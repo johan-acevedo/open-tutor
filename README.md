@@ -22,9 +22,9 @@ A child opens the page on a school Chromebook or a Windows PC. There is no insta
 
 A large avatar makes the voice tutor the centre of the starting page. The tutor greets the child and invites them into a conversation. It takes responsibility for helping the child get started, as a welcoming older student would.
 
-The child can explain what they need or drop schoolwork onto the page. Uploads include files and photographs of paper assignments or tests. File uploads are expected to be the more common route. The exact supported file formats remain an implementation decision.
+The child can explain what they need, drop in files or photographs of paper assignments and tests, or paste text and screenshots from the clipboard. The exact supported file formats remain an implementation decision.
 
-After the browser's initial microphone and audio interaction, the session feels like a live call. The child speaks freely, pauses to think, and interrupts when needed. There is no push-to-talk cycle.
+After the browser's initial microphone and audio interaction, the session feels like a live call, without push-to-talk. The tutor remains present, listening and following the material available in the session. It speaks when addressed or when it has something useful enough to contribute, with initiative to move learning forward. Silence for thinking, reading, writing, or watching a video is a natural part of the session.
 
 A permanent text input gives the child another way to communicate. The text field and call controls belong to the stable page layout, outside the tutor's dynamically generated whiteboard content.
 
@@ -42,7 +42,7 @@ It celebrates when the child understands something they previously struggled wit
 
 The tutor has a visual whiteboard on the page that it can update while speaking. It can draw diagrams, display text and equations, organise ideas, and explain a process step by step.
 
-The visual tools may include vector graphics, generated web layouts, animations, and generated images. We should choose the medium that helps explain the idea. Generating an image is useful when the image serves the lesson.
+The visual tools may include vector graphics, generated web layouts, animations, and generated images. Choose the medium that helps explain the idea. Coordinate speech with what the child can actually see, and keep the session flowing while slower content is generated.
 
 Initially, the tutor controls the whiteboard. The child does not draw on it or edit it. The exact layout and the way the large avatar makes room for explanations remain design experiments.
 
@@ -58,9 +58,9 @@ Give the model tools to discover and share resources, and let it exercise judgem
 
 ## Languages and continuity
 
-Swedish is the primary language. English and Spanish are also required. The tutor should support natural language switching, including requests to explain in one language while practising another.
+The initial focus is teaching in Swedish across subjects such as maths, religion, social sciences, and chemistry. English, Spanish, and natural language switching remain goals for later, including explaining in one language while practising another.
 
-Voice selection starts with the quality of spoken Swedish. There is no initial preference for a masculine or feminine voice. English, Spanish, and switching languages also need to work in the chosen speech setup.
+Voice selection starts with the quality of spoken Swedish, with no preference for a masculine or feminine voice. Mixed-language teaching can follow initial use.
 
 The tutor remembers the learner across visits. Initially, learner profiles and continuity live in browser-local storage, with no account. A returning child can choose their saved name, and siblings sharing a browser can keep separate profiles. Someone new can start without registration.
 
@@ -86,9 +86,9 @@ These examples explain the intent. They do not limit the initial tool to those s
 
 Use LiveKit for live audio transport and agent session handling. Separate speech recognition, the tutor LLM, and speech synthesis so providers can change as capabilities improve.
 
-During testing, use Johan's OpenCode Go subscription and the intended Spark model for the tutor LLM. The exact model identifier, API integration, and capabilities still need confirmation. Document and image understanding may require a separate provider.
+For Johan's initial instance, the `homelab` Infisical project supplies prototype credentials and existing provider credits. The intended testing LLM is Spark through OpenCode Go. The exact model and its suitability for live streaming and tool use still need confirmation. Document and image understanding may require a separate provider.
 
-The Infisical project `homelab` holds credentials for prototype development. Existing provider credits are available for this experiment. Select speech services for live streaming, conversational responsiveness, and language quality. Do not assume that an endpoint suitable for generating an audio file is suitable for a live call.
+Other contributors and hosts can use their own providers and credentials. Johan's provisioning setup is not an application dependency. Select speech services for live streaming, conversational responsiveness, and language quality.
 
 Keep credentials in the backend runtime, outside the browser and repository. Browser-local learner storage and the server-side voice session are separate responsibilities.
 
@@ -113,7 +113,7 @@ The balance of humour, encouragement, initiative, and direct explanation should 
 
 Accounts, cross-device synchronisation, parent dashboards, parent instructions, billing, resource ratings, and child-editable whiteboards can come later. Formal curriculum integrations and multiple tutor personalities can also wait.
 
-Inference costs are covered for the initial experiment. Sustainable access needs attention as usage grows, but the funding model should not dictate the first experience. Free trials, user-provided provider access, and other approaches remain possibilities. Subscription access depends on what providers actually support.
+Inference costs are covered for the initial experiment. Johan may also open his hosted instance to others for a while. Sustainable access needs attention as usage grows, but should not dictate the first experience. Free trials and user-provided provider access remain possibilities, subject to what providers support.
 
 The first version should deliver a welcoming live conversation, useful visual teaching, homework context, educational resources, and continuity in the same browser.
 
