@@ -6,7 +6,7 @@ A live voice tutor that helps children understand their schoolwork and take the 
 
 This document records the project's starting intent. Open Tutor is a working name. There is no application yet.
 
-The [product requirements](PRD.md), [visual style guide](design/STYLE-GUIDE.md), and [selected image mockups](design/mockups/pass-2/README.md) develop this intent into the first experience.
+The [product requirements](PRD.md), [visual style guide](design/STYLE-GUIDE.md), and [selected image mockups](design/mockups/pass-2/README.md) develop this intent into the first experience. The [build plan](BUILD-PLAN.md) and [review presentation](review/README.md) propose how to reach the first homework session.
 
 ## Why this exists
 

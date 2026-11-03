@@ -1,0 +1,63 @@
+{
+  "slides": [
+    {
+      "slide": 1,
+      "title": "Ready to build the first real homework session"
+    },
+    {
+      "slide": 2,
+      "title": "One URL, then ordinary schoolwork"
+    },
+    {
+      "slide": 3,
+      "title": "Keep the companion. Give the lesson room."
+    },
+    {
+      "slide": 4,
+      "title": "Build our experience. Borrow selected working parts."
+    },
+    {
+      "slide": 5,
+      "title": "Three pieces, with clear responsibilities"
+    },
+    {
+      "slide": 6,
+      "title": "Familiar parts, each with one job"
+    },
+    {
+      "slide": 7,
+      "title": "A flexible teaching board, without building an editor"
+    },
+    {
+      "slide": 8,
+      "title": "The LLM needs a supported route for tutoring"
+    },
+    {
+      "slide": 9,
+      "title": "Use the home lab, with managed call transport"
+    },
+    {
+      "slide": 10,
+      "title": "Four milestones, each ending in something usable"
+    },
+    {
+      "slide": 11,
+      "title": "A grounded proposal, with the unknowns visible"
+    },
+    {
+      "slide": 12,
+      "title": "A concrete direction to take into the first build"
+    }
+  ],
+  "pdfPages": 12,
+  "checks": [
+    "all slides visible through navigation",
+    "keyboard and presenter notes",
+    "all mockup images loaded",
+    "728px and 390px no horizontal overflow",
+    "print layout has no clipped content",
+    "PDF has twelve readable pages",
+    "no browser page errors"
+  ],
+  "scope": "Presentation and documentation only; no tutor application tested"
+}

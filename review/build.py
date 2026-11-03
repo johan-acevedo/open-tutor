@@ -1,0 +1,207 @@
+#!/usr/bin/env python3
+"""Build the review deck. Optional PDF export uses Playwright and Chromium."""
+
+from __future__ import annotations
+
+import argparse
+import html
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+ROOT = HERE.parent
+ART = "../design/mockups/pass-2/"
+
+
+def picture(name: str, caption: str) -> str:
+    return f'<figure><img src="{ART}{name}.png" alt="{html.escape(caption)}"><figcaption>{caption}</figcaption></figure>'
+
+
+SLIDES = [
+    {
+        "label": "The recommendation",
+        "title": "Ready to build the first real homework session",
+        "subtitle": "Open Tutor · product foundation and technical proposal · 3 November 2026",
+        "body": '<div class="hero"><div><p class="lead">A welcoming tutor. A live conversation. Something useful to show.</p><p>Build a small app around LiveKit and reuse selected work we already have.</p><div class="status-list"><span class="tag good">Product direction agreed</span><span class="tag">Technical choices proposed</span><span class="tag warning">Live integration still to prove</span></div></div>' + picture("02-greeting", "The agreed visual direction: the same companion, without wings, facing the learner.") + '</div>',
+        "takeaway": "The next investment should be a working teaching loop, guided by the product and visual foundation.",
+        "notes": "This meeting covers the two requested steps: preserve the agreed foundation in a PR and recommend the technical approach. It does not claim that the tutor has been implemented or deployed. The wingless character, inward or frontal gaze, Swedish-first teaching, and accountless arrival are already agreed. Provider and hosting choices are proposals for review.",
+    },
+    {
+        "label": "The child's experience",
+        "title": "One URL, then ordinary schoolwork",
+        "subtitle": "Windows PC or school Chromebook. No installation or learner account.",
+        "body": '<div class="journey"><article><b>01</b><h3>Arrive</h3><p>Choose a local learner. The tutor welcomes them.</p></article><article><b>02</b><h3>Bring the task</h3><p>Talk, drop a file, or paste text or a screenshot.</p></article><article><b>03</b><h3>Work together</h3><p>Explain, ask, draw, read, watch, and think quietly.</p></article><article><b>04</b><h3>Leave with progress</h3><p>The child does the work. Short learning notes carry forward.</p></article></div><div class="callout">First use: your child brings whatever is difficult that weekday. No prepared demonstration.</div>',
+        "takeaway": "Success means the child understands more and can take the next step themselves.",
+        "notes": "The child writes long assignments in their school document or on paper, sharing drafts when useful. The board is tutor-controlled. Continuity means notes in this browser, not automatic cross-device sync. Each later session starts with a fresh board. The first test is a real homework session with Johan present, rather than a staged subject-specific showcase.",
+    },
+    {
+        "label": "The foundation is preserved",
+        "title": "Keep the companion. Give the lesson room.",
+        "subtitle": "The selected second-pass images and style guide are now part of the review package.",
+        "body": '<div class="visual">' + picture("04-maths-plain", "Wingless companion on the right, looking into the lesson. Homework and explanation stay readable.") + '<div class="principles"><p><strong>Large on arrival</strong><br>Welcoming and recognisable.</p><p><strong>Smaller during work</strong><br>The board becomes the main space.</p><p><strong>Quiet when useful</strong><br>No false speaking indicators.</p><p><strong>Stable controls</strong><br>Text, microphone, and end call stay available.</p></div></div>',
+        "takeaway": "These are design references. Making the interaction work is the next phase.",
+        "notes": "The package includes the PRD, visual guide, ten selected screen states, and the revised character sheet. Some reference and intermediate images remain with the generation prompts for provenance. The earlier competitor and coaching reports stay local. Precise spacing and colour tokens remain implementation defaults, not extra decisions Johan must settle now.",
+    },
+    {
+        "label": "Build or adapt?",
+        "title": "Build our experience. Borrow selected working parts.",
+        "subtitle": "Source inspection points to selective reuse rather than adopting another tutor wholesale.",
+        "body": '<div class="options"><article class="recommended"><small>PRIMARY REUSE SOURCE</small><h3>Your t3-call</h3><p>Python voice integrations, session state, visual-stage patterns, and timing instrumentation.</p><p class="muted">MIT. Leave its T3 and coding workflows behind.</p></article><article><small>IMPLEMENTATION REFERENCE</small><h3>AI Math Tutor</h3><p>Homework context, LiveKit-to-board actions, and explicit turn state.</p><p class="muted">MIT. Its editable canvas is a different product choice.</p></article><article><small>IDEAS TO LEARN FROM</small><h3>Tablo</h3><p>Multimodal teaching and memory ideas.</p><p class="muted">AGPL. A larger retrieval stack than we need initially.</p></article></div><p class="source">Inspected source and licences, not live product sessions. Revisions are recorded in <a href="../docs/technical-evidence.md">technical evidence</a>.</p>',
+        "takeaway": "Reusing patterns saves effort while preserving your specific teaching experience.",
+        "notes": "The research repositories are real code, but reading source is not runtime verification. The recommendation uses the familiar Python stack because t3-call already integrates the relevant speech providers and visual work. No external project source has been copied yet. Preserve MIT notices when copying selected code. Do not introduce a dependency on the t3-call app itself. No AGPL code was copied.",
+    },
+    {
+        "label": "How it fits together",
+        "title": "Three pieces, with clear responsibilities",
+        "subtitle": "The browser shows the lesson. LiveKit carries the call. Our worker coordinates the tutor.",
+        "body": '<div class="architecture"><article><span class="node-icon">01</span><h3>Child\'s browser</h3><p>Avatar · homework · board<br>Text and microphone controls<br>Local learner notes</p></article><div class="arrow" aria-hidden="true">↔</div><article><span class="node-icon">02</span><h3>LiveKit Cloud</h3><p>Live audio<br>Connection and call state<br>Board messages and captions</p></article><div class="arrow" aria-hidden="true">↔</div><article><span class="node-icon">03</span><h3>Our tutor service</h3><p>Teaching instructions<br>Speech and LLM connections<br>Tools for visuals and resources</p></article></div><div class="provider-strip"><span>Speech recognition</span><span>Reasoning model</span><span>Speech synthesis</span><span>Vision · search · images</span></div><p class="muted center">The tutor service calls providers. Provider keys stay there.</p>',
+        "takeaway": "We can change a voice or model without rebuilding the whole experience.",
+        "notes": "There are two backend processes: a small FastAPI web service and the persistent LiveKit worker. This diagram groups them as our tutor service to keep the responsibilities readable. The HTTPS page and uploads use our web service; audio and call data use LiveKit. Direct provider plugins perform inference. A coding-agent harness is not part of each conversational turn. LiveKit documents media, RPC and state exchange; this architecture remains untested here.",
+        "source": '<a href="https://docs.livekit.io/frontends/build/media-data/">LiveKit media and data</a>',
+    },
+    {
+        "label": "The proposed stack",
+        "title": "Familiar parts, each with one job",
+        "subtitle": "Choose a small first implementation. Pin exact versions when building it.",
+        "body": '<div class="stack-table"><div><strong>The page</strong><span>React + TypeScript + Vite</span><em>Build the approved interface.</em></div><div><strong>The tutor</strong><span>Python + LiveKit Agents</span><em>Manage conversation and tools.</em></div><div><strong>The web service</strong><span>FastAPI</span><em>Serve the page, join calls, receive files.</em></div><div><strong>The board</strong><span>HTML + SVG + KaTeX</span><em>Show precise maths and flexible visuals.</em></div><div><strong>Files and memory</strong><span>PDF.js + browser storage</span><em>Read pages and remember the learner locally.</em></div></div><div class="callout">Initial speech candidates: Soniox for listening, ElevenLabs for speaking. Choose the actual Swedish voice by listening.</div>',
+        "takeaway": "No account platform, central learner database, or local GPU is needed for the first family version.",
+        "notes": "Start file support with PDFs, PNG/JPEG photos, screenshots and pasted text. The format choice is proposed rather than an exclusion of all future formats. The frontend build can be served by FastAPI, avoiding separate frontend hosting for the first family deployment. Speech provider key names are present, but their balances and live performance are not verified. The exact media model and voice selection happen in the next phase.",
+        "source": '<a href="https://vite.dev/guide/">Vite</a> · <a href="https://fastapi.tiangolo.com/tutorial/static-files/">FastAPI</a> · <a href="https://mozilla.github.io/pdf.js/">PDF.js</a>',
+    },
+    {
+        "label": "The visual teaching approach",
+        "title": "A flexible teaching board, without building an editor",
+        "subtitle": "The tutor owns the board initially. Children write their assignments where school expects.",
+        "body": '<div class="visual">' + picture("05-book-review-plain", "The child\'s own ideas and pasted draft stay distinct from the tutor\'s explanation.") + '<div class="principles"><p><strong>Fast, precise visuals</strong><br>Equations, diagrams, steps and mind maps.</p><p><strong>Richer content when useful</strong><br>Generated HTML, animations and images.</p><p><strong>Speak in step with the board</strong><br>Know when a visual is ready before referring to it.</p></div></div><p class="source">Generated panels stay separate from fixed controls and learner storage. <a href="https://tldraw.dev/community/license">tldraw production licensing</a> is another reason to defer an editor dependency.</p>',
+        "takeaway": "Preserve expressive teaching while avoiding an unnecessary canvas-editor dependency.",
+        "notes": "This does not constrain every explanation to a fixed set of cards. The tutor can create web content in isolated panels as well as structured equations and SVG. A background tool can publish slower imagery later. Use a browser acknowledgement and shared visual identifiers to coordinate speech with what is actually visible. Nothing is implemented yet. tldraw templates and the tldraw SDK have different licensing; the SDK requires a production key.",
+    },
+    {
+        "label": "One assumption to resolve",
+        "title": "The LLM needs a supported route for tutoring",
+        "subtitle": "The product design survives a provider change. The subscription assumption needs checking.",
+        "body": '<div class="decision-panel"><div class="decision-number">!</div><div><h3>OpenCode Go is coding-oriented</h3><p>Its current documentation describes coding-agent traffic. Tutoring eligibility is unconfirmed.</p><p>The Muse Spark Contributor route also lists training use and regional conditions.</p></div></div><div class="two"><article><h3>Preferred route</h3><p>Keep the intended Spark candidate if a supported tutoring route is confirmed.</p></article><article><h3>Alternative route</h3><p>Use an ordinary metered API behind the same provider interface.</p></article></div><p class="source"><a href="https://opencode.ai/v2/docs/console/go/">OpenCode Go: usage and model terms</a></p>',
+        "takeaway": "Settle the route before real homework. No provider settings or credentials have been changed.",
+        "notes": "The earlier API-availability assumption was incomplete. Do not disguise traffic or silently replace the chosen model. Also test HTTP streaming and tool compatibility; a Responses endpoint does not prove WebSocket support.",
+    },
+    {
+        "label": "Where the first demo lives",
+        "title": "Use the home lab, with managed call transport",
+        "subtitle": "A proposed deployment, not a service that is live today.",
+        "body": '<div class="hosting-path"><span>Windows / Chromebook</span><b>→ HTTPS →</b><span>Existing Mini tunnel</span><b>→</b><span>ThinkCentre service + worker</span></div><div class="two"><article><h3>The page and tutor service</h3><p>Proposed URL: <strong>tutor.labtopia.dev</strong></p><p>Use CPU hosting already available. Confirm machine availability and DNS during deployment.</p></article><article><h3>The live call</h3><p>Browser audio connects through LiveKit Cloud directly.</p><p>Inference runs with providers; no GPU installation on the child\'s PC.</p></article></div><div class="callout">Infisical access is confirmed. Speech-provider key names are present. Key validity, balances, and LiveKit provisioning still need checking.</div>',
+        "takeaway": "Start with family use. A public demo can follow with a simple owner-controlled spending limit.",
+        "notes": "ThinkCentre is proposed from inventory evidence, which records always-on intent rather than guaranteed availability. We have not connected to it, changed DNS, installed services or deployed the app. The existing Mini tunnel can route HTTP over the tailnet. No LiveKit or OpenCode key names appeared in the inspected homelab development environment; they may exist in other service configuration. The first implementation must locate provisioning. No costs are measured; existing credits cover the experiment without a new billing product.",
+    },
+    {
+        "label": "Path to the child's Windows PC",
+        "title": "Four milestones, each ending in something usable",
+        "subtitle": "This package completes the foundation and technical proposal. Implementation starts after review.",
+        "body": '<div class="roadmap"><article><b>A</b><h3>Prove the loop</h3><p>Swedish voice, homework page, interruption, quiet work and a board update together.</p><small>NEXT</small></article><article><b>B</b><h3>Complete the workspace</h3><p>Approved character, profiles, uploads, teaching board, links and learning notes.</p></article><article><b>C</b><h3>Put it behind a URL</h3><p>Persistent hosting and checks on the actual Windows PC and Chromebook.</p></article><article><b>D</b><h3>Use real homework</h3><p>Observe a weekday session and fix the friction the child actually encounters.</p></article></div><p class="muted center">Milestones describe results, not promised dates. No integration experiment has been run yet.</p>',
+        "takeaway": "The first working session is the priority; elaborate animation and expansion come later.",
+        "notes": "Milestone A uses fictional material until the LLM route is settled. It is not a separate product demo; it tests the technical uncertainties before the full workspace is built. B keeps voice, visual teaching, homework and continuity together. C checks microphone permissions, school restrictions, reconnects and a usable URL. D uses whatever schoolwork the child brings, without a prepared subject-specific script.",
+    },
+    {
+        "label": "What the evidence does and does not say",
+        "title": "A grounded proposal, with the unknowns visible",
+        "subtitle": "We have inspected the ingredients. We have not proved the recipe.",
+        "body": '<div class="evidence-columns"><article><small class="good-text">KNOWN</small><h3>Inspected</h3><ul><li>PRD and chosen visual direction</li><li>Source and licences in three repositories</li><li>Current integration documentation</li><li>Infisical project access and key names</li></ul></article><article><small class="info-text">PROPOSED</small><h3>Recommended</h3><ul><li>Small app with selected reuse</li><li>Python worker and React page</li><li>Tutor-controlled web board</li><li>Home-lab hosting first</li></ul></article><article><small class="warning-text">TO PROVE</small><h3>Next experiment</h3><ul><li>LLM access and streaming</li><li>Swedish voice quality</li><li>Quiet work and interruption</li><li>Homework vision and visual timing</li></ul></article></div>',
+        "takeaway": "There is no measured cost, latency claim, deployed app, or live teaching result in this package.",
+        "notes": "The competitor research was useful for discovery but contains unverified marketing claims. The new technical recommendation is based on targeted source inspection and official documentation. The artifact checks apply to documents and the presentation, not to a tutor application. Do not mistake polished mockups for functioning software. The package includes a reproducible deck builder and a primary-source evidence record.",
+    },
+    {
+        "label": "For your review",
+        "title": "A concrete direction to take into the first build",
+        "subtitle": "The product ambition stays intact. The implementation starts small.",
+        "body": '<div class="review-list"><article><b>01</b><div><h3>Build the small app, borrowing selected parts</h3><p>Preserve the experience you chose instead of inheriting another tutor\'s whole product.</p></div></article><article><b>02</b><div><h3>Resolve the model route, then test the loop</h3><p>Keep providers replaceable and choose the Swedish voice through actual listening.</p></div></article><article><b>03</b><div><h3>Host the family version on the existing lab</h3><p>Reach a normal browser URL; consider wider access after the family experience works.</p></div></article></div><div class="meeting-links"><a href="https://github.com/johan-acevedo/open-tutor/pull/1">Review PR #1</a><a href="../BUILD-PLAN.md">Technical plan</a><a href="../PRD.md">PRD</a><a href="../design/mockups/pass-2/README.md">Image gallery</a></div>',
+        "takeaway": "Next authorised build phase, after your review: the integration experiment. Nothing has been deployed.",
+        "notes": "The PR remains open for review and has not been merged. The project licence is still unselected; MIT is proposed for easy reuse, not applied unilaterally. The spending limit for a broader public demo is an operational follow-up, not an account or payment system for the children. Johan can review this package asynchronously; no immediate answers are required to understand the recommendation.",
+    },
+]
+
+CSS = r"""
+:root { --foreground:#edf1f6; --muted-foreground:#a5b0be; --card:#1a2029; --secondary:#242d39; --border:#354151; --primary:#34d3df; --accent:#ad9af3; --warning:#eeb963; --success:#7cdbac; --radius:18px; --font-sans:'Segoe UI',Inter,Arial,sans-serif; }
+* {box-sizing:border-box} html,body {margin:0;padding:0;color:var(--foreground);font-family:var(--font-sans);background:transparent} button,a {font:inherit} a {color:var(--primary);text-underline-offset:3px} a:hover {text-decoration-thickness:2px} button {cursor:pointer} button:focus-visible,a:focus-visible,summary:focus-visible {outline:3px solid var(--primary);outline-offset:4px}
+.deck {max-width:1280px;margin:0 auto} .chrome {display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 10px;padding:10px 16px;border-radius:var(--radius);background:var(--card);color:var(--muted-foreground);font-size:13px} .chrome button,.chrome select {background:var(--secondary);color:var(--foreground);border:1px solid var(--border);padding:7px 12px;border-radius:8px} .nav {display:flex;align-items:center;gap:8px} #counter {min-width:47px;text-align:center;font-variant-numeric:tabular-nums} .slide {background:var(--card);border-radius:var(--radius);padding:28px 32px 22px;min-height:630px;display:flex;flex-direction:column;gap:0;overflow:hidden} .slide[hidden] {display:none} .kicker {font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--primary);margin:0 0 12px;font-weight:700} h1 {font-size:clamp(25px,3.2vw,42px);letter-spacing:-.025em;line-height:1.12;margin:0 0 12px;font-weight:650} .subtitle {font-size:16px;line-height:1.4;color:var(--muted-foreground);margin:0 0 24px;max-width:70ch} .content {flex:1;display:flex;flex-direction:column;justify-content:center;gap:16px} p {line-height:1.5;margin:0 0 13px} h3 {font-size:19px;line-height:1.25;margin:0 0 12px;font-weight:650} .lead {font-size:25px;line-height:1.32;letter-spacing:-.015em} .hero {display:grid;grid-template-columns:.8fr 1.4fr;gap:28px;align-items:center} .hero p {font-size:17px} .hero .lead {font-size:27px} figure {margin:0;min-width:0} figure img {width:100%;height:auto;display:block;border-radius:11px;border:1px solid var(--border)} figcaption {font-size:12px;color:var(--muted-foreground);line-height:1.4;margin-top:9px} .tag {display:inline-block;padding:6px 10px;border-radius:20px;font-size:12px;background:var(--secondary);border:1px solid var(--border);color:var(--foreground)} .status-list {display:flex;flex-wrap:wrap;gap:8px;margin-top:20px} .good,.good-text {color:var(--success)} .warning,.warning-text {color:var(--warning)} .info-text {color:var(--primary)} .takeaway {margin-top:25px;border-top:1px solid var(--border);padding-top:15px;font-size:15px;color:var(--foreground);line-height:1.45} .slide-footer {font-size:11px;color:var(--muted-foreground);margin-top:14px;display:flex;justify-content:space-between;gap:12px} .journey,.roadmap {display:grid;grid-template-columns:repeat(4,1fr);gap:14px} article {background:var(--secondary);border:1px solid var(--border);padding:19px;border-radius:12px;min-width:0} article p {font-size:15px;margin:0 0 12px} article p:last-child {margin-bottom:0} .journey b,.roadmap b {display:block;font-size:30px;color:var(--primary);font-weight:500;margin-bottom:24px} .journey h3,.roadmap h3 {font-size:19px} .callout {border-left:3px solid var(--primary);padding:13px 18px;background:var(--secondary);font-size:15px;line-height:1.5;border-radius:0 8px 8px 0;margin-top:16px} .visual {display:grid;grid-template-columns:2.6fr 1fr;gap:24px;align-items:center} .principles p {font-size:14px;line-height:1.45;margin:0 0 18px;color:var(--muted-foreground)} .principles strong {color:var(--foreground);font-weight:600} .options {display:grid;grid-template-columns:repeat(3,1fr);gap:16px} small {font-size:11px;color:var(--muted-foreground);letter-spacing:.06em;font-weight:650} .options small {display:block;margin-bottom:14px} .recommended {border-color:var(--primary)} .muted {color:var(--muted-foreground)} .source {font-size:12px;color:var(--muted-foreground);margin:12px 0 0;line-height:1.5} .architecture {display:grid;grid-template-columns:1fr 24px 1fr 24px 1fr;gap:8px;align-items:center} .architecture article {text-align:center;min-height:195px} .architecture p {font-size:14px;line-height:1.6}.node-icon {display:inline-flex;color:var(--primary);font-size:22px;margin-bottom:14px} .arrow {font-size:23px;text-align:center;color:var(--primary)} .provider-strip {display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:12px 0 0} .provider-strip span {border:1px solid var(--border);border-radius:20px;padding:8px 13px;font-size:13px;color:var(--muted-foreground)} .center {text-align:center;font-size:14px} .stack-table {display:flex;flex-direction:column;gap:0;border:1px solid var(--border);border-radius:12px;overflow:hidden} .stack-table>div {display:grid;grid-template-columns:1fr 1.4fr 1.7fr;gap:14px;padding:15px 18px;border-bottom:1px solid var(--border);font-size:15px;align-items:center}.stack-table>div:nth-child(odd){background:var(--secondary)} .stack-table>div:last-child{border:0}.stack-table strong{font-weight:600}.stack-table em{font-style:normal;color:var(--muted-foreground);font-size:14px}.decision-panel{display:flex;align-items:center;gap:24px;background:var(--secondary);padding:22px;border-radius:12px;border-left:3px solid var(--warning)}.decision-number{font-size:52px;color:var(--warning);font-weight:300;padding:0 15px}.decision-panel p{font-size:16px}.two{display:grid;grid-template-columns:1fr 1fr;gap:16px}.hosting-path {display:flex;justify-content:center;align-items:center;gap:12px;margin:0 0 8px;font-size:15px}.hosting-path span{background:var(--secondary);padding:16px;border:1px solid var(--border);border-radius:10px;text-align:center}.hosting-path b{font-size:13px;color:var(--primary);white-space:nowrap}.roadmap article{position:relative}.roadmap small{display:block;margin-top:18px;color:var(--primary)}.evidence-columns{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}.evidence-columns small{display:block;margin-bottom:12px}.evidence-columns ul{padding-left:18px;margin:0;font-size:15px;line-height:1.6}.evidence-columns li{margin-bottom:10px}.review-list{display:grid;gap:12px}.review-list article{display:flex;gap:20px;padding:16px 20px}.review-list b{font-size:24px;color:var(--primary);font-weight:400}.review-list h3{font-size:18px;margin-bottom:5px}.review-list p{font-size:14px}.meeting-links{display:flex;gap:18px;flex-wrap:wrap;margin-top:7px;font-size:14px}.notes{margin-top:12px;background:var(--card);border-radius:var(--radius);padding:14px 18px;font-size:14px}.notes summary{cursor:pointer;color:var(--muted-foreground)}.notes p{margin:14px 0 0;color:var(--muted-foreground)}.key-hint{font-size:12px;color:var(--muted-foreground)}
+@media(max-width:850px){.slide{padding:24px;min-height:610px}.hero{grid-template-columns:1fr}.hero .lead{font-size:23px}.hero figure{max-width:560px}.hero .status-list{margin-top:10px}.hero p{font-size:15px}.hero .lead{margin-bottom:8px}.visual{grid-template-columns:1fr}.principles{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.principles p{margin-bottom:5px}.journey,.roadmap{grid-template-columns:repeat(2,1fr)}.journey b,.roadmap b{margin-bottom:12px}.options,.evidence-columns{gap:10px}.options article,.evidence-columns article{padding:14px}.architecture article{padding:13px}.stack-table>div{grid-template-columns:.8fr 1.2fr 1.3fr;font-size:14px}.key-hint{display:none}}
+@media(max-width:520px){.slide{padding:18px;min-height:0}.subtitle{font-size:14px;margin-bottom:18px}.options,.evidence-columns,.two{grid-template-columns:1fr}.architecture{grid-template-columns:1fr}.arrow{transform:rotate(90deg)}.architecture article{min-height:0}.hosting-path{flex-direction:column}.stack-table>div{grid-template-columns:1fr;gap:4px}.chrome{padding:9px}.chrome select{max-width:150px;font-size:12px}.nav button{padding:7px 10px}.journey article,.roadmap article{padding:13px}.journey h3,.roadmap h3{font-size:17px}.journey p,.roadmap p{font-size:14px}.decision-panel{gap:10px;padding:15px}.decision-number{padding:0 5px;font-size:38px}.lead{font-size:21px}}
+@media print{@page{size:1280px 720px;margin:0}html,body{width:1280px;margin:0;padding:0}.deck{max-width:none;width:1280px}.chrome,.notes{display:none!important}.slide,.slide[hidden]{display:flex!important;width:1280px;height:720px;min-height:720px;border-radius:0;padding:34px 42px 24px;break-after:page;page-break-after:always;overflow:hidden;print-color-adjust:exact;-webkit-print-color-adjust:exact}.slide:last-child{break-after:auto;page-break-after:auto}h1{font-size:42px}.hero{grid-template-columns:.8fr 1.4fr}.visual{grid-template-columns:2.6fr 1fr}.journey,.roadmap{grid-template-columns:repeat(4,1fr)}.principles{display:block}.slide-footer{margin-top:14px}.takeaway{margin-top:20px}.visual figure img{width:auto;max-width:100%;max-height:340px;margin:auto}}
+"""
+
+JS = r"""
+(() => {
+  const slides = [...document.querySelectorAll('.slide')];
+  const picker = document.querySelector('#picker');
+  const counter = document.querySelector('#counter');
+  const notes = document.querySelector('#notes-text');
+  const prev = document.querySelector('#previous');
+  const next = document.querySelector('#next');
+  function show(index) {
+    index = Math.max(0, Math.min(slides.length - 1, index));
+    slides.forEach((slide, n) => slide.hidden = n !== index);
+    picker.value = String(index);
+    counter.textContent = `${index + 1} / ${slides.length}`;
+    notes.textContent = slides[index].dataset.notes;
+    prev.disabled = index === 0;
+    next.disabled = index === slides.length - 1;
+    document.querySelector('#notes').open = false;
+    if (['file:', 'http:', 'https:'].includes(location.protocol)) history.replaceState(null, '', `#slide-${index + 1}`);
+  }
+  prev.addEventListener('click', () => show(Number(picker.value) - 1));
+  next.addEventListener('click', () => show(Number(picker.value) + 1));
+  picker.addEventListener('change', () => show(Number(picker.value)));
+  document.addEventListener('keydown', event => {
+    if (['SELECT', 'INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
+    if (['ArrowRight', 'PageDown'].includes(event.key)) { event.preventDefault(); show(Number(picker.value) + 1); }
+    if (['ArrowLeft', 'PageUp'].includes(event.key)) { event.preventDefault(); show(Number(picker.value) - 1); }
+    if (event.key === 'Home') show(0);
+    if (event.key === 'End') show(slides.length - 1);
+  });
+  show(Number((location.hash.match(/slide-(\d+)/) || [0, 1])[1]) - 1);
+})();
+"""
+
+
+def build() -> None:
+    options = "".join(f'<option value="{n}">{n + 1}. {html.escape(slide["label"])}</option>' for n, slide in enumerate(SLIDES))
+    sections = []
+    for n, slide in enumerate(SLIDES):
+        sections.append(f'''<section class="slide" id="slide-{n + 1}" data-notes="{html.escape(slide['notes'], quote=True)}" {"hidden" if n else ""} aria-label="Slide {n + 1}: {html.escape(slide['title'])}">
+          <p class="kicker">Open Tutor / {html.escape(slide['label'])}</p>
+          <h1>{html.escape(slide['title'])}</h1>
+          <p class="subtitle">{html.escape(slide['subtitle'])}</p>
+          <div class="content">{slide['body']}</div>
+          <div class="takeaway">{html.escape(slide['takeaway'])}</div>
+          <div class="slide-footer"><span>{slide.get('source', 'Review package · 3 November 2026')}</span><span>{n + 1:02d} / {len(SLIDES):02d}</span></div>
+        </section>''')
+    page = f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Open Tutor — first build review</title><style>{CSS}</style></head><body>
+      <main class="deck"><nav class="chrome" aria-label="Presentation controls"><label><span class="sr-label">Go to slide </span><select id="picker" aria-label="Go to slide">{options}</select></label><span class="key-hint">Use ← → or choose a slide</span><div class="nav"><button id="previous" aria-label="Previous slide">←</button><span id="counter" aria-live="polite">1 / {len(SLIDES)}</span><button id="next" aria-label="Next slide">→</button></div></nav>
+      {''.join(sections)}<details class="notes" id="notes"><summary>Presenter notes and detail</summary><p id="notes-text"></p></details></main><script>{JS}</script></body></html>'''
+    (HERE / "board-meeting.html").write_text(page)
+    notes = "# Open Tutor: review meeting notes\n\nCompanion to the [presentation](board-meeting.html) and [technical plan](../BUILD-PLAN.md).\n\n"
+    for n, slide in enumerate(SLIDES):
+        notes += f"## {n + 1}. {slide['title']}\n\n{slide['takeaway']}\n\n{slide['notes']}\n\n"
+    (HERE / "MEETING-NOTES.md").write_text(notes.rstrip() + "\n")
+    print(f"Built {len(SLIDES)} slides and meeting notes.")
+
+
+def render_pdf() -> None:
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as p:
+        candidates = sorted((Path.home() / ".cache/ms-playwright").glob("chromium-*/chrome-linux64/chrome"))
+        options = {"executable_path": str(candidates[-1])} if candidates else {}
+        browser = p.chromium.launch(**options)
+        page = browser.new_page(viewport={"width": 1280, "height": 800})
+        page.goto((HERE / "board-meeting.html").as_uri(), wait_until="load")
+        page.evaluate("document.fonts.ready")
+        page.pdf(path=str(HERE / "board-meeting.pdf"), prefer_css_page_size=True, print_background=True)
+        browser.close()
+    print("Saved board-meeting.pdf")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--pdf", action="store_true")
+    args = parser.parse_args()
+    build()
+    if args.pdf:
+        render_pdf()
