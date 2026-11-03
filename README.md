@@ -6,6 +6,8 @@ A live voice tutor that helps children understand their schoolwork and take the 
 
 This document records the project's starting intent. Open Tutor is a working name. There is no application yet.
 
+The [product requirements](PRD.md), [visual style guide](design/STYLE-GUIDE.md), and [selected image mockups](design/mockups/pass-2/README.md) develop this intent into the first experience.
+
 ## Why this exists
 
 This project starts with a parent's immediate need. Johan's children, aged 9 to 15 in Sweden, need help with homework, assignments, and preparation for tests. Sometimes they understand more than they can put into words. Sometimes a test reveals a gap that needs patient attention.
