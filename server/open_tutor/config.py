@@ -10,21 +10,32 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
-AGENT_NAME = "open-tutor"
+# One worker per LiveKit project registers under this name. A test worker can use another
+# name (with a web service set the same way) so it never takes a family session.
+AGENT_NAME = os.environ.get("TUTOR_AGENT_NAME", "open-tutor")
 
-# Tutor model routes, all OpenAI-compatible chat completions with streaming,
-# tools and image input. "spark" is the intended teaching model through an
-# ordinary metered API (not the Contributor/coding-agent route). "gemini-dev"
-# exists only to exercise the pipeline with fictional material while the
-# Spark route has no credit; it is never selected silently.
+# Tutor model routes. There is no silent fallback: the route is chosen by TUTOR_LLM.
+#
+# "go" (default) is Muse Spark 1.3 Contributor on Johan's OpenCode Go subscription. Go
+# serves that model only on its OpenAI Responses endpoint, over HTTP streaming (the
+# Responses WebSocket returns 404 there), with function calls as structured
+# `function_call` output items. Minimal reasoning: in tests it called the board tool as
+# reliably as "low" (24/24) with a median of 1.4 s to first output instead of 4.2 s.
+#
+# "gemini-dev" is the earlier development route (Gemini 3.5 Flash Lite through Google's
+# OpenAI-compatible Chat Completions). It is kept only to reproduce the board/voice bug
+# it caused: it often writes board content into its spoken reply instead of calling a
+# board tool. Do not deploy it.
 LLM_ROUTES = {
-    "spark": {
-        "base_url": "https://openrouter.ai/api/v1",
-        "model": "meta/muse-spark-1.3",
-        "key": "OPENROUTER_API_KEY",
-        "reasoning_effort": "low",
+    "go": {
+        "api": "responses",
+        "base_url": "https://opencode.ai/inference/go/openai/v1",
+        "model": "muse-spark-1.3-contributor",
+        "key": "OPENCODE_GO_API_KEY",
+        "reasoning_effort": "minimal",
     },
     "gemini-dev": {
+        "api": "chat",
         "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
         "model": "gemini-3.5-flash-lite",
         "key": "GEMINI_API_KEY",
@@ -32,10 +43,14 @@ LLM_ROUTES = {
     },
 }
 
+# Go asks clients to name themselves rather than send a generic SDK user agent.
+USER_AGENT = "open-tutor/0.1 (+https://github.com/johan-acevedo/open-tutor)"
+
 
 @dataclass(frozen=True)
 class LLMRoute:
     name: str
+    api: str
     base_url: str
     model: str
     api_key: str
@@ -44,7 +59,7 @@ class LLMRoute:
 
 def llm_route(environ: dict[str, str] | None = None) -> LLMRoute:
     env = os.environ if environ is None else environ
-    name = env.get("TUTOR_LLM", "spark")
+    name = env.get("TUTOR_LLM", "go")
     if name not in LLM_ROUTES:
         raise ValueError(f"TUTOR_LLM must be one of {', '.join(LLM_ROUTES)}")
     spec = LLM_ROUTES[name]
@@ -53,6 +68,7 @@ def llm_route(environ: dict[str, str] | None = None) -> LLMRoute:
         raise ValueError(f"TUTOR_LLM={name} needs {spec['key']} in the backend environment")
     return LLMRoute(
         name=name,
+        api=spec["api"],
         base_url=env.get("TUTOR_LLM_BASE_URL", spec["base_url"]),
         model=env.get("TUTOR_LLM_MODEL", spec["model"]),
         api_key=key,

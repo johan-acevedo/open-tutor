@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 # Run a command with Open Tutor's backend environment.
-# Reads ${OPEN_TUTOR_ENV:-~/.config/open-tutor/env} (mode 600, never committed). If it names an
-# Infisical project (OPEN_TUTOR_INFISICAL_PROJECT), provider keys are injected from there too.
+# Reads ${OPEN_TUTOR_ENV:-~/.config/open-tutor/env} (mode 600, never committed) as defaults:
+# a variable already set in the environment wins. If the file names an Infisical project
+# (OPEN_TUTOR_INFISICAL_PROJECT), provider keys are injected from there too.
 set -euo pipefail
 env_file=${OPEN_TUTOR_ENV:-$HOME/.config/open-tutor/env}
 if [[ -f $env_file ]]; then
+  preset=$(export -p)
   set -a; source "$env_file"; set +a
+  eval "$preset"
 fi
 if [[ -n ${OPEN_TUTOR_INFISICAL_PROJECT:-} ]] && command -v infisical >/dev/null; then
   exec infisical run --silent --projectId "$OPEN_TUTOR_INFISICAL_PROJECT" \

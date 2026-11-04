@@ -32,12 +32,15 @@ def test_youtube_embed(url, embed):
 
 
 def test_llm_route_is_explicit():
-    assert llm_route({"OPENROUTER_API_KEY": "k"}).model == "meta/muse-spark-1.3"
+    route = llm_route({"OPENCODE_GO_API_KEY": "k"})
+    assert (route.name, route.api, route.model) == ("go", "responses", "muse-spark-1.3-contributor")
+    assert route.base_url == "https://opencode.ai/inference/go/openai/v1"
+    assert not llm_route({"OPENCODE_GO_API_KEY": "k", "OPENROUTER_API_KEY": "k"}).base_url.startswith("https://openrouter")
     assert llm_route({"TUTOR_LLM": "gemini-dev", "GEMINI_API_KEY": "k"}).name == "gemini-dev"
     with pytest.raises(ValueError):
-        llm_route({})  # the Spark route never silently falls back
+        llm_route({"GEMINI_API_KEY": "k"})  # the Go route never silently falls back
     with pytest.raises(ValueError):
-        llm_route({"TUTOR_LLM": "other", "OPENROUTER_API_KEY": "k"})
+        llm_route({"TUTOR_LLM": "spark", "OPENCODE_GO_API_KEY": "k"})  # the OpenRouter route is gone
 
 
 def test_prompt_uses_learner_and_notes():

@@ -29,7 +29,7 @@ from livekit.agents import (
     llm,
     room_io,
 )
-from livekit.plugins import cartesia, elevenlabs, openai, silero, soniox
+from livekit.plugins import cartesia, elevenlabs, silero, soniox
 from pydantic import ValidationError
 
 from . import prompt
@@ -45,8 +45,9 @@ from .board import (
     TextItem,
     youtube_embed,
 )
-from .config import AGENT_NAME, env_float, llm_route
-from .speech import speakable_stream
+from .config import AGENT_NAME, env_float
+from .tutor_llm import build_llm, warm_up
+from .speech import speakable_stream, unspoken_stream
 
 log = logging.getLogger("open-tutor")
 
@@ -83,21 +84,6 @@ def build_tts():
     return elevenlabs.TTS(**kwargs)
 
 
-def build_llm() -> openai.LLM:
-    route = llm_route()
-    log.info("tutor LLM route %s model %s", route.name, route.model)
-    extra: dict[str, Any] = {}
-    if route.reasoning_effort:
-        extra["reasoning_effort"] = route.reasoning_effort
-    return openai.LLM(
-        model=route.model,
-        base_url=route.base_url,
-        api_key=route.api_key,
-        temperature=0.6,
-        **extra,
-    )
-
-
 class Tutor(Agent):
     def __init__(self, learner: dict[str, Any], room: rtc.Room) -> None:
         super().__init__(instructions=prompt.instructions(learner))
@@ -121,10 +107,12 @@ class Tutor(Agent):
                 payload=json.dumps(payload, ensure_ascii=False),
                 response_timeout=BOARD_RPC_TIMEOUT,
             )
-            return bool(json.loads(reply or "{}").get("ok"))
+            ok = bool(json.loads(reply or "{}").get("ok"))
         except Exception as error:  # timeout, child left, or render error
             log.warning("board rpc %s failed: %s", method, error)
             return False
+        log.info("board rpc %s %s acknowledged=%s", method, payload.get("id"), ok)
+        return ok
 
     async def _show(self, item) -> str:
         shown = await self._rpc("board.show", item.model_dump(exclude_none=True))
@@ -351,8 +339,13 @@ class Tutor(Agent):
                 "you, call stay_quiet.] ",
             )
 
+    # Tool calls arrive as structured calls and run as tools. Only the reply's words may
+    # reach the voice, the caption and (through the caption) the chat history.
     def tts_node(self, text, model_settings):
         return Agent.default.tts_node(self, speakable_stream(text), model_settings)
+
+    def transcription_node(self, text, model_settings):
+        return Agent.default.transcription_node(self, unspoken_stream(text), model_settings)
 
     # ---- homework ----------------------------------------------------------------
 
@@ -377,6 +370,7 @@ server = AgentServer()
 
 def prewarm(proc: JobProcess) -> None:
     proc.userdata["vad"] = silero.VAD.load(min_silence_duration=0.5)
+    warm_up()
 
 
 server.setup_fnc = prewarm
@@ -396,7 +390,7 @@ async def entrypoint(ctx: JobContext) -> None:
 
     session = AgentSession(
         stt=build_stt(),
-        llm=build_llm(),
+        llm=build_llm(ctx.room.name),
         tts=build_tts(),
         vad=ctx.proc.userdata["vad"],
         turn_handling=TurnHandlingOptions(
@@ -406,6 +400,11 @@ async def entrypoint(ctx: JobContext) -> None:
         ),
         max_tool_steps=6,
     )
+
+    @session.on("function_tools_executed")
+    def tools_executed(event) -> None:
+        # Names only: arguments can hold the child's words.
+        log.info("tools executed: %s", ", ".join(call.name for call in event.function_calls))
 
     # ---- homework intake ----------------------------------------------------------
     pending: list[tuple[list[Any], str]] = []
