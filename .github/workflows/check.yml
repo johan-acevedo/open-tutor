@@ -1,4 +1,4 @@
-name: Review package
+name: Checks
 
 on:
   pull_request:
@@ -19,3 +19,35 @@ jobs:
         run: git diff --exit-code -- review/board-meeting.html review/MEETING-NOTES.md
       - name: Check review package
         run: python review/check.py
+
+  server:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Install
+        run: uv sync --locked --python 3.12
+      - name: Import the worker (plugins and tools register)
+        run: uv run python -c "import open_tutor.agent, open_tutor.web"
+      - name: Tests
+        run: uv run pytest -q
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
