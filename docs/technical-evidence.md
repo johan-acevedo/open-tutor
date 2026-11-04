@@ -33,6 +33,8 @@ The Infisical CLI successfully listed the `homelab` project. A subprocess retrie
 
 No `LIVEKIT_*` or OpenCode key names appeared in that inspected development environment. This does not establish that they are absent from other environments or existing service configuration. Do not publish the full secret inventory or environment identifiers.
 
+Update 2026-11-04: rechecked by name across every `homelab` environment and folder (and the other projects visible to the CLI). There is still no OpenCode key in Infisical. The family deployment uses Johan's existing OpenCode Go key from the Go provider configuration on dell5500, copied into the deployment's private env file. The tested Go route is described in [server/README.md](../server/README.md#the-opencode-go-route).
+
 The home-lab inventory describes ThinkCentre as a CPU host with always-on intent. The operations handbook documents the Mini's Cloudflare tunnel and tailnet service routing. Neither current host availability nor a proposed tutor hostname was tested in this phase.
 
 ## Scope of the review package

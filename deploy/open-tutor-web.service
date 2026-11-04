@@ -1,0 +1,14 @@
+[Unit]
+Description=Open Tutor web service (page + room tokens)
+After=network-online.target
+
+[Service]
+WorkingDirectory=%h/code/open-tutor/server
+ExecStart=%h/code/open-tutor/server/bin/with-env %h/.local/bin/uv run --frozen uvicorn open_tutor.web:app --host ${TUTOR_BIND} --port 8710 --proxy-headers
+Environment=TUTOR_BIND=127.0.0.1
+EnvironmentFile=-%h/.config/open-tutor/bind.env
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

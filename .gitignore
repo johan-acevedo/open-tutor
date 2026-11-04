@@ -1,3 +1,6 @@
 __pycache__/
 *.py[cod]
 .review-checks/
+.venv/
+node_modules/
+web/dist/

@@ -88,7 +88,7 @@ These examples explain the intent. They do not limit the initial tool to those s
 
 Use LiveKit for live audio transport and agent session handling. Separate speech recognition, the tutor LLM, and speech synthesis so providers can change as capabilities improve.
 
-For Johan's initial instance, the `homelab` Infisical project supplies prototype credentials and existing provider credits. The intended testing LLM is Spark through OpenCode Go. The exact model and its suitability for live streaming and tool use still need confirmation. Document and image understanding may require a separate provider.
+For Johan's initial instance, the `homelab` Infisical project supplies prototype credentials and existing provider credits. The tutor LLM is Muse Spark 1.3 Contributor through Johan's OpenCode Go subscription (Responses API, HTTP streaming). Streaming, structured tool calls and image input were tested on 2026-11-04; see [server/README.md](server/README.md#the-opencode-go-route).
 
 Other contributors and hosts can use their own providers and credentials. Johan's provisioning setup is not an application dependency. Select speech services for live streaming, conversational responsiveness, and language quality.
 

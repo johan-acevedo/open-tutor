@@ -33,13 +33,13 @@ These are recommendations, not installed dependencies. Pin versions during imple
 
 Choose our own tutor-controlled board. A full canvas editor adds interaction work we have deliberately deferred. The tldraw SDK also requires a production licence key, including discretionary hobby licences. This is a dependency choice, not a judgement about either project's educational quality. [tldraw licensing](https://tldraw.dev/community/license)
 
-## Provider proposal and the unresolved LLM route
+## Provider proposal and the LLM route
 
 Start the integration experiment with Soniox streaming transcription and ElevenLabs streaming speech. Both have key names present in `homelab` development and existing integrations in `t3-call`. Swedish support is documented for Soniox. Choose the actual voice and model configurations by listening and testing; their quality and latency here are not yet established. Cartesia and other already available providers remain alternatives if the first combination disappoints. [Soniox languages](https://docs.soniox.com/stt/concepts/supported-languages), [LiveKit Soniox integration](https://docs.livekit.io/agents/models/stt/soniox/), [ElevenLabs integration](https://docs.livekit.io/agents/models/tts/elevenlabs/)
 
-Spark through OpenCode Go remains the founder's intended testing route. However, the current Go documentation asks clients to send typical coding-agent traffic, so tutoring eligibility is unresolved. Its Muse Spark Contributor route also lists training use and regional restrictions. The earlier assumption that API availability alone established suitability was incomplete. Do not disguise tutoring traffic as coding. Confirm a supported route before using real homework, or use an ordinary metered API configured behind the same interface. No provider or workspace settings were changed. [OpenCode Go usage and model terms](https://opencode.ai/v2/docs/console/go/)
+Johan chose Muse Spark 1.3 Contributor through his OpenCode Go subscription as the tutor model (decision of 2026-11-04, replacing the metered OpenRouter route). The app identifies itself truthfully to Go (`User-Agent: open-tutor/…`, one `x-opencode-session` per room). Go's documentation lists training use and regional limits for Contributor models; see [server/README.md](server/README.md#the-opencode-go-route). [OpenCode Go](https://opencode.ai/docs/go/)
 
-LiveKit supports configurable compatible endpoints, but wire compatibility still needs testing. In particular, the documented Responses plugin defaults to WebSocket, while an endpoint advertising HTTP Responses does not establish WebSocket support. Prefer a documented HTTP-streaming route or a small adapter if needed. Native image understanding is preferable; use a Gemini vision helper only if the selected tutor model cannot inspect the original pages. [LiveKit LLM integration](https://docs.livekit.io/agents/models/llm/openai/)
+Wire compatibility was tested: Go's Responses endpoint works over HTTP streaming with structured function calls and image input, and its Responses WebSocket answers 404, so the worker uses LiveKit's Responses plugin with `use_websocket=False` and a small usage-field fix. Native image understanding works, so no separate vision helper is needed. [LiveKit LLM integration](https://docs.livekit.io/agents/models/llm/openai/)
 
 Use Exa for the initial resource-search tool. Give the tutor returned links and metadata to choose from, with no resource approval system. Existing `t3-call` search code is a reference. Generated images use the available cloud providers asynchronously when useful; select exact media models when implementing that tool.
 
@@ -61,7 +61,7 @@ Use speech-provider endpointing and voice-activity detection as the initial Swed
 
 Propose `tutor.labtopia.dev` as the first URL, subject to a DNS check during deployment. The existing Mini tunnel can route HTTPS to the service on ThinkCentre over the tailnet. Browser audio goes directly through LiveKit, rather than through that HTTP tunnel. ThinkCentre's inventory records always-on intent, but we have not probed its current state or deployed anything.
 
-Inject credentials from Infisical into the backend processes. The inspected `homelab` development environment contains speech, search, vision and image-provider key names. Their validity, balances and API access were not tested. No `LIVEKIT_*` or OpenCode key names appeared in that inspected environment; locate the existing call project's provisioning or add the needed backend configuration when implementing. Do not expose keys to the browser or commit environment exports.
+Inject credentials from Infisical into the backend processes. The inspected `homelab` development environment contains speech, search, vision and image-provider key names. Their validity, balances and API access were not tested. No `LIVEKIT_*` or OpenCode key names appeared in that inspected environment (rechecked on 2026-11-04 across all `homelab` environments and folders: still no OpenCode key); the deployment's private env file holds them. Do not expose keys to the browser or commit environment exports.
 
 Hosting one family's sessions and opening a demo to the public are separate operational steps. Start with family use. Before opening it more broadly, set an owner-controlled spending and concurrency limit. That need not add learner accounts. Track actual usage before estimating a per-session cost; this phase makes no cost or latency promise.
 
@@ -69,7 +69,7 @@ Hosting one family's sessions and opening a demo to the public are separate oper
 
 | Milestone | Concrete result | What we learn |
 |---|---|---|
-| A. Integration experiment | Swedish voice, one real homework page, interruption, quiet work, and a board update in one session | Whether the chosen provider route and coordination work. Use fictional material until the LLM route is settled. |
+| A. Integration experiment | Swedish voice, one real homework page, interruption, quiet work, and a board update in one session | Whether the chosen provider route and coordination work. Fictional material only. |
 | B. Complete workspace | Approved character poses, local profiles, homework intake, visual teaching, links and saved notes | Whether all parts work as one experience rather than isolated demonstrations. |
 | C. Browser-ready hosting | HTTPS URL, persistent services, reconnect/error handling, Windows and Chromebook checks | Whether the child can arrive and use it without technical help. |
 | D. First weekday session | The child brings actual schoolwork; Johan observes | What helps learning and which friction to fix next. |
@@ -78,6 +78,6 @@ This phase delivers the foundation and technical proposal only. The next step is
 
 ## Decisions for review
 
-The recommended direction is a new small app, selective MIT reuse, a tutor-controlled web board, Python voice worker, and existing home-lab hosting with managed LiveKit transport. Confirm the LLM access route before real learner content. Exact Swedish voice choice belongs to the integration experiment.
+The recommended direction is a new small app, selective MIT reuse, a tutor-controlled web board, Python voice worker, and existing home-lab hosting with managed LiveKit transport. The LLM route is Muse Spark on OpenCode Go (see above). Exact Swedish voice choice belongs to the integration experiment.
 
 An MIT project licence is a reasonable proposal for easy reuse, but remains unselected here. No licence was added and no AGPL source was copied. The PRD and visual direction can be reviewed independently of these technical recommendations.
