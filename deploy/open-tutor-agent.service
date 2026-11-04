@@ -1,0 +1,12 @@
+[Unit]
+Description=Open Tutor voice worker (LiveKit agent)
+After=network-online.target
+
+[Service]
+WorkingDirectory=%h/code/open-tutor/server
+ExecStart=%h/code/open-tutor/server/bin/with-env %h/.local/bin/uv run --frozen python -m open_tutor.agent start
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
