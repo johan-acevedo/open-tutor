@@ -1,6 +1,6 @@
 # Milestone A: what actually ran
 
-Recorded 2026-11-04 on dell5500, against LiveKit Cloud (Germany region), with **fictional material only**. The worker and web service ran locally; nothing is deployed yet.
+Recorded 2026-11-04 against LiveKit Cloud (Germany region), with **fictional material only**. The first runs used a worker and web service on dell5500. The same browser test then passed against the family deployment described below.
 
 ## Model route used for these runs
 
@@ -32,6 +32,14 @@ The built page was served by the FastAPI service. Checked at 1366×768 and 900×
 - Returning learner → "Förra gången: Ekvationer" chip; spoken greeting referred to last session.
 - Two-page PDF rendered with PDF.js and both pages understood; pasted text acknowledged; resource request → Exa search → YouTube embed, "Väntar medan du tittar", "Klar – prata vidare" → follow-up question.
 - Microphone denied → amber banner, typing works.
+
+## Family deployment
+
+- `https://tutor.labtopia.dev`: a proxied CNAME and an ingress rule on the Mini's `labtopia-mini` Cloudflare tunnel, routed to the web service on ThinkCentre at its tailnet address, port 8710.
+- ThinkCentre runs `open-tutor-web` and `open-tutor-agent` as user services (`deploy/install.sh`, lingering on, no root). Secrets are in `~/.config/open-tutor/env` (mode 600).
+- `TUTOR_ACCESS_CODE` is set. Without it `/api/session` returns 401. Share the page as `https://tutor.labtopia.dev/?kod=<code>`. Johan's copy of the code is in `$HOMELAB_SECRETS/open-tutor-family-code.txt` on dell5500. The cap is 12 sessions per hour.
+- After the change, labtopia.dev, farm and art still answered 200, 200 and 401. Rollback: the tunnel backup path that `cf tunnel-put` printed (20261104-095418), and delete the `tutor` CNAME.
+- The deployment runs `TUTOR_LLM=gemini-dev`, so it is **for fictional material until the Spark route has credit**.
 
 ## Not yet verified
 
