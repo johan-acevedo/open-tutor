@@ -1,0 +1,606 @@
+{
+ "two_flushes": {
+  "sent": [
+   {
+    "inputs": [
+     {
+      "text": "Bra jobbat! ",
+      "voice_id": "hpp4J3VqNfWAUOO0d1Us"
+     }
+    ]
+   },
+   {
+    "flush": true
+   },
+   {
+    "inputs": [
+     {
+      "text": "Nu tar vi bort fem på båda sidor. ",
+      "voice_id": "hpp4J3VqNfWAUOO0d1Us"
+     }
+    ]
+   },
+   {
+    "flush": true
+   },
+   {
+    "close_socket": true
+   }
+  ],
+  "received": [
+   {
+    "alignment": {
+     "chars": [
+      "B",
+      "r"
+     ],
+     "char_start_times_ms": [
+      0,
+      40
+     ],
+     "char_durations_ms": [
+      40,
+      40
+     ]
+    },
+    "normalized_alignment": {
+     "chars": [
+      "B",
+      "r"
+     ],
+     "char_start_times_ms": [
+      0,
+      40
+     ],
+     "char_durations_ms": [
+      40,
+      40
+     ]
+    },
+    "audio_bytes": 1518
+   },
+   {
+    "audio_bytes": 4554
+   },
+   {
+    "alignment": {
+     "chars": [
+      "a",
+      " "
+     ],
+     "char_start_times_ms": [
+      0,
+      120
+     ],
+     "char_durations_ms": [
+      120,
+      120
+     ]
+    },
+    "normalized_alignment": {
+     "chars": [
+      "a",
+      " "
+     ],
+     "char_start_times_ms": [
+      0,
+      120
+     ],
+     "char_durations_ms": [
+      120,
+      120
+     ]
+    },
+    "audio_bytes": 7590
+   },
+   {
+    "audio_bytes": 3036
+   },
+   {
+    "alignment": {
+     "chars": [
+      "j"
+     ],
+     "char_start_times_ms": [
+      0
+     ],
+     "char_durations_ms": [
+      160
+     ]
+    },
+    "normalized_alignment": {
+     "chars": [
+      "j"
+     ],
+     "char_start_times_ms": [
+      0
+     ],
+     "char_durations_ms": [
+      160
+     ]
+    },
+    "audio_bytes": 12144
+   },
+   {
+    "alignment": {
+     "chars": [
+      "o",
+      "b",
+      "b",
+      "a",
+      "t"
+     ],
+     "char_start_times_ms": [
+      0,
+      160,
+      240,
+      373,
+      507
+     ],
+     "char_durations_ms": [
+      160,
+      80,
+      133,
+      134,
+      133
+     ]
+    },
+    "normalized_alignment": {
+     "chars": [
+      "o",
+      "b",
+      "b",
+      "a",
+      "t"
+     ],
+     "char_start_times_ms": [
+      0,
+      160,
+      240,
+      373,
+      507
+     ],
+     "char_durations_ms": [
+      160,
+      80,
+      133,
+      134,
+      133
+     ]
+    },
+    "audio_bytes": 30360
+   },
+   {
+    "alignment": {
+     "chars": [
+      "!",
+      " "
+     ],
+     "char_start_times_ms": [
+      0,
+      400
+     ],
+     "char_durations_ms": [
+      400,
+      0
+     ]
+    },
+    "normalized_alignment": {
+     "chars": [
+      "!",
+      " "
+     ],
+     "char_start_times_ms": [
+      0,
+      400
+     ],
+     "char_durations_ms": [
+      400,
+      0
+     ]
+    },
+    "audio_bytes": 12144
+   },
+   {
+    "audio_bytes": 1614
+   },
+   {
+    "is_final_audio_for_turn": true
+   },
+   {
+    "audio_bytes": 1518
+   },
+   {
+    "alignment": {
+     "chars": [
+      "N",
+      "u",
+      " "
+     ],
+     "char_start_times_ms": [
+      0,
+      80,
+      120
+     ],
+     "char_durations_ms": [
+      80,
+      40,
+      40
+     ]
+    },
+    "normalized_alignment": {
+     "chars": [
+      "N",
+      "u",
+      " "
+     ],
+     "char_start_times_ms": [
+      0,
+      80,
+      120
+     ],
+     "char_durations_ms": [
+      80,
+      40,
+      40
+     ]
+    },
+    "audio_bytes": 4554
+   },
+   {
+    "alignment": {
+     "chars": [
+      "t",
+      "a",
+      "r",
+      " "
+     ],
+     "char_start_times_ms": [
+      0,
+      80,
+      107,
+      133
+     ],
+     "char_durations_ms": [
+      80,
+      27,
+      26,
+      27
+     ]
+    },
+    "normalized_alignment": {
+     "chars": [
+      "t",
+      "a",
+      "r",
+      " "
+     ],
+     "char_start_times_ms": [
+      0,
+      80,
+      107,
+      133
+     ],
+     "char_durations_ms": [
+      80,
+      27,
+      26,
+      27
+     ]
+    },
+    "audio_bytes": 7590
+   },
+   {
+    "alignment": {
+     "chars": [
+      "v",
+      "i",
+      " "
+     ],
+     "char_start_times_ms": [
+      0,
+      40,
+      60
+     ],
+     "char_durations_ms": [
+      40,
+      20,
+      20
+     ]
+    },
+    "normalized_alignment": {
+     "chars": [
+      "v",
+      "i",
+      " "
+     ],
+     "char_start_times_ms": [
+      0,
+      40,
+      60
+     ],
+     "char_durations_ms": [
+      40,
+      20,
+      20
+     ]
+    },
+    "audio_bytes": 3036
+   },
+   {
+    "alignment": {
+     "chars": [
+      "b"
+     ],
+     "char_start_times_ms": [
+      0
+     ],
+     "char_durations_ms": [
+      80
+     ]
+    },
+    "normalized_alignment": {
+     "chars": [
+      "b"
+     ],
+     "char_start_times_ms": [
+      0
+     ],
+     "char_durations_ms": [
+      80
+     ]
+    },
+    "audio_bytes": 12144
+   },
+   {
+    "alignment": {
+     "chars": [
+      "o",
+      "r",
+      "t",
+      " ",
+      "f",
+      "e",
+      "m",
+      " "
+     ],
+     "char_start_times_ms": [
+      0,
+      160,
+      200,
+      240,
+      400,
+      480,
+      600,
+      720
+     ],
+     "char_durations_ms": [
+      160,
+      40,
+      40,
+      160,
+      80,
+      120,
+      120,
+      80
+     ]
+    },
+    "normalized_alignment": {
+     "chars": [
+      "o",
+      "r",
+      "t",
+      " ",
+      "f",
+      "e",
+      "m",
+      " "
+     ],
+     "char_start_times_ms": [
+      0,
+      160,
+      200,
+      240,
+      400,
+      480,
+      600,
+      720
+     ],
+     "char_durations_ms": [
+      160,
+      40,
+      40,
+      160,
+      80,
+      120,
+      120,
+      80
+     ]
+    },
+    "audio_bytes": 30360
+   },
+   {
+    "alignment": {
+     "chars": [
+      "p",
+      "å",
+      " ",
+      "b",
+      "å",
+      "d",
+      "a"
+     ],
+     "char_start_times_ms": [
+      0,
+      80,
+      160,
+      240,
+      320,
+      400,
+      480
+     ],
+     "char_durations_ms": [
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80
+     ]
+    },
+    "normalized_alignment": {
+     "chars": [
+      "p",
+      "å",
+      " ",
+      "b",
+      "å",
+      "d",
+      "a"
+     ],
+     "char_start_times_ms": [
+      0,
+      80,
+      160,
+      240,
+      320,
+      400,
+      480
+     ],
+     "char_durations_ms": [
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80
+     ]
+    },
+    "audio_bytes": 27324
+   },
+   {
+    "alignment": {
+     "chars": [
+      " ",
+      "s",
+      "i",
+      "d",
+      "o",
+      "r"
+     ],
+     "char_start_times_ms": [
+      0,
+      80,
+      160,
+      240,
+      320,
+      440
+     ],
+     "char_durations_ms": [
+      80,
+      80,
+      80,
+      80,
+      120,
+      120
+     ]
+    },
+    "normalized_alignment": {
+     "chars": [
+      " ",
+      "s",
+      "i",
+      "d",
+      "o",
+      "r"
+     ],
+     "char_start_times_ms": [
+      0,
+      80,
+      160,
+      240,
+      320,
+      440
+     ],
+     "char_durations_ms": [
+      80,
+      80,
+      80,
+      80,
+      120,
+      120
+     ]
+    },
+    "audio_bytes": 34914
+   },
+   {
+    "alignment": {
+     "chars": [
+      ".",
+      " "
+     ],
+     "char_start_times_ms": [
+      0,
+      320
+     ],
+     "char_durations_ms": [
+      320,
+      0
+     ]
+    },
+    "normalized_alignment": {
+     "chars": [
+      ".",
+      " "
+     ],
+     "char_start_times_ms": [
+      0,
+      320
+     ],
+     "char_durations_ms": [
+      320,
+      0
+     ]
+    },
+    "audio_bytes": 4554
+   },
+   {
+    "audio_bytes": 726
+   },
+   {
+    "is_final_audio_for_turn": true
+   },
+   {
+    "is_final": true
+   }
+  ]
+ },
+ "bad_voice": {
+  "sent": [
+   {
+    "inputs": [
+     {
+      "text": "Hej. ",
+      "voice_id": "hpp4J3VqNfWAUOO0d1Us"
+     }
+    ]
+   },
+   {
+    "flush": true
+   },
+   {
+    "close_socket": true
+   }
+  ],
+  "received": [
+   {
+    "message": "A voice with voice_id 'notARealVoiceId123' was not found.",
+    "error": "voice_not_found",
+    "code": 1008
+   }
+  ]
+ },
+ "_about": "Recorded 2026-11-04 from wss://api.elevenlabs.io/v1/text-to-dialogue/stream-input, model eleven_v4_turbo, voice hpp4J3VqNfWAUOO0d1Us (Bella), output pcm_24000, language_code=sv, sync_alignment=true. Fictional text. Audio is replaced by its decoded byte count (audio_bytes); every other field is as received."
+}

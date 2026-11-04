@@ -43,6 +43,13 @@ LLM_ROUTES = {
     },
 }
 
+# Voice. Eleven v4 Turbo (ElevenLabs, released September 2026) is the v4 model for
+# real-time conversation; it is served only over text-to-dialogue (see dialogue_tts.py).
+# Bella - Professional, Bright, Warm: an ElevenLabs premade voice, the one the family liked
+# on Flash v2.5; checked on v4 Turbo with the real API on 2026-11-04.
+DEFAULT_TTS_MODEL = "eleven_v4_turbo"
+DEFAULT_TTS_VOICE = "hpp4J3VqNfWAUOO0d1Us"
+
 # Go asks clients to name themselves rather than send a generic SDK user agent.
 USER_AGENT = "open-tutor/0.1 (+https://github.com/johan-acevedo/open-tutor)"
 
