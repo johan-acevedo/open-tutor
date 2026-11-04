@@ -19,11 +19,14 @@ import { appendNote } from './db';
 import type { Profile } from './db';
 import { isNoteLike, validateBoardFocus, validateBoardItem } from './validate';
 import { dataUrlToBytes, downscaleImage } from './image';
+import { createDiagramAcks } from './diagramAck';
 
 export type Phase = 'profiles' | 'connecting' | 'live' | 'ending' | 'ended';
 export type ConnBanner = 'reconnecting' | 'disconnected' | null;
 
 const MOUNT_TIMEOUT_MS = 4500;
+// A diagram's first appearance fetches the drawing library; the worker waits 12 s for the reply.
+const DIAGRAM_RENDER_TIMEOUT_MS = 10500;
 // The tutor saves a note and says goodbye before it closes the room (which disconnects us);
 // this is only the fallback if that never happens. 8 s cut goodbyes off mid-sentence.
 const END_WAIT_MS = 25000;
@@ -93,6 +96,17 @@ function unregisterRpc(room: Room, method: string): void {
   }
 }
 
+/** Replace the card with the same id, else append. An older diagram revision never replaces a newer one. */
+export function upsertItem(items: BoardItem[], item: BoardItem): BoardItem[] {
+  const i = items.findIndex((b) => b.id === item.id);
+  if (i < 0) return [...items, item];
+  const current = items[i];
+  if (current.kind === 'diagram' && item.kind === 'diagram' && item.rev < current.rev) return items;
+  const next = [...items];
+  next[i] = item;
+  return next;
+}
+
 export function useSession() {
   const [phase, setPhase] = useState<Phase>('profiles');
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -150,6 +164,10 @@ export function useSession() {
     });
   }, []);
 
+  // Diagram RPCs are answered only when the card reports that the scene shows their revision.
+  const [diagramAcks] = useState(() => createDiagramAcks(DIAGRAM_RENDER_TIMEOUT_MS));
+  const { wait: waitForDiagram, rendered: diagramRendered, failAll: failDiagramWaiters } = diagramAcks;
+
   const readParticipantStates = useCallback((room: Room) => {
     for (const p of room.remoteParticipants.values()) {
       const st = p.attributes?.[ATTR_AGENT_STATE];
@@ -175,8 +193,9 @@ export function useSession() {
       /* ignore */
     }
     room.removeAllListeners();
+    failDiagramWaiters('Samtalet avslutades.');
     void room.disconnect().catch(() => undefined);
-  }, []);
+  }, [failDiagramWaiters]);
 
   const start = useCallback(
     async (p: Profile) => {
@@ -197,6 +216,7 @@ export function useSession() {
       setConnBanner(null);
       setDragOver(false);
       mountResolvers.current.clear();
+      failDiagramWaiters('Sessionen startade om.');
       setPhase('connecting');
 
       const notes = p.notes.slice(-5).reverse(); // newest first
@@ -271,6 +291,20 @@ export function useSession() {
         setConnBanner('disconnected');
       });
 
+      // Ordinary cards answer once mounted. A diagram answers once its scene shows the revision, and
+      // answers with an error if the drawing library or the font failed: never a false success.
+      const acknowledge = async (item: BoardItem, drawn: Promise<void> | null) => {
+        if (!drawn) {
+          await waitForMounted(item.id);
+          return;
+        }
+        try {
+          await drawn;
+        } catch (error) {
+          throw new RpcError(1500, error instanceof Error ? error.message : 'Diagrammet kunde inte ritas.');
+        }
+      };
+
       registerRpc(room, BOARD_RPC_SHOW, async (data) => {
         let parsed: unknown;
         try {
@@ -280,17 +314,10 @@ export function useSession() {
         }
         const v = validateBoardItem(parsed);
         if (!v.ok) throw new RpcError(1500, v.error);
-        setItems((prev) => {
-          const i = prev.findIndex((b) => b.id === v.item.id);
-          if (i >= 0) {
-            const next = [...prev];
-            next[i] = v.item;
-            return next;
-          }
-          return [...prev, v.item];
-        });
+        const drawn = v.item.kind === 'diagram' ? waitForDiagram(v.item.id, v.item.rev) : null;
+        setItems((prev) => upsertItem(prev, v.item));
         setFocused(null);
-        await waitForMounted(v.item.id);
+        await acknowledge(v.item, drawn);
         return '{"ok":true}';
       });
 
@@ -303,16 +330,9 @@ export function useSession() {
         }
         const v = validateBoardItem(parsed);
         if (!v.ok) throw new RpcError(1500, v.error);
-        setItems((prev) => {
-          const i = prev.findIndex((b) => b.id === v.item.id);
-          if (i >= 0) {
-            const next = [...prev];
-            next[i] = v.item;
-            return next;
-          }
-          return [...prev, v.item];
-        });
-        await waitForMounted(v.item.id);
+        const drawn = v.item.kind === 'diagram' ? waitForDiagram(v.item.id, v.item.rev) : null;
+        setItems((prev) => upsertItem(prev, v.item));
+        await acknowledge(v.item, drawn);
         return '{"ok":true}';
       });
 
@@ -397,7 +417,7 @@ export function useSession() {
       }
       setPhase('live');
     },
-    [cleanupRoom, readParticipantStates, showToast, waitForMounted],
+    [cleanupRoom, failDiagramWaiters, readParticipantStates, showToast, waitForDiagram, waitForMounted],
   );
 
   const sendChat = useCallback(
@@ -688,6 +708,7 @@ export function useSession() {
     addFiles,
     addText,
     onItemMounted: resolveMounted,
+    onDiagramRendered: diagramRendered,
   };
 }
 

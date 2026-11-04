@@ -56,4 +56,6 @@ uv run pytest -q
 
 `scripts/two_session_probe.py` runs two consecutive typed sessions for one fictional learner against a running worker. The first session's saved note goes into the second, as in the browser. It checks that board items arrive and are acknowledged in both, and that no tool name, arguments or JSON reach the captions (the text the voice speaks).
 
+`scripts/diagram_browser_probe.py` checks the diagram card in a real browser: the real `Tutor` tools drive a Chromium page through a local LiveKit server (`livekit-server --dev`), with no model, voice or cloud account. It verifies what the browser drew (labels, arrows, focus, ordering, text alternative, lazy-load and font failures, reconnection) and writes screenshots. See [docs/diagram-card.md](../docs/diagram-card.md). It needs Playwright and is not part of CI.
+
 `scripts/live_probe.py` runs a real session against a running worker with a scripted fictional learner: recorded Swedish clips, a generated worksheet, an interruption, 30 s of quiet work, mumbling, and the end of the session. It writes a JSON timeline and the tutor's audio. It uses live providers and costs a little; it is not part of CI.

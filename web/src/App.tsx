@@ -73,6 +73,7 @@ export default function App() {
               items={session.items}
               focused={session.focused}
               onItemMounted={session.onItemMounted}
+              onDiagramRendered={session.onDiagramRendered}
               onResourceClosed={(id) => void session.resourceClosed(id)}
               dragOver={session.dragOver}
             />

@@ -1,8 +1,12 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { ComponentType } from 'react';
 import katex from 'katex';
 import type { BoardItem } from '../protocol';
 import { renderMarkdown } from '../markdown';
 import { sanitiseSvg } from '../svgSanitize';
+import { diagramText } from '../diagramModel';
+import { loadDiagramCanvas } from '../diagramLoader';
+import type { DiagramCanvasProps } from '../diagramLoader';
 
 export const IMAGE_MOUNT_TIMEOUT_MS = 4000;
 
@@ -11,6 +15,8 @@ type CardProps = {
   focusedStep?: number;
   onMounted: (id: string) => void;
   onResourceClosed?: (id: string) => void;
+  /** Diagram cards report the revision they have drawn, or why they could not. */
+  onDiagramRendered?: (id: string, rev: number, error?: string) => void;
 };
 
 function useReportMounted(id: string, onMounted: (id: string) => void, waitForImage = false) {
@@ -223,6 +229,94 @@ function HomeworkCard({ item, onMounted }: CardProps) {
   );
 }
 
+function DiagramCard({ item, onDiagramRendered }: CardProps) {
+  if (item.kind !== 'diagram') return null;
+  const [Canvas, setCanvas] = useState<ComponentType<DiagramCanvasProps> | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [renderError, setRenderError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const [interactive, setInteractive] = useState(false);
+  const text = useMemo(() => diagramText(item), [item]);
+  const id = item.id;
+
+  // The drawing library is a separate chunk, fetched when the first diagram arrives.
+  useEffect(() => {
+    let cancelled = false;
+    setLoadError(null);
+    loadDiagramCanvas().then(
+      (module) => {
+        if (!cancelled) setCanvas(() => module.default);
+      },
+      () => {
+        if (!cancelled) setLoadError('Ritprogrammet kunde inte laddas.');
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [attempt]);
+
+  // While the library is missing, every revision is answered with the failure, not left to time out.
+  useEffect(() => {
+    if (loadError) onDiagramRendered?.(id, item.rev, loadError);
+  }, [loadError, id, item.rev, onDiagramRendered]);
+
+  const rendered = (rev: number, error?: string) => {
+    setRenderError(error ?? null);
+    onDiagramRendered?.(id, rev, error);
+  };
+
+  const problem = loadError ?? renderError;
+  const describedBy = `diagram-text-${id}`;
+  return (
+    <article className="ot-bcard ot-diagram-card" data-board-id={id} aria-label={item.title ?? 'Diagram'}>
+      {item.title && <h2>{item.title}</h2>}
+      <div className={`ot-diagram-stage${problem ? ' ot-diagram-stage-off' : ''}`} role="img" aria-label={text.summary} aria-describedby={describedBy}>
+        {Canvas && !loadError ? (
+          <Canvas item={item} onRendered={rendered} interactive={interactive} />
+        ) : (
+          !loadError && (
+            <div className="ot-pending ot-diagram-loading" role="status">
+              Ritar…
+            </div>
+          )
+        )}
+      </div>
+      {problem && (
+        <div className="ot-diagram-error" role="alert">
+          <span>Diagrammet kunde inte visas. Texten nedan visar samma sak.</span>
+          {loadError && (
+            <button type="button" className="ot-diagram-btn" onClick={() => setAttempt((n) => n + 1)}>
+              Försök igen
+            </button>
+          )}
+        </div>
+      )}
+      <div className="ot-diagram-tools">
+        {!problem && Canvas && (
+          <button
+            type="button"
+            className="ot-diagram-btn"
+            aria-pressed={interactive}
+            onClick={() => setInteractive((on) => !on)}
+          >
+            {interactive ? 'Lås diagrammet' : 'Zooma och flytta'}
+          </button>
+        )}
+        <details className="ot-diagram-text" open={Boolean(problem)} id={describedBy}>
+          <summary>Visa som text</summary>
+          <p>{text.summary}</p>
+          <ul>
+            {text.lines.map((line, i) => (
+              <li key={i}>{line}</li>
+            ))}
+          </ul>
+        </details>
+      </div>
+    </article>
+  );
+}
+
 export default function BoardCard(props: CardProps) {
   switch (props.item.kind) {
     case 'text':
@@ -243,6 +337,8 @@ export default function BoardCard(props: CardProps) {
       return <ResourceCard {...props} />;
     case 'homework':
       return <HomeworkCard {...props} />;
+    case 'diagram':
+      return <DiagramCard {...props} />;
     default:
       return null;
   }

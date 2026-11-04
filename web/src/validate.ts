@@ -1,7 +1,14 @@
 // Validation for incoming board RPC payloads (docs/protocol.md).
 // Unknown kinds are rejected so the RPC handler can answer with an error.
 
-import type { BoardFocusPayload, BoardItem } from './protocol';
+import type { BoardFocusPayload, BoardItem, DiagramItem } from './protocol';
+import {
+  DIAGRAM_COORD_LIMIT,
+  DIAGRAM_ID,
+  DIAGRAM_MAX_LINKS,
+  DIAGRAM_MAX_NODES,
+  DIAGRAM_ROLES,
+} from './diagramLimits';
 
 export type ValidateOk = { ok: true; item: BoardItem };
 export type ValidateErr = { ok: false; error: string };
@@ -17,6 +24,7 @@ const KNOWN_KINDS = new Set([
   'pending',
   'resource',
   'homework',
+  'diagram',
 ]);
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -29,6 +37,50 @@ function isNonEmptyString(v: unknown): v is string {
 
 function optString(v: unknown): v is string | undefined {
   return v === undefined || typeof v === 'string';
+}
+
+function validateDiagram(raw: Record<string, unknown>, id: string, title: string | undefined): ValidateResult {
+  const bad = (error: string): ValidateErr => ({ ok: false, error: `diagram: ${error}` });
+  if (typeof raw.rev !== 'number' || !Number.isInteger(raw.rev) || raw.rev < 1) return bad('rev must be a positive integer');
+  if (raw.layout !== 'radial' && raw.layout !== 'flow') return bad('layout must be radial or flow');
+  if (!Array.isArray(raw.nodes) || raw.nodes.length === 0 || raw.nodes.length > DIAGRAM_MAX_NODES) {
+    return bad(`nodes must hold 1 to ${DIAGRAM_MAX_NODES} items`);
+  }
+  const links = raw.links ?? [];
+  if (!Array.isArray(links) || links.length > DIAGRAM_MAX_LINKS) return bad(`links must hold at most ${DIAGRAM_MAX_LINKS} items`);
+  const focus = raw.focus ?? [];
+  if (!Array.isArray(focus) || !focus.every((f) => typeof f === 'string')) return bad('focus must be a string array');
+
+  const seen = new Set<string>();
+  const nodes: DiagramItem['nodes'] = [];
+  for (const n of raw.nodes) {
+    if (!isRecord(n) || typeof n.id !== 'string' || !DIAGRAM_ID.test(n.id)) return bad('node id is missing or malformed');
+    if (typeof n.text !== 'string' || n.text.length === 0 || n.text.length > 60) return bad(`node ${n.id} needs text of 1 to 60 characters`);
+    const role = n.role === undefined ? 'idea' : n.role;
+    if (typeof role !== 'string' || !(DIAGRAM_ROLES as readonly string[]).includes(role)) return bad(`node ${n.id} has an unknown role`);
+    const { x, y } = n;
+    if (typeof x !== 'number' || typeof y !== 'number' || !Number.isFinite(x) || !Number.isFinite(y)) return bad(`node ${n.id} needs numeric x and y`);
+    if (Math.abs(x) > DIAGRAM_COORD_LIMIT || Math.abs(y) > DIAGRAM_COORD_LIMIT) return bad(`node ${n.id} is outside the scene bounds`);
+    if (seen.has(n.id)) return bad(`id ${n.id} is used twice`);
+    seen.add(n.id);
+    nodes.push({ id: n.id, text: n.text, role: role as DiagramItem['nodes'][number]['role'], x, y });
+  }
+  const outLinks: DiagramItem['links'] = [];
+  for (const l of links) {
+    if (!isRecord(l) || typeof l.id !== 'string' || !DIAGRAM_ID.test(l.id)) return bad('link id is missing or malformed');
+    if (typeof l.source !== 'string' || typeof l.target !== 'string' || !seen.has(l.source) || !seen.has(l.target)) {
+      return bad(`link ${l.id} points at a node that does not exist`);
+    }
+    if (l.label !== undefined && (typeof l.label !== 'string' || l.label.length > 30)) return bad(`link ${l.id} label is invalid`);
+    if (seen.has(l.id)) return bad(`id ${l.id} is used twice`);
+    seen.add(l.id);
+    outLinks.push({ id: l.id, source: l.source, target: l.target, ...(typeof l.label === 'string' && l.label ? { label: l.label } : {}) });
+  }
+  if (!focus.every((f) => seen.has(f as string))) return bad('focus names an id that does not exist');
+  return {
+    ok: true,
+    item: { id, kind: 'diagram', title, rev: raw.rev, layout: raw.layout, nodes, links: outLinks, focus: focus as string[] },
+  };
 }
 
 /** Parse + validate a board.show / board.update payload. */
@@ -160,6 +212,8 @@ export function validateBoardItem(raw: unknown): ValidateResult {
         },
       };
     }
+    case 'diagram':
+      return validateDiagram(raw, id, title);
     default:
       return { ok: false, error: `Unknown board kind: ${String(raw.kind)}` };
   }
