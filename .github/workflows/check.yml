@@ -1,0 +1,21 @@
+name: Review package
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  documents:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Rebuild presentation source
+        run: python review/build.py
+      - name: Check committed presentation matches its source
+        run: git diff --exit-code -- review/board-meeting.html review/MEETING-NOTES.md
+      - name: Check review package
+        run: python review/check.py
