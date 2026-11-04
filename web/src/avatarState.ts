@@ -69,6 +69,12 @@ export function mapAvatarState(input: AvatarInput): AvatarOutput {
       pill: { label: 'Tänker…', icon: 'sparkle', tone: 'violet', animateBars: false },
     };
   }
+  if (micBlocked) {
+    return {
+      pose: 'waiting',
+      pill: { label: 'Väntar på text', icon: 'circle', tone: 'grey', animateBars: false },
+    };
+  }
   if (agentState === 'listening') {
     if (!hasSpokenFirst) {
       return {
@@ -79,12 +85,6 @@ export function mapAvatarState(input: AvatarInput): AvatarOutput {
     return {
       pose: 'listening',
       pill: { label: 'Lyssnar', icon: 'ear', tone: 'cyan', animateBars: false },
-    };
-  }
-  if (micBlocked) {
-    return {
-      pose: 'waiting',
-      pill: { label: 'Väntar på text', icon: 'circle', tone: 'grey', animateBars: false },
     };
   }
   if (!hasSpokenFirst) {

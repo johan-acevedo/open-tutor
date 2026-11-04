@@ -60,3 +60,11 @@ describe('layoutMode', () => {
     expect(layoutMode(5)).toBe('teaching');
   });
 });
+
+describe('mic blocked', () => {
+  it('shows waiting for text instead of listening', () => {
+    const out = mapAvatarState({ agentState: 'listening', tutorMode: 'talking', hasPending: false, isTeaching: false, micBlocked: true, hasSpokenFirst: true });
+    expect(out.pill.label).toBe('Väntar på text');
+    expect(out.pill.animateBars).toBe(false);
+  });
+});
