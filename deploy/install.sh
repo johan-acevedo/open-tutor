@@ -4,6 +4,7 @@
 set -euo pipefail
 repo=$(cd "$(dirname "$0")/.." && pwd)
 cd "$repo"
+export PATH="$HOME/.local/bin:$PATH"  # uv and npm for non-interactive (ssh) shells
 if [[ -n ${1:-} ]]; then git fetch -q origin && git checkout -q "$1" && git pull -q --ff-only || true; fi
 (cd server && ~/.local/bin/uv sync -q --frozen --python 3.12)
 (cd web && npm ci --silent && npm run -s build)

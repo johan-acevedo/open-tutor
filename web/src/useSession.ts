@@ -24,7 +24,9 @@ export type Phase = 'profiles' | 'connecting' | 'live' | 'ending' | 'ended';
 export type ConnBanner = 'reconnecting' | 'disconnected' | null;
 
 const MOUNT_TIMEOUT_MS = 4500;
-const END_WAIT_MS = 8000;
+// The tutor saves a note and says goodbye before it closes the room (which disconnects us);
+// this is only the fallback if that never happens. 8 s cut goodbyes off mid-sentence.
+const END_WAIT_MS = 25000;
 const IMAGE_EXT = ['png', 'jpg', 'jpeg', 'webp'];
 const PDF_EXT = ['pdf'];
 

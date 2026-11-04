@@ -48,6 +48,7 @@ class GoResponsesLLM(responses.LLM):
 def warm_up() -> None:
     """Build the OpenAI SDK's Responses event models now. Built lazily, the first reply
     of every session blocked the audio loop for about 0.8 s."""
+    import openai.lib.streaming.responses._events  # noqa: F401  (imported on first stream)
     from openai._models import construct_type
     from openai.types.responses import ResponseStreamEvent
 
