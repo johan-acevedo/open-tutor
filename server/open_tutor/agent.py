@@ -540,23 +540,23 @@ async def entrypoint(ctx: JobContext) -> None:
     ctx.room.register_text_stream_handler("homework-text", spawn(on_homework_text))
     ctx.room.register_text_stream_handler("session-event", spawn(on_session_event))
 
-    await session.start(
-        agent=tutor,
-        room=ctx.room,
-        room_options=room_io.RoomOptions(participant_identity=child.identity),
-        # TUTOR_CLOUD_RECORDING=1 uploads session audio and transcripts to LiveKit
-        # Cloud observability. Off by default; the local debug log (TUTOR_DEBUG_LOG=1)
-        # is the reviewable trail when Cloud is off or unreachable.
-        record=os.environ.get("TUTOR_CLOUD_RECORDING") == "1",
-    )
-    debug.record("worker_session_started", {
-        "cloud_recording": os.environ.get("TUTOR_CLOUD_RECORDING") == "1"})
-    await ctx.room.local_participant.set_attributes({"tutor.mode": "talking"})
-    debug.record("prompt", {"kind": "greeting"})
-    prompt_event(session, prompt.greeting_instruction(learner))
-
     outcome = "unknown"
     try:
+        await session.start(
+            agent=tutor,
+            room=ctx.room,
+            room_options=room_io.RoomOptions(participant_identity=child.identity),
+            # TUTOR_CLOUD_RECORDING=1 uploads session audio and transcripts to LiveKit
+            # Cloud observability. Off by default; the local debug log (TUTOR_DEBUG_LOG=1)
+            # is the reviewable trail when Cloud is off or unreachable.
+            record=os.environ.get("TUTOR_CLOUD_RECORDING") == "1",
+        )
+        debug.record("worker_session_started", {
+            "cloud_recording": os.environ.get("TUTOR_CLOUD_RECORDING") == "1"})
+        await ctx.room.local_participant.set_attributes({"tutor.mode": "talking"})
+        debug.record("prompt", {"kind": "greeting"})
+        prompt_event(session, prompt.greeting_instruction(learner))
+
         outcome = await _run_until_done(ctx, session, tutor, debug, ending)
     except Exception as error:
         outcome = f"error: {type(error).__name__}: {error}"[:300]
@@ -575,7 +575,7 @@ async def _run_until_done(
 ) -> str:
 
     left = asyncio.Event()
-    ctx.room.on("participant_disconnected", lambda p: p.identity == child.identity and left.set())
+    ctx.room.on("participant_disconnected", lambda p: p.identity == tutor.child_identity and left.set())
     closed = asyncio.Event()
 
     @session.on("close")

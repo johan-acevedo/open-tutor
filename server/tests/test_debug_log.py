@@ -243,3 +243,34 @@ def test_finalize_after_error_still_writes_report(tmp_path):
     body = json.loads(path.read_text(encoding="utf-8"))
     assert body["outcome"].startswith("error:")
     assert len(body["events"]) == 2  # session_start + the turn: crash keeps evidence
+
+
+async def test_learner_disconnect_finishes_session(tmp_path):
+    """A disconnect must leave the wait and clean up the room, not raise NameError."""
+    import asyncio
+    from types import SimpleNamespace
+    from livekit.agents import utils
+    from open_tutor.agent import Tutor, _run_until_done
+
+    room = utils.EventEmitter()
+    session = utils.EventEmitter()
+    cleaned = []
+
+    async def close_session():
+        cleaned.append("session")
+
+    async def delete_room():
+        cleaned.append("room")
+
+    session.aclose = close_session
+    tutor = Tutor({"name": "Leo"}, room=None)
+    tutor.child_identity = "learner-test"
+    ctx = SimpleNamespace(room=room, delete_room=delete_room, shutdown=lambda _: cleaned.append("job"))
+    debug = DebugLog.create("tutor-disconnect", LEARNER, "AJ_disconnect", environ={})
+    task = asyncio.create_task(_run_until_done(ctx, session, tutor, debug, asyncio.Event()))
+    await asyncio.sleep(0)  # let the lifecycle register its listeners
+    room.emit("participant_disconnected", SimpleNamespace(identity="unrelated-participant"))
+    assert not task.done()
+    room.emit("participant_disconnected", SimpleNamespace(identity=tutor.child_identity))
+    assert await asyncio.wait_for(task, 1) == "child_left"
+    assert cleaned == ["session", "room", "job"]
