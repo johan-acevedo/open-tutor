@@ -63,6 +63,18 @@ Johan's second family session spoke tool-call text and showed nothing on the boa
 - Real browser (Playwright Chromium, silent fake microphone) through `https://tutor.labtopia.dev`, same profile twice. Session 1: steps for 3x + 5 = 20, focus, goodbye, end card. Session 2: the "Förra gången" note and greeting, a fresh steps card for 2x − 4 = 10 only, focus, end card with the new note. 131 caption updates contained no tool names, JSON or markup. The worker log showed `board rpc board.show b1 acknowledged=True` in both rooms.
 - The browser stopped waiting 8 s after Avsluta, which cut the second goodbye off. It now waits up to 25 s; the tutor still ends the room itself.
 
+## Session stall on an empty tool call (fixed, not yet deployed)
+
+During a real family session on 2026-11-06 the tutor stopped responding mid-session and the page sat silent. The next session worked normally.
+
+**Cause.** Go emitted a `show_text` call with empty arguments. The tool runner reads that as `{}` (the model got a useful argument error: `title` and `markdown` required), but the empty string stayed in the retained history. Go rejects every follow-up request carrying it with a 400 for invalid `arguments` (not retryable). Four consecutive rejections (09:29:59-09:30:28) closed the AgentSession, and a later `session.interrupt()` crashed the job with `RuntimeError: AgentSession isn't running`, so the room was never deleted and the browser never left the dead room. First wrong state was the empty upstream call: the plugin passes arguments through verbatim, and there were no interruption or truncation markers in the log.
+
+**Fix.**
+1. `tutor_llm.py` heals retained history before each request: empty arguments become `"{}"`, other non-JSON arguments go through the framework's own repair, valid JSON is left byte-identical, and anything even the repair cannot parse is left untouched (still loud, never fabricated). The tool's error output stays, so the model still self-corrects.
+2. `agent.py` tolerates `interrupt()` on a closed session, wakes when the session closes unexpectedly, skips the goodbye that could never play, and still deletes the room - so the browser shows its disconnected notice with a restart button instead of silence. No client change was needed.
+
+**Evidence.** Unit tests replay the synthetic failure (empty-arguments call plus its error) through the real adapter and serializer: the wire history carries `"{}"`, the error output is preserved, valid calls are byte-identical, and a streamed `show_steps` call still validates against the board. A minimal live probe with fictional material confirmed the provider behaviour: replaying empty arguments returns the exact 400 from the incident, replaying `"{}"` returns 200. Not verified: a full live family session after the fix (no public sessions were started; the next real session is the proof).
+
 ## Not yet verified
 
 - Spark on Go with real speech: the checks above typed their requests. The interruption, quiet-work and mumbling results in the first table are from the Gemini route and have not been re-run on Go. Listening quality of the Swedish voice. The runs used the ElevenLabs default voice with `eleven_flash_v2_5`; Johan should choose from the recorded samples.
