@@ -67,6 +67,7 @@ class Probe:
         self.notes: list[dict] = []
         self.board: list[dict] = []
         self.disconnected = asyncio.Event()
+        self.voiced: list[float] = []  # probe times of 20 ms tutor frames that carry sound
 
     def log(self, kind: str, **data) -> None:
         entry = {"t": round(time.monotonic() - self.t0, 2), "event": kind, **data}
@@ -111,11 +112,19 @@ class Probe:
 
     async def record(self, track: rtc.Track) -> None:
         async for event in rtc.AudioStream(track, sample_rate=RATE, num_channels=1):
-            self.recorded.extend(bytes(event.frame.data))
+            data = bytes(event.frame.data)
+            self.recorded.extend(data)
+            samples = memoryview(data).cast("h")
+            if samples and max(abs(x) for x in samples) > 500:
+                self.voiced.append(time.monotonic() - self.t0)
 
     async def run(self) -> dict:
         client = TestClient(create_app())
-        session = client.post("/api/session", json={"learner": {"name": "Leo", "grade": 7, "notes": []}}).json()
+        session = client.post(
+            "/api/session",
+            json={"learner": {"name": "Leo", "grade": 7, "notes": []}},
+            headers={"x-tutor-code": os.environ.get("TUTOR_ACCESS_CODE", "")},
+        ).json()
         room = rtc.Room()
 
         @room.on("participant_attributes_changed")
@@ -199,6 +208,14 @@ class Probe:
             await self.say("interrupt")
             stopped = await self.wait_state({"listening", "thinking"}, 12)
             results["interrupt_stop_s"] = round(time.monotonic() - started, 2) if stopped else None
+            # The interrupted reply must not keep playing: count tutor audio from 0.5 s after
+            # the state change until the tutor starts its next reply.
+            stop_t = time.monotonic() - self.t0
+            await self.wait_state({"speaking"}, 30)
+            next_t = time.monotonic() - self.t0
+            results["audio_after_interrupt_s"] = round(
+                0.02 * len([t for t in self.voiced if stop_t + 0.5 <= t < next_t - 0.3]), 2)
+            results["interrupt_gap_s"] = round(next_t - stop_t, 2)
         await self.wait_state({"listening"}, 60)
         # 4. Quiet work: the child tries alone; 30 s of silence.
         await self.say("tryself")

@@ -45,7 +45,8 @@ from .board import (
     TextItem,
     youtube_embed,
 )
-from .config import AGENT_NAME, env_float
+from .config import AGENT_NAME, DEFAULT_TTS_MODEL, DEFAULT_TTS_VOICE, env_float
+from .dialogue_tts import DialogueTTS, is_dialogue_model
 from .tutor_llm import build_llm, warm_up
 from .speech import speakable_stream, unspoken_stream
 
@@ -74,14 +75,20 @@ def build_tts():
             voice=os.environ["TUTOR_TTS_VOICE"],
             language="sv",
         )
-    kwargs: dict[str, Any] = {
-        "model": os.environ.get("TUTOR_TTS_MODEL", "eleven_flash_v2_5"),
-        "language": "sv",
-        "api_key": os.environ.get("ELEVENLABS_API_KEY") or os.environ.get("ELEVEN_API_KEY"),
-    }
-    if os.environ.get("TUTOR_TTS_VOICE"):
-        kwargs["voice_id"] = os.environ["TUTOR_TTS_VOICE"]
-    return elevenlabs.TTS(**kwargs)
+    model = os.environ.get("TUTOR_TTS_MODEL", DEFAULT_TTS_MODEL)
+    voice = os.environ.get("TUTOR_TTS_VOICE") or DEFAULT_TTS_VOICE
+    api_key = os.environ.get("ELEVENLABS_API_KEY") or os.environ.get("ELEVEN_API_KEY") or ""
+    if is_dialogue_model(model):
+        # Eleven v4: the documented single-context text-to-dialogue socket (dialogue_tts.py).
+        return DialogueTTS(api_key=api_key, voice_id=voice, model=model, language="sv")
+    # Earlier models (e.g. eleven_flash_v2_5) through LiveKit's plugin, kept for rollback.
+    return elevenlabs.TTS(model=model, voice_id=voice, language="sv", api_key=api_key)
+
+
+def tts_route(engine) -> str:
+    if isinstance(engine, DialogueTTS):
+        return engine.route()
+    return f"{engine.provider} {engine.model}"
 
 
 class Tutor(Agent):
@@ -403,10 +410,12 @@ async def entrypoint(ctx: JobContext) -> None:
     tutor = Tutor(learner, ctx.room)
     tutor.child_identity = child.identity
 
+    voice = build_tts()
+    log.info("tutor TTS route %s", tts_route(voice))
     session = AgentSession(
         stt=build_stt(),
         llm=build_llm(ctx.room.name),
-        tts=build_tts(),
+        tts=voice,
         vad=ctx.proc.userdata["vad"],
         turn_handling=TurnHandlingOptions(
             turn_detection="stt",

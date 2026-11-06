@@ -63,6 +63,18 @@ Johan's second family session spoke tool-call text and showed nothing on the boa
 - Real browser (Playwright Chromium, silent fake microphone) through `https://tutor.labtopia.dev`, same profile twice. Session 1: steps for 3x + 5 = 20, focus, goodbye, end card. Session 2: the "Förra gången" note and greeting, a fresh steps card for 2x − 4 = 10 only, focus, end card with the new note. 131 caption updates contained no tool names, JSON or markup. The worker log showed `board rpc board.show b1 acknowledged=True` in both rooms.
 - The browser stopped waiting 8 s after Avsluta, which cut the second goodbye off. It now waits up to 25 s; the tutor still ends the room itself.
 
+## Voice: Eleven v4 Turbo (from 2026-11-04 afternoon)
+
+The voice is now ElevenLabs **Eleven v4 Turbo** (`eleven_v4_turbo`, released September 2026), with the same speaker as before: **Bella - Professional, Bright, Warm** (`hpp4J3VqNfWAUOO0d1Us`), in Swedish. Before that it was `eleven_flash_v2_5` with Bella (the plugin default). v4 is only served over text-to-dialogue, so the worker uses its own adapter for the documented single-context socket `wss://api.elevenlabs.io/v1/text-to-dialogue/stream-input`. Why, and what the API returned, are in [server/README.md](../server/README.md#the-voice-route).
+
+Verified with a test worker on ThinkCentre under a separate dispatch name (Go route, v4 Turbo, fictional material). It was stopped afterwards.
+
+- **Typed, two sessions** (`two_session_probe.py`): in both, `board.show` steps and `board.focus` were acknowledged, no caption held tool text, a note was saved, and the second board held only the second equation.
+- **Recorded speech clips through a fake microphone** (`live_probe.py`, not a real microphone or device): greeting audio 4.1 s after joining, homework image described, steps on the board before the explanation, 0 s of speech in 30 s of quiet work and after mumbling, note and goodbye at the end.
+- **Interruption**: the tutor stopped speaking 0.62 s after the interrupting clip began. In the 11.5 s before its next reply, the probe received **no** tutor audio (frames with sound counted from 0.5 s after the stop). The caption ended where the audio stopped.
+- **Latency**: first audio 88–104 ms after the first sentence reached ElevenLabs (worker log, 12 replies). End-to-end time to speak is still set by turn detection and the model.
+- Worker log per session: `tutor TTS route elevenlabs /text-to-dialogue/stream-input model eleven_v4_turbo voice hpp4J3VqNfWAUOO0d1Us lang sv`.
+
 ## Session stall on an empty tool call (fixed, not yet deployed)
 
 During a real family session on 2026-11-06 the tutor stopped responding mid-session and the page sat silent. The next session worked normally.
@@ -77,7 +89,7 @@ During a real family session on 2026-11-06 the tutor stopped responding mid-sess
 
 ## Not yet verified
 
-- Spark on Go with real speech: the checks above typed their requests. The interruption, quiet-work and mumbling results in the first table are from the Gemini route and have not been re-run on Go. Listening quality of the Swedish voice. The runs used the ElevenLabs default voice with `eleven_flash_v2_5`; Johan should choose from the recorded samples.
+- Spark on Go with a real microphone: the v4 run above used recorded clips through a fake microphone. The interruption, quiet-work and mumbling results in the first table are from the Gemini route; the v4 run repeated them on Go. Listening quality of Bella on v4 Turbo in Swedish: the probes check timing, not how it sounds.
 - Real microphone, echo, and children's speech, pauses and thinking aloud. Turn-taking tuning needs real sessions.
 - Windows and Chromebook hardware, school network restrictions, the HTTPS URL and reconnect behaviour (milestone C).
 - Generated images (`pending` → `image`) are in the protocol but have no tool yet.
