@@ -104,8 +104,10 @@ def describe(session: dict) -> str:
         "duration=" + (str(duration) + "s" if duration is not None else "?"),
     ]
     if summary:
+        typed = summary.get("child_typed_turns")
+        typed_bit = "+" + str(typed) + " typed" if typed is not None else ""
         bits.append(
-            "child_turns=" + str(summary.get("child_final_turns"))
+            "child_turns=" + str(summary.get("child_final_turns")) + typed_bit
             + " tutor_replies=" + str(summary.get("tutor_replies"))
             + " tools=" + str(summary.get("tool_calls"))
             + " tool_errors=" + str(summary.get("tool_errors"))
@@ -130,12 +132,24 @@ def timeline_line(entry: dict) -> str:
         mark = "CHILD" if entry.get("final") else "child~interim"
         return stamp + " " + mark + ": " + one_line(entry.get("text", ""), 800)
     if kind == "chat_item" and entry.get("item") == "message":
+        text = str(entry.get("text", ""))
+        if text.startswith("[Session event"):
+            return stamp + " PROMPT-INJECTED: " + one_line(text, 400)
         who = "TUTOR" if entry.get("role") == "assistant" else "child-typed"
         metrics = entry.get("metrics") or {}
         extra = ""
         if metrics.get("llm_node_ttft") is not None:
             extra = " [ttft=" + str(round(metrics["llm_node_ttft"], 1)) + "s]"
         return stamp + " " + who + ": " + one_line(entry.get("text", ""), 800) + extra
+    if kind == "tool_lifecycle":
+        line = stamp + " " + str(entry.get("update", "?")) + " call=" + str(entry.get("call_id"))
+        if entry.get("name"):
+            line += " name=" + str(entry.get("name"))
+        if entry.get("status"):
+            line += " status=" + str(entry.get("status"))
+        if entry.get("message"):
+            line += " -> " + one_line(entry.get("message", ""), 200)
+        return line
     if kind == "tools_executed":
         parts = []
         for call, output in zip(entry.get("calls", []), entry.get("outputs", [])):

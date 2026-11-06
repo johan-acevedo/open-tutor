@@ -8,8 +8,9 @@ import os
 import stat
 
 from livekit.agents import llm
-from livekit.agents.metrics import AgentSessionUsage, LLMMetrics
+from livekit.agents.metrics import AgentSessionUsage, LLMMetrics, LLMModelUsage
 from livekit.agents.voice import events
+from livekit.agents.voice.events import ToolCallEnded, ToolCallStarted, ToolExecutionUpdatedEvent
 
 from open_tutor.debug_log import (
     DebugLog,
@@ -96,6 +97,11 @@ def test_transcript_both_sides_and_tool_content_recorded(tmp_path):
     debug.record_sdk(events.UserInputTranscribedEvent(transcript="hej, visa ekvationer", is_final=True))
     debug.record_sdk(events.ConversationItemAddedEvent(
         item=llm.ChatMessage(role="assistant", content=["Jag lägger upp det på tavlan."])))
+    debug.record_sdk(events.ConversationItemAddedEvent(
+        item=llm.ChatMessage(role="user", content=["Visa hur man löser 3x + 5 = 20."])))
+    # Worker-injected prompts are user-role messages too, but not the child's words.
+    debug.record_sdk(events.ConversationItemAddedEvent(
+        item=llm.ChatMessage(role="user", content=["[Session event, not the child's words: greet.]"])))
     debug.record_sdk(events.FunctionToolsExecutedEvent(
         function_calls=[llm.FunctionCall(call_id="c1", name="show_steps",
                                         arguments='{"title": "Ekvationer", "steps": []}')],
@@ -115,6 +121,7 @@ def test_transcript_both_sides_and_tool_content_recorded(tmp_path):
     assert tools["calls"][0]["arguments"] == '{"title": "Ekvationer", "steps": []}'
     assert tools["outputs"][0]["output"] == "Item b1 is now visible."
     assert body["summary"]["child_final_turns"] == 1
+    assert body["summary"]["child_typed_turns"] == 1
     assert body["summary"]["tool_calls"] == 1 and body["summary"]["tool_errors"] == 0
 
 
@@ -150,13 +157,27 @@ def test_lifecycle_errors_modes_and_usage(tmp_path):
     debug.record("interrupt", {"where": "homework"})
     debug.record_sdk(events.UserTranscriptionTimeoutEvent(speech_duration=3.2,
                                                           vad_speech_started_at=1.0))
-    debug.record_sdk(events.SessionUsageUpdatedEvent(usage=AgentSessionUsage(model_usage=[])))
+    debug.record_sdk(events.SessionUsageUpdatedEvent(usage=AgentSessionUsage(model_usage=[
+        LLMModelUsage(provider="opencode.ai", model="muse-spark-1.3-contributor",
+                      input_tokens=3080, output_tokens=137, total_tokens=3217),
+    ])))
+    debug.record_sdk(events.ToolExecutionUpdatedEvent(update=ToolCallStarted(
+        function_call=llm.FunctionCall(call_id="c1", name="show_text", arguments="{}"))))
+    debug.record_sdk(events.ToolExecutionUpdatedEvent(update=ToolCallEnded(
+        call_id="c1", id="c1_final", message="Saved.", status="done")))
     debug.record_sdk(events.CloseEvent(reason=events.CloseReason.TASK_COMPLETED))
     body = json.loads(debug.finalize("ended_by_child").read_text(encoding="utf-8"))
     kinds = [e["event"] for e in body["events"]]
     assert kinds[:1] == ["session_start"]
     assert "speech_state" in kinds and "mode" in kinds and "board_ack" in kinds
     assert "interrupt" in kinds and "transcription_timeout" in kinds
+    usage = next(e for e in body["events"] if e["event"] == "usage")
+    assert usage["usage"]["model_usage"][0]["model"] == "muse-spark-1.3-contributor"
+    assert usage["usage"]["model_usage"][0]["input_tokens"] == 3080
+    started = next(e for e in body["events"] if e.get("update") == "tool_call_started")
+    assert started["call_id"] == "c1" and started["name"] == "show_text"
+    ended = next(e for e in body["events"] if e.get("update") == "tool_call_ended")
+    assert ended["status"] == "done" and ended["message"] == "Saved."
     assert body["summary"]["close_reason"] == "task_completed"
     assert body["summary"]["mode_changes"][0][1] == "quiet"
     assert len(body["summary"]["mode_changes"]) == 1

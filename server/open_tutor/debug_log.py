@@ -235,19 +235,33 @@ class DebugLog:
                 )
             elif kind == "tool_execution_updated":
                 update = getattr(event, "update", None)
-                self.record(
-                    "tool_lifecycle",
-                    {
-                        "update": getattr(update, "type", "?"),
-                        "call_id": getattr(update, "call_id", "?"),
-                        "status": getattr(update, "status", None),
-                        "message": getattr(update, "message", None),
-                    },
-                )
+                update_type = getattr(update, "type", "?")
+                # ToolCallStarted carries the call inside `function_call`; the other
+                # updates carry call_id/status/message directly.
+                if update_type == "tool_call_started":
+                    fnc = getattr(update, "function_call", None)
+                    self.record(
+                        "tool_lifecycle",
+                        {
+                            "update": update_type,
+                            "call_id": getattr(fnc, "call_id", "?"),
+                            "name": getattr(fnc, "name", "?"),
+                        },
+                    )
+                else:
+                    self.record(
+                        "tool_lifecycle",
+                        {
+                            "update": update_type,
+                            "call_id": getattr(update, "call_id", "?"),
+                            "status": getattr(update, "status", None),
+                            "message": getattr(update, "message", None),
+                        },
+                    )
             elif kind in ("agent_false_interruption", "overlapping_speech"):
                 self.record(kind, _dump(getattr(event, "model_dump", lambda: {})()))
             elif kind == "session_usage_updated":
-                self.record("usage", _dump(getattr(event, "usage", None)))
+                self.record("usage", {"usage": _dump(getattr(event, "usage", None))})
             elif kind == "error":
                 self.record("provider_error", _dump_error(event))
             elif kind == "close":
@@ -350,28 +364,28 @@ def _chat_item(item: Any) -> dict[str, Any]:
     return {"item": kind}
 
 
-def _dump(value: Any) -> Any:
-    if value is None:
-        return None
+def _dump(value: Any, _depth: int = 0) -> Any:
+    """Convert SDK objects to plain JSON-safe data, recursing into models."""
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if _depth > 4:
+        return repr(value)[:1000]
     model_dump = getattr(value, "model_dump", None)
     if callable(model_dump):
         try:
-            return json.loads(json.dumps(model_dump(), ensure_ascii=False, default=str))
+            return _dump(model_dump(), _depth + 1)
         except Exception:
             return repr(value)[:1000]
     if dataclasses.is_dataclass(value) and not isinstance(value, type):
         try:
-            return json.loads(
-                json.dumps(dataclasses.asdict(value), ensure_ascii=False, default=str)
-            )
+            fields = {f.name: getattr(value, f.name) for f in dataclasses.fields(value)}
         except Exception:
             return repr(value)[:1000]
-    if isinstance(value, (str, int, float, bool)):
-        return value
+        return {key: _dump(item, _depth + 1) for key, item in fields.items()}
     if isinstance(value, dict):
-        return {str(k)[:80]: _dump(v) for k, v in list(value.items())[:50]}
+        return {str(k)[:80]: _dump(v, _depth + 1) for k, v in list(value.items())[:50]}
     if isinstance(value, (list, tuple)):
-        return [_dump(v) for v in list(value)[:50]]
+        return [_dump(v, _depth + 1) for v in list(value)[:50]]
     return repr(value)[:1000]
 
 
@@ -385,8 +399,21 @@ def _dump_error(event: Any) -> dict[str, Any]:
     return entry
 
 
+def _is_prompt_injection(text: str) -> bool:
+    """Worker-injected session events are user-role messages, not the child's words."""
+    return text.startswith("[Session event")
+
+
 def _summarize(events: list[dict[str, Any]]) -> dict[str, Any]:
     child_turns = sum(1 for e in events if e["event"] == "child_speech" and e.get("final"))
+    typed_turns = sum(
+        1
+        for e in events
+        if e["event"] == "chat_item"
+        and e.get("item") == "message"
+        and e.get("role") == "user"
+        and not _is_prompt_injection(e.get("text") or "")
+    )
     tutor_replies = sum(1 for e in events if e["event"] == "reply_started")
     assistant_texts = sum(
         1
@@ -405,6 +432,7 @@ def _summarize(events: list[dict[str, Any]]) -> dict[str, Any]:
     )
     return {
         "child_final_turns": child_turns,
+        "child_typed_turns": typed_turns,
         "tutor_replies": tutor_replies,
         "assistant_messages": assistant_texts,
         "tool_calls": tool_calls,
