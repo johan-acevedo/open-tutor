@@ -372,6 +372,21 @@ def prompt_event(session: AgentSession, text: str):
     return session.generate_reply(user_input=f"[Session event, not the child's words: {text}]")
 
 
+def safe_interrupt(session: AgentSession, where: str) -> None:
+    """Interrupt, tolerating a session that already closed.
+
+    On 2026-11-06 the session closed on repeated provider 400s and a later
+    `session.interrupt()` raised `RuntimeError: AgentSession isn't running`, which
+    crashed the job before the room was deleted and left the browser sitting in a
+    dead room. Interrupting a closed session is a no-op for us: there is nothing
+    left to stop.
+    """
+    try:
+        session.interrupt()
+    except RuntimeError:
+        log.warning("interrupt skipped, session already closed (%s)", where)
+
+
 server = AgentServer()
 
 
@@ -426,7 +441,7 @@ async def entrypoint(ctx: JobContext) -> None:
         for parts, description in batch:
             await tutor.add_homework(parts, description)
         await tutor.set_mode("talking")
-        session.interrupt()
+        safe_interrupt(session, "homework")
         prompt_event(session, "The child just shared homework (see the latest shared items). Say "
                      "briefly what you see and ask where they want to start.")
 
@@ -494,18 +509,33 @@ async def entrypoint(ctx: JobContext) -> None:
 
     left = asyncio.Event()
     ctx.room.on("participant_disconnected", lambda p: p.identity == child.identity and left.set())
+    closed = asyncio.Event()
+
+    @session.on("close")
+    def session_closed(event) -> None:
+        # The agent is gone (e.g. repeated provider errors closed it). Wake up instead of
+        # waiting for an end or a leave that may never come; the room is deleted below so
+        # the browser shows its disconnected notice with a restart button.
+        closed.set()
+
     await asyncio.wait(
-        [asyncio.create_task(ending.wait()), asyncio.create_task(left.wait())],
+        [asyncio.create_task(ending.wait()), asyncio.create_task(left.wait()),
+         asyncio.create_task(closed.wait())],
         return_when=asyncio.FIRST_COMPLETED,
     )
-    if ending.is_set():
+    if closed.is_set() and not ending.is_set() and not left.is_set():
+        log.error("agent session closed before the child left or ended the session")
+    elif ending.is_set():
         await tutor.set_mode("ending")
-        session.interrupt()
-        handle = prompt_event(session, prompt.END_INSTRUCTION)
+        safe_interrupt(session, "ending")
         try:
-            await asyncio.wait_for(handle.wait_for_playout(), timeout=30)
-        except Exception as error:
-            log.warning("goodbye did not finish: %s", error)
+            handle = prompt_event(session, prompt.END_INSTRUCTION)
+            try:
+                await asyncio.wait_for(handle.wait_for_playout(), timeout=30)
+            except Exception as error:
+                log.warning("goodbye did not finish: %s", error)
+        except RuntimeError as error:
+            log.warning("could not say goodbye, session already closed: %s", error)
         if tutor.notes_saved == 0:
             await tutor.send_note("Läxhjälp")
     if tutor._http:

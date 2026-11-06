@@ -75,6 +75,18 @@ Verified with a test worker on ThinkCentre under a separate dispatch name (Go ro
 - **Latency**: first audio 88–104 ms after the first sentence reached ElevenLabs (worker log, 12 replies). End-to-end time to speak is still set by turn detection and the model.
 - Worker log per session: `tutor TTS route elevenlabs /text-to-dialogue/stream-input model eleven_v4_turbo voice hpp4J3VqNfWAUOO0d1Us lang sv`.
 
+## Session stall on an empty tool call (fixed, not yet deployed)
+
+During a real family session on 2026-11-06 the tutor stopped responding mid-session and the page sat silent. The next session worked normally.
+
+**Cause.** Go emitted a `show_text` call with empty arguments. The tool runner reads that as `{}` (the model got a useful argument error: `title` and `markdown` required), but the empty string stayed in the retained history. Go rejects every follow-up request carrying it with a 400 for invalid `arguments` (not retryable). Four consecutive rejections (09:29:59-09:30:28) closed the AgentSession, and a later `session.interrupt()` crashed the job with `RuntimeError: AgentSession isn't running`, so the room was never deleted and the browser never left the dead room. First wrong state was the empty upstream call: the plugin passes arguments through verbatim, and there were no interruption or truncation markers in the log.
+
+**Fix.**
+1. `tutor_llm.py` heals retained history before each request: empty arguments become `"{}"`, other non-JSON arguments go through the framework's own repair, valid JSON is left byte-identical, and anything even the repair cannot parse is left untouched (still loud, never fabricated). The tool's error output stays, so the model still self-corrects.
+2. `agent.py` tolerates `interrupt()` on a closed session, wakes when the session closes unexpectedly, skips the goodbye that could never play, and still deletes the room - so the browser shows its disconnected notice with a restart button instead of silence. No client change was needed.
+
+**Evidence.** Unit tests replay the synthetic failure (empty-arguments call plus its error) through the real adapter and serializer: the wire history carries `"{}"`, the error output is preserved, valid calls are byte-identical, and a streamed `show_steps` call still validates against the board. A minimal live probe with fictional material confirmed the provider behaviour: replaying empty arguments returns the exact 400 from the incident, replaying `"{}"` returns 200. Not verified: a full live family session after the fix (no public sessions were started; the next real session is the proof).
+
 ## Not yet verified
 
 - Spark on Go with a real microphone: the v4 run above used recorded clips through a fake microphone. The interruption, quiet-work and mumbling results in the first table are from the Gemini route; the v4 run repeated them on Go. Listening quality of Bella on v4 Turbo in Swedish: the probes check timing, not how it sounds.

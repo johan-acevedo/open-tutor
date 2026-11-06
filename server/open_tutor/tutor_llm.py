@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
 from livekit.agents import llm
+from livekit.agents.llm.utils import parse_function_arguments
 from livekit.plugins import openai
 from livekit.plugins.openai.responses import llm as responses
 from openai import AsyncOpenAI
@@ -14,6 +16,48 @@ from openai.types import Reasoning
 from .config import USER_AGENT, llm_route
 
 log = logging.getLogger("open-tutor")
+
+
+def heal_tool_arguments(chat_ctx: llm.ChatContext) -> int:
+    """Rewrite tool-call arguments the Responses API would reject with a 400.
+
+    On 2026-11-06 Go emitted a `show_text` call with empty arguments. The worker's
+    tool runner reads that as `{}` (so the model got a useful argument error and the
+    session could have recovered), but the empty string stays in the retained history
+    and Go rejects every follow-up request carrying it with
+    ``400 `arguments` must be valid JSON``. After enough consecutive rejections the
+    AgentSession closes and the browser sits on a dead agent.
+
+    This heals the retained items before each request, using the same reading the tool
+    runner already applied: empty arguments become `"{}"`, and anything else that is
+    not valid JSON goes through the framework's own repair. Arguments that parse as
+    JSON are left byte-identical, and anything even the repair cannot parse is left
+    untouched (still a loud provider error, never silently replaced). The tool's error
+    output stays in history either way, so the model still sees what went wrong and
+    can self-correct. Returns the number of items rewritten.
+    """
+    healed = 0
+    for item in chat_ctx.items:
+        if item.type != "function_call":
+            continue
+        arguments = item.arguments
+        if not arguments or not arguments.strip():
+            # Exactly what the tool runner assumed (`fnc_call.arguments or "{}"`);
+            # the retained error output already describes `input_value={}`.
+            item.arguments = "{}"
+            healed += 1
+            continue
+        try:
+            json.loads(arguments)
+        except ValueError:
+            try:
+                canonical = json.dumps(parse_function_arguments(arguments), default=str)
+            except ValueError:
+                continue  # unrecoverable: leave it loud, don't fabricate a call
+            if canonical != arguments:
+                item.arguments = canonical
+                healed += 1
+    return healed
 
 
 class _GoResponsesStream(responses.LLMStream):
@@ -38,6 +82,14 @@ class _GoResponsesStream(responses.LLMStream):
 
 class GoResponsesLLM(responses.LLM):
     def chat(self, **kwargs: Any) -> responses.LLMStream:
+        chat_ctx = kwargs.get("chat_ctx")
+        if isinstance(chat_ctx, llm.ChatContext):
+            healed = heal_tool_arguments(chat_ctx)
+            if healed:
+                # Names and counts only: arguments can hold the child's words.
+                names = sorted({i.name for i in chat_ctx.items if i.type == "function_call"})
+                log.warning("healed %d tool call(s) with provider-invalid arguments", healed,
+                            extra={"functions": names})
         stream = super().chat(**kwargs)
         # The plugin builds its stream class directly; swap in the subclass before the
         # stream's task first runs (it starts on the next loop iteration).
