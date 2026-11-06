@@ -64,7 +64,39 @@ The worker logs the route at the start of each session (`tutor TTS route elevenl
 | `TUTOR_ACCESS_CODE` | Optional family code. When set, the page asks for it once per browser |
 | `TUTOR_MAX_SESSIONS_PER_HOUR` | Owner spending cap across the instance (default 12) |
 | `TUTOR_CLOUD_RECORDING` | `1` uploads session audio and transcripts to LiveKit Cloud observability. Off by default |
+| `TUTOR_DEBUG_LOG` | `1` writes a per-session debug trail to a private local directory (see below). Off by default |
+| `TUTOR_DEBUG_LOG_DIR` | Override the debug trail directory (default `~/.local/state/open-tutor/sessions`) |
 | `TUTOR_STT_MAX_ENDPOINT_MS`, `TUTOR_MIN_ENDPOINT` | Turn-taking tuning for pauses while a child thinks |
+
+## Family-testing debug trail
+
+During authorised family testing, `TUTOR_DEBUG_LOG=1` in the worker environment
+writes one private directory per session (`TUTOR_DEBUG_LOG_DIR`, default
+`~/.local/state/open-tutor/sessions`, directories 0700, files 0600, outside
+git). Each session appends timestamped events to `events.jsonl` as they happen
+(wall-clock UTC plus seconds since session start, flushed at once so crashes
+leave evidence) and writes `report.json` on shutdown with a header, a summary
+and the full timeline.
+
+Captured: learner name/grade (to tell siblings apart), both sides of the
+conversation, tool calls with arguments and results (including board content
+and notes), homework descriptions (image sizes only; pasted text is kept),
+lifecycle and close/disconnect reasons, mode and board acknowledgements,
+interrupts, healed malformed tool arguments, speech-state changes, and usage
+metrics. Not captured: credentials, keys, tokens, the whole environment, or
+audio (LiveKit Cloud recording keeps that when `TUTOR_CLOUD_RECORDING=1`). The
+config snapshot is an explicit allowlist. The normal log stream stays free of
+session content either way.
+
+Review the most recent sessions where the worker runs:
+
+```bash
+bin/with-env uv run python scripts/debug_sessions.py --list
+bin/with-env uv run python scripts/debug_sessions.py --last --learner kian
+bin/with-env uv run python scripts/debug_sessions.py --show tutor-XXXX
+```
+
+Default off, so open-source adopters get no behaviour or file change.
 
 ## Tests
 

@@ -46,6 +46,7 @@ from .board import (
     youtube_embed,
 )
 from .config import AGENT_NAME, DEFAULT_TTS_MODEL, DEFAULT_TTS_VOICE, env_float
+from .debug_log import DebugLog, clear_active, record_active, set_active
 from .dialogue_tts import DialogueTTS, is_dialogue_model
 from .tutor_llm import build_llm, warm_up
 from .speech import speakable_stream, unspoken_stream
@@ -117,8 +118,13 @@ class Tutor(Agent):
             ok = bool(json.loads(reply or "{}").get("ok"))
         except Exception as error:  # timeout, child left, or render error
             log.warning("board rpc %s failed: %s", method, error)
+            record_active("board_ack", {"method": method, "id": payload.get("id"), "ok": False,
+                                          "error": f"{type(error).__name__}: {error}"[:200]})
             return False
         log.info("board rpc %s %s acknowledged=%s", method, payload.get("id"), ok)
+        record_active("board_ack", {"method": method, "id": payload.get("id"),
+                                     "kind": payload.get("kind"), "title": payload.get("title"),
+                                     "ok": ok})
         return ok
 
     async def _show(self, item) -> str:
@@ -285,7 +291,9 @@ class Tutor(Agent):
     async def set_mode(self, mode: str) -> None:
         if mode == self.mode:
             return
+        old = self.mode
         self.mode = mode
+        record_active("mode", {"old": old, "mode": mode})
         try:
             await self.room.local_participant.set_attributes({"tutor.mode": mode})
         except Exception as error:
@@ -332,8 +340,12 @@ class Tutor(Agent):
             )
         except Exception as error:
             log.warning("note send failed: %s", error)
+            record_active("note", {"ok": False, "topic": topic,
+                                     "error": f"{type(error).__name__}"})
             return "Could not save the note."
         self.notes_saved += 1
+        record_active("note", {"ok": True, "topic": topic, "clicked": clicked,
+                                "tricky": tricky, "next": next_step})
         return "Saved."
 
     async def on_user_turn_completed(self, turn_ctx: llm.ChatContext, new_message: llm.ChatMessage) -> None:
@@ -357,6 +369,9 @@ class Tutor(Agent):
     # ---- homework ----------------------------------------------------------------
 
     async def add_homework(self, parts: list[Any], description: str) -> None:
+        record_active("homework_added", {"description": description[:300],
+                                           "parts": len(parts),
+                                           "image_parts": sum(1 for p in parts if hasattr(p, "image"))})
         ctx = self.chat_ctx.copy()
         ctx.add_message(role="user", content=[f"[Shared homework: {description}]", *parts])
         await self.update_chat_ctx(ctx)
@@ -381,6 +396,7 @@ def safe_interrupt(session: AgentSession, where: str) -> None:
     dead room. Interrupting a closed session is a no-op for us: there is nothing
     left to stop.
     """
+    record_active("interrupt", {"where": where})
     try:
         session.interrupt()
     except RuntimeError:
@@ -410,6 +426,9 @@ async def entrypoint(ctx: JobContext) -> None:
     tutor = Tutor(learner, ctx.room)
     tutor.child_identity = child.identity
 
+    debug = DebugLog.create(ctx.room.name, learner, getattr(getattr(ctx, "job", None), "id", "?"))
+    set_active(debug)
+
     voice = build_tts()
     log.info("tutor TTS route %s", tts_route(voice))
     session = AgentSession(
@@ -429,6 +448,22 @@ async def entrypoint(ctx: JobContext) -> None:
     def tools_executed(event) -> None:
         # Names only: arguments can hold the child's words.
         log.info("tools executed: %s", ", ".join(call.name for call in event.function_calls))
+        debug.record_sdk(event)
+
+    for sdk_event in (
+        "user_input_transcribed",
+        "user_transcription_timeout",
+        "conversation_item_added",
+        "user_state_changed",
+        "agent_state_changed",
+        "speech_created",
+        "tool_execution_updated",
+        "agent_false_interruption",
+        "overlapping_speech",
+        "session_usage_updated",
+        "error",
+    ):
+        session.on(sdk_event, debug.record_sdk)
 
     # ---- homework intake ----------------------------------------------------------
     pending: list[tuple[list[Any], str]] = []
@@ -442,6 +477,7 @@ async def entrypoint(ctx: JobContext) -> None:
             await tutor.add_homework(parts, description)
         await tutor.set_mode("talking")
         safe_interrupt(session, "homework")
+        debug.record("prompt", {"kind": "homework_shared", "items": len(batch)})
         prompt_event(session, "The child just shared homework (see the latest shared items). Say "
                      "briefly what you see and ask where they want to start.")
 
@@ -465,6 +501,8 @@ async def entrypoint(ctx: JobContext) -> None:
         if attrs.get("page"):
             description += f", sida {attrs['page']} av {attrs.get('pages', '?')}"
         description += f" (board id {attrs.get('itemId', '?')}, {attrs.get('kind', 'photo')})"
+        debug.record("homework_shared", {"kind": "image", "description": description[:300],
+                                           "bytes": len(data), "mime": mime})
         image = llm.ImageContent(image=f"data:{mime};base64,{base64.b64encode(bytes(data)).decode()}", inference_detail="high")
         pending.append(([image], description))
         schedule_reply()
@@ -472,7 +510,10 @@ async def entrypoint(ctx: JobContext) -> None:
     async def on_homework_text(reader: rtc.TextStreamReader, identity: str) -> None:
         text = (await reader.read_all())[:12000]
         attrs = dict(reader.info.attributes or {})
-        pending.append(([text], f"pasted text (board id {attrs.get('itemId', '?')})"))
+        description = f"pasted text (board id {attrs.get('itemId', '?')})"
+        debug.record("homework_shared", {"kind": "text", "description": description,
+                                           "chars": len(text), "text": text})
+        pending.append(([text], description))
         schedule_reply()
 
     ending = asyncio.Event()
@@ -482,10 +523,12 @@ async def entrypoint(ctx: JobContext) -> None:
             event = json.loads(await reader.read_all())
         except json.JSONDecodeError:
             return
+        debug.record("browser_event", {"type": str(event.get("type", "?"))[:40]})
         if event.get("type") == "end":
             ending.set()
         elif event.get("type") == "resource-closed":
             await tutor.set_mode("talking")
+            debug.record("prompt", {"kind": "resource_closed"})
             prompt_event(session, "The child finished the resource. Ask briefly what they noticed or thought.")
 
     def spawn(coro_fn):
@@ -497,18 +540,42 @@ async def entrypoint(ctx: JobContext) -> None:
     ctx.room.register_text_stream_handler("homework-text", spawn(on_homework_text))
     ctx.room.register_text_stream_handler("session-event", spawn(on_session_event))
 
-    await session.start(
-        agent=tutor,
-        room=ctx.room,
-        room_options=room_io.RoomOptions(participant_identity=child.identity),
-        # Children's audio and transcripts are not uploaded to LiveKit Cloud observability.
-        record=os.environ.get("TUTOR_CLOUD_RECORDING") == "1",
-    )
-    await ctx.room.local_participant.set_attributes({"tutor.mode": "talking"})
-    prompt_event(session, prompt.greeting_instruction(learner))
+    outcome = "unknown"
+    try:
+        await session.start(
+            agent=tutor,
+            room=ctx.room,
+            room_options=room_io.RoomOptions(participant_identity=child.identity),
+            # TUTOR_CLOUD_RECORDING=1 uploads session audio and transcripts to LiveKit
+            # Cloud observability. Off by default; the local debug log (TUTOR_DEBUG_LOG=1)
+            # is the reviewable trail when Cloud is off or unreachable.
+            record=os.environ.get("TUTOR_CLOUD_RECORDING") == "1",
+        )
+        debug.record("worker_session_started", {
+            "cloud_recording": os.environ.get("TUTOR_CLOUD_RECORDING") == "1"})
+        await ctx.room.local_participant.set_attributes({"tutor.mode": "talking"})
+        debug.record("prompt", {"kind": "greeting"})
+        prompt_event(session, prompt.greeting_instruction(learner))
+
+        outcome = await _run_until_done(ctx, session, tutor, debug, ending)
+    except Exception as error:
+        outcome = f"error: {type(error).__name__}: {error}"[:300]
+        log.exception("session failed")
+        raise
+    finally:
+        report_path = debug.finalize(outcome)
+        if report_path is not None:
+            log.info("debug session report: %s", report_path)
+        clear_active()
+
+
+async def _run_until_done(
+    ctx: JobContext, session: AgentSession, tutor: Tutor, debug: DebugLog,
+    ending: asyncio.Event,
+) -> str:
 
     left = asyncio.Event()
-    ctx.room.on("participant_disconnected", lambda p: p.identity == child.identity and left.set())
+    ctx.room.on("participant_disconnected", lambda p: p.identity == tutor.child_identity and left.set())
     closed = asyncio.Event()
 
     @session.on("close")
@@ -516,6 +583,7 @@ async def entrypoint(ctx: JobContext) -> None:
         # The agent is gone (e.g. repeated provider errors closed it). Wake up instead of
         # waiting for an end or a leave that may never come; the room is deleted below so
         # the browser shows its disconnected notice with a restart button.
+        debug.record_sdk(event)
         closed.set()
 
     await asyncio.wait(
@@ -525,28 +593,39 @@ async def entrypoint(ctx: JobContext) -> None:
     )
     if closed.is_set() and not ending.is_set() and not left.is_set():
         log.error("agent session closed before the child left or ended the session")
+        outcome = "sdk_closed_early"
     elif ending.is_set():
+        outcome = "ended_by_child"
         await tutor.set_mode("ending")
         safe_interrupt(session, "ending")
         try:
+            debug.record("prompt", {"kind": "goodbye"})
             handle = prompt_event(session, prompt.END_INSTRUCTION)
             try:
                 await asyncio.wait_for(handle.wait_for_playout(), timeout=30)
             except Exception as error:
                 log.warning("goodbye did not finish: %s", error)
+                debug.record("goodbye", {"ok": False, "error": f"{type(error).__name__}"})
         except RuntimeError as error:
             log.warning("could not say goodbye, session already closed: %s", error)
+            debug.record("goodbye", {"ok": False, "error": "session already closed"})
         if tutor.notes_saved == 0:
             await tutor.send_note("Läxhjälp")
+    elif left.is_set():
+        outcome = "child_left"
+        debug.record("child_left", {})
     if tutor._http:
         await tutor._http.close()
     await session.aclose()
     # Deleting the room disconnects the browser, which then shows its end card.
     try:
         await ctx.delete_room()
+        debug.record("room_deleted", {})
     except Exception as error:
         log.warning("could not delete room: %s", error)
+        debug.record("room_deleted", {"ok": False, "error": f"{type(error).__name__}"})
     ctx.shutdown("session ended")
+    return outcome
 
 
 if __name__ == "__main__":

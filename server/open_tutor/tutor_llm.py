@@ -14,6 +14,7 @@ from openai import AsyncOpenAI
 from openai.types import Reasoning
 
 from .config import USER_AGENT, llm_route
+from .debug_log import record_active
 
 log = logging.getLogger("open-tutor")
 
@@ -83,6 +84,7 @@ class _GoResponsesStream(responses.LLMStream):
 class GoResponsesLLM(responses.LLM):
     def chat(self, **kwargs: Any) -> responses.LLMStream:
         chat_ctx = kwargs.get("chat_ctx")
+        healed, names = 0, []
         if isinstance(chat_ctx, llm.ChatContext):
             healed = heal_tool_arguments(chat_ctx)
             if healed:
@@ -94,6 +96,8 @@ class GoResponsesLLM(responses.LLM):
         # The plugin builds its stream class directly; swap in the subclass before the
         # stream's task first runs (it starts on the next loop iteration).
         stream.__class__ = _GoResponsesStream
+        if healed:
+            record_active("healed_arguments", {"count": healed, "functions": sorted(names)})
         return stream
 
 
