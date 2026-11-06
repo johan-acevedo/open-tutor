@@ -137,6 +137,7 @@ class DebugLog:
             if session_dir != (base.resolve() / sanitize_id(room)):
                 raise ValueError(f"unsafe session dir for room {room!r}")
             session_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+            os.chmod(base, 0o700)
             os.chmod(session_dir, 0o700)
             path = session_dir / f"{sanitize_id(job_id, 40)}.events.jsonl"
             fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)

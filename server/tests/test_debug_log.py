@@ -212,6 +212,7 @@ def test_private_permissions(tmp_path):
     env, base = enabled_env(tmp_path)
     debug = DebugLog.create("tutor-room9", LEARNER, "AJ_x", environ=env, base_dir=base)
     path = debug.finalize("ended_by_child")
+    assert stat.S_IMODE(os.stat(base).st_mode) == 0o700
     assert stat.S_IMODE(os.stat(debug.directory).st_mode) == 0o700
     assert stat.S_IMODE(os.stat(path).st_mode) == 0o600
     events_file = debug.directory / "AJ_x.events.jsonl"
