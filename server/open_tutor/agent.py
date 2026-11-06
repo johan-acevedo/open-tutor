@@ -11,7 +11,7 @@ import json
 import logging
 import os
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Callable, Literal
 
 import aiohttp
 from livekit import rtc
@@ -34,6 +34,7 @@ from pydantic import ValidationError
 
 from . import prompt
 from .board import (
+    DiagramRole,
     HtmlItem,
     Ids,
     MindmapItem,
@@ -45,6 +46,7 @@ from .board import (
     TextItem,
     youtube_embed,
 )
+from .diagram import Diagram, DiagramError, LinkSpec, NodeSpec
 from .config import AGENT_NAME, env_float
 from .tutor_llm import build_llm, warm_up
 from .speech import speakable_stream, unspoken_stream
@@ -52,6 +54,8 @@ from .speech import speakable_stream, unspoken_stream
 log = logging.getLogger("open-tutor")
 
 BOARD_RPC_TIMEOUT = 6.0
+# The first diagram of a session loads the drawing library in the browser; give a slow line time.
+DIAGRAM_RPC_TIMEOUT = 12.0
 HOMEWORK_SETTLE = 1.2  # seconds to wait for more PDF pages before responding
 
 
@@ -90,6 +94,8 @@ class Tutor(Agent):
         self.learner = learner
         self.room = room
         self.ids = Ids()
+        self.diagrams: dict[str, Diagram] = {}
+        self._diagram_lock = asyncio.Lock()  # one diagram change at a time, in the order the tools ran
         self.child_identity: str | None = None
         self.mode = "talking"
         self.notes_saved = 0
@@ -97,7 +103,7 @@ class Tutor(Agent):
 
     # ---- board -----------------------------------------------------------------
 
-    async def _rpc(self, method: str, payload: dict[str, Any]) -> bool:
+    async def _rpc(self, method: str, payload: dict[str, Any], timeout: float = BOARD_RPC_TIMEOUT) -> bool:
         if not self.child_identity:
             return False
         try:
@@ -105,7 +111,7 @@ class Tutor(Agent):
                 destination_identity=self.child_identity,
                 method=method,
                 payload=json.dumps(payload, ensure_ascii=False),
-                response_timeout=BOARD_RPC_TIMEOUT,
+                response_timeout=timeout,
             )
             ok = bool(json.loads(reply or "{}").get("ok"))
         except Exception as error:  # timeout, child left, or render error
@@ -183,6 +189,133 @@ class Tutor(Agent):
             return await self._show(SvgItem(id=self.ids.next(), title=title, svg=svg))
         except ValidationError as error:
             return f"Invalid svg: {error.errors()[0]['msg']}"
+
+    # ---- diagrams ----------------------------------------------------------------------
+    # The worker owns each diagram (nodes, links, layout, focus) and sends the whole item with a
+    # rising `rev` on every change. The browser acknowledges once the scene shows that revision, so
+    # a tool result never reports a drawing the child cannot see, and a missed update is repaired by
+    # the next one. Changes run one at a time under a lock.
+
+    async def _diagram_change(self, diagram_id: str, change: Callable[[Diagram], None]) -> str:
+        async with self._diagram_lock:
+            diagram = self.diagrams.get(diagram_id)
+            if diagram is None:
+                known = ", ".join(self.diagrams) or "none yet"
+                return f"There is no diagram {diagram_id}. Diagrams: {known}. Start one with show_diagram."
+            try:
+                change(diagram)
+            except DiagramError as error:
+                return f"Diagram {diagram_id} is unchanged: {error}"
+            except ValidationError as error:
+                return f"Diagram {diagram_id} is unchanged: {error.errors()[0]['msg']}"
+            return await self._diagram_send(diagram)
+
+    async def _diagram_send(self, diagram: Diagram) -> str:
+        method = "board.update" if diagram.shown else "board.show"
+        payload = diagram.item().model_dump(exclude_none=True)
+        diagram.shown = await self._rpc(method, payload, timeout=DIAGRAM_RPC_TIMEOUT)
+        if not diagram.shown:
+            return (
+                f"The board did not confirm diagram {diagram.id} (revision {diagram.rev}); the child may not "
+                "see it yet. The diagram is kept and your next diagram call sends all of it again. Explain in "
+                "words, briefly."
+            )
+        return f"Diagram {diagram.id} is now visible (revision {diagram.rev}). {diagram.describe()}"
+
+    @function_tool()
+    async def show_diagram(
+        self,
+        context: RunContext,
+        title: str,
+        nodes: list[NodeSpec],
+        links: list[LinkSpec] | None = None,
+        layout: Literal["radial", "flow"] = "radial",
+    ) -> str:
+        """Start a connected diagram: a mind map or a flow of boxes and arrows (not equations).
+
+        Start small (the main subject and one to three nodes) and grow it with `add_to_diagram` as you
+        talk, so the child sees it appear in step with your words. Equations stay in `show_steps`.
+        You choose short ids, labels and links; the board does the drawing and layout.
+
+        Args:
+            title: Short Swedish heading.
+            nodes: Boxes, each with a short id of your choice, a short Swedish label and an optional
+                role. The first node of a radial diagram is the centre.
+            links: Arrows between node ids, optionally labelled with one or two words.
+            layout: "radial" for a mind map around the first node, "flow" for steps left to right
+                (a process, a reaction as generic labels, cause and effect).
+        """
+        async with self._diagram_lock:
+            diagram = Diagram(self.ids.next(), title or None, layout or "radial")
+            try:
+                diagram.add(nodes, links or [])
+            except DiagramError as error:
+                return f"No diagram was started: {error}"
+            except ValidationError as error:
+                return f"No diagram was started: {error.errors()[0]['msg']}"
+            self.diagrams[diagram.id] = diagram
+            return await self._diagram_send(diagram)
+
+    @function_tool()
+    async def add_to_diagram(
+        self,
+        context: RunContext,
+        diagram_id: str,
+        nodes: list[NodeSpec] | None = None,
+        links: list[LinkSpec] | None = None,
+    ) -> str:
+        """Add nodes and/or links to a diagram. Existing nodes keep their place in a mind map.
+
+        Args:
+            diagram_id: The id returned by show_diagram, e.g. "b3".
+            nodes: New nodes with new ids.
+            links: New arrows between existing or new node ids.
+        """
+        if not nodes and not links:
+            return "Nothing to add: give nodes or links."
+        return await self._diagram_change(diagram_id, lambda d: d.add(nodes or [], links or []))
+
+    @function_tool()
+    async def edit_diagram(
+        self,
+        context: RunContext,
+        diagram_id: str,
+        target_id: str,
+        text: str | None = None,
+        role: DiagramRole | None = None,
+    ) -> str:
+        """Change the label or role of one node, or the label of one link, by its id.
+
+        Args:
+            diagram_id: The diagram's id.
+            target_id: A node id, or a link id like "l2".
+            text: The new label. For a link, an empty text removes its label.
+            role: New role for a node: center, idea, step, result or note.
+        """
+        if text is None and role is None:
+            return "Nothing to change: give text or role."
+        return await self._diagram_change(diagram_id, lambda d: d.edit(target_id, text, role))
+
+    @function_tool()
+    async def remove_from_diagram(self, context: RunContext, diagram_id: str, ids: list[str]) -> str:
+        """Remove nodes (with their arrows) or single links from a diagram, by id.
+
+        Args:
+            diagram_id: The diagram's id.
+            ids: Node ids and/or link ids.
+        """
+        return await self._diagram_change(diagram_id, lambda d: d.remove(ids))
+
+    @function_tool()
+    async def focus_diagram(self, context: RunContext, diagram_id: str, ids: list[str] | None = None) -> str:
+        """Highlight nodes or links of a diagram while you talk about them, and zoom to them.
+        Call it with no ids to clear the highlight and show the whole diagram again.
+
+        Args:
+            diagram_id: The diagram's id.
+            ids: Node and/or link ids to highlight.
+        """
+        return await self._diagram_change(diagram_id, lambda d: d.set_focus(ids or []))
 
     @function_tool()
     async def show_html(self, context: RunContext, title: str, html: str, height: int = 360) -> str:

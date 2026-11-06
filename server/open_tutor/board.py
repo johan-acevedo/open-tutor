@@ -5,7 +5,7 @@ from __future__ import annotations
 import itertools
 from typing import Annotated, Literal, Union
 
-from pydantic import BaseModel, Field, TypeAdapter
+from pydantic import BaseModel, Field, TypeAdapter, model_validator
 
 
 class Step(BaseModel):
@@ -66,8 +66,61 @@ class ResourceItem(_Item):
     prompt: str | None = Field(default=None, max_length=200)
 
 
+DIAGRAM_ROLES = ("center", "idea", "step", "result", "note")
+DIAGRAM_LAYOUTS = ("radial", "flow")
+DiagramRole = Literal["center", "idea", "step", "result", "note"]
+DIAGRAM_MAX_NODES = 24
+DIAGRAM_MAX_LINKS = 40
+DIAGRAM_COORD_LIMIT = 4000  # |x|, |y| of a node centre, in scene units
+DIAGRAM_ID = r"^[A-Za-z0-9_-]{1,24}$"
+
+
+class DiagramNode(BaseModel):
+    id: str = Field(pattern=DIAGRAM_ID)
+    text: str = Field(min_length=1, max_length=60)
+    role: DiagramRole = "idea"
+    x: float = Field(ge=-DIAGRAM_COORD_LIMIT, le=DIAGRAM_COORD_LIMIT)  # centre of the node
+    y: float = Field(ge=-DIAGRAM_COORD_LIMIT, le=DIAGRAM_COORD_LIMIT)
+
+
+class DiagramLink(BaseModel):
+    id: str = Field(pattern=DIAGRAM_ID)
+    source: str = Field(pattern=DIAGRAM_ID)
+    target: str = Field(pattern=DIAGRAM_ID)
+    label: str | None = Field(default=None, max_length=30)
+
+
+class DiagramItem(_Item):
+    """A connected diagram. The tutor owns the model and sends all of it on every change.
+
+    `rev` rises with every change; the browser acknowledges a revision only once the scene shows it.
+    Coordinates are node centres chosen by the server (open_tutor.diagram), never by the model.
+    """
+
+    kind: Literal["diagram"] = "diagram"
+    rev: int = Field(ge=1)
+    layout: Literal["radial", "flow"]
+    nodes: list[DiagramNode] = Field(min_length=1, max_length=DIAGRAM_MAX_NODES)
+    links: list[DiagramLink] = Field(default_factory=list, max_length=DIAGRAM_MAX_LINKS)
+    focus: list[str] = Field(default_factory=list, max_length=DIAGRAM_MAX_NODES + DIAGRAM_MAX_LINKS)
+
+    @model_validator(mode="after")
+    def _consistent(self) -> "DiagramItem":
+        node_ids = [n.id for n in self.nodes]
+        link_ids = [link.id for link in self.links]
+        if len(set(node_ids + link_ids)) != len(node_ids) + len(link_ids):
+            raise ValueError("node and link ids must be unique")
+        known = set(node_ids)
+        for link in self.links:
+            if link.source not in known or link.target not in known:
+                raise ValueError(f"link {link.id} points at a node that does not exist")
+        if any(f not in known and f not in set(link_ids) for f in self.focus):
+            raise ValueError("focus names an id that does not exist")
+        return self
+
+
 BoardItem = Annotated[
-    Union[TextItem, StepsItem, MindmapItem, SvgItem, HtmlItem, ImageItem, PendingItem, ResourceItem],
+    Union[TextItem, StepsItem, MindmapItem, SvgItem, HtmlItem, ImageItem, PendingItem, ResourceItem, DiagramItem],
     Field(discriminator="kind"),
 ]
 board_item = TypeAdapter(BoardItem)

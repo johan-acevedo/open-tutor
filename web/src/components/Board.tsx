@@ -9,6 +9,7 @@ type Props = {
   focused: BoardFocusPayload | null;
   onItemMounted: (id: string) => void;
   onResourceClosed: (id: string) => void;
+  onDiagramRendered?: (id: string, rev: number, error?: string) => void;
   dragOver: boolean;
 };
 
@@ -19,6 +20,7 @@ export default function Board({
   focused,
   onItemMounted,
   onResourceClosed,
+  onDiagramRendered,
   dragOver,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -57,6 +59,7 @@ export default function Board({
           focusedStep={focused?.id === item.id ? focused.step : undefined}
           onMounted={onItemMounted}
           onResourceClosed={onResourceClosed}
+          onDiagramRendered={onDiagramRendered}
         />
       ))}
       <div ref={endRef} />

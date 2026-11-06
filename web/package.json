@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@excalidraw/excalidraw": "0.18.1",
     "katex": "0.19.1",
     "livekit-client": "2.23.0",
     "pdfjs-dist": "6.5.438",

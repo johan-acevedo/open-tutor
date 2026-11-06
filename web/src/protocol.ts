@@ -23,6 +23,29 @@ export type Note = {
   next?: string;
 };
 
+export type DiagramRole = 'center' | 'idea' | 'step' | 'result' | 'note';
+
+/** A node of a diagram. x and y are the centre, in scene units, chosen by the tutor worker. */
+export type DiagramNodeData = { id: string; text: string; role: DiagramRole; x: number; y: number };
+
+export type DiagramLinkData = { id: string; source: string; target: string; label?: string };
+
+/**
+ * A connected diagram (mind map or flow). The worker owns the model and sends all of it on every
+ * change; `rev` rises with each change and the browser acknowledges a revision only once the scene
+ * shows it. `focus` lists the node and link ids to highlight (empty: none).
+ */
+export type DiagramItem = {
+  id: string;
+  kind: 'diagram';
+  title?: string;
+  rev: number;
+  layout: 'radial' | 'flow';
+  nodes: DiagramNodeData[];
+  links: DiagramLinkData[];
+  focus: string[];
+};
+
 export type BoardItem =
   | { id: string; kind: 'text'; title?: string; markdown: string }
   | { id: string; kind: 'steps'; title?: string; steps: Step[] }
@@ -31,6 +54,7 @@ export type BoardItem =
   | { id: string; kind: 'html'; title?: string; html: string; height?: number }
   | { id: string; kind: 'image'; title?: string; url: string; alt: string }
   | { id: string; kind: 'pending'; title: string }
+  | DiagramItem
   | {
       id: string;
       kind: 'resource';

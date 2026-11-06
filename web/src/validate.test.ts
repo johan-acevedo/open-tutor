@@ -81,3 +81,53 @@ describe('validateBoardFocus', () => {
     expect(validateBoardFocus(null).ok).toBe(false);
   });
 });
+
+describe('validateBoardItem: diagram', () => {
+  const diagram = () => ({
+    id: 'b1',
+    kind: 'diagram',
+    title: 'Klimat',
+    rev: 2,
+    layout: 'radial',
+    nodes: [
+      { id: 'k', text: 'Klimat', role: 'center', x: 0, y: 0 },
+      { id: 'a', text: 'Växthusgaser', role: 'idea', x: 400, y: 0 },
+    ],
+    links: [{ id: 'l1', source: 'k', target: 'a', label: 'orsakas av' }],
+    focus: ['a'],
+  });
+
+  it('accepts a whole diagram and keeps its ids, positions and focus', () => {
+    const r = validateBoardItem(diagram());
+    expect(r.ok).toBe(true);
+    if (r.ok && r.item.kind === 'diagram') {
+      expect(r.item.nodes.map((n) => n.id)).toEqual(['k', 'a']);
+      expect(r.item.links[0]).toEqual({ id: 'l1', source: 'k', target: 'a', label: 'orsakas av' });
+      expect(r.item.focus).toEqual(['a']);
+      expect(r.item.rev).toBe(2);
+    }
+  });
+
+  it.each([
+    ['a rev that is not positive', (d: any) => (d.rev = 0)],
+    ['an unknown layout', (d: any) => (d.layout = 'tree')],
+    ['no nodes', (d: any) => (d.nodes = [])],
+    ['too many nodes', (d: any) => (d.nodes = Array.from({ length: 25 }, (_, i) => ({ id: `n${i}`, text: 'x', role: 'idea', x: i, y: 0 })))],
+    ['a malformed id', (d: any) => (d.nodes[0].id = 'has space')],
+    ['a duplicate id', (d: any) => (d.nodes[1].id = 'k')],
+    ['an id shared by a node and a link', (d: any) => (d.links[0].id = 'k')],
+    ['empty text', (d: any) => (d.nodes[0].text = '')],
+    ['text over 60 characters', (d: any) => (d.nodes[0].text = 'x'.repeat(61))],
+    ['an unknown role', (d: any) => (d.nodes[0].role = 'boss')],
+    ['a position outside the bounds', (d: any) => (d.nodes[0].x = 9000)],
+    ['a position that is not a number', (d: any) => (d.nodes[0].y = 'high')],
+    ['a link to a missing node', (d: any) => (d.links[0].target = 'ghost')],
+    ['a focus on a missing id', (d: any) => (d.focus = ['ghost'])],
+  ])('rejects %s', (_name, mutate) => {
+    const d = diagram();
+    mutate(d);
+    const r = validateBoardItem(d);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/^diagram:/);
+  });
+});
