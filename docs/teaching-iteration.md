@@ -1,6 +1,6 @@
 # Teaching iteration: judgement, not more rules
 
-Status: proposal implemented on branch `teaching-judgement-iteration`, awaiting parent review.
+Status: implementation reviewed on branch `teaching-judgement-iteration`; awaiting merge and deployment.
 No merge, no deployment. Production stays on `main` (`b24ea26`) on ThinkCentre.
 
 ## Agreed intent
@@ -14,7 +14,7 @@ Scope (authorised):
 
 1. Refine/reorganise existing How-you-teach BASE, filling gaps: grounding, learner ownership,
    confusion, honest assessment/praise, capability honesty.
-2. New short `LOCAL_EXPERIENCE` section in `prompt.py`: 3 curated deidentified family-level
+2. New short local-experience section in `prompt.py`: 3 curated deidentified family-level
    observations as background, not recipes. Max 3–5, maintainer-curated. No child names,
    no real quotes, no personal data.
 3. Tool mechanics accurate: `show_steps` renders rows of equations, not written arithmetic
@@ -44,7 +44,7 @@ Scope (authorised):
   size); honest praise (effort/strategy/self-correction, helped vs independent plainly,
   warm initiative, no hesitant interrogator); capabilities (no volume tool, column layout
   possible via html/svg); memory (`clicked` optional, no forced story, prior `clicked`
-  not mastery); `LOCAL_EXPERIENCE` with 3 vignettes (answer-giveaway repair, ladder
+  not mastery); a local-experience section with 3 vignettes (answer-giveaway repair, ladder
   helped-but-answer-visible, requested-method replaced and confused), each with context,
   outcome and remaining uncertainty, no new must-do rule.
 - `server/open_tutor/agent.py`: tool docstrings only. `show_steps` states rows-not-columns
@@ -141,22 +141,42 @@ Official ElevenLabs docs (checked 2026-11-07, `text-to-dialogue/convert` + capab
   `language_code` auto-detects per sentence.
 
 Decision: keep forced `language="sv"` (`DialogueTTS`, `build_tts`), unchanged. English
-practice will be spoken with Swedish-enforced pronunciation; LLM output language and TTS
+pronunciation remains unverified with that parameter; LLM output language and TTS
 pronunciation are distinct — do not claim forced TTS `sv` caused an LLM language switch,
 and do not claim English voice is fully supported. Limit explicitly reported here rather
 than shipping an unverified autodetect change. No Swedish+English TTS audio generated or
 listened to for this iteration (no config change to verify).
 
+### Parent review and memory probes
+
+Review caught an unchanged `save_note.clicked` description ("What they understood"). It now
+explicitly permits an empty value and distinguishes guided work from independent use on a
+fresh example. Stored fields are unchanged. Review also removed wording-only prompt tests
+and corrected the experience vignettes to describe exchanges rather than separate sessions.
+
+Two additional real Go probes used the candidate prompt and tool descriptions with simulated
+tool results (not executed tools). Both requested an actual `save_note` call at the end:
+
+- **Guided answer:** the tutor had supplied 37 hg = 3.7 kg and the learner repeated it.
+  The returned note omitted `clicked` and recorded uncertainty about independent understanding.
+- **Fresh application:** after that demonstration the learner independently answered 45 hg =
+  4.5 kg and explained dividing by ten. The returned note still omitted `clicked` and recorded
+  uncertainty. This is cautious rather than an unsupported mastery claim, but may under-record
+  genuine progress. Watch that tradeoff in family use.
+
+These probes check the actual generated note arguments. They do not establish a measured
+improvement over the previous prompt, and their simulated tool results are not board evidence.
+The synthetic probe now distinguishes simulated board, memory and quiet-work results rather
+than returning a board acknowledgement for every tool.
+
 ### Tests
 
-- `uv run pytest -q` (server): 72 passed + new teaching tests (see below) — full suite
-  once stable, narrow files while iterating.
-- New `test_teaching.py` checks assembly/compatibility only: instructions contain learner,
-  Note fields unchanged (`topic`/`clicked`/`tricky`/`next`), END follows spoken language
-  (no hard-coded "Swedish sentences"), BASE keeps agency anchors and local-experience
-  bounds. No exact-wording mirrors.
-- Web untouched: `npm run typecheck`, `npm test`, `npm run build` to be run before PR
-  (CI runs them).
+- Full server suite on the reviewed tree: **74 passed**, run from `server` so its
+  pytest asyncio configuration is loaded.
+- Teaching smoke tests cover prompt assembly and unchanged browser-note compatibility.
+  Pedagogical behaviour is reviewed through real-provider probes, not substring assertions.
+- Web is unchanged; typecheck, tests and build passed for the implementation. GitHub CI
+  reruns all required checks after the review commit.
 
 ## Limits and remaining uncertainty
 

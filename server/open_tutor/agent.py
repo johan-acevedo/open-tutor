@@ -330,8 +330,9 @@ class Tutor(Agent):
 
         Args:
             topic: What they worked on, e.g. "Ekvationer med x på ena sidan".
-            clicked: What they understood.
-            tricky: What is still hard.
+            clicked: Evidence of what became clearer; empty is normal when unclear.
+                Distinguish guided work from independent use on a fresh example.
+            tricky: What still needs help or remains uncertain, not a fixed learner trait.
             next_step: What to try next time.
         """
         return await self.send_note(topic, clicked, tricky, next_step)

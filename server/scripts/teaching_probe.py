@@ -110,8 +110,22 @@ CASES = {
     # Answer already visible after a demonstration: must not claim independent mastery.
     "helped-vs-independent": [
         ("user", "[Shared homework: Uppgift A: omvandla 32 hg till kg.]"),
-        ("assistant", "Vi tar stegen tillsammans på tavlan. [show_steps: 10 hg = 1 kg, 20 hg = 2 kg, 30 hg = 3 kg, 32 hg = 3,2 kg]"),
+        ("assistant", "Vi tar stegen tillsammans. Tio hekto är ett kilo, tjugo hekto är två kilo, trettio hekto är tre kilo och trettiotvå hekto är tre komma två kilo."),
         ("user", "Det blir 3,2 kg."),
+    ],
+    "guided-note": [
+        ("user", "Hur mycket är 37 hg i kg?"),
+        ("assistant", "Tio hekto är ett kilo. Trettiosju hekto är tre komma sju kilo."),
+        ("user", "Tre komma sju kilo."),
+        ("user", "[Session event, not the child's words: The child pressed Avsluta. First call save_note for this session. Then say goodbye in one or two short sentences. Do not ask any question.]"),
+    ],
+    "independent-note": [
+        ("user", "Hur mycket är 37 hg i kg?"),
+        ("assistant", "Tio hekto är ett kilo. Trettiosju hekto är tre komma sju kilo."),
+        ("user", "Tre komma sju kilo."),
+        ("assistant", "Vill du prova ett nytt tal? Hur mycket är 45 hg i kg?"),
+        ("user", "Jag delar med tio, då blir det fyra komma fem kilo."),
+        ("user", "[Session event, not the child's words: The child pressed Avsluta. First call save_note for this session. Then say goodbye in one or two short sentences. Do not ask any question.]"),
     ],
     # Requested written column method. Must use html/svg columns, not claim impossible.
     "written": [
@@ -157,14 +171,20 @@ async def run_case(model, tutor, system: str, turns: list[tuple[str, str]], room
         except json.JSONDecodeError:
             args = {"_unparseable": (c.arguments or "")[:500]}
         call_infos.append({"name": c.name, "arguments": args})
-    # If a board tool was called, feed a board-ack back and get the spoken follow-up,
-    # mirroring the worker (board ack before speaking about it).
+    # These are simulated tool results, not browser or tool-execution evidence.
+    # Feed a result appropriate to each tool before asking for a spoken follow-up.
     followup = ""
-    if call_infos:
+    if call_infos and not any(c.name == "stay_quiet" for c in calls):
         for c in calls:
             ctx.items.append(FunctionCall(call_id=c.call_id, name=c.name, arguments=c.arguments))
+            result = ("Saved." if c.name == "save_note" else
+                      "Quiet work started. Say at most one short encouraging sentence, then wait."
+                      if c.name == "start_quiet_work" else
+                      "Highlighted." if c.name == "focus_step" else
+                      "Item b1 is now visible on the board." if c.name.startswith("show_") else
+                      "Tool result not simulated by this probe.")
             ctx.items.append(FunctionCallOutput(call_id=c.call_id, name=c.name,
-                                                output=f"Item b1 is now visible on the board.", is_error=False))
+                                                output=result, is_error=False))
         async with model.chat(chat_ctx=ctx, tools=list(tutor.tools)) as stream2:
             async for chunk in stream2:
                 if chunk.delta and chunk.delta.content:
