@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { Profile } from '../db';
 import { createProfile } from '../db';
 
@@ -6,6 +6,7 @@ type Props = {
   profiles: Profile[];
   onPick: (profile: Profile) => void;
   starting: boolean;
+  onStartGesture?: () => void;
 };
 
 const GRADES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
@@ -14,24 +15,32 @@ function gradeLabel(g: number): string {
   return g <= 9 ? `åk ${g}` : `gymnasiet åk ${g - 9}`;
 }
 
-export default function ProfilePicker({ profiles, onPick, starting }: Props) {
+export default function ProfilePicker({ profiles, onPick, starting, onStartGesture }: Props) {
   const [selectedId, setSelectedId] = useState<string | null>(profiles[0]?.id ?? null);
   const [showNew, setShowNew] = useState(profiles.length === 0);
   const [name, setName] = useState('');
   const [grade, setGrade] = useState(4);
+  const [creating, setCreating] = useState(false);
+  const startPending = useRef(false);
 
   const canStart = showNew ? name.trim().length > 0 : selectedId !== null;
 
   async function handleStart() {
-    if (starting) return;
-    if (showNew) {
-      const trimmed = name.trim();
-      if (!trimmed) return;
-      const created = await createProfile(trimmed, grade);
-      onPick(created);
-    } else {
-      const found = profiles.find((p) => p.id === selectedId);
-      if (found) onPick(found);
+    if (starting || startPending.current || !canStart) return;
+    startPending.current = true;
+    setCreating(true);
+    try {
+      onStartGesture?.();
+      if (showNew) {
+        const created = await createProfile(name.trim(), grade);
+        onPick(created);
+      } else {
+        const found = profiles.find((p) => p.id === selectedId);
+        if (found) onPick(found);
+      }
+    } finally {
+      startPending.current = false;
+      setCreating(false);
     }
   }
 
@@ -103,13 +112,17 @@ export default function ProfilePicker({ profiles, onPick, starting }: Props) {
           </div>
         )}
 
-        <button type="button" className="ot-start-btn" disabled={!canStart || starting} onClick={handleStart}>
-          {starting ? 'Startar…' : 'Starta'}
+        <button type="button" className="ot-start-btn" disabled={!canStart || starting || creating} onClick={handleStart}>
+          {starting || creating ? 'Startar…' : 'Starta'}
         </button>
         <p className="ot-profiles-note">Sparas i den här webbläsaren. Ingen inloggning behövs.</p>
       </div>
       <div className="ot-profiles-side" aria-hidden="true">
-        <img src="/character/greeting.webp" alt="" onError={(e) => ((e.target as HTMLImageElement).style.display = 'none')} />
+        <img
+          src="/character/greeting.webp"
+          alt=""
+          onError={(e) => ((e.target as HTMLImageElement).style.display = 'none')}
+        />
       </div>
     </div>
   );

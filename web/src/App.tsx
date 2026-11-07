@@ -8,16 +8,21 @@ import Avatar from './components/Avatar';
 import Board from './components/Board';
 import BottomBar from './components/BottomBar';
 import EndCard from './components/EndCard';
+import HomeworkTray from './components/HomeworkTray';
+import { useViewport } from './useViewport';
 
 function pillLabel(p: Profile): string {
   return p.grade <= 9 ? `${p.name} · åk ${p.grade}` : `${p.name} · gy ${p.grade - 9}`;
 }
 
 export default function App() {
-  const session = useSession();
+  const { mobile, keyboard } = useViewport();
+  const session = useSession(mobile);
   const { phase, profile } = session;
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const cameraRef = useRef<HTMLInputElement | null>(null);
+  const [smallCompanion, setSmallCompanion] = useState(false);
 
   useEffect(() => {
     if (phase === 'profiles') {
@@ -28,7 +33,8 @@ export default function App() {
   const inSession = phase === 'live' || phase === 'ending' || phase === 'connecting';
   const showBottomBar = phase === 'live' || phase === 'ending';
   const mode = layoutMode(session.items.length);
-  const lastTopic = profile && profile.notes.length > 0 ? (profile.notes[profile.notes.length - 1].topic ?? null) : null;
+  const lastTopic =
+    profile && profile.notes.length > 0 ? (profile.notes[profile.notes.length - 1].topic ?? null) : null;
 
   const avatar = mapAvatarState({
     agentState: session.agentState,
@@ -44,7 +50,9 @@ export default function App() {
   }
 
   return (
-    <div className="ot-root">
+    <div
+      className={`ot-root${mobile ? ' ot-phone' : ''}${keyboard ? ' ot-keyboard' : ''}${smallCompanion ? ' ot-small-companion' : ''}${inSession ? ' ot-in-session' : ''}`}
+    >
       <header className="ot-topbar">
         <div className="ot-wordmark">Open Tutor</div>
         {profile && inSession && (
@@ -55,7 +63,12 @@ export default function App() {
       </header>
 
       {phase === 'profiles' && (
-        <ProfilePicker profiles={profiles} onPick={(p) => void session.start(p)} starting={false} />
+        <ProfilePicker
+          profiles={profiles}
+          onPick={(p) => void session.start(p)}
+          onStartGesture={session.prepareStart}
+          starting={false}
+        />
       )}
 
       {phase === 'connecting' && (
@@ -75,10 +88,39 @@ export default function App() {
               onItemMounted={session.onItemMounted}
               onResourceClosed={(id) => void session.resourceClosed(id)}
               dragOver={session.dragOver}
+              mobile={mobile}
+              activeItemId={session.activeItemId}
+              onCamera={() => cameraRef.current?.click()}
+              onFiles={() => fileRef.current?.click()}
+              onEnd={() => void session.endSession()}
+              ending={phase === 'ending'}
             />
+            {session.homeworkDraft && (
+              <HomeworkTray
+                draft={session.homeworkDraft}
+                busy={session.homeworkSending}
+                onCamera={() => cameraRef.current?.click()}
+                onFiles={() => fileRef.current?.click()}
+                onCancel={() => session.setHomeworkDraft(null)}
+                onSend={() => void session.sendHomework()}
+                onRemove={(index) => {
+                  const draft = session.homeworkDraft;
+                  if (draft?.kind !== 'files') return;
+                  const files = draft.files.filter((_, i) => i !== index);
+                  session.setHomeworkDraft(files.length ? { ...draft, files } : { kind: 'picker' });
+                }}
+              />
+            )}
           </section>
           <aside className="ot-avatar-col" aria-label="Tutor">
-            <Avatar pose={avatar.pose} pill={avatar.pill} caption={session.caption} captionFading={session.captionFading} />
+            <Avatar
+              pose={avatar.pose}
+              pill={avatar.pill}
+              caption={session.caption}
+              captionFading={session.captionFading}
+              compact={smallCompanion}
+              onToggleSize={mobile ? () => setSmallCompanion((small) => !small) : undefined}
+            />
           </aside>
         </main>
       )}
@@ -102,6 +144,13 @@ export default function App() {
             }}
           >
             Försök igen
+          </button>
+        </div>
+      )}
+      {(session.audioBlocked || session.resumeNeeded) && showBottomBar && (
+        <div className="ot-banner ot-banner-amber" role="alert">
+          <button type="button" onClick={() => void session.resumeMedia()}>
+            {session.resumeNeeded ? 'Fortsätt samtalet' : 'Tryck för att höra mig'}
           </button>
         </div>
       )}
@@ -138,11 +187,12 @@ export default function App() {
       {showBottomBar && (
         <BottomBar
           micEnabled={session.micEnabled}
+          mobile={mobile}
           micBlocked={session.micBlocked}
           sending={session.sending || phase === 'ending'}
           onSendText={(t) => void session.sendChat(t)}
           onToggleMic={() => void session.toggleMic()}
-          onAttach={() => fileRef.current?.click()}
+          onAttach={() => (mobile ? session.setHomeworkDraft({ kind: 'picker' }) : fileRef.current?.click())}
           onEnd={() => void session.endSession()}
         />
       )}
@@ -153,16 +203,29 @@ export default function App() {
         hidden
         aria-hidden="true"
         tabIndex={-1}
-        accept=".pdf,.png,.jpg,.jpeg,.webp"
+        accept="image/*,.pdf,application/pdf"
         multiple
         onChange={(e) => {
           if (e.target.files && e.target.files.length > 0) {
-            void session.addFiles(e.target.files, 'photo');
+            if (mobile) session.queueFiles(e.target.files);
+            else void session.addFiles(e.target.files, 'photo');
           }
           e.target.value = '';
         }}
       />
-      <audio ref={session.audioRef} aria-hidden="true" />
+      <input
+        ref={cameraRef}
+        type="file"
+        hidden
+        accept="image/*"
+        capture="environment"
+        aria-label="Fota läxan"
+        onChange={(event) => {
+          if (event.target.files?.length) session.queueFiles(event.target.files);
+          event.target.value = '';
+        }}
+      />
+      <audio ref={session.audioRef} aria-hidden="true" autoPlay />
     </div>
   );
 }

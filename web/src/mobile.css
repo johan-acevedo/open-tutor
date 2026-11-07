@@ -1,0 +1,455 @@
+/* Shared companion structure; desktop keeps its existing column. */
+[hidden] {
+  display: none !important;
+}
+.ot-companion {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  position: relative;
+  display: flex;
+}
+.ot-main-teaching .ot-companion {
+  max-height: 72%;
+}
+.ot-main-teaching .ot-companion .ot-avatar-img {
+  max-height: 100%;
+}
+.ot-voice-bubble {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  flex: 0 0 auto;
+  max-width: 100%;
+}
+.ot-pose-thinking .ot-avatar-img,
+.ot-pose-waiting .ot-avatar-img {
+  transform: scaleX(-1);
+}
+.ot-card-slot {
+  min-width: 0;
+  flex: 0 0 auto;
+}
+.ot-size-btn {
+  position: absolute;
+  right: 0;
+  top: 0;
+  border-radius: 50%;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--ot-border);
+  background: #14171dcc;
+  color: var(--ot-text-dim);
+  font-size: 24px;
+}
+.ot-board-nav,
+.ot-tray-actions,
+.ot-arrival-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.ot-board-nav button,
+.ot-arrival-actions button,
+.ot-homework-tray button,
+.ot-end-confirm button,
+.ot-follow-btn,
+.ot-send-btn {
+  min-height: 44px;
+  border: 1px solid var(--ot-border);
+  border-radius: 12px;
+  background: var(--ot-elevated);
+  color: var(--ot-text);
+  padding: 8px 12px;
+  font-size: 16px;
+}
+.ot-board-nav {
+  flex: 0 0 auto;
+  padding: 4px 8px 8px;
+}
+.ot-board-nav .ot-mobile-end,
+.ot-end-confirm .ot-mobile-end {
+  background: var(--ot-end-fill);
+  border: 0;
+  color: white;
+  margin-left: auto;
+}
+.ot-homework-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 45%;
+}
+.ot-homework-chip img {
+  width: 30px;
+  height: 30px;
+  object-fit: cover;
+  border-radius: 6px;
+}
+.ot-end-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  background: var(--ot-elevated);
+  flex: 0 0 auto;
+}
+.ot-homework-tray {
+  position: absolute;
+  inset: 56px 8px 4px;
+  z-index: 3;
+  padding: 12px;
+  background: var(--ot-elevated);
+  border: 1px solid var(--ot-border);
+  border-radius: 16px;
+  overflow: auto;
+}
+.ot-homework-tray h2 {
+  font-size: 20px;
+  margin: 0 0 12px;
+}
+.ot-homework-tray ul {
+  padding: 0;
+  list-style: none;
+  margin: 0 0 12px;
+}
+.ot-homework-tray li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 8px;
+  overflow-wrap: anywhere;
+}
+.ot-homework-tray li img {
+  width: 64px;
+  height: 72px;
+  object-fit: contain;
+  border-radius: 8px;
+  background: var(--ot-paper);
+}
+.ot-homework-tray li span {
+  flex: 1;
+  min-width: 0;
+}
+.ot-homework-tray .ot-primary {
+  background: var(--ot-cyan);
+  color: #062a31;
+}
+.ot-tray-actions {
+  margin-top: 8px;
+}
+.ot-tray-hint {
+  font-size: 14px;
+  color: var(--ot-text-dim);
+}
+.ot-draft-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* B2 mobile web: voice band below a clear, scrollable teaching surface. */
+.ot-phone {
+  position: fixed;
+  top: var(--ot-view-top, 0px);
+  left: 0;
+  right: 0;
+  height: var(--ot-view-height, 100dvh);
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) 0 env(safe-area-inset-left, 0px);
+}
+.ot-phone.ot-in-session > .ot-topbar {
+  display: none;
+}
+.ot-phone .ot-topbar {
+  padding: 0 12px;
+  height: 44px;
+  flex-basis: 44px;
+}
+.ot-phone .ot-profiles {
+  padding: 8px 16px 20px;
+  gap: 0;
+  position: relative;
+}
+.ot-phone .ot-profiles-left {
+  flex: 1;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.ot-phone .ot-profiles h1 {
+  margin: 12px 0 18px;
+  font-size: 26px;
+}
+.ot-phone .ot-profile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.ot-phone .ot-profile-card {
+  min-width: 0;
+  padding: 12px;
+}
+.ot-phone .ot-profiles-side {
+  display: none;
+}
+.ot-phone .ot-start-btn {
+  width: 100%;
+  padding: 12px;
+  margin-top: 18px;
+}
+.ot-phone .ot-main {
+  --companion-w: min(50vw, 215px);
+  --companion-h: min(64.6vw, 277px);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) var(--companion-h);
+  gap: 8px;
+  padding: 4px 0 0;
+}
+.ot-phone .ot-main-arrival {
+  --companion-w: min(60vw, 234px);
+  --companion-h: min(77.4vw, 302px);
+}
+.ot-phone .ot-main .ot-board {
+  position: relative;
+  width: 100%;
+  min-height: 0;
+  min-width: 0;
+}
+.ot-phone .ot-main .ot-avatar-col {
+  max-width: none;
+  width: 100%;
+  min-height: 0;
+  overflow: visible;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--companion-w);
+  grid-template-rows: minmax(0, 1fr);
+  gap: 4px;
+  padding-left: 8px;
+  align-items: start;
+}
+.ot-phone .ot-main .ot-companion {
+  grid-column: 2;
+  grid-row: 1;
+  height: 100%;
+  max-height: none;
+  width: 100%;
+}
+.ot-phone .ot-main .ot-avatar-img {
+  flex: 1;
+  max-height: 100%;
+  height: 100%;
+  width: 100%;
+}
+.ot-phone .ot-voice-bubble {
+  grid-column: 1;
+  grid-row: 1;
+  margin-top: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  gap: 8px;
+  border: 1px solid var(--ot-border);
+  border-radius: 18px 18px 6px 18px;
+  background: var(--ot-elevated);
+  max-height: 100%;
+  overflow: hidden;
+}
+.ot-phone .ot-pill {
+  padding: 5px 10px;
+  font-size: 14px;
+  max-width: 100%;
+}
+.ot-phone .ot-caption {
+  font-size: 18px;
+  text-align: left;
+  line-height: 1.35;
+  -webkit-line-clamp: 5;
+  line-clamp: 5;
+}
+.ot-phone .ot-board-scroll {
+  padding: 0 10px 4px;
+  gap: 10px;
+  overscroll-behavior: contain;
+}
+.ot-phone [data-view='focus'] > .ot-card-slot:not([hidden]) {
+  margin-top: auto;
+}
+.ot-phone .ot-bcard {
+  padding: 12px;
+  border-radius: 14px;
+}
+.ot-phone .ot-bcard h2 {
+  font-size: 18px;
+  margin-bottom: 8px;
+  overflow-wrap: anywhere;
+}
+.ot-phone .ot-bcard .ot-md,
+.ot-phone .ot-paper p {
+  font-size: 17px;
+}
+.ot-phone .ot-step-eq {
+  font-size: 25px;
+  padding: 6px;
+}
+.ot-phone .ot-step-note {
+  font-size: 14px;
+}
+.ot-phone .ot-step-transition {
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.ot-phone .ot-op {
+  font-size: 14px;
+}
+.ot-phone .ot-html-frame,
+.ot-phone .ot-resource-frame {
+  max-height: calc(var(--ot-view-height, 100dvh) * 0.45);
+}
+.ot-phone .ot-image-full {
+  max-height: 45dvh;
+  object-fit: contain;
+}
+.ot-phone .ot-greeting {
+  padding: 8px 12px;
+}
+.ot-phone .ot-greeting h1 {
+  font-size: 26px;
+}
+.ot-phone .ot-greeting-sub {
+  font-size: 19px;
+}
+.ot-phone .ot-last-chip {
+  font-size: 14px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.ot-phone .ot-arrival-actions {
+  align-items: stretch;
+}
+.ot-phone .ot-arrival-actions button {
+  text-align: left;
+}
+.ot-phone .ot-follow-btn {
+  align-self: center;
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  color: var(--ot-cyan);
+}
+.ot-phone .ot-bottombar {
+  gap: 6px;
+  padding: 8px 8px calc(8px + env(safe-area-inset-bottom, 0px));
+}
+.ot-phone .ot-chat-input {
+  width: 0;
+  min-width: 0;
+  flex: 1;
+  font-size: 17px;
+  padding: 0 12px;
+}
+.ot-phone .ot-attach-btn,
+.ot-phone .ot-mic-btn {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  flex: 0 0 44px;
+}
+.ot-phone .ot-banner {
+  padding: 6px 10px;
+  flex: 0 0 auto;
+  font-size: 14px;
+  max-height: 25%;
+  overflow: auto;
+}
+.ot-phone .ot-sent-chip {
+  display: none;
+}
+.ot-phone .ot-endcard {
+  overflow: auto;
+}
+.ot-phone .ot-toast {
+  max-width: calc(100% - 24px);
+  overflow-wrap: anywhere;
+}
+.ot-phone.ot-small-companion .ot-main {
+  --companion-w: 76px;
+  --companion-h: 108px;
+}
+.ot-phone.ot-keyboard .ot-main {
+  --companion-w: 120px;
+  --companion-h: 156px;
+}
+.ot-phone.ot-keyboard .ot-board-nav {
+  display: none;
+}
+.ot-phone.ot-keyboard .ot-voice-bubble {
+  margin-top: 0;
+}
+.ot-phone.ot-keyboard .ot-caption {
+  font-size: 15px;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+.ot-phone.ot-keyboard .ot-bottombar {
+  padding-bottom: 8px;
+}
+.ot-phone.ot-keyboard .ot-homework-tray {
+  top: 0;
+}
+@media (orientation: landscape) {
+  .ot-phone .ot-main {
+    --companion-w: min(31vw, 260px);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) var(--companion-w);
+    grid-template-rows: minmax(0, 1fr);
+    gap: 8px;
+  }
+  .ot-phone .ot-main .ot-avatar-col {
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    align-items: stretch;
+  }
+  .ot-phone .ot-main .ot-companion {
+    flex: 1 1 auto;
+    height: 0;
+  }
+  .ot-phone .ot-voice-bubble {
+    flex: 0 0 auto;
+    margin: 0;
+    padding: 4px 8px;
+    gap: 2px;
+  }
+  .ot-phone .ot-caption {
+    font-size: 15px;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+  }
+  .ot-phone .ot-greeting h1 {
+    margin-top: 0;
+  }
+  .ot-phone .ot-profiles-side {
+    display: flex;
+    position: absolute;
+    bottom: 0;
+    right: 10px;
+    width: 25%;
+    pointer-events: none;
+    opacity: 0.25;
+  }
+  .ot-phone .ot-profiles-left {
+    z-index: 1;
+  }
+  .ot-phone.ot-keyboard .ot-main .ot-companion {
+    display: none;
+  }
+  .ot-phone.ot-keyboard .ot-main {
+    --companion-w: 120px;
+  }
+  .ot-phone.ot-keyboard .ot-caption {
+    display: none;
+  }
+  .ot-phone.ot-small-companion .ot-main {
+    --companion-w: 120px;
+  }
+}
