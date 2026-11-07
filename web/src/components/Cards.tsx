@@ -11,15 +11,16 @@ type CardProps = {
   focusedStep?: number;
   onMounted: (id: string) => void;
   onResourceClosed?: (id: string) => void;
+  revealThrough?: number;
 };
 
-function useReportMounted(id: string, onMounted: (id: string) => void, waitForImage = false) {
+function useReportMounted(item: BoardItem, onMounted: (id: string) => void, waitForImage = false) {
   const ref = useRef<HTMLDivElement | null>(null);
-  const done = useRef(false);
+  const done = useRef<BoardItem | null>(null);
   const finish = () => {
-    if (!done.current) {
-      done.current = true;
-      onMounted(id);
+    if (done.current !== item) {
+      done.current = item;
+      onMounted(item.id);
     }
   };
   useEffect(() => {
@@ -36,13 +37,13 @@ function useReportMounted(id: string, onMounted: (id: string) => void, waitForIm
     raf = requestAnimationFrame(() => finish());
     return () => cancelAnimationFrame(raf);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [item]);
   return { ref, finish };
 }
 
 function TextCard({ item, onMounted }: CardProps) {
   if (item.kind !== 'text') return null;
-  const { ref } = useReportMounted(item.id, onMounted);
+  const { ref } = useReportMounted(item, onMounted);
   const html = useMemo(() => renderMarkdown(item.markdown), [item.markdown]);
   return (
     <article className="ot-bcard ot-katex" ref={ref} data-board-id={item.id} aria-label={item.title ?? 'Text'}>
@@ -52,24 +53,24 @@ function TextCard({ item, onMounted }: CardProps) {
   );
 }
 
-function StepsCard({ item, focusedStep, onMounted }: CardProps) {
+function StepsCard({ item, focusedStep, onMounted, revealThrough }: CardProps) {
   if (item.kind !== 'steps') return null;
-  const { ref } = useReportMounted(item.id, onMounted);
+  const { ref } = useReportMounted(item, onMounted);
   const stepRefs = useRef(new Map<number, HTMLDivElement>());
   useEffect(() => {
-    if (focusedStep !== undefined) {
+    if (focusedStep !== undefined && revealThrough === undefined) {
       const el = stepRefs.current.get(focusedStep);
       if (el && typeof el.scrollIntoView === 'function') {
         el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       }
     }
-  }, [focusedStep]);
+  }, [focusedStep, revealThrough]);
   return (
     <article className="ot-bcard ot-katex" ref={ref} data-board-id={item.id} aria-label={item.title ?? 'Steg för steg'}>
       {item.title && <h2>{item.title}</h2>}
       <div className="ot-steps">
         {item.steps.map((s, i) => (
-          <div className="ot-step-row" key={i}>
+          <div className="ot-step-row" key={i} hidden={revealThrough !== undefined && i > revealThrough}>
             {i > 0 && (s.op || s.note) && (
               <div className="ot-step-transition">
                 {s.op && (
@@ -90,6 +91,7 @@ function StepsCard({ item, focusedStep, onMounted }: CardProps) {
                 else stepRefs.current.delete(i);
               }}
               className={`ot-step-eq${focusedStep === i ? ' focused' : ''}`}
+              data-step={i}
               dangerouslySetInnerHTML={{
                 __html: katex.renderToString(s.tex, { displayMode: true, throwOnError: false }),
               }}
@@ -104,7 +106,7 @@ function StepsCard({ item, focusedStep, onMounted }: CardProps) {
 
 function MindmapCard({ item, onMounted }: CardProps) {
   if (item.kind !== 'mindmap') return null;
-  const { ref } = useReportMounted(item.id, onMounted);
+  const { ref } = useReportMounted(item, onMounted);
   return (
     <article className="ot-bcard" ref={ref} data-board-id={item.id} aria-label={item.title ?? 'Tankekarta'}>
       {item.title && <h2>{item.title}</h2>}
@@ -124,7 +126,7 @@ function MindmapCard({ item, onMounted }: CardProps) {
 
 function SvgCard({ item, onMounted }: CardProps) {
   if (item.kind !== 'svg') return null;
-  const { ref } = useReportMounted(item.id, onMounted);
+  const { ref } = useReportMounted(item, onMounted);
   const html = useMemo(() => sanitiseSvg(item.svg), [item.svg]);
   return (
     <article className="ot-bcard" ref={ref} data-board-id={item.id} aria-label={item.title ?? 'Bild'}>
@@ -139,7 +141,7 @@ const HTML_CSP =
 
 function HtmlCard({ item, onMounted }: CardProps) {
   if (item.kind !== 'html') return null;
-  const { ref } = useReportMounted(item.id, onMounted);
+  const { ref } = useReportMounted(item, onMounted);
   const srcDoc = useMemo(
     () => `<meta http-equiv="Content-Security-Policy" content="${HTML_CSP}">\n${item.html}`,
     [item.html],
@@ -148,14 +150,20 @@ function HtmlCard({ item, onMounted }: CardProps) {
   return (
     <article className="ot-bcard" ref={ref} data-board-id={item.id} aria-label={item.title ?? 'Interaktiv'}>
       {item.title && <h2>{item.title}</h2>}
-      <iframe className="ot-html-frame" title={item.title ?? 'Interaktivt innehåll'} sandbox="allow-scripts" srcDoc={srcDoc} style={{ height }} />
+      <iframe
+        className="ot-html-frame"
+        title={item.title ?? 'Interaktivt innehåll'}
+        sandbox="allow-scripts"
+        srcDoc={srcDoc}
+        style={{ height }}
+      />
     </article>
   );
 }
 
 function ImageCard({ item, onMounted }: CardProps) {
   if (item.kind !== 'image') return null;
-  const { ref, finish } = useReportMounted(item.id, onMounted, true);
+  const { ref, finish } = useReportMounted(item, onMounted, true);
   return (
     <article className="ot-bcard" ref={ref} data-board-id={item.id} aria-label={item.title ?? item.alt}>
       {item.title && <h2>{item.title}</h2>}
@@ -166,7 +174,7 @@ function ImageCard({ item, onMounted }: CardProps) {
 
 function PendingCard({ item, onMounted }: CardProps) {
   if (item.kind !== 'pending') return null;
-  const { ref } = useReportMounted(item.id, onMounted);
+  const { ref } = useReportMounted(item, onMounted);
   return (
     <article className="ot-bcard" ref={ref} data-board-id={item.id} aria-label={item.title}>
       <h2>{item.title}</h2>
@@ -179,7 +187,7 @@ function PendingCard({ item, onMounted }: CardProps) {
 
 function ResourceCard({ item, onMounted, onResourceClosed }: CardProps) {
   if (item.kind !== 'resource') return null;
-  const { ref } = useReportMounted(item.id, onMounted);
+  const { ref } = useReportMounted(item, onMounted);
   return (
     <article className="ot-bcard" ref={ref} data-board-id={item.id} aria-label={item.title}>
       <h2>{item.title}</h2>
@@ -209,7 +217,7 @@ function ResourceCard({ item, onMounted, onResourceClosed }: CardProps) {
 
 function HomeworkCard({ item, onMounted }: CardProps) {
   if (item.kind !== 'homework') return null;
-  const { ref } = useReportMounted(item.id, onMounted);
+  const { ref } = useReportMounted(item, onMounted);
   return (
     <article className="ot-bcard" ref={ref} data-board-id={item.id} aria-label={item.title}>
       <div className="ot-paper">

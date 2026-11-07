@@ -19,6 +19,7 @@ import { appendNote } from './db';
 import type { Profile } from './db';
 import { isNoteLike, validateBoardFocus, validateBoardItem } from './validate';
 import { dataUrlToBytes, downscaleImage } from './image';
+import type { HomeworkDraft } from './components/HomeworkTray';
 
 export type Phase = 'profiles' | 'connecting' | 'live' | 'ending' | 'ended';
 export type ConnBanner = 'reconnecting' | 'disconnected' | null;
@@ -93,7 +94,7 @@ function unregisterRpc(room: Room, method: string): void {
   }
 }
 
-export function useSession() {
+export function useSession(mobile = false) {
   const [phase, setPhase] = useState<Phase>('profiles');
   const [profile, setProfile] = useState<Profile | null>(null);
   const [items, setItems] = useState<BoardItem[]>([]);
@@ -111,12 +112,20 @@ export function useSession() {
   const [lastSent, setLastSent] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [sending, setSending] = useState(false);
+  const [activeItemId, setActiveItemId] = useState<string | null>(null);
+  const [homeworkDraft, setHomeworkDraft] = useState<HomeworkDraft | null>(null);
+  const [homeworkSending, setHomeworkSending] = useState(false);
+  const [audioBlocked, setAudioBlocked] = useState(false);
+  const [resumeNeeded, setResumeNeeded] = useState(false);
 
   const roomRef = useRef<Room | null>(null);
+  const preparedRoomRef = useRef<Room | null>(null);
   const profileRef = useRef<Profile | null>(null);
   const intentionalEndRef = useRef(false);
   const mountResolvers = useRef(new Map<string, Array<() => void>>());
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const micWantedRef = useRef(true);
   const toastTimer = useRef<number>(0);
   const sentTimer = useRef<number>(0);
   const captionTimer = useRef<number>(0);
@@ -136,15 +145,21 @@ export function useSession() {
   }, []);
 
   const waitForMounted = useCallback((id: string) => {
-    return new Promise<void>((resolve) => {
+    return new Promise<void>((resolve, reject) => {
       const list = mountResolvers.current.get(id) ?? [];
-      list.push(resolve);
+      const finish = () => {
+        window.clearTimeout(timer);
+        resolve();
+      };
+      list.push(finish);
       mountResolvers.current.set(id, list);
-      window.setTimeout(() => {
+      const timer = window.setTimeout(() => {
         const pending = mountResolvers.current.get(id);
         if (pending) {
-          mountResolvers.current.delete(id);
-          resolve();
+          const remaining = pending.filter((fn) => fn !== finish);
+          if (remaining.length) mountResolvers.current.set(id, remaining);
+          else mountResolvers.current.delete(id);
+          reject(new RpcError(1501, 'The browser did not confirm rendering this board item'));
         }
       }, MOUNT_TIMEOUT_MS);
     });
@@ -162,6 +177,10 @@ export function useSession() {
   const cleanupRoom = useCallback(() => {
     const room = roomRef.current;
     roomRef.current = null;
+    preparedRoomRef.current = null;
+    const context = audioContextRef.current;
+    audioContextRef.current = null;
+    if (context) void context.close().catch(() => undefined);
     if (!room) return;
     for (const m of [BOARD_RPC_SHOW, BOARD_RPC_UPDATE, BOARD_RPC_FOCUS]) unregisterRpc(room, m);
     try {
@@ -178,13 +197,47 @@ export function useSession() {
     void room.disconnect().catch(() => undefined);
   }, []);
 
+  // Called directly by Starta, before profile persistence or the session request.
+  const prepareStart = useCallback(() => {
+    cleanupRoom();
+    let context: AudioContext | undefined;
+    try {
+      context = new AudioContext();
+      audioContextRef.current = context;
+      void context.resume().catch(() => {
+        if (audioContextRef.current === context) setAudioBlocked(true);
+      });
+    } catch {
+      /* Playback recovery remains available if Web Audio is unavailable. */
+    }
+    const room = new Room({
+      audioCaptureDefaults: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      ...(context ? { webAudioMix: { audioContext: context } } : {}),
+    });
+    roomRef.current = room;
+    preparedRoomRef.current = room;
+    room.on(RoomEvent.AudioPlaybackStatusChanged, (enabled) => {
+      if (roomRef.current === room) setAudioBlocked(!enabled);
+    });
+    void room.startAudio().catch(() => {
+      if (roomRef.current === room) setAudioBlocked(true);
+    });
+  }, [cleanupRoom]);
+
   const start = useCallback(
     async (p: Profile) => {
-      cleanupRoom();
+      if (!preparedRoomRef.current) prepareStart();
+      const room = roomRef.current;
+      if (!room) return;
+      preparedRoomRef.current = null;
       intentionalEndRef.current = false;
       profileRef.current = p;
       setProfile(p);
       setItems([]);
+      setActiveItemId(null);
+      setHomeworkDraft(null);
+      setResumeNeeded(false);
+      micWantedRef.current = true;
       setFocused(null);
       setSessionNotes([]);
       setCaption('');
@@ -217,6 +270,7 @@ export function useSession() {
         }
         if (res.status === 429) {
           showToast('Det är fullt just nu. Försök igen om en stund.');
+          cleanupRoom();
           setPhase('profiles');
           return;
         }
@@ -225,18 +279,16 @@ export function useSession() {
       } catch {
         showToast('Kunde inte starta sessionen. Kontrollera anslutningen och försök igen.');
         setPhase('profiles');
+        cleanupRoom();
         return;
       }
-
-      const room = new Room();
-      roomRef.current = room;
 
       room.on(RoomEvent.TrackSubscribed, (track, _pub, participant) => {
         if (track.kind === Track.Kind.Audio && participant.identity !== room.localParticipant.identity) {
           const el = audioRef.current;
           if (el) {
             track.attach(el);
-            void el.play().catch(() => undefined);
+            void el.play().catch(() => setAudioBlocked(true));
           }
         }
       });
@@ -290,6 +342,7 @@ export function useSession() {
           return [...prev, v.item];
         });
         setFocused(null);
+        setActiveItemId(v.item.id);
         await waitForMounted(v.item.id);
         return '{"ok":true}';
       });
@@ -312,6 +365,7 @@ export function useSession() {
           }
           return [...prev, v.item];
         });
+        setActiveItemId(v.item.id);
         await waitForMounted(v.item.id);
         return '{"ok":true}';
       });
@@ -326,6 +380,7 @@ export function useSession() {
         const v = validateBoardFocus(parsed);
         if (!v.ok) throw new RpcError(1500, v.error);
         setFocused(v.focus);
+        setActiveItemId(v.focus.id);
         return '{"ok":true}';
       });
 
@@ -384,7 +439,7 @@ export function useSession() {
       try {
         await room.startAudio();
       } catch {
-        /* audio unlock best-effort; tracks attach once allowed */
+        setAudioBlocked(true);
       }
       try {
         await room.localParticipant.setMicrophoneEnabled(true);
@@ -397,7 +452,7 @@ export function useSession() {
       }
       setPhase('live');
     },
-    [cleanupRoom, readParticipantStates, showToast, waitForMounted],
+    [cleanupRoom, prepareStart, readParticipantStates, showToast, waitForMounted],
   );
 
   const sendChat = useCallback(
@@ -423,6 +478,7 @@ export function useSession() {
     const room = roomRef.current;
     if (!room) return;
     const next = !micEnabled;
+    micWantedRef.current = next;
     try {
       await room.localParticipant.setMicrophoneEnabled(next);
       setMicEnabled(next);
@@ -436,6 +492,7 @@ export function useSession() {
   const retryMic = useCallback(async () => {
     const room = roomRef.current;
     if (!room) return;
+    micWantedRef.current = true;
     try {
       await room.localParticipant.setMicrophoneEnabled(true);
       setMicEnabled(true);
@@ -445,6 +502,47 @@ export function useSession() {
       setMicBlocked(true);
     }
   }, []);
+
+  const resumeMedia = useCallback(async () => {
+    const room = roomRef.current;
+    if (!room) return;
+    // Both calls begin in the tap handler; neither waits for a network operation.
+    const playback = room.startAudio();
+    const context = audioContextRef.current;
+    if (context?.state === 'suspended') void context.resume().catch(() => setAudioBlocked(true));
+    try {
+      await playback;
+      setAudioBlocked(!room.canPlaybackAudio);
+    } catch {
+      setAudioBlocked(true);
+    }
+    if (resumeNeeded && micWantedRef.current) {
+      try {
+        await room.localParticipant.setMicrophoneEnabled(false);
+        await room.localParticipant.setMicrophoneEnabled(true);
+        setMicEnabled(true);
+        setMicBlocked(false);
+      } catch {
+        setMicEnabled(false);
+        setMicBlocked(true);
+      }
+    }
+    setResumeNeeded(false);
+  }, [resumeNeeded]);
+
+  useEffect(() => {
+    if (phase !== 'live' || !mobile) return;
+    let hidden = false;
+    const onVisibility = () => {
+      if (document.hidden) hidden = true;
+      else if (hidden) {
+        hidden = false;
+        setResumeNeeded(true);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, [phase, mobile]);
 
   const resourceClosed = useCallback(
     async (id: string) => {
@@ -503,11 +601,14 @@ export function useSession() {
         const down = await downscaleImage(file);
         const title = file.name || 'Bild';
         setItems((prev) => [...prev, { id: itemId, kind: 'homework', title, images: [down.dataUrl] }]);
+        setActiveItemId(itemId);
         if (room) {
           await sendHomeworkBytes(room, down.bytes, { kind, source: file.name || 'bild', itemId });
         }
+        return true;
       } catch {
-        showToast('Kunde inte läsa bilden. Prova en annan fil.');
+        showToast('Bilden kunde inte läsas eller skickas. Prova JPG, PNG eller PDF och kontrollera anslutningen.');
+        return false;
       }
     },
     [showToast],
@@ -523,10 +624,11 @@ export function useSession() {
         const pages = await renderPdfPages(file, 10, 1600);
         if (pages.length === 0) {
           showToast('PDF:en verkar vara tom.');
-          return;
+          return false;
         }
         const images = pages.map((pg) => pg.dataUrl);
         setItems((prev) => [...prev, { id: itemId, kind: 'homework', title: file.name || 'PDF', images }]);
+        setActiveItemId(itemId);
         if (room) {
           const total = String(pages.length);
           for (let i = 0; i < pages.length; i++) {
@@ -540,8 +642,10 @@ export function useSession() {
             });
           }
         }
+        return true;
       } catch {
         showToast('Kunde inte läsa PDF:en. Prova en annan fil.');
+        return false;
       }
     },
     [showToast],
@@ -554,6 +658,7 @@ export function useSession() {
       if (!trimmed) return;
       const itemId = uid();
       setItems((prev) => [...prev, { id: itemId, kind: 'homework', title: 'Inklistrad text', text: trimmed }]);
+      setActiveItemId(itemId);
       if (room) {
         try {
           await room.localParticipant.sendText(trimmed, {
@@ -562,8 +667,10 @@ export function useSession() {
           });
         } catch {
           showToast('Kunde inte skicka texten. Försök igen.');
+          return false;
         }
       }
+      return true;
     },
     [showToast],
   );
@@ -586,6 +693,37 @@ export function useSession() {
     [addImageFile, addPdfFile, showToast],
   );
 
+  const queueFiles = useCallback((files: File[] | FileList, source: 'photo' | 'screenshot' = 'photo') => {
+    if (files.length) setHomeworkDraft({ kind: 'files', files: Array.from(files), source });
+  }, []);
+
+  const sendHomework = useCallback(async () => {
+    const draft = homeworkDraft;
+    if (!draft || draft.kind === 'picker' || homeworkSending || phase !== 'live') return;
+    setHomeworkSending(true);
+    try {
+      if (draft.kind === 'text') {
+        if (await addText(draft.text)) setHomeworkDraft(null);
+      } else {
+        const failed: File[] = [];
+        for (const file of draft.files) {
+          const ext = extOf(file.name);
+          const ok =
+            file.type.startsWith('image/') || IMAGE_EXT.includes(ext)
+              ? await addImageFile(file, draft.source)
+              : file.type === 'application/pdf' || PDF_EXT.includes(ext)
+                ? await addPdfFile(file)
+                : false;
+          if (!ok) failed.push(file);
+        }
+        setHomeworkDraft(failed.length ? { ...draft, files: failed } : null);
+        if (failed.length) showToast('Alla filer kunde inte skickas. Prova JPG, PNG eller PDF.');
+      }
+    } finally {
+      setHomeworkSending(false);
+    }
+  }, [homeworkDraft, homeworkSending, phase, addText, addImageFile, addPdfFile, showToast]);
+
   useEffect(() => {
     return () => {
       window.clearTimeout(toastTimer.current);
@@ -593,6 +731,8 @@ export function useSession() {
       window.clearTimeout(captionTimer.current);
     };
   }, []);
+
+  useEffect(() => () => cleanupRoom(), [cleanupRoom]);
 
   // Caption fades out 3 s after speech stops.
   useEffect(() => {
@@ -609,7 +749,6 @@ export function useSession() {
     if (phase !== 'live' && phase !== 'ending') return;
     const onPaste = (e: ClipboardEvent) => {
       const target = e.target as HTMLElement | null;
-      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
       const items = e.clipboardData?.items;
       if (!items) return;
       const files: File[] = [];
@@ -624,13 +763,16 @@ export function useSession() {
       }
       if (files.length > 0) {
         e.preventDefault();
-        void addFiles(files, 'screenshot');
+        if (mobile) queueFiles(files, 'screenshot');
+        else void addFiles(files, 'screenshot');
         return;
       }
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
       text = e.clipboardData?.getData('text/plain') ?? '';
       if (text.trim()) {
         e.preventDefault();
-        void addText(text);
+        if (mobile) setHomeworkDraft({ kind: 'text', text });
+        else void addText(text);
       }
     };
     const onDragOver = (e: DragEvent) => {
@@ -644,7 +786,8 @@ export function useSession() {
       e.preventDefault();
       setDragOver(false);
       if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
-        void addFiles(e.dataTransfer.files, 'photo');
+        if (mobile) queueFiles(e.dataTransfer.files);
+        else void addFiles(e.dataTransfer.files, 'photo');
       }
     };
     window.addEventListener('paste', onPaste);
@@ -657,12 +800,22 @@ export function useSession() {
       window.removeEventListener('dragleave', onDragLeave);
       window.removeEventListener('drop', onDrop);
     };
-  }, [phase, addFiles, addText]);
+  }, [phase, mobile, addFiles, addText, queueFiles]);
 
   return {
     phase,
     profile,
     items,
+    activeItemId,
+    homeworkDraft,
+    homeworkSending,
+    queueFiles,
+    setHomeworkDraft,
+    sendHomework,
+    audioBlocked,
+    resumeNeeded,
+    resumeMedia,
+    prepareStart,
     focused,
     sessionNotes,
     caption,
@@ -693,7 +846,10 @@ export function useSession() {
 
 /** The sentence being spoken now (plus the previous one if it is short), for a 2-line caption. */
 export function captionTail(text: string, max = 140): string {
-  const clean = text.replace(/[$*#`]/g, '').replace(/\s+/g, ' ').trim();
+  const clean = text
+    .replace(/[$*#`]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
   if (clean.length <= max) return clean;
   const sentences = clean.match(/[^.!?]+[.!?]*\s*/g) ?? [clean];
   let out = '';
