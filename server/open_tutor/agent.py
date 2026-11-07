@@ -137,12 +137,18 @@ class Tutor(Agent):
     async def show_steps(self, context: RunContext, title: str, steps: list[Step]) -> str:
         """Show a worked equation or process step by step on the board.
 
+        Renders as one equation per row, in order. It is not a handwritten column layout
+        (uppställning): for a written column method (for example long division) use show_html
+        or show_svg instead.
+
         Args:
-            title: Short Swedish heading, e.g. "Ekvationer · ett steg i taget".
+            title: Short heading in the language you are speaking (Swedish unless practising
+                another language), e.g. "Ekvationer · ett steg i taget".
             steps: Rows in order. `tex` is plain LaTeX without $ (e.g. "3x + 5 = 20"). From the
                 second row on, `op` is the operation that turned the PREVIOUS row into THIS row (e.g.
-                "-5" or "\\div 3") and `note` says the same in a few Swedish words ("Ta bort 5 på båda
-                sidor"). The first row has no op. Titles use ordinary notation, not spoken words.
+                "-5" or "\\div 3") and `note` says the same in a few words in the language you are
+                speaking ("Ta bort 5 på båda sidor"). The first row has no op. Titles use ordinary
+                notation, not spoken words.
         """
         try:
             item = StepsItem(id=self.ids.next(), title=title, steps=steps)
@@ -162,7 +168,8 @@ class Tutor(Agent):
         """Show a short explanation, key words or a task on the board.
 
         Args:
-            title: Short Swedish heading.
+            title: Short heading in the language you are speaking (Swedish unless practising
+                another language).
             markdown: A few short lines. Simple Markdown; LaTeX inside $…$ or $$…$$.
         """
         try:
@@ -177,7 +184,7 @@ class Tutor(Agent):
         Args:
             center: The subject, e.g. a book title.
             ideas: 1–8 short phrases, quoting what the child said where possible.
-            title: Optional heading, e.g. "Dina tankar om boken".
+            title: Optional heading in the language you are speaking, e.g. "Dina tankar om boken".
         """
         try:
             item = MindmapItem(id=self.ids.next(), title=title or None, center=center, ideas=ideas)
@@ -190,7 +197,9 @@ class Tutor(Agent):
         """Draw a diagram as a complete SVG document (viewBox set, no scripts).
 
         Use the board palette: background transparent, lines #F3F5F8 or #A78BFA, highlights #22D3EE,
-        text in Swedish at font-size >= 18.
+        text in the language you are speaking (Swedish unless practising another language) at
+        font-size >= 18. Can also lay out a written column method (for example long division) as
+        columns here when the child asks for that form; use your judgement.
         """
         try:
             return await self._show(SvgItem(id=self.ids.next(), title=title, svg=svg))
@@ -203,6 +212,9 @@ class Tutor(Agent):
 
         It runs in an isolated frame with no network except scripts from cdn.jsdelivr.net. Dark
         background #181B22, text #F3F5F8, accents #22D3EE and #A78BFA. Keep it small and clear.
+        Text in the language you are speaking (Swedish unless practising another language). Can lay
+        out a written column method (for example long division) as columns here when the child asks
+        for that form; use your judgement.
 
         Args:
             height: Frame height in pixels, 120–900.
