@@ -7,6 +7,8 @@ type Props = {
   caption: string;
   captionFading: boolean;
   decorative?: boolean;
+  compact?: boolean;
+  onToggleSize?: () => void;
 };
 
 /** Fallback silhouette shown when a pose image is missing (404). */
@@ -60,33 +62,48 @@ function PillIcon({ pill }: { pill: Pill }) {
   );
 }
 
-export default function Avatar({ pose, pill, caption, captionFading, decorative }: Props) {
+export default function Avatar({ pose, pill, caption, captionFading, decorative, compact, onToggleSize }: Props) {
   const [missing, setMissing] = useState(false);
   const toneClass = pill ? `ot-pill-${pill.tone}` : '';
 
   return (
     <>
-      {missing ? (
-        <AvatarFallback />
-      ) : (
-        <img
-          className="ot-avatar-img"
-          src={`/character/${pose}.webp`}
-          alt={decorative ? '' : 'Tutorn'}
-          onError={() => setMissing(true)}
-        />
-      )}
-      {!decorative && pill && (
-        <div className={`ot-pill ${toneClass}`} role="status" aria-label={pill.label}>
-          <PillIcon pill={pill} />
-          <span>{pill.label}</span>
-        </div>
-      )}
-      {!decorative && (
-        <div className={`ot-caption${captionFading ? ' ot-caption-fading' : ''}`} aria-live="polite">
-          {caption}
-        </div>
-      )}
+      <div className={`ot-companion ot-pose-${pose}`}>
+        {missing ? (
+          <AvatarFallback />
+        ) : (
+          <img
+            className="ot-avatar-img"
+            src={`/character/${pose}.webp`}
+            alt={decorative ? '' : 'Tutorn'}
+            onError={() => setMissing(true)}
+          />
+        )}
+        {onToggleSize && (
+          <button
+            type="button"
+            className="ot-size-btn"
+            aria-label={compact ? 'Gör tutorn större' : 'Gör tutorn mindre'}
+            aria-pressed={compact}
+            onClick={onToggleSize}
+          >
+            {compact ? '+' : '−'}
+          </button>
+        )}
+      </div>
+      <div className="ot-voice-bubble">
+        {!decorative && pill && (
+          <div className={`ot-pill ${toneClass}`} role="status" aria-label={pill.label}>
+            <PillIcon pill={pill} />
+            <span>{pill.label}</span>
+          </div>
+        )}
+        {!decorative && (
+          <div className={`ot-caption${captionFading ? ' ot-caption-fading' : ''}`} aria-live="polite">
+            {caption}
+          </div>
+        )}
+      </div>
     </>
   );
 }
