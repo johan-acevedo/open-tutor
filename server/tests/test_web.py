@@ -40,3 +40,23 @@ def test_hourly_session_cap():
     client = TestClient(create_app({**ENV, "TUTOR_MAX_SESSIONS_PER_HOUR": "1"}))
     assert client.post("/api/session", json=LEARNER).status_code == 200
     assert client.post("/api/session", json=LEARNER).status_code == 429
+
+
+def test_sweden_public_access_needs_no_password():
+    client = TestClient(create_app({**ENV, "TUTOR_ALLOWED_COUNTRIES": "SE"}))
+    assert client.post("/api/session", json=LEARNER, headers={"cf-ipcountry": "SE"}).status_code == 200
+    assert client.post("/api/session", json=LEARNER, headers={"cf-ipcountry": "DE"}).status_code == 403
+    assert client.post("/api/session", json=LEARNER).status_code == 403
+    assert client.get("/api/health").status_code == 200
+
+
+def test_country_restriction_covers_page_and_assets():
+    client = TestClient(create_app({**ENV, "TUTOR_ALLOWED_COUNTRIES": "SE"}))
+    for path in ("/", "/assets/example.js"):
+        assert client.get(path, headers={"cf-ipcountry": "US"}).status_code == 403
+
+
+def test_rejected_countries_do_not_consume_session_allowance():
+    client = TestClient(create_app({**ENV, "TUTOR_ALLOWED_COUNTRIES": "SE", "TUTOR_MAX_SESSIONS_PER_HOUR": "1"}))
+    assert client.post("/api/session", json=LEARNER, headers={"cf-ipcountry": "US"}).status_code == 403
+    assert client.post("/api/session", json=LEARNER, headers={"cf-ipcountry": "SE"}).status_code == 200

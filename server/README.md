@@ -62,11 +62,25 @@ The worker logs the route at the start of each session (`tutor TTS route elevenl
 | `TUTOR_AGENT_NAME` | Dispatch name, default `open-tutor`. Give a test worker and its web service another name so it never takes a family session |
 | `EXA_API_KEY` | Resource search |
 | `TUTOR_ACCESS_CODE` | Optional family code. When set, the page asks for it once per browser |
+| `TUTOR_ALLOWED_COUNTRIES` | Optional comma-separated Cloudflare country codes, e.g. `SE`. Missing/disallowed country headers get 403; `/api/health` remains accessible |
 | `TUTOR_MAX_SESSIONS_PER_HOUR` | Owner spending cap across the instance (default 12) |
 | `TUTOR_CLOUD_RECORDING` | `1` uploads session audio and transcripts to LiveKit Cloud observability. Off by default |
 | `TUTOR_DEBUG_LOG` | `1` writes a per-session debug trail to a private local directory (see below). Off by default |
 | `TUTOR_DEBUG_LOG_DIR` | Override the debug trail directory (default `~/.local/state/open-tutor/sessions`) |
 | `TUTOR_STT_MAX_ENDPOINT_MS`, `TUTOR_MIN_ENDPOINT` | Turn-taking tuning for pauses while a child thinks |
+
+### Password-free Sweden testing
+
+For the hosted demo, `TUTOR_ALLOWED_COUNTRIES=SE` and an empty `TUTOR_ACCESS_CODE`
+allow Swedish visitors without a password. Country checks cover the page, assets
+and session creation. The session-start cap still applies. IP geolocation is
+approximate and VPNs affect it.
+
+This restriction trusts Cloudflare's `CF-IPCountry` header. Enable Cloudflare IP
+Geolocation and keep the origin private behind its tunnel; a publicly reachable
+origin would allow clients to forge that header. The current origin binds to
+ThinkCentre's tailnet address, with public requests arriving through the Mini's
+Cloudflare tunnel. Health checks are exempt to preserve local monitoring.
 
 ## Family-testing debug trail
 
