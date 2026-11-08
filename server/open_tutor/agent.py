@@ -137,6 +137,7 @@ class Tutor(Agent):
     async def show_steps(self, context: RunContext, title: str, steps: list[Step]) -> str:
         """Show a worked equation or process step by step on the board.
 
+        All rows are visible immediately. focus_step highlights a row; it does not hide later rows.
         Renders as one equation per row, in order. It is not a handwritten column layout
         (uppställning): for a written column method (for example long division) use show_html
         or show_svg instead.
@@ -332,6 +333,8 @@ class Tutor(Agent):
             topic: What they worked on, e.g. "Ekvationer med x på ena sidan".
             clicked: Evidence of what became clearer; empty is normal when unclear.
                 Distinguish guided work from independent use on a fresh example.
+                Visible answers and motivational points or preserved streaks are not
+                evidence of independent success.
             tricky: What still needs help or remains uncertain, not a fixed learner trait.
             next_step: What to try next time.
         """

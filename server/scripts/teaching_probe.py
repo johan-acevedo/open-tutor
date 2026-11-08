@@ -8,10 +8,14 @@ Usage (on a machine with OPENCODE_GO_API_KEY in the backend env):
     bin/with-env uv run python scripts/teaching_probe.py --out /tmp/teaching-probe --prompt old --cases grounding,written
 
 --prompt new uses server/open_tutor/prompt.py (this branch).
---prompt old reconstructs the pre-iteration BASE from origin/main for a small baseline.
-Only the prompt text differs; model, reasoning, temperature and tools are identical.
+--prompt old uses the historical BASE below; compare current deployed and candidate packages
+with --prompt new in separate directories for this iteration.
+Keep the model and reasoning fixed when comparing packages; tool descriptions follow each package.
 
-Writes <out>/report.json with turns, tool calls and spoken text (no secrets).
+Writes <out>/report-<prompt>.json with turns, tool calls and reply text (no secrets).
+Tool results are simulated; this does not exercise board rendering or audio playback.
+`leaks` checks spoken tool syntax only. `answer_mentions` flags case-specific answers in
+speech or board arguments for human review; neither field grades teaching quality.
 """
 
 from __future__ import annotations
@@ -21,12 +25,15 @@ import asyncio
 import json
 import re
 import sys
+from uuid import uuid4
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from livekit.agents import llm
 from livekit.agents.llm import FunctionCall, FunctionCallOutput
+from livekit.agents.llm.utils import function_arguments_to_pydantic_model
+from pydantic import ValidationError
 
 from open_tutor.agent import Tutor
 from open_tutor.tutor_llm import build_llm
@@ -88,12 +95,12 @@ clicked, what is still tricky and what to try next. Keep each part to a short ph
 """
 
 
-def system_text(which: str) -> str:
+def system_text(which: str, learner: dict) -> str:
     if which == "old":
         return OLD_BASE + "\nAbout this learner\nThe child is called Leo.\nThey are in årskurs 5."
     from open_tutor import prompt as new_prompt
 
-    return new_prompt.instructions(LEARNER)
+    return new_prompt.instructions(learner)
 
 
 CASES = {
@@ -147,68 +154,163 @@ CASES = {
 }
 
 
+END = "[Session event, not the child's words: The child pressed Avsluta. First call save_note, then say goodbye briefly.]"
+CASES.update({
+    "standing-no-answer": {
+        "turns": [("user", "Förhör mig på mina tal. Jag vill höra uppgiften och själv svara, utan att se lösningen. A: 480 gram i kg. B: 75 gram i kg.")],
+        "followups": ["A är 0,48 kg.", "Ta nästa."]},
+    "slower": [
+        ("user", "Vi räknar pris för 0,6 kg när ett kilo kostar 85 kr."),
+        ("assistant", "Först tar du sex gånger åttiofem och sedan delar du med tio."),
+        ("user", "Vänta, förklara igen."),
+        ("assistant", "Sex gånger åttiofem, och sedan delar du resultatet med tio."),
+        ("user", "Långsammare, jag tappar bort mig. Hjälp mig med en liten bit i taget.")],
+    "visible-answer-note": [
+        ("user", "Min uppgift gäller kilopris: 0,6 kg ost kostar 85 kronor per kilo. Vad kostar osten?"),
+        {"tool": "show_steps", "arguments": {"title": "Pris", "steps": [{"tex": "0,6 \\cdot 85 = 51"}]}},
+        ("assistant", "Här är hela uträkningen på tavlan."),
+        ("user", "Det står 51, då säger jag 51."), ("user", END)],
+    "streak-memory": [
+        ("assistant", "Du har två poäng. Hur många gram är ett kilo?"),
+        ("user", "Hundra."), ("assistant", "Det är tusen gram."),
+        ("user", "Kan jag få behålla mina poäng ändå?"),
+        ("assistant", "Ja, poängen får vara kvar. Hur många gram är två kilo?"),
+        ("user", "Tvåtusen."), ("assistant", "Och tre kilo?"),
+        ("user", "Tretusen."), ("user", END)],
+    "incoming-streak": {
+        "learner": {"name": "Leo", "grade": 5, "notes": [{"at": "2026-11-01", "topic": "Viktenheter", "clicked": "10 rätt i rad hg till kg"}]},
+        "turns": [("user", "Hej! Jag vill fortsätta med viktenheter.")]},
+    "continue-after-offer": {
+        "turns": [("assistant", "Vill du ta en sista uppgift och sedan vila?"),
+                  ("user", "Jag vill fortsätta räkna mer, inte sluta nu.")],
+        "followups": ["Vi fortsätter med division. Ge mig en uppgift att prova."]},
+    "exam-hard-topic": {
+        "turns": [("assistant", "Vi kan ta vikt istället och spara divisionen till en annan dag."),
+                  ("user", "Jag har prov imorgon och division är det jag behöver mest hjälp med. Jag vill öva det nu.")],
+        "followups": ["Börja med en uppgift med kort division, så provar jag."]},
+    "wants-to-stop": [("user", "Nu är jag trött. Jag vill sluta plugga för idag.")],
+    "offer-pause": [("user", "Vi har räknat jättelänge. Jag är så trött att allt blir en enda röra, men jag vet inte om jag ska fortsätta.")],
+    "requested-explanation": [
+        ("user", "Förhör mig utan att visa svaren, jag vill försöka själv."),
+        ("assistant", "Hur mycket är 0,6 kg av något som kostar 85 kr per kilo?"),
+        ("user", "Nu behöver jag faktiskt se ett färdigt exempel. Kan du visa och förklara den här uträkningen?")],
+})
+CASES["slower"] = {
+    "turns": CASES["slower"],
+    "answer_markers": [r"(?<!\d)51(?!\d)", r"\bfemtio(?:en|ett)\b"],
+}
+
+
 def leak_scan(text: str) -> list[str]:
     patterns = ["show_steps", "show_html", "show_svg", "show_text", "save_note",
                 "default_api", '"tex"', '"steps"', "{", "}", "tool_code"]
     return [p for p in patterns if p in text]
 
 
-async def run_case(model, tutor, system: str, turns: list[tuple[str, str]], room: str) -> dict:
+def add_history(ctx, turn, index):
+    if isinstance(turn, dict):
+        name = turn["tool"]
+        call_id = f"scripted-{index}"
+        ctx.items.append(FunctionCall(call_id=call_id, name=name, arguments=json.dumps(turn["arguments"])))
+        ctx.items.append(FunctionCallOutput(call_id=call_id, name=name,
+                                            output="Item b1 is visible on the board.", is_error=False))
+    else:
+        role, text = turn
+        ctx.add_message(role=role, content=text)
+
+
+async def complete_turn(model, tutor, ctx) -> dict:
+    rounds = []
+    schemas = {tool.__name__: function_arguments_to_pydantic_model(tool) for tool in tutor.tools}
+    for _ in range(6):
+        text, calls = "", []
+        async with model.chat(chat_ctx=ctx, tools=list(tutor.tools)) as stream:
+            async for chunk in stream:
+                if chunk.delta:
+                    text += chunk.delta.content or ""
+                    calls += chunk.delta.tool_calls or []
+        if text:
+            ctx.add_message(role="assistant", content=text)
+        info = []
+        for call in calls:
+            try:
+                arguments = json.loads(call.arguments or "{}")
+            except json.JSONDecodeError:
+                arguments = {"_unparseable": call.arguments}
+            validation_error = None
+            try:
+                schemas[call.name].model_validate(arguments)
+            except (ValidationError, KeyError) as error:
+                validation_error = str(error)
+            info.append({"name": call.name, "arguments": arguments,
+                         **({"validation_error": validation_error} if validation_error else {})})
+            ctx.items.append(FunctionCall(call_id=call.call_id, name=call.name, arguments=call.arguments))
+            result = ("Saved." if call.name == "save_note" else
+                      "Quiet work started. Say at most one short encouraging sentence, then wait."
+                      if call.name == "start_quiet_work" else
+                      "Highlighted." if call.name == "focus_step" else
+                      "Item b1 is now visible on the board."
+                      if call.name.startswith("show_") else "No further output.")
+            ctx.items.append(FunctionCallOutput(call_id=call.call_id, name=call.name,
+                                                output=validation_error or result,
+                                                is_error=validation_error is not None))
+        rounds.append({"text": text, "calls": info})
+        if not calls or any(call.name == "stay_quiet" for call in calls):
+            break
+    return {"rounds": rounds, "round_limit": bool(calls) and len(rounds) == 6}
+
+
+async def run_case(model, tutor, system: str, turns: list, followups: list, room: str, answer_markers: list[str]) -> dict:
     ctx = llm.ChatContext()
     ctx.add_message(role="system", content=system)
-    for role, text in turns:
-        ctx.add_message(role=role, content=text)
-    text, calls = "", []
-    async with model.chat(chat_ctx=ctx, tools=list(tutor.tools)) as stream:
-        async for chunk in stream:
-            if chunk.delta:
-                text += chunk.delta.content or ""
-                calls += chunk.delta.tool_calls or []
-    call_infos = []
-    for c in calls:
-        try:
-            args = json.loads(c.arguments or "{}")
-        except json.JSONDecodeError:
-            args = {"_unparseable": (c.arguments or "")[:500]}
-        call_infos.append({"name": c.name, "arguments": args})
-    # These are simulated tool results, not browser or tool-execution evidence.
-    # Feed a result appropriate to each tool before asking for a spoken follow-up.
-    followup = ""
-    if call_infos and not any(c.name == "stay_quiet" for c in calls):
-        for c in calls:
-            ctx.items.append(FunctionCall(call_id=c.call_id, name=c.name, arguments=c.arguments))
-            result = ("Saved." if c.name == "save_note" else
-                      "Quiet work started. Say at most one short encouraging sentence, then wait."
-                      if c.name == "start_quiet_work" else
-                      "Highlighted." if c.name == "focus_step" else
-                      "Item b1 is now visible on the board." if c.name.startswith("show_") else
-                      "Tool result not simulated by this probe.")
-            ctx.items.append(FunctionCallOutput(call_id=c.call_id, name=c.name,
-                                                output=result, is_error=False))
-        async with model.chat(chat_ctx=ctx, tools=list(tutor.tools)) as stream2:
-            async for chunk in stream2:
-                if chunk.delta and chunk.delta.content:
-                    followup += chunk.delta.content
-    return {"turns": turns, "text": text, "calls": call_infos, "followup": followup,
-            "leaks": leak_scan(text + followup), "room": room}
+    for index, turn in enumerate(turns):
+        add_history(ctx, turn, index)
+    exchanges = [await complete_turn(model, tutor, ctx)]
+    for followup in followups:
+        ctx.add_message(role="user", content=followup)
+        exchanges.append({"user": followup, **await complete_turn(model, tutor, ctx)})
+    spoken = " ".join(r["text"] for exchange in exchanges for r in exchange["rounds"])
+    answer_mentions = []
+    for index, exchange in enumerate(exchanges):
+        for round_index, reply in enumerate(exchange["rounds"]):
+            surfaces = [("speech", reply["text"])] + [
+                (call["name"], json.dumps(call["arguments"], ensure_ascii=False))
+                for call in reply["calls"] if call["name"].startswith("show_")
+            ]
+            for surface, content in surfaces:
+                if any(re.search(marker, content, re.IGNORECASE) for marker in answer_markers):
+                    answer_mentions.append({"exchange": index, "round": round_index, "surface": surface})
+    return {"turns": turns, "exchanges": exchanges, "leaks": leak_scan(spoken),
+            "answer_mentions": answer_mentions, "room": room}
 
 
-async def main(out: Path, which: str, cases: list[str]) -> dict:
+async def main(out: Path, which: str, cases: list[str], repeat: int) -> dict:
     out.mkdir(parents=True, exist_ok=True)
-    system = system_text(which)
-    results: dict = {"prompt": which, "cases": {}}
-    for i, name in enumerate(cases):
-        room = f"teaching-probe-{which}-{name}"
-        model = build_llm(room)
-        tutor = Tutor(LEARNER, room=None)
-        try:
-            result = await run_case(model, tutor, system, CASES[name], room)
-        finally:
-            await model.aclose()
-        results["cases"][name] = result
-        print(f"[{which}/{name}] text={result['text'][:160]!r} calls={[c['name'] for c in result['calls']]} "
-              f"followup={result['followup'][:160]!r} leaks={result['leaks']}", flush=True)
-    (out / f"report-{which}.json").write_text(json.dumps(results, ensure_ascii=False, indent=2))
+    run_id = uuid4().hex[:12]
+    results = {"prompt": which, "repeat": repeat, "run_id": run_id, "repetitions": []}
+    for trial in range(repeat):
+        group = {}
+        results["repetitions"].append(group)
+        for name in cases:
+            case = CASES[name]
+            learner = case.get("learner", LEARNER) if isinstance(case, dict) else LEARNER
+            turns = case["turns"] if isinstance(case, dict) else case
+            followups = case.get("followups", []) if isinstance(case, dict) else []
+            answer_markers = case.get("answer_markers", []) if isinstance(case, dict) else []
+            room = f"teaching-probe-{run_id}-{which}-{name}-{trial}"
+            model = build_llm(room)
+            tutor = Tutor(learner, room=None)
+            try:
+                group[name] = await run_case(model, tutor, system_text(which, learner), turns, followups, room, answer_markers)
+            except Exception as error:
+                group[name] = {"error_type": type(error).__name__}
+                print(f"[{trial+1}/{name}] ERROR {type(error).__name__}", flush=True)
+                raise
+            finally:
+                await model.aclose()
+                (out / f"report-{which}.json").write_text(json.dumps(results, ensure_ascii=False, indent=2))
+            rounds = [r for exchange in group[name]["exchanges"] for r in exchange["rounds"]]
+            print(f"[{trial+1}/{name}] " + " | ".join(r["text"][:200] + " " + str([c["name"] for c in r["calls"]]) for r in rounds), flush=True)
     return results
 
 
@@ -217,8 +319,9 @@ if __name__ == "__main__":
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--prompt", choices=["new", "old"], default="new")
     parser.add_argument("--cases", default=",".join(CASES.keys()))
+    parser.add_argument("--repeat", type=int, default=1)
     args = parser.parse_args()
-    wanted = [c for c in args.cases.split(",") if c in CASES]
-    if not wanted:
-        raise SystemExit(f"unknown cases: {args.cases}")
-    asyncio.run(main(args.out, args.prompt, wanted))
+    wanted = args.cases.split(",")
+    if any(case not in CASES for case in wanted) or args.repeat < 1:
+        parser.error("cases must exist and repeat must be positive")
+    asyncio.run(main(args.out, args.prompt, wanted, args.repeat))
