@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from livekit import api
 from pydantic import BaseModel, Field
@@ -70,6 +70,16 @@ def create_app(environ: dict[str, str] | None = None) -> FastAPI:
     app = FastAPI(title="Open Tutor", docs_url=None, redoc_url=None, openapi_url=None)
     limiter = SessionLimiter(int(env.get("TUTOR_MAX_SESSIONS_PER_HOUR", "12")))
     access_code = env.get("TUTOR_ACCESS_CODE", "")
+    allowed_countries = {country.strip().upper() for country in env.get("TUTOR_ALLOWED_COUNTRIES", "").split(",") if country.strip()}
+
+    @app.middleware("http")
+    async def country_access(request: Request, call_next):
+        # This opt-in restriction requires a private origin reached through Cloudflare.
+        # Health remains available for the machine's local service checks.
+        if allowed_countries and request.url.path != "/api/health":
+            if request.headers.get("cf-ipcountry", "").upper() not in allowed_countries:
+                return JSONResponse(status_code=403, content={"detail": "Open Tutor is currently available from Sweden only."})
+        return await call_next(request)
 
     @app.get("/api/health")
     async def health() -> dict[str, Any]:
