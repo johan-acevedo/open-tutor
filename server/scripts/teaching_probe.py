@@ -25,6 +25,7 @@ import asyncio
 import json
 import re
 import sys
+from uuid import uuid4
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -165,6 +166,7 @@ CASES.update({
         ("assistant", "Sex gånger åttiofem, och sedan delar du resultatet med tio."),
         ("user", "Långsammare, jag tappar bort mig. Hjälp mig med en liten bit i taget.")],
     "visible-answer-note": [
+        ("user", "Min uppgift gäller kilopris: 0,6 kg ost kostar 85 kronor per kilo. Vad kostar osten?"),
         {"tool": "show_steps", "arguments": {"title": "Pris", "steps": [{"tex": "0,6 \\cdot 85 = 51"}]}},
         ("assistant", "Här är hela uträkningen på tavlan."),
         ("user", "Det står 51, då säger jag 51."), ("user", END)],
@@ -284,7 +286,8 @@ async def run_case(model, tutor, system: str, turns: list, followups: list, room
 
 async def main(out: Path, which: str, cases: list[str], repeat: int) -> dict:
     out.mkdir(parents=True, exist_ok=True)
-    results = {"prompt": which, "repeat": repeat, "repetitions": []}
+    run_id = uuid4().hex[:12]
+    results = {"prompt": which, "repeat": repeat, "run_id": run_id, "repetitions": []}
     for trial in range(repeat):
         group = {}
         results["repetitions"].append(group)
@@ -294,7 +297,7 @@ async def main(out: Path, which: str, cases: list[str], repeat: int) -> dict:
             turns = case["turns"] if isinstance(case, dict) else case
             followups = case.get("followups", []) if isinstance(case, dict) else []
             answer_markers = case.get("answer_markers", []) if isinstance(case, dict) else []
-            room = f"teaching-probe-{which}-{name}-{trial}"
+            room = f"teaching-probe-{run_id}-{which}-{name}-{trial}"
             model = build_llm(room)
             tutor = Tutor(learner, room=None)
             try:
