@@ -332,6 +332,8 @@ class Tutor(Agent):
             topic: What they worked on, e.g. "Ekvationer med x på ena sidan".
             clicked: Evidence of what became clearer; empty is normal when unclear.
                 Distinguish guided work from independent use on a fresh example.
+                Visible answers and motivational points or preserved streaks are not
+                evidence of independent success.
             tricky: What still needs help or remains uncertain, not a fixed learner trait.
             next_step: What to try next time.
         """
