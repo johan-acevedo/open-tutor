@@ -77,7 +77,9 @@ def create_app(environ: dict[str, str] | None = None) -> FastAPI:
 
     @app.post("/api/session")
     async def create_session(body: SessionRequest, request: Request) -> dict[str, str]:
-        if access_code and not secrets.compare_digest(request.headers.get("x-tutor-code", ""), access_code):
+        if access_code and not secrets.compare_digest(
+            request.headers.get("x-tutor-code", "").encode("utf-8"), access_code.encode("utf-8")
+        ):
             raise HTTPException(status_code=401, detail="code")
         for name in ("LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET"):
             if not env.get(name):

@@ -40,3 +40,15 @@ def test_hourly_session_cap():
     client = TestClient(create_app({**ENV, "TUTOR_MAX_SESSIONS_PER_HOUR": "1"}))
     assert client.post("/api/session", json=LEARNER).status_code == 200
     assert client.post("/api/session", json=LEARNER).status_code == 429
+
+
+def test_non_ascii_wrong_password_is_rejected_without_consuming_session_limit():
+    client = TestClient(create_app({**ENV, "TUTOR_ACCESS_CODE": "fika", "TUTOR_MAX_SESSIONS_PER_HOUR": "1"}))
+    wrong = {"x-tutor-code": "felå".encode("latin-1")}
+    assert client.post("/api/session", json=LEARNER, headers=wrong).status_code == 401
+    assert client.post("/api/session", json=LEARNER, headers={"x-tutor-code": "fika"}).status_code == 200
+
+
+def test_swedish_password_is_accepted():
+    client = TestClient(create_app({**ENV, "TUTOR_ACCESS_CODE": "räven"}))
+    assert client.post("/api/session", json=LEARNER, headers={"x-tutor-code": "räven".encode("latin-1")}).status_code == 200
