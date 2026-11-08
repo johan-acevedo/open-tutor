@@ -137,6 +137,7 @@ class Tutor(Agent):
     async def show_steps(self, context: RunContext, title: str, steps: list[Step]) -> str:
         """Show a worked equation or process step by step on the board.
 
+        All rows are visible immediately. focus_step highlights a row; it does not hide later rows.
         Renders as one equation per row, in order. It is not a handwritten column layout
         (uppställning): for a written column method (for example long division) use show_html
         or show_svg instead.

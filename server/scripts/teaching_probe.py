@@ -14,6 +14,8 @@ Keep the model and reasoning fixed when comparing packages; tool descriptions fo
 
 Writes <out>/report-<prompt>.json with turns, tool calls and reply text (no secrets).
 Tool results are simulated; this does not exercise board rendering or audio playback.
+`leaks` checks spoken tool syntax only. `answer_mentions` flags case-specific answers in
+speech or board arguments for human review; neither field grades teaching quality.
 """
 
 from __future__ import annotations
@@ -29,6 +31,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from livekit.agents import llm
 from livekit.agents.llm import FunctionCall, FunctionCallOutput
+from livekit.agents.llm.utils import function_arguments_to_pydantic_model
+from pydantic import ValidationError
 
 from open_tutor.agent import Tutor
 from open_tutor.tutor_llm import build_llm
@@ -189,6 +193,10 @@ CASES.update({
         ("assistant", "Hur mycket är 0,6 kg av något som kostar 85 kr per kilo?"),
         ("user", "Nu behöver jag faktiskt se ett färdigt exempel. Kan du visa och förklara den här uträkningen?")],
 })
+CASES["slower"] = {
+    "turns": CASES["slower"],
+    "answer_markers": [r"(?<!\d)51(?!\d)", r"\bfemtio(?:en|ett)\b"],
+}
 
 
 def leak_scan(text: str) -> list[str]:
@@ -211,6 +219,7 @@ def add_history(ctx, turn, index):
 
 async def complete_turn(model, tutor, ctx) -> dict:
     rounds = []
+    schemas = {tool.__name__: function_arguments_to_pydantic_model(tool) for tool in tutor.tools}
     for _ in range(6):
         text, calls = "", []
         async with model.chat(chat_ctx=ctx, tools=list(tutor.tools)) as stream:
@@ -226,7 +235,13 @@ async def complete_turn(model, tutor, ctx) -> dict:
                 arguments = json.loads(call.arguments or "{}")
             except json.JSONDecodeError:
                 arguments = {"_unparseable": call.arguments}
-            info.append({"name": call.name, "arguments": arguments})
+            validation_error = None
+            try:
+                schemas[call.name].model_validate(arguments)
+            except (ValidationError, KeyError) as error:
+                validation_error = str(error)
+            info.append({"name": call.name, "arguments": arguments,
+                         **({"validation_error": validation_error} if validation_error else {})})
             ctx.items.append(FunctionCall(call_id=call.call_id, name=call.name, arguments=call.arguments))
             result = ("Saved." if call.name == "save_note" else
                       "Quiet work started. Say at most one short encouraging sentence, then wait."
@@ -234,14 +249,16 @@ async def complete_turn(model, tutor, ctx) -> dict:
                       "Highlighted." if call.name == "focus_step" else
                       "Item b1 is now visible on the board."
                       if call.name.startswith("show_") else "No further output.")
-            ctx.items.append(FunctionCallOutput(call_id=call.call_id, name=call.name, output=result, is_error=False))
+            ctx.items.append(FunctionCallOutput(call_id=call.call_id, name=call.name,
+                                                output=validation_error or result,
+                                                is_error=validation_error is not None))
         rounds.append({"text": text, "calls": info})
         if not calls or any(call.name == "stay_quiet" for call in calls):
             break
     return {"rounds": rounds, "round_limit": bool(calls) and len(rounds) == 6}
 
 
-async def run_case(model, tutor, system: str, turns: list, followups: list, room: str) -> dict:
+async def run_case(model, tutor, system: str, turns: list, followups: list, room: str, answer_markers: list[str]) -> dict:
     ctx = llm.ChatContext()
     ctx.add_message(role="system", content=system)
     for index, turn in enumerate(turns):
@@ -251,7 +268,18 @@ async def run_case(model, tutor, system: str, turns: list, followups: list, room
         ctx.add_message(role="user", content=followup)
         exchanges.append({"user": followup, **await complete_turn(model, tutor, ctx)})
     spoken = " ".join(r["text"] for exchange in exchanges for r in exchange["rounds"])
-    return {"turns": turns, "exchanges": exchanges, "leaks": leak_scan(spoken), "room": room}
+    answer_mentions = []
+    for index, exchange in enumerate(exchanges):
+        for round_index, reply in enumerate(exchange["rounds"]):
+            surfaces = [("speech", reply["text"])] + [
+                (call["name"], json.dumps(call["arguments"], ensure_ascii=False))
+                for call in reply["calls"] if call["name"].startswith("show_")
+            ]
+            for surface, content in surfaces:
+                if any(re.search(marker, content, re.IGNORECASE) for marker in answer_markers):
+                    answer_mentions.append({"exchange": index, "round": round_index, "surface": surface})
+    return {"turns": turns, "exchanges": exchanges, "leaks": leak_scan(spoken),
+            "answer_mentions": answer_mentions, "room": room}
 
 
 async def main(out: Path, which: str, cases: list[str], repeat: int) -> dict:
@@ -265,11 +293,12 @@ async def main(out: Path, which: str, cases: list[str], repeat: int) -> dict:
             learner = case.get("learner", LEARNER) if isinstance(case, dict) else LEARNER
             turns = case["turns"] if isinstance(case, dict) else case
             followups = case.get("followups", []) if isinstance(case, dict) else []
+            answer_markers = case.get("answer_markers", []) if isinstance(case, dict) else []
             room = f"teaching-probe-{which}-{name}-{trial}"
             model = build_llm(room)
             tutor = Tutor(learner, room=None)
             try:
-                group[name] = await run_case(model, tutor, system_text(which, learner), turns, followups, room)
+                group[name] = await run_case(model, tutor, system_text(which, learner), turns, followups, room, answer_markers)
             except Exception as error:
                 group[name] = {"error_type": type(error).__name__}
                 print(f"[{trial+1}/{name}] ERROR {type(error).__name__}", flush=True)
