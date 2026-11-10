@@ -30,7 +30,9 @@ claude-haiku-5-5, deepseek-v4.1-flash, muse-spark-1.3-contributor, minimax-m3.1-
 ## Rounds
 | Round | What changed | Status |
 |---|---|---|
-| r0 | Baseline: plain scenario framing (`prompts/r0`), thinking low, one shot, no toolkit, palette given as information | boards done; judging with Spark |
+| r0 | Baseline: plain framing, thinking low, one shot | done. Tune correct (Argon): Haiku 50% · DeepSeek 79% · MiniMax 43% · Spark 36%; median s: 5 · 45 · 11 · 21 |
+| r1 | Space/time awareness in framing; thinking minimal for DeepSeek and Spark | done. Tune correct: Haiku 64% · DeepSeek 71% · MiniMax 43% · Spark 29%; median s: 4.6 · 37 · 14 · 11. Off-screen text boards 15→10 of 56 |
+| r2 | r1 + one fix pass on layout findings (Haiku, MiniMax, Spark); DeepSeek thinking off | running |
 
 ## Kicks
 - **longcat-2.5-free: kicked 2026-11-10 (Johan: not stable enough).** Ignores `--thinking` (off/minimal still reason >120 s with no HTML); 18/25 r0 boards timed out at 180 s. Its r0 boards stay in the data for reference; it runs in no further round.
