@@ -1,0 +1,23 @@
+{
+ "round": "r7",
+ "generated_at": "2026-11-10T17:46:16+00:00",
+ "notes": "Haiku: r6 (r5 framing, thinking medium) but the review pass on every board runs at thinking low, to cut time.",
+ "targets": {
+  "median_wall_s": 15.0,
+  "pct_correct": 90.0,
+  "mean_clarity": 4.5
+ },
+ "members": {
+  "claude-haiku-5-5": {
+   "tune": {
+    "n": 14,
+    "judged": 14,
+    "fail": 0,
+    "pct_correct": 71.4,
+    "mean_clarity": 4.07,
+    "median_wall": 18.55,
+    "p90_wall": 24.4
+   }
+  }
+ }
+}

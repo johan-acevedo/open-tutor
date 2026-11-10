@@ -38,11 +38,14 @@ claude-haiku-5-5, deepseek-v4.1-flash, muse-spark-1.3-contributor, minimax-m3.1-
 | r4 | All three: r1 framing + review pass on every board with a written checklist (style `checks`), no BoardKit | done. Haiku 79% (15.0 s, no gain over plain review) · Spark 64% (31 s) · MiniMax 43% (37 s) |
 | r5 | r3 recipe + school-context line (Swedish written methods, notation, terms). Haiku + Spark | done. Haiku 71% (15.8 s), Spark 50% (28 s): no gain from the line |
 | r6 | r5 with Haiku thinking medium (both calls) | done. **Haiku 86% correct, clarity 4.5, median 21.7 s** (first call 8.8 s) |
-| r7 | r6 but review at thinking low | running |
-| r8 | Haiku medium, fix pass only on layout findings | queued |
+| r7 | r6 but review at thinking low | done. Haiku 71% (18.6 s) |
+| r8 | Haiku medium, fix pass only on layout findings (9/14 triggered) | done. Haiku 71% (19.4 s, p90 49 s) |
+| r6b | Exact repeat of r6, tune + hidden, to measure run-to-run spread (n=14 → one board = 7 points) | running |
 
 ## Parked
 - deepseek-v4.1-flash, after r2: best quality (r0 79% tune, r0 hidden 80%) but median 37–63 s in r0–r2; thinking minimal/off made it no faster (off: 57 s). Not kicked: may serve a non-live use. Revisit only with a new speed idea.
+
+- muse-spark-1.3-contributor, after r5: best 64% tune (r4) but only with a review pass at 28–31 s; one-shot 29–36% at 11–21 s. No path to 15 s at useful quality.
 
 ## Kicks
 - **minimax-m3.1-flash: kicked 2026-11-10 after r4 (lead).** Tune correct 43/43/64/43/43% over r0–r4: no gain in the last 3 rounds, and with any fix or review pass its median is 28–37 s.
