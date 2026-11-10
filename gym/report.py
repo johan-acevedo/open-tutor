@@ -241,7 +241,9 @@ def build_site(records: list, agg: dict, rounds: list):
                        "fits": j.get("fits_request"), "issues": j.get("issues", []),
                        "png": rel})
 
-    KICKED = {"longcat-2.5-free": "kicked 2026-11-10: unstable (ignores thinking level, 18/25 timeouts)"}
+    KICKED = {"longcat-2.5-free": "kicked 2026-11-10: unstable (ignores thinking level, 18/25 timeouts)",
+              "minimax-m3.1-flash": "kicked 2026-11-10 after r4: no gain in 3 rounds, 28–37 s with a fix pass",
+              "deepseek-v4.1-flash": "parked after r2: best quality but 37–63 s median"}
     # Leaderboard: best round per member by hidden pct_correct.
     members = sorted({r["member"] for r in records})
     lb_rows = []

@@ -34,12 +34,16 @@ claude-haiku-5-5, deepseek-v4.1-flash, muse-spark-1.3-contributor, minimax-m3.1-
 | r1 | Space/time awareness in framing; thinking minimal for DeepSeek and Spark | done. Tune correct: Haiku 64% · DeepSeek 71% · MiniMax 43% · Spark 29%; median s: 4.6 · 37 · 14 · 11. Off-screen text boards 15→10 of 56 |
 | r2 | r1 + one fix pass on layout findings (Haiku, MiniMax, Spark); DeepSeek thinking off | done. Tune correct: Haiku 71% (8.2 s) · MiniMax 64% (28 s) · Spark 50% (17 s) · DeepSeek 64% (57 s, slower with thinking off) |
 | r3 | Haiku: review pass on every board. Spark + MiniMax: BoardKit library offered + fix pass on findings. DeepSeek parked | done. Tune: **Haiku 79% (14.5 s)** · Spark 57% (21 s) · MiniMax 43% (14 s). BoardKit used 1/28 times (Spark 1, MiniMax 0). Haiku hidden checkpoint running |
-| r4 | All three: r1 framing + review pass on every board with a written checklist (style `checks`), no BoardKit | running |
+| r3 hidden | Haiku r3 config on the hidden panel | **Haiku hidden 82% correct, clarity 4.0, median 16.4 s** (p90 36 s) |
+| r4 | All three: r1 framing + review pass on every board with a written checklist (style `checks`), no BoardKit | done. Haiku 79% (15.0 s, no gain over plain review) · Spark 64% (31 s) · MiniMax 43% (37 s) |
+| r5 | r3 recipe + school-context line (Swedish written methods, notation, terms). Haiku + Spark | running |
+| r6 | r5 with Haiku thinking medium | queued |
 
 ## Parked
 - deepseek-v4.1-flash, after r2: best quality (r0 79% tune, r0 hidden 80%) but median 37–63 s in r0–r2; thinking minimal/off made it no faster (off: 57 s). Not kicked: may serve a non-live use. Revisit only with a new speed idea.
 
 ## Kicks
+- **minimax-m3.1-flash: kicked 2026-11-10 after r4 (lead).** Tune correct 43/43/64/43/43% over r0–r4: no gain in the last 3 rounds, and with any fix or review pass its median is 28–37 s.
 - **longcat-2.5-free: kicked 2026-11-10 (Johan: not stable enough).** Ignores `--thinking` (off/minimal still reason >120 s with no HTML); 18/25 r0 boards timed out at 180 s. Its r0 boards stay in the data for reference; it runs in no further round.
 
 ## Open questions / next

@@ -1,6 +1,6 @@
 {
  "round": "r3",
- "generated_at": "2026-11-10T16:31:24+00:00",
+ "generated_at": "2026-11-10T17:04:41+00:00",
  "notes": "Haiku: r1 framing + a review pass on every board (it sees its own settled render and HTML, fixes or returns unchanged). Muse Spark and MiniMax: r1 framing + BoardKit drawing library described as an optional tool (code computes geometry and counts) + fix pass on layout findings. DeepSeek parked (3 rounds, no path to 15 s).",
  "targets": {
   "median_wall_s": 15.0,
@@ -9,6 +9,15 @@
  },
  "members": {
   "claude-haiku-5-5": {
+   "hidden": {
+    "n": 11,
+    "judged": 11,
+    "fail": 0,
+    "pct_correct": 81.8,
+    "mean_clarity": 4.0,
+    "median_wall": 16.44,
+    "p90_wall": 35.69
+   },
    "tune": {
     "n": 14,
     "judged": 14,
