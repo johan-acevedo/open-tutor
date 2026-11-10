@@ -185,6 +185,9 @@ SITE_TMPL = """<!doctype html>
 <h2>What changed</h2>
 {notes}
 
+<h2>All boards per round</h2>
+<p>{grid_links}</p>
+
 <h2>Case browser</h2>
 <div class=card>
 <select id=case></select>
@@ -314,10 +317,12 @@ def build_site(records: list, agg: dict, rounds: list):
     data = {"cases": case_list, "boards": sorted(boards, key=lambda b: (b["case"], b["round"], b["member"]))}
     html = SITE_TMPL.format(
         css=CSS, at=datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
+        grid_links=" · ".join(f'<a href="round-{r}.html">{r}</a>' for r in rounds),
         lb_rows="\n".join(lb_rows), progress_rows="\n".join(progress_rows), charts="\n".join(charts),
         notes="\n".join(notes),
         data=json.dumps(data, ensure_ascii=False).replace("</", "<\\/"))
     (SITE / "index.html").write_text(html, encoding="utf-8")
+    write_round_grids(boards, case_list)
     log(f"wrote {SITE / 'index.html'} ({len(boards)} boards)")
 
 
@@ -360,3 +365,36 @@ def main() -> None:
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
+def write_round_grids(boards, case_list):
+    """One page per round: a row per case, a column per member, thumbnails link to full size."""
+    import html as h
+    labels = {c["id"]: c["label"] for c in case_list}
+    for rnd in sorted({b["round"] for b in boards}):
+        bs = [b for b in boards if b["round"] == rnd]
+        members = sorted({b["member"] for b in bs})
+        cases = sorted({b["case"] for b in bs}, key=lambda c: (next(x["split"] for x in bs if x["case"] == c) or "", c))
+        rows = []
+        for c in cases:
+            split = next(x["split"] for x in bs if x["case"] == c)
+            cells = []
+            for m in members:
+                b = next((x for x in bs if x["case"] == c and x["member"] == m), None)
+                if not b or not b["png"]:
+                    cells.append("<td class=muted>no board</td>")
+                    continue
+                badge = ("<span class=pill>unjudged</span>" if b["correct"] is None else
+                         "<span class='pill pass'>correct</span>" if b["correct"] else
+                         "<span class='pill fail'>not correct</span>")
+                tip = h.escape("; ".join(b["issues"] or []))
+                cells.append(f"<td><a href='{b['png']}'><img loading=lazy src='{b['png']}' title='{tip}'></a>"
+                             f"<br>{badge} {b['clarity'] or '–'}/5 · {b['wall'] or '–'} s</td>")
+            rows.append(f"<tr><th>{h.escape(labels.get(c, c))}<br><span class=muted>{split}</span></th>{''.join(cells)}</tr>")
+        page = (f"<!doctype html><html><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
+                f"<title>Board gym {rnd}</title><style>{CSS} .grid td,.grid th{{vertical-align:top;padding:6px;font-size:13px}}"
+                f" .grid img{{width:320px;border:1px solid #2e3543;border-radius:6px}} .wrap{{overflow-x:auto}}</style></head><body>"
+                f"<h1>Round {rnd}: all boards</h1><p><a href='index.html'>← progress</a> · hover a board for the judge's issues, click for full size</p>"
+                f"<div class=wrap><table class=grid><tr><th>Case</th>{''.join(f'<th>{m}</th>' for m in members)}</tr>"
+                f"{''.join(rows)}</table></div></body></html>")
+        (SITE / f"round-{rnd}.html").write_text(page, encoding="utf-8")
