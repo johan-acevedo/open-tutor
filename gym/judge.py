@@ -164,7 +164,7 @@ def write_batch(round_id: str, bid: str, anons: list, by_anon: dict) -> Path:
 
 def judge_prompt(anons: list, by_anon: dict, bdir: Path, tool: str) -> str:
     ctx = "\n\n".join(board_context(a, by_anon[a], bdir) for a in anons)
-    if tool == "opus":
+    if tool in ("opus", "gemini"):
         paths = "\n".join(f"- {bdir.resolve() / (a + '.png')}" for a in anons)
         how = (f"Read each PNG with the Read tool before scoring it:\n{paths}\n"
                "You may also Read the HTML source files listed per board.")
@@ -365,8 +365,12 @@ def run_sol(bdir: Path, prompt: str, anons: list) -> list:
 PI_JUDGES = {"spark": ("opencode-go/muse-spark-1.3-contributor", "high"),
              "sparkx": ("opencode-go/muse-spark-1.3-contributor", "xhigh"),
              "sparkc": ("opencode-go/muse-spark-1.3-contributor", "xhigh"),
-             "deepseek": ("opencode-go/deepseek-v4.1-flash", "high")}
-RUBRIC_FOR = {"sparkc": (GYM / "prompts" / "judge-v2.md").read_text(encoding="utf-8")}
+             "deepseek": ("opencode-go/deepseek-v4.1-flash", "high"),
+             "deepseekc": ("opencode-go/deepseek-v4.1-flash", "high"),
+             "mimo": ("opencode-go/mimo-v2.6-pro", "high"),
+             "argon": ("opencode-go/gemini-4-argon", "high")}
+_V2 = (GYM / "prompts" / "judge-v2.md").read_text(encoding="utf-8")
+RUBRIC_FOR = {"sparkc": _V2, "deepseekc": _V2, "mimo": _V2, "argon": _V2, "gemini": _V2}
 PI_SYSTEM = ("You are a careful, strict and fair reviewer of teaching boards for children. "
              "You look closely at every image before scoring it. You answer only with the JSON "
              "the rubric asks for.")
@@ -393,8 +397,27 @@ def make_pi_runner(name: str):
     return run
 
 
-RUNNERS = {"opus": run_opus, "sol": run_sol,
-           "spark": make_pi_runner("spark"), "sparkx": make_pi_runner("sparkx"), "sparkc": make_pi_runner("sparkc"),
+def run_gemini(bdir: Path, prompt: str, anons: list) -> list:
+    """Gemini 3.8 Flash (high) through the Antigravity CLI; it opens the PNGs with its file tool."""
+    (bdir / "prompt-gemini.md").write_text(prompt, encoding="utf-8")
+    prompt = ("Do not run any shell commands. Open each PNG with your file viewing tool "
+              "and look at it directly.\n\n" + prompt)
+    argv = ["agy", "-p", prompt, "--model", "gemini-3.8-flash-high", "--sandbox",
+            "--dangerously-skip-permissions",
+            "--add-dir", str(bdir.resolve()), "--output-format", "json"]
+    rc, wall, err = spawn(argv, bdir, bdir / "judge-gemini.log", TIMEOUT_S)
+    raw = (bdir / "judge-gemini.log").read_text(encoding="utf-8", errors="replace")
+    if err is not None:
+        raise RuntimeError(err)
+    if rc != 0:
+        raise RuntimeError(f"agy exit={rc}: {raw[-300:]}")
+    start = raw.find('{"conversation_id"')
+    reply = json.loads(raw[start:].strip().splitlines()[0]).get("response", "") if start >= 0 else raw
+    return extract_verdicts(reply, anons)
+
+
+RUNNERS = {"opus": run_opus, "gemini": run_gemini, "sol": run_sol,
+           "spark": make_pi_runner("spark"), "sparkx": make_pi_runner("sparkx"), "sparkc": make_pi_runner("sparkc"), "deepseekc": make_pi_runner("deepseekc"), "mimo": make_pi_runner("mimo"), "argon": make_pi_runner("argon"),
            "deepseek": make_pi_runner("deepseek")}
 # A judge never scores its own family's board alone: such boards also get this judge,
 # and the verdicts are combined (correct ANDed, numbers averaged).
@@ -402,7 +425,11 @@ FAMILY = {"spark": ("muse-spark-1.3-contributor", "deepseek"),
           "opus": ("claude-haiku-5-5", "sol"),
           "sparkx": ("muse-spark-1.3-contributor", "deepseek"),
           "sparkc": ("muse-spark-1.3-contributor", "deepseek"),
-          "deepseek": ("deepseek-v4.1-flash", "spark")}
+          "deepseek": ("deepseek-v4.1-flash", "spark"),
+          "deepseekc": ("deepseek-v4.1-flash", "sparkc"),
+          "mimo": (None, None),
+          "argon": (None, None),
+          "gemini": (None, None)}  # MiMo (Xiaomi) is no member's family
 
 
 def combine(judged: dict) -> dict:
@@ -425,7 +452,7 @@ def combine(judged: dict) -> dict:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--round", required=True)
-    ap.add_argument("--judge", default="auto", choices=["opus", "sol", "auto", "spark", "sparkx", "sparkc", "deepseek"])
+    ap.add_argument("--judge", default="auto", choices=["opus", "sol", "auto", "spark", "sparkx", "sparkc", "deepseek", "deepseekc", "mimo", "argon", "gemini"])
     ap.add_argument("--batch", type=int, default=BATCH_SIZE)
     ap.add_argument("--only", default="", help="comma-separated anon ids (calibration)")
     ap.add_argument("--parallel", type=int, default=3)
@@ -446,7 +473,7 @@ def main() -> None:
     stored = {}
     for p in raw_dir.glob("*.json"):
         try:
-            m = re.fullmatch(r"(B\d+)\.(opus|sol|spark|sparkx|sparkc|deepseek)", p.stem)
+            m = re.fullmatch(r"(B\d+)\.(opus|sol|spark|sparkx|sparkc|deepseek|deepseekc|mimo|argon|gemini)", p.stem)
             if m:
                 stored[(m.group(1), m.group(2))] = json.loads(p.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
@@ -459,11 +486,11 @@ def main() -> None:
     log(f"round {a.round}: {len(anons)} boards in {len(batches)} batches")
 
     jobs = []  # (batch id, boards, judge)
-    if a.judge in PI_JUDGES:
+    if a.judge in PI_JUDGES or a.judge == "gemini":
         for i, batch in enumerate(batches):
             jobs.append((f"b{i + 1:02d}", batch, a.judge))
         own, second = FAMILY[a.judge]
-        fam = [x for x in anons if by_anon[x]["member"] == own]
+        fam = [x for x in anons if own and by_anon[x]["member"] == own]
         for i in range(0, len(fam), a.batch):
             jobs.append((f"f{i // a.batch + 1:02d}", fam[i:i + a.batch], second))
     else:
@@ -508,8 +535,8 @@ def main() -> None:
 
     # Only verdicts from this run's judge family count when a pi judge is chosen,
     # so a round is scored by one consistent panel.
-    if a.judge in PI_JUDGES:
-        keep = {a.judge, FAMILY[a.judge][1]}
+    if a.judge in PI_JUDGES or a.judge == "gemini":
+        keep = {a.judge, FAMILY[a.judge][1]} - {None}
         stored = {k: v for k, v in stored.items() if k[1] in keep}
 
     # Rebuild combined verdicts from all raw files.

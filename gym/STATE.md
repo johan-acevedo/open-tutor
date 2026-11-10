@@ -23,6 +23,10 @@ claude-haiku-5-5, deepseek-v4.1-flash, muse-spark-1.3-contributor, minimax-m3.1-
 - Lead verifies a sample of each round's verdicts against the PNGs.
 - Render fix 2026-11-10: judges see the *settled* board (timers fast-forwarded 15 s, finite animations finished) plus an early frame at 1.5 s. 99/125 r0 boards animate; the first r0 judging at 1.5 s was discarded. One-shot wall = model time only (render counts only with a fix pass).
 
+- 2026-11-10 calibration (lead): 39 r0 boards (all Spark-vs-Opus/Sol disagreements + agreed sample), reference = Opus/Sol verdicts. Agreement: **Gemini 4 Argon (Go, high) 34/39**, Gemini 3.8 Flash (agy) 30, MiMo v2.6 Pro 27, DeepSeek v4.1 Flash 26, Muse Spark xhigh 22, Spark high 15. Argon+MiMo AND 35 (not worth 2x). `python3 gym/calib.py`.
+- **Decision: Gemini 4 Argon is the gym judge** (rubric v2 `prompts/judge-v2.md` with written checks + layout-script evidence, 2 boards/call). No member is Google family, so no second judge. Spark judging (Johan's first choice) was too lenient: it passed a clock showing 9 when the tutor said three, hg→g ×10, clipped text.
+- Gemini 3.8 Flash runs via Antigravity (`agy`, logged in on dell5500 2026-11-10) with `--sandbox --dangerously-skip-permissions` (headless mode blocks its commands otherwise).
+
 ## Rounds
 | Round | What changed | Status |
 |---|---|---|
