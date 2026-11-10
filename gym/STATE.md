@@ -1,6 +1,6 @@
 # Board gym — state
 
-Lead: Opus 5.5 medium (this thread). Branch `gym/board-renderer`. Data (private, never in git): dell5500 `~/gym-data/board-gym/`.
+Lead: **Muse Spark 1.3 Contributor xhigh** from 2026-11-10 evening (handed over from Opus 5.5, whose quota ran out). Branch `gym/board-renderer`. Data (private, never in git): dell5500 `~/gym-data/board-gym/`.
 Progress page: http://100.91.148.43:8743 (user unit `gym-board-site.service` on dell5500).
 
 ## Goal
@@ -52,5 +52,20 @@ claude-haiku-5-5, deepseek-v4.1-flash, muse-spark-1.3-contributor, minimax-m3.1-
 - **minimax-m3.1-flash: kicked 2026-11-10 after r4 (lead).** Tune correct 43/43/64/43/43% over r0–r4: no gain in the last 3 rounds, and with any fix or review pass its median is 28–37 s.
 - **longcat-2.5-free: kicked 2026-11-10 (Johan: not stable enough).** Ignores `--thinking` (off/minimal still reason >120 s with no HTML); 18/25 r0 boards timed out at 180 s. Its r0 boards stay in the data for reference; it runs in no further round.
 
-## Open questions / next
-- Harness done (Muse worker, 05ff675) + lead fixes (434883f).
+## How to run things (lead handbook)
+- Every long job: `gym/bin/job <name> "<commands>"` → user systemd unit `gym-<name>`, log `~/gym-data/board-gym/logs/<name>.log`, ends with `JOB-DONE`. It passes PATH (codex/agy need it). `systemctl --user reset-failed` before reusing a name. Never sleep/poll loops; wait on the unit's PID (`tail --pid=$(systemctl --user show -p MainPID --value gym-<name>) -f /dev/null`) as a background command.
+- A round: write `gym/configs/rN.yaml` (copy the latest; set `notes:` — the page shows it), then
+  `gym/bin/job rN "python3 gym/run.py --config gym/configs/rN.yaml --panel tune && python3 gym/judge.py --round rN --judge argon --batch 2 --parallel 4 && python3 gym/report.py"`.
+- Config keys: `prompt` (dir or {member: dir}), `thinking` (level or {member/default}), `review_thinking`, `fix_pass` (false | true = only on layout findings | "always" = review every board), `review_style` (plain | checks), `toolkit`, `members`, `panels`.
+- Hidden panel only for checkpoints of a candidate config (`--panel hidden`, same round id). Never tune on it.
+- Lead checks 2–3 verdicts per round against the PNGs (`~/gym-data/board-gym/runs/<round>/<member>/<case>/board.png`, verdicts in `judge/<round>/verdicts.jsonl`).
+- Page refreshes every 2 min (`gym-board-report.timer`). Per-round grids: `/round-rN.html`.
+- Privacy: repo is PUBLIC. Never commit anything from `~/gym-data` (transcripts, boards, judge notes, names). Only code, prompts, configs, aggregate scores.
+
+## Open questions / next (handover 2026-11-10)
+- **r6b running** (unit `gym-r6b`, started ~17:30): exact repeat of r6 on tune + hidden. Read its result first: does Haiku medium + always-review hold ~86% tune and how does it do hidden? That is the current best candidate.
+- Haiku's remaining errors are Swedish school conventions/wording, not layout: American long-division bracket, "bär 1" for carry (Swedish: "1 i minne"), "deci betyder tio" (tiondel), unit-stair arrows reading "1 l × 10 = 1 dl", "Ett deciliter". The one-line school-context hint (r5) did not help.
+- Next ideas, one variable per round, Haiku only, tune panel: (a) short reference examples of Swedish conventions (a correct uppställning for division/addition with "minnessiffra", a unit staircase with unit names, not quantities, on the steps) — conventions as information, not a teaching method; (b) review pass at thinking high; (c) best-of-2 first boards; (d) homework images once the tutor's debug trail stores them.
+- Speed: median ~20 s is acceptable (Johan). ~3 s per board is our cold Playwright render; production with a warm browser ≈1 s. Production idea not yet tested: show the first board, swap in the reviewed one if it changed.
+- Deliverable at the end: winning Haiku config with evidence (tune + hidden scores, timing), and a production recommendation. Sol (Codex) is back 2026-11-11 09:07 for an independent check of the final hidden verdicts.
+- Production note: BoardKit lives only in the gym (fake jsdelivr URL); publishing it needs Johan's OK. Not used by the winner so far.
