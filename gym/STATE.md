@@ -42,7 +42,8 @@ claude-haiku-5-5, deepseek-v4.1-flash, muse-spark-1.3-contributor, minimax-m3.1-
 | r7 | r6 but review at thinking low | done. Haiku 71% (18.6 s) |
 | r8 | Haiku medium, fix pass only on layout findings (9/14 triggered) | done. Haiku 71% (19.4 s, p90 49 s) |
 | r9 | r6 + Swedish-convention reference examples in framing (kort division with raised remainder, minnessiffra/"1 i minne", unit staircase with unit names, terms). One new variable | done tune. **92.9% (13/14), clarity 4.5, median 24.0 s.** All 4 r6b Swedish-convention fails now pass (verified on PNGs: "1 i minne" + minnessiffra shown; no Anglo bracket); the 1 fail is a layout nit (caption flush at left edge). Correct ✓, clarity ✓, speed ✗ (24 vs 20 s target) |
-| r9 hidden | r9 config checkpoint on the hidden panel | running |
+| r9 hidden | r9 config checkpoint on the hidden panel | done. **72.7% (8/11), clarity 4.1, median 21.7 s.** 20 pts below tune. Lead verified 2/3 fails on PNGs, both fair: a real place-value error (tens digit 6 called "ental") and overlapping remainder digits in decimal kort division; third is wording/diagram. Examples fixed notation but harder hidden cases still slip factually |
+| r10 | r9 but review pass at thinking high (one new variable), to catch residual factual/wording errors | running (tune only) |
 | r6b | Exact repeat of r6, tune + hidden, to measure run-to-run spread (n=14 → one board = 7 points) | done. **Tune 64% (clarity 4.1, median 22.2 s)** vs r6's 86%: spread is ±20 pts, r6 was partly luck. **Hidden 82% correct, clarity 4.4, median 22.4 s** (same as r3 hidden). Lead verified 2 fail verdicts against PNGs (Anglo bracket + overflow; "bär 1"); both fair. Remaining errors all Swedish conventions/wording, not layout |
 
 ## Parked
