@@ -392,15 +392,22 @@ def do_run(round_id: str, member: str, case_id: str, case: dict,
             (run_dir / "lint.json").write_text(
                 json.dumps(lint, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
             # Fix only on findings a child would notice: text off screen, overlaps, JS errors.
-            if fix_pass and (lint.get("outside") or lint.get("overlaps") or
-                             (render_info.get("meta", {}) or {}).get("page_errors")):
+            found = bool(lint.get("outside") or lint.get("overlaps") or
+                         (render_info.get("meta", {}) or {}).get("page_errors"))
+            if fix_pass == "always" or (fix_pass and found):
                 # ONE follow-up call with the PNG attached + lint findings.
                 fix_used = True
                 findings = lint_findings_text(
                     lint, render_info.get("meta", {}) or {})
+                head = ("The board you made has these problems on its 1920x1080 screenshot:\n\n"
+                        f"{findings}\n\n") if found else (
+                        "Before the child sees it, look at the attached settled screenshot of your "
+                        "board as the child will. Check every number, every claim, every drawn "
+                        "quantity and position, the language, and that everything is readable and "
+                        "inside the screen. If anything is wrong or unclear, fix it; if it is right, "
+                        "return it unchanged.\n\n")
                 fix_md = (
-                    "The board you made has these problems on its 1920x1080 screenshot:\n\n"
-                    f"{findings}\n\n"
+                    head +
                     "Your HTML was:\n\n```html\n"
                     + (run_dir / "board.html").read_text(encoding="utf-8") +
                     "\n```\n\n"
@@ -522,17 +529,19 @@ def main() -> None:
     round_id = cfg["round"]
     prompt_rel = cfg.get("prompt", "prompts/r0")
     thinking = cfg.get("thinking", "low")
-    fix_pass = cfg.get("fix_pass", False)
-    if not isinstance(fix_pass, dict):
-        fix_pass = bool(fix_pass)
+    fix_pass = cfg.get("fix_pass", False)  # bool, "always", or {member: ...}
     toolkit = cfg.get("toolkit")
     toolkit_file = toolkit_url = None
     if isinstance(toolkit, dict):
         toolkit_file = toolkit.get("file")
         toolkit_url = toolkit.get("url")
 
-    sys_tpl = (GYM / prompt_rel / "system.md").read_text(encoding="utf-8")
-    user_tpl = (GYM / prompt_rel / "user.md").read_text(encoding="utf-8")
+    prompt_cfg = prompt_rel if isinstance(prompt_rel, dict) else {"default": prompt_rel}
+    def tpl_for(member):
+        d = prompt_cfg.get(member, prompt_cfg.get("default", "prompts/r0"))
+        return ((GYM / d / "system.md").read_text(encoding="utf-8"),
+                (GYM / d / "user.md").read_text(encoding="utf-8"))
+    sys_tpl, user_tpl = tpl_for("default")
 
     panels_data = json.loads((CASES / "panels.json").read_text(encoding="utf-8"))
     if a.cases:
@@ -559,8 +568,9 @@ def main() -> None:
             case = json.loads(cpath.read_text(encoding="utf-8"))
             run_dir = DATA / "runs" / round_id / member / cid
             run_dir.mkdir(parents=True, exist_ok=True)
-            system_text = fill_template(sys_tpl, case)
-            user_text = fill_template(user_tpl, case)
+            m_sys, m_user = tpl_for(member)
+            system_text = fill_template(m_sys, case)
+            user_text = fill_template(m_user, case)
             (run_dir / "prompt-system.md").write_text(system_text, encoding="utf-8")
             (run_dir / "prompt-user.md").write_text(user_text, encoding="utf-8")
             jobs.append((member, cid, case, system_text))
@@ -578,7 +588,7 @@ def main() -> None:
                 try:
                     th = (thinking.get(member, thinking.get("default", "low"))
                           if isinstance(thinking, dict) else thinking)
-                    fx = (bool(fix_pass.get(member, fix_pass.get("default", False)))
+                    fx = (fix_pass.get(member, fix_pass.get("default", False))
                           if isinstance(fix_pass, dict) else fix_pass)
                     return do_run(round_id, member, cid, case, system_text,
                                   th, fx, toolkit_file, toolkit_url,

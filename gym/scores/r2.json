@@ -1,0 +1,56 @@
+{
+ "round": "r2",
+ "generated_at": "2026-11-10T16:13:27+00:00",
+ "notes": "r1 framing + one automatic fix pass for Haiku, MiniMax and Muse Spark: the board is rendered, and if the layout script finds text off screen, overlaps or JS errors, the member gets its HTML, the settled screenshot and the findings once and returns a fixed board (render + fix count toward wall time). DeepSeek: thinking off, no fix pass (speed test).",
+ "targets": {
+  "median_wall_s": 15.0,
+  "pct_correct": 90.0,
+  "mean_clarity": 4.5
+ },
+ "members": {
+  "claude-haiku-5-5": {
+   "tune": {
+    "n": 14,
+    "judged": 14,
+    "fail": 0,
+    "pct_correct": 71.4,
+    "mean_clarity": 3.79,
+    "median_wall": 8.21,
+    "p90_wall": 21.37
+   }
+  },
+  "deepseek-v4.1-flash": {
+   "tune": {
+    "n": 14,
+    "judged": 14,
+    "fail": 0,
+    "pct_correct": 64.3,
+    "mean_clarity": 3.86,
+    "median_wall": 57.33,
+    "p90_wall": 107.51
+   }
+  },
+  "minimax-m3.1-flash": {
+   "tune": {
+    "n": 14,
+    "judged": 14,
+    "fail": 0,
+    "pct_correct": 64.3,
+    "mean_clarity": 3.36,
+    "median_wall": 28.27,
+    "p90_wall": 53.95
+   }
+  },
+  "muse-spark-1.3-contributor": {
+   "tune": {
+    "n": 14,
+    "judged": 14,
+    "fail": 1,
+    "pct_correct": 50.0,
+    "mean_clarity": 3.57,
+    "median_wall": 17.26,
+    "p90_wall": 35.08
+   }
+  }
+ }
+}
