@@ -1,0 +1,14 @@
+round: r4
+notes: "All three on Haiku's r3 recipe without BoardKit: r1 framing + a review pass on every board. Review style 'checks': the member first lists each check (calculations, conversions, drawn quantities and positions, column alignment, Swedish terms, on-screen) in a comment, then fixes what failed."
+prompt: prompts/r1
+review_style: checks
+thinking:
+  default: low
+  muse-spark-1.3-contributor: minimal
+fix_pass: always
+toolkit: null
+members:
+  - claude-haiku-5-5
+  - muse-spark-1.3-contributor
+  - minimax-m3.1-flash
+panels: [tune]

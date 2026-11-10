@@ -321,6 +321,24 @@ def member_argv(member: str, thinking: str, system_text: str,
     return base + [f"@{user_file}", *extra_args, "Make the board now."]
 
 
+REVIEW_TEXT = {
+    "plain": ("Before the child sees it, look at the attached settled screenshot of your "
+              "board as the child will. Check every number, every claim, every drawn "
+              "quantity and position, the language, and that everything is readable and "
+              "inside the screen. If anything is wrong or unclear, fix it; if it is right, "
+              "return it unchanged.\n\n"),
+    "checks": ("Before the child sees it, review the attached settled screenshot of your board "
+               "the way a strict reviewer would. First list, inside an HTML comment at the very top "
+               "of your answer (<!-- checks: ... -->), one short line per check: every calculation "
+               "and its result, every unit conversion, every drawn quantity, angle and position "
+               "(does the picture really show what the label says?), column alignment in any "
+               "written method, every Swedish word and term, and that every element is fully inside "
+               "1920x1080, readable and not covered. Then fix everything that failed; if all checks "
+               "pass, return the board unchanged.\n\n"),
+}
+REVIEW_STYLE = {"style": "plain"}
+
+
 def do_run(round_id: str, member: str, case_id: str, case: dict,
            system_text: str, thinking: str, fix_pass: bool,
            toolkit_file: str | None, toolkit_url: str | None,
@@ -401,11 +419,7 @@ def do_run(round_id: str, member: str, case_id: str, case: dict,
                     lint, render_info.get("meta", {}) or {})
                 head = ("The board you made has these problems on its 1920x1080 screenshot:\n\n"
                         f"{findings}\n\n") if found else (
-                        "Before the child sees it, look at the attached settled screenshot of your "
-                        "board as the child will. Check every number, every claim, every drawn "
-                        "quantity and position, the language, and that everything is readable and "
-                        "inside the screen. If anything is wrong or unclear, fix it; if it is right, "
-                        "return it unchanged.\n\n")
+                        REVIEW_TEXT.get(REVIEW_STYLE["style"], REVIEW_TEXT["plain"]))
                 fix_md = (
                     head +
                     "Your HTML was:\n\n```html\n"
@@ -530,6 +544,7 @@ def main() -> None:
     prompt_rel = cfg.get("prompt", "prompts/r0")
     thinking = cfg.get("thinking", "low")
     fix_pass = cfg.get("fix_pass", False)  # bool, "always", or {member: ...}
+    REVIEW_STYLE["style"] = cfg.get("review_style", "plain")
     toolkit = cfg.get("toolkit")
     toolkit_file = toolkit_url = None
     if isinstance(toolkit, dict):

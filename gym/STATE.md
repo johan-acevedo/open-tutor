@@ -33,7 +33,8 @@ claude-haiku-5-5, deepseek-v4.1-flash, muse-spark-1.3-contributor, minimax-m3.1-
 | r0 | Baseline: plain framing, thinking low, one shot | done. Tune correct (Argon): Haiku 50% · DeepSeek 79% · MiniMax 43% · Spark 36%; median s: 5 · 45 · 11 · 21 |
 | r1 | Space/time awareness in framing; thinking minimal for DeepSeek and Spark | done. Tune correct: Haiku 64% · DeepSeek 71% · MiniMax 43% · Spark 29%; median s: 4.6 · 37 · 14 · 11. Off-screen text boards 15→10 of 56 |
 | r2 | r1 + one fix pass on layout findings (Haiku, MiniMax, Spark); DeepSeek thinking off | done. Tune correct: Haiku 71% (8.2 s) · MiniMax 64% (28 s) · Spark 50% (17 s) · DeepSeek 64% (57 s, slower with thinking off) |
-| r3 | Haiku: review pass on every board. Spark + MiniMax: BoardKit library offered + fix pass on findings. DeepSeek parked | running |
+| r3 | Haiku: review pass on every board. Spark + MiniMax: BoardKit library offered + fix pass on findings. DeepSeek parked | done. Tune: **Haiku 79% (14.5 s)** · Spark 57% (21 s) · MiniMax 43% (14 s). BoardKit used 1/28 times (Spark 1, MiniMax 0). Haiku hidden checkpoint running |
+| r4 | All three: r1 framing + review pass on every board with a written checklist (style `checks`), no BoardKit | running |
 
 ## Parked
 - deepseek-v4.1-flash, after r2: best quality (r0 79% tune, r0 hidden 80%) but median 37–63 s in r0–r2; thinking minimal/off made it no faster (off: 57 s). Not kicked: may serve a non-live use. Revisit only with a new speed idea.
