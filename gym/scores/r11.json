@@ -1,6 +1,6 @@
 {
  "round": "r11",
- "generated_at": "2026-11-10T21:43:29+00:00",
+ "generated_at": "2026-11-10T21:50:23+00:00",
  "notes": "Exact repeat of r9 (reference examples, thinking medium, review always) to measure spread at the top end.",
  "targets": {
   "median_wall_s": 20.0,
