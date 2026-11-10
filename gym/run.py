@@ -534,6 +534,8 @@ def main() -> None:
     toolkit_file = toolkit_url = None
     if isinstance(toolkit, dict):
         toolkit_file = toolkit.get("file")
+        if toolkit_file and not Path(toolkit_file).is_absolute():
+            toolkit_file = str((GYM.parent / toolkit_file).resolve())
         toolkit_url = toolkit.get("url")
 
     prompt_cfg = prompt_rel if isinstance(prompt_rel, dict) else {"default": prompt_rel}
