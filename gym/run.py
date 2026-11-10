@@ -431,7 +431,8 @@ def do_run(round_id: str, member: str, case_id: str, case: dict,
                 )
                 (run_dir / "fix-prompt.md").write_text(fix_md, encoding="utf-8")
                 # Order: original request, then the fix note with the HTML, then the PNG.
-                argv2 = member_argv(member, thinking, system_text, user_path,
+                argv2 = member_argv(member, REVIEW_STYLE.get("thinking") or thinking,
+                                    system_text, user_path,
                                     [f"@{run_dir / 'fix-prompt.md'}", f"@{run_dir / 'board.png'}", *extra],
                                     use_append, sys_path)
                 rc2, wall2, err2 = spawn(argv2, run_dir, run_dir / "cli2.log", TIMEOUT_S)
@@ -545,6 +546,7 @@ def main() -> None:
     thinking = cfg.get("thinking", "low")
     fix_pass = cfg.get("fix_pass", False)  # bool, "always", or {member: ...}
     REVIEW_STYLE["style"] = cfg.get("review_style", "plain")
+    REVIEW_STYLE["thinking"] = cfg.get("review_thinking")  # thinking for the fix/review call
     toolkit = cfg.get("toolkit")
     toolkit_file = toolkit_url = None
     if isinstance(toolkit, dict):

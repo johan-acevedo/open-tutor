@@ -36,8 +36,10 @@ claude-haiku-5-5, deepseek-v4.1-flash, muse-spark-1.3-contributor, minimax-m3.1-
 | r3 | Haiku: review pass on every board. Spark + MiniMax: BoardKit library offered + fix pass on findings. DeepSeek parked | done. Tune: **Haiku 79% (14.5 s)** · Spark 57% (21 s) · MiniMax 43% (14 s). BoardKit used 1/28 times (Spark 1, MiniMax 0). Haiku hidden checkpoint running |
 | r3 hidden | Haiku r3 config on the hidden panel | **Haiku hidden 82% correct, clarity 4.0, median 16.4 s** (p90 36 s) |
 | r4 | All three: r1 framing + review pass on every board with a written checklist (style `checks`), no BoardKit | done. Haiku 79% (15.0 s, no gain over plain review) · Spark 64% (31 s) · MiniMax 43% (37 s) |
-| r5 | r3 recipe + school-context line (Swedish written methods, notation, terms). Haiku + Spark | running |
-| r6 | r5 with Haiku thinking medium | queued |
+| r5 | r3 recipe + school-context line (Swedish written methods, notation, terms). Haiku + Spark | done. Haiku 71% (15.8 s), Spark 50% (28 s): no gain from the line |
+| r6 | r5 with Haiku thinking medium (both calls) | done. **Haiku 86% correct, clarity 4.5, median 21.7 s** (first call 8.8 s) |
+| r7 | r6 but review at thinking low | running |
+| r8 | Haiku medium, fix pass only on layout findings | queued |
 
 ## Parked
 - deepseek-v4.1-flash, after r2: best quality (r0 79% tune, r0 hidden 80%) but median 37–63 s in r0–r2; thinking minimal/off made it no faster (off: 57 s). Not kicked: may serve a non-live use. Revisit only with a new speed idea.
