@@ -38,6 +38,7 @@ from .board import (
     Ids,
     MindmapItem,
     Note,
+    PendingItem,
     ResourceItem,
     Step,
     StepsItem,
@@ -133,6 +134,67 @@ class Tutor(Agent):
             return f"The board could not show item {item.id}. Explain in words instead, briefly."
         return f"Item {item.id} is now visible on the board. You can talk about it."
 
+    async def _remove(self, item_id: str) -> None:
+        """Take a placeholder off the board (best effort: a failed drawing must not linger)."""
+        if not self.child_identity or not item_id:
+            return
+        try:
+            await self.room.local_participant.perform_rpc(
+                destination_identity=self.child_identity,
+                method="board.remove",
+                payload=json.dumps({"id": item_id}),
+                response_timeout=BOARD_RPC_TIMEOUT,
+            )
+            record_active("board_ack", {"method": "board.remove", "id": item_id, "ok": True})
+        except Exception as error:
+            log.warning("board remove %s failed: %s", item_id, error)
+            record_active("board_ack", {"method": "board.remove", "id": item_id, "ok": False,
+                                          "error": f"{type(error).__name__}: {error}"[:200]})
+
+    async def _show_final(self, item, pending_id: str) -> str:
+        """Publish a finished drawing: in place of its placeholder when announced."""
+        if not pending_id:
+            return await self._show(item)
+        shown = await self._rpc("board.update", item.model_dump(exclude_none=True))
+        if shown:
+            return f"Item {item.id} is now visible on the board. You can talk about it."
+        await self._remove(pending_id)
+        return (f"The drawing failed to appear (item {pending_id}). "
+                "The placeholder was removed. Explain in words instead, briefly.")
+
+    @function_tool()
+    async def announce_drawing(self, context: RunContext, title: str, height: int = 360) -> str:
+        """Show a drawing placeholder on the board NOW, before a slow drawing.
+
+        Call this first when you are about to draw with `show_html` or `show_svg`
+        (writing them takes many seconds, silent to the child): the child sees the
+        placeholder at once and knows something is coming. Then say one short natural
+        sentence (for example "Vänta lite, jag ritar det åt dig…") and call
+        `show_html`/`show_svg` with the `pending_id` returned here, so the finished
+        board replaces the placeholder in place. If this call fails, just explain
+        in words instead.
+
+        Args:
+            title: Short title of what you are about to draw, in the language you
+                are speaking (Swedish unless practising another language),
+                e.g. "Vattnets kretslopp".
+            height: Expected frame height in pixels, 80–900 (default 360, the
+                `show_html` default), so the placeholder has the finished size.
+        """
+        try:
+            item = PendingItem(id=self.ids.next(), title=title, height=height)
+        except ValidationError as error:
+            return f"Invalid drawing announcement: {error.errors()[0]['msg']}"
+        shown = await self._rpc("board.show", item.model_dump(exclude_none=True))
+        if not shown:
+            return "The board is not visible right now. Explain in words instead, briefly."
+        return (
+            f"Placeholder {item.id} is visible on the board (\"Ritar…\"). Say one short "
+            f"natural sentence so the child knows the drawing is coming, then call "
+            f"`show_html` or `show_svg` with pending_id=\"{item.id}\" so it replaces "
+            f"the placeholder."
+        )
+
     @function_tool()
     async def show_steps(self, context: RunContext, title: str, steps: list[Step]) -> str:
         """Show a worked equation or process step by step on the board.
@@ -194,21 +256,32 @@ class Tutor(Agent):
         return await self._show(item)
 
     @function_tool()
-    async def show_svg(self, context: RunContext, title: str, svg: str) -> str:
+    async def show_svg(self, context: RunContext, title: str, svg: str, pending_id: str = "") -> str:
         """Draw a diagram as a complete SVG document (viewBox set, no scripts).
 
         Use the board palette: background transparent, lines #F3F5F8 or #A78BFA, highlights #22D3EE,
         text in the language you are speaking (Swedish unless practising another language) at
         font-size >= 18. Can also lay out a written column method (for example long division) as
         columns here when the child asks for that form; use your judgement.
+
+        Args:
+            pending_id: When you announced this drawing with `announce_drawing`, its id so the
+                finished diagram replaces the placeholder in place. Omit it when you did not announce.
         """
+        pid = pending_id.strip()[:40]
         try:
-            return await self._show(SvgItem(id=self.ids.next(), title=title, svg=svg))
+            item = SvgItem(id=pid or self.ids.next(), title=title, svg=svg)
         except ValidationError as error:
+            if pid:
+                await self._remove(pid)
+                return (f"Invalid svg: {error.errors()[0]['msg']} "
+                        "The placeholder was removed. Explain in words instead.")
             return f"Invalid svg: {error.errors()[0]['msg']}"
+        return await self._show_final(item, pid)
 
     @function_tool()
-    async def show_html(self, context: RunContext, title: str, html: str, height: int = 360) -> str:
+    async def show_html(self, context: RunContext, title: str, html: str, height: int = 360,
+                      pending_id: str = "") -> str:
         """Show an interactive or animated explanation as a self-contained HTML document.
 
         It runs in an isolated frame with no network except scripts from cdn.jsdelivr.net. Dark
@@ -219,12 +292,19 @@ class Tutor(Agent):
 
         Args:
             height: Frame height in pixels, 120–900.
+            pending_id: When you announced this drawing with `announce_drawing`, its id so the
+                finished board replaces the placeholder in place. Omit it when you did not announce.
         """
+        pid = pending_id.strip()[:40]
         try:
-            item = HtmlItem(id=self.ids.next(), title=title, html=html, height=max(120, min(height, 900)))
+            item = HtmlItem(id=pid or self.ids.next(), title=title, html=html, height=max(120, min(height, 900)))
         except ValidationError as error:
+            if pid:
+                await self._remove(pid)
+                return (f"Invalid html: {error.errors()[0]['msg']} "
+                        "The placeholder was removed. Explain in words instead.")
             return f"Invalid html: {error.errors()[0]['msg']}"
-        return await self._show(item)
+        return await self._show_final(item, pid)
 
     # ---- resources ---------------------------------------------------------------
 

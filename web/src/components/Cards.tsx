@@ -176,7 +176,13 @@ function PendingCard({ item, onMounted }: CardProps) {
   if (item.kind !== 'pending') return null;
   const { ref } = useReportMounted(item, onMounted);
   return (
-    <article className="ot-bcard" ref={ref} data-board-id={item.id} aria-label={item.title}>
+    <article
+      className="ot-bcard"
+      ref={ref}
+      data-board-id={item.id}
+      aria-label={item.title}
+      style={item.height ? { minHeight: item.height } : undefined}
+    >
       <h2>{item.title}</h2>
       <div className="ot-pending" role="status">
         Ritar…

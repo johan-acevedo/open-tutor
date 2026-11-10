@@ -78,3 +78,84 @@ async def test_a_new_session_starts_clean():
 def test_prompt_forbids_narrating_tool_calls():
     text = instructions({"name": "Leo"})
     assert "only when you call a board tool" in text and "Never describe or narrate a tool call" in text
+
+
+def test_prompt_announces_slow_drawings_before_writing_them():
+    text = instructions({"name": "Leo"})
+    assert "announce_drawing" in text and "pending_id" in text
+    assert "Vänta lite, jag ritar det åt dig" in text
+
+
+class FlakyParticipant(FakeParticipant):
+    """Fails one RPC per queued exception, so a later step can fail after an earlier one worked."""
+
+    def __init__(self, failures):
+        super().__init__()
+        self.failures = list(failures)
+
+    async def perform_rpc(self, *, destination_identity, method, payload, response_timeout):
+        self.calls.append((destination_identity, method, json.loads(payload)))
+        outcome = self.failures.pop(0) if self.failures else None
+        if isinstance(outcome, Exception):
+            raise outcome
+        return self.reply
+
+
+def flaky_room(*failures):
+    room = FakeRoom()
+    room.local_participant = FlakyParticipant(failures)
+    return room
+
+
+async def test_announce_drawing_shows_a_pending_placeholder():
+    room = FakeRoom()
+    result = await tutor(room).announce_drawing(None, title="Vattnets kretslopp")
+    assert 'pending_id="b1"' in result and "Ritar" in result
+    identity, method, payload = room.local_participant.calls[0]
+    assert (identity, method) == ("learner-1", "board.show")
+    assert payload == {"id": "b1", "kind": "pending", "title": "Vattnets kretslopp", "height": 360}
+
+
+async def test_announced_html_replaces_the_placeholder_in_place():
+    room = FakeRoom()
+    t = tutor(room)
+    announced = await t.announce_drawing(None, title="Kretslopp")
+    assert 'pending_id="b1"' in announced
+    result = await t.show_html(None, title="Kretslopp", html="<p>hej</p>", pending_id="b1")
+    assert "b1 is now visible" in result
+    assert [c[1] for c in room.local_participant.calls] == ["board.show", "board.update"]
+    _, _, payload = room.local_participant.calls[1]
+    assert payload["id"] == "b1" and payload["kind"] == "html"
+
+
+async def test_unannounced_svg_still_shows_directly():
+    room = FakeRoom()
+    result = await tutor(room).show_svg(None, title="Triangel", svg='<svg viewBox="0 0 10 10"></svg>')
+    assert "b1 is now visible" in result
+    assert [c[1] for c in room.local_participant.calls] == ["board.show"]
+
+
+async def test_a_failed_final_board_removes_its_placeholder():
+    room = flaky_room(None, TimeoutError("no reply"))  # announce works, the update times out
+    t = tutor(room)
+    await t.announce_drawing(None, title="Kretslopp")
+    result = await t.show_html(None, title="Kretslopp", html="<p>hej</p>", pending_id="b1")
+    assert "placeholder was removed" in result and "Explain in words" in result
+    assert [c[1] for c in room.local_participant.calls] == ["board.show", "board.update", "board.remove"]
+    assert room.local_participant.calls[2][2] == {"id": "b1"}
+
+
+async def test_rejected_drawing_removes_its_placeholder():
+    room = FakeRoom()
+    t = tutor(room)
+    await t.announce_drawing(None, title="Kretslopp")
+    result = await t.show_svg(None, title="Kretslopp", svg="x" * 70000, pending_id="b1")
+    assert result.startswith("Invalid svg") and "placeholder was removed" in result
+    assert [c[1] for c in room.local_participant.calls] == ["board.show", "board.remove"]
+
+
+async def test_a_failed_announcement_leaves_no_placeholder_behind():
+    room = flaky_room(TimeoutError("no reply"))
+    result = await tutor(room).announce_drawing(None, title="Kretslopp")
+    assert "not visible" in result and "pending_id" not in result
+    assert [c[1] for c in room.local_participant.calls] == ["board.show"]

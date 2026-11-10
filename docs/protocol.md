@@ -25,7 +25,8 @@ The browser shows homework on the board itself as soon as the child adds it (kin
 |---|---|---|
 | RPC to browser | `board.show` | `BoardItem` JSON. The browser renders it, scrolls to it, and responds `{ "ok": true }` once it is in the DOM (images: after load). The tutor speaks about the item only after this reply. Timeout 5 s. |
 | RPC to browser | `board.focus` | `{ "id", "step"?: number }` highlights one step of a `steps` item, or the whole item. Responds `{ "ok": true }`. |
-| RPC to browser | `board.update` | `BoardItem` with an existing `id` replaces it in place, for example a `pending` placeholder that becomes an image. |
+| RPC to browser | `board.update` | `BoardItem` with an existing `id` replaces it in place: a `pending` placeholder becomes the finished board (same position, same `id`). |
+| RPC to browser | `board.remove` | `{ "id" }` removes that board item, for example a `pending` placeholder whose drawing failed. Responds `{ "ok": true }`. |
 | Text stream | `note` | JSON `Note`. The browser saves it to the current profile in IndexedDB. |
 | Text stream | `lk.transcription` | Built-in agent captions, streamed in step with the audio. The browser shows the sentence being spoken. |
 | Participant attribute | `lk.agent.state` | Built-in: `initializing`, `listening`, `thinking`, `speaking`. |
@@ -41,7 +42,7 @@ type BoardItem =
   | { id: string; kind: "svg"; title?: string; svg: string }                 // sanitised, no scripts
   | { id: string; kind: "html"; title?: string; html: string; height?: number } // sandboxed iframe, scripts allowed, no same-origin
   | { id: string; kind: "image"; title?: string; url: string; alt: string }
-  | { id: string; kind: "pending"; title: string }                           // "Ritar…" placeholder
+  | { id: string; kind: "pending"; title: string; height?: number }       // "Ritar…" placeholder
   | { id: string; kind: "resource"; title: string; url: string; embedUrl?: string; source?: string; prompt?: string }
   | { id: string; kind: "homework"; title: string; images?: string[]; text?: string }; // browser-created only
 
@@ -50,3 +51,13 @@ type Note = { at: string; topic: string; clicked?: string; tricky?: string; next
 ```
 
 Generated HTML runs in `<iframe sandbox="allow-scripts">` with a strict CSP and no access to the page, learner storage or credentials. Links in resources open in a new tab.
+
+## Slow drawings
+
+`show_html`/`show_svg` take many seconds to generate, silently: the model writes the whole
+document inside the tool-call arguments, so no speech streams meanwhile. The tutor therefore
+announces first: `announce_drawing` publishes a `pending` placeholder through `board.show` (with
+the expected height, so it already has the finished size), says one short natural sentence, and
+then calls `show_html`/`show_svg` with that `pending_id`. The finished board arrives through
+`board.update` with the same `id`, replacing the placeholder in place. If the drawing fails or
+is rejected, the worker removes the placeholder through `board.remove` and explains in words.
