@@ -1,6 +1,6 @@
 {
  "round": "r4",
- "generated_at": "2026-11-10T17:46:16+00:00",
+ "generated_at": "2026-11-10T17:48:23+00:00",
  "notes": "All three on Haiku's r3 recipe without BoardKit: r1 framing + a review pass on every board. Review style 'checks': the member first lists each check (calculations, conversions, drawn quantities and positions, column alignment, Swedish terms, on-screen) in a comment, then fixes what failed.",
  "targets": {
   "median_wall_s": 15.0,

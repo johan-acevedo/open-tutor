@@ -29,7 +29,7 @@ DATA = Path(os.environ.get("GYM_DATA", Path.home() / "gym-data" / "board-gym"))
 SITE = DATA / "site"
 SCORES = GYM / "scores"
 
-TARGET_WALL = 15.0
+TARGET_WALL = 20.0
 TARGET_CORRECT = 90.0
 TARGET_CLARITY = 4.5
 
@@ -165,7 +165,7 @@ SITE_TMPL = """<!doctype html>
 <title>Board gym</title><style>{css}</style></head>
 <body>
 <h1>Board gym</h1>
-<p class=muted>Generated {at} · targets: hidden &ge;90% correct · clarity &ge;4.5 · median wall &le;15 s</p>
+<p class=muted>Generated {at} · targets: hidden &ge;90% correct · clarity &ge;4.5 · median wall &le;20 s</p>
 
 <h2>Runs so far</h2>
 <div class=card><table>

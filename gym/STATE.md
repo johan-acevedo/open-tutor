@@ -4,7 +4,8 @@ Lead: Opus 5.5 medium (this thread). Branch `gym/board-renderer`. Data (private,
 Progress page: http://100.91.148.43:8743 (user unit `gym-board-site.service` on dell5500).
 
 ## Goal
-Each member renders excellent teaching boards fast. Targets on the hidden panel: ≥90% judged correct, clarity ≥4.5/5, median wall ≤15 s incl. any fix pass.
+Each member renders excellent teaching boards fast. Targets on the hidden panel: ≥90% judged correct, clarity ≥4.5/5, median wall ≤20 s incl. any fix pass (Johan 2026-11-10: 20 s can work; was 15 s).
+Focus from 2026-11-10: **Haiku 5.5 only** (Johan: narrow down on Haiku and iterate on it).
 
 ## Cases
 - `python3 gym/ingest.py` pulls thinkcentre debug trails and makes one case per board tool call.
