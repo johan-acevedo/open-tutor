@@ -1,0 +1,13 @@
+# Round 0: baseline. Plain scenario framing, no toolkit, one shot, no fix pass.
+round: r0
+prompt: prompts/r0
+thinking: low
+fix_pass: false
+toolkit: null
+members:
+  - claude-haiku-5-5
+  - deepseek-v4.1-flash
+  - longcat-2.5-free
+  - muse-spark-1.3-contributor
+  - minimax-m3.1-flash
+panels: [tune, hidden]

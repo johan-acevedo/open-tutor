@@ -1,0 +1,5 @@
+{
+ "_note": "Frozen hidden sessions (room ids only, no content). Chosen 2026-11-10 for coverage: column division + price (html/steps/text), weight staircase svg, grade-7 equation + English science, grade-3 clock svg, cherry price steps. New sessions: sha256(room) % 4 == 0 -> hidden.",
+ "hidden_sessions": ["tutor-Y6oUmcwZdv8i", "tutor-MlmL7Xudu_v3", "tutor-tLzncdPUZFgO", "tutor-Tz7Tq5d5tDxN", "tutor-8NcL3raFVrZy"],
+ "known_sessions_frozen_at": "2026-11-10"
+}
