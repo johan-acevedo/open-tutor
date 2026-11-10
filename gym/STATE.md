@@ -41,7 +41,7 @@ claude-haiku-5-5, deepseek-v4.1-flash, muse-spark-1.3-contributor, minimax-m3.1-
 | r6 | r5 with Haiku thinking medium (both calls) | done. **Haiku 86% correct, clarity 4.5, median 21.7 s** (first call 8.8 s) |
 | r7 | r6 but review at thinking low | done. Haiku 71% (18.6 s) |
 | r8 | Haiku medium, fix pass only on layout findings (9/14 triggered) | done. Haiku 71% (19.4 s, p90 49 s) |
-| r6b | Exact repeat of r6, tune + hidden, to measure run-to-run spread (n=14 → one board = 7 points) | running |
+| r6b | Exact repeat of r6, tune + hidden, to measure run-to-run spread (n=14 → one board = 7 points) | done. **Tune 64% (clarity 4.1, median 22.2 s)** vs r6's 86%: spread is ±20 pts, r6 was partly luck. **Hidden 82% correct, clarity 4.4, median 22.4 s** (same as r3 hidden). Lead verified 2 fail verdicts against PNGs (Anglo bracket + overflow; "bär 1"); both fair. Remaining errors all Swedish conventions/wording, not layout |
 
 ## Parked
 - deepseek-v4.1-flash, after r2: best quality (r0 79% tune, r0 hidden 80%) but median 37–63 s in r0–r2; thinking minimal/off made it no faster (off: 57 s). Not kicked: may serve a non-live use. Revisit only with a new speed idea.
