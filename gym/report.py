@@ -363,10 +363,6 @@ def main() -> None:
     build_site(records, agg, rounds)
 
 
-if __name__ == "__main__":
-    sys.exit(main())
-
-
 def write_round_grids(boards, case_list):
     """One page per round: a row per case, a column per member, thumbnails link to full size."""
     import html as h
@@ -398,3 +394,7 @@ def write_round_grids(boards, case_list):
                 f"<div class=wrap><table class=grid><tr><th>Case</th>{''.join(f'<th>{m}</th>' for m in members)}</tr>"
                 f"{''.join(rows)}</table></div></body></html>")
         (SITE / f"round-{rnd}.html").write_text(page, encoding="utf-8")
+
+
+if __name__ == "__main__":
+    sys.exit(main())
