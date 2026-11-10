@@ -101,8 +101,13 @@ page.on('console', (msg) => {
 page.on('pageerror', (err) => pageErrors.push(String(err).slice(0, 300)));
 
 const fileUrl = 'file://' + resolve(htmlPath);
+await page.clock.install();
 await page.goto(fileUrl, { waitUntil: 'load', timeout: 30000 });
-await page.waitForTimeout(1500);
+await page.waitForTimeout(300);
+// Lint the settled board: run timers ahead, finish finite animations (same as render.mjs).
+await page.clock.runFor(16500);
+await page.evaluate(() => { for (const a of document.getAnimations()) { try { a.finish(); } catch {} } });
+await page.waitForTimeout(300);
 
 // Render to a temp PNG (same framing as render.sh) so layout is final.
 const workdir = mkdtempSync(join(tmpdir(), 'boardcheck-'));

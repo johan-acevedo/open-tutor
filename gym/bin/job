@@ -1,0 +1,12 @@
+#!/bin/bash
+# Run a gym command as a transient user systemd unit with a log file and this shell's PATH
+# (codex lives under nvm, which systemd's default PATH lacks).
+#   gym/bin/job <name> <command...>      log: ~/gym-data/board-gym/logs/<name>.log
+set -eu
+name=$1; shift
+logs=${GYM_DATA:-$HOME/gym-data/board-gym}/logs; mkdir -p "$logs"
+cd "$(dirname "$0")/../.."
+systemd-run --user --unit="gym-$name" --same-dir -p Environment="PATH=$PATH" \
+  -p StandardOutput=append:"$logs/$name.log" -p StandardError=append:"$logs/$name.log" \
+  bash -c "$* && echo JOB-DONE"
+echo "unit gym-$name, log $logs/$name.log"

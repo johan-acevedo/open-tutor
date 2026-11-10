@@ -381,7 +381,10 @@ def do_run(round_id: str, member: str, case_id: str, case: dict,
     lint: dict = {}
     if error is None:
         render_info = run_node_render(run_dir, toolkit_file, toolkit_url)
-        total_wall += render_info.get("wall_s", 0)
+        # Production one-shot never renders server-side: the render only counts
+        # toward wall time when a fix pass needs it.
+        if fix_pass:
+            total_wall += render_info.get("wall_s", 0)
         if render_info.get("error"):
             error = f"render failed: {render_info['error']}"
         else:

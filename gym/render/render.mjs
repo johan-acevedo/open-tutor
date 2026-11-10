@@ -111,7 +111,22 @@ page.on('pageerror', (err) => pageErrors.push(String(err).slice(0, 500)));
 
 const fileUrl = 'file://' + resolve(htmlPath);
 await page.goto(fileUrl, { waitUntil: 'load', timeout: 30000 });
-await page.waitForTimeout(1500);
+await page.waitForTimeout(300);
+await page.clock.runFor(1500);
+// Early frame: what the child sees ~1.5 s after the board appears.
+const earlyPath = pngPath.replace(/\.png$/, '') + '-early.png';
+await page.screenshot({ path: earlyPath, clip: { x: 0, y: 0, width: 1920, height: 1080 } });
+// Settled frame: run JS timers 15 s ahead and finish every finite CSS/Web animation,
+// so staggered reveals are judged in their final state.
+await page.clock.runFor(15000);
+const anim = await page.evaluate(() => {
+  let finished = 0, infinite = 0;
+  for (const a of document.getAnimations()) {
+    try { a.finish(); finished++; } catch { infinite++; }
+  }
+  return { finished, infinite };
+});
+await page.waitForTimeout(300);
 
 const scroll = await page.evaluate(() => ({
   scrollWidth: document.documentElement.scrollWidth,
@@ -130,6 +145,8 @@ writeFileSync(metaPath, JSON.stringify({
   page_errors: pageErrors,
   blocked_requests: blocked,
   scroll,
+  animations: anim,
+  early_png: earlyPath,
   viewport: { width: 1920, height: 1080 },
 }, null, 2) + '\n');
 console.log(`rendered ${pngPath}`);
