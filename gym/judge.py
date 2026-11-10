@@ -133,7 +133,21 @@ def board_context(anon: str, board: dict, batch_dir: Path) -> str:
         f"### Last conversation lines\n{format_convo(case.get('conversation', []))}\n"
         f"### What the tutor asked to show\n{json.dumps(payload, ensure_ascii=False, indent=2)}\n"
         f"### What the tutor said next (judge-only)\n{after_s}\n"
+        f"### Automatic layout check\n{lint_evidence(board)}\n"
     )
+
+
+def lint_evidence(board: dict) -> str:
+    try:
+        l = json.loads((board["run_dir"] / "lint.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return "(not available)"
+    out = []
+    for key, label in (("outside", "outside the screen"), ("overlaps", "overlapping"),
+                       ("small_text", "small text")):
+        for item in (l.get(key) or [])[:6]:
+            out.append(f"- {label}: {str(item)[:160]}")
+    return "\n".join(out) or "- nothing found"
 
 
 def write_batch(round_id: str, bid: str, anons: list, by_anon: dict) -> Path:
@@ -157,7 +171,7 @@ def judge_prompt(anons: list, by_anon: dict, bdir: Path, tool: str) -> str:
     else:
         how = ("The board images are attached to this message in batch order "
                f"({', '.join(anons)}). Match image N to board N in the list.")
-    return (f"{RUBRIC}\n\n# Batch ({len(anons)} boards)\n{how}\n\n{ctx}\n")
+    return (f"{RUBRIC_FOR.get(tool, RUBRIC)}\n\n# Batch ({len(anons)} boards)\n{how}\n\n{ctx}\n")
 
 
 # ---------------------------------------------------------------- judge calls
@@ -350,7 +364,9 @@ def run_sol(bdir: Path, prompt: str, anons: list) -> list:
 
 PI_JUDGES = {"spark": ("opencode-go/muse-spark-1.3-contributor", "high"),
              "sparkx": ("opencode-go/muse-spark-1.3-contributor", "xhigh"),
+             "sparkc": ("opencode-go/muse-spark-1.3-contributor", "xhigh"),
              "deepseek": ("opencode-go/deepseek-v4.1-flash", "high")}
+RUBRIC_FOR = {"sparkc": (GYM / "prompts" / "judge-v2.md").read_text(encoding="utf-8")}
 PI_SYSTEM = ("You are a careful, strict and fair reviewer of teaching boards for children. "
              "You look closely at every image before scoring it. You answer only with the JSON "
              "the rubric asks for.")
@@ -378,13 +394,14 @@ def make_pi_runner(name: str):
 
 
 RUNNERS = {"opus": run_opus, "sol": run_sol,
-           "spark": make_pi_runner("spark"), "sparkx": make_pi_runner("sparkx"),
+           "spark": make_pi_runner("spark"), "sparkx": make_pi_runner("sparkx"), "sparkc": make_pi_runner("sparkc"),
            "deepseek": make_pi_runner("deepseek")}
 # A judge never scores its own family's board alone: such boards also get this judge,
 # and the verdicts are combined (correct ANDed, numbers averaged).
 FAMILY = {"spark": ("muse-spark-1.3-contributor", "deepseek"),
           "opus": ("claude-haiku-5-5", "sol"),
           "sparkx": ("muse-spark-1.3-contributor", "deepseek"),
+          "sparkc": ("muse-spark-1.3-contributor", "deepseek"),
           "deepseek": ("deepseek-v4.1-flash", "spark")}
 
 
@@ -408,7 +425,7 @@ def combine(judged: dict) -> dict:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--round", required=True)
-    ap.add_argument("--judge", default="auto", choices=["opus", "sol", "auto", "spark", "sparkx", "deepseek"])
+    ap.add_argument("--judge", default="auto", choices=["opus", "sol", "auto", "spark", "sparkx", "sparkc", "deepseek"])
     ap.add_argument("--batch", type=int, default=BATCH_SIZE)
     ap.add_argument("--only", default="", help="comma-separated anon ids (calibration)")
     ap.add_argument("--parallel", type=int, default=3)
@@ -429,7 +446,7 @@ def main() -> None:
     stored = {}
     for p in raw_dir.glob("*.json"):
         try:
-            m = re.fullmatch(r"(B\d+)\.(opus|sol|spark|sparkx|deepseek)", p.stem)
+            m = re.fullmatch(r"(B\d+)\.(opus|sol|spark|sparkx|sparkc|deepseek)", p.stem)
             if m:
                 stored[(m.group(1), m.group(2))] = json.loads(p.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):

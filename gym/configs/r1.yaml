@@ -1,0 +1,15 @@
+round: r1
+notes: "Space and time awareness in the framing (exact 1920x1080, no scroll/scale, settled state counts, the child is waiting, the draft is only intent). Thinking minimal for the slow members (DeepSeek, Muse Spark), low for Haiku and MiniMax. One shot, no fix pass. longcat kicked."
+prompt: prompts/r1
+thinking:
+  default: low
+  deepseek-v4.1-flash: minimal
+  muse-spark-1.3-contributor: minimal
+fix_pass: false
+toolkit: null
+members:
+  - claude-haiku-5-5
+  - deepseek-v4.1-flash
+  - muse-spark-1.3-contributor
+  - minimax-m3.1-flash
+panels: [tune]

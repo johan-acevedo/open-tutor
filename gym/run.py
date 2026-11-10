@@ -391,7 +391,8 @@ def do_run(round_id: str, member: str, case_id: str, case: dict,
             lint = run_node_lint(run_dir, toolkit_file, toolkit_url)
             (run_dir / "lint.json").write_text(
                 json.dumps(lint, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
-            if fix_pass and (not lint.get("clean") or
+            # Fix only on findings a child would notice: text off screen, overlaps, JS errors.
+            if fix_pass and (lint.get("outside") or lint.get("overlaps") or
                              (render_info.get("meta", {}) or {}).get("page_errors")):
                 # ONE follow-up call with the PNG attached + lint findings.
                 fix_used = True
@@ -400,14 +401,17 @@ def do_run(round_id: str, member: str, case_id: str, case: dict,
                 fix_md = (
                     "The board you made has these problems on its 1920x1080 screenshot:\n\n"
                     f"{findings}\n\n"
-                    "The current screenshot is attached (@board.png). "
+                    "Your HTML was:\n\n```html\n"
+                    + (run_dir / "board.html").read_text(encoding="utf-8") +
+                    "\n```\n\n"
+                    "The settled screenshot of it is attached. The original request comes first. "
                     "Return the corrected full HTML document only, "
                     "starting with <!doctype html>. No explanation before or after."
                 )
                 (run_dir / "fix-prompt.md").write_text(fix_md, encoding="utf-8")
-                argv2 = member_argv(member, thinking, system_text,
-                                    run_dir / "fix-prompt.md",
-                                    [f"@{run_dir / 'board.png'}", *extra],
+                # Order: original request, then the fix note with the HTML, then the PNG.
+                argv2 = member_argv(member, thinking, system_text, user_path,
+                                    [f"@{run_dir / 'fix-prompt.md'}", f"@{run_dir / 'board.png'}", *extra],
                                     use_append, sys_path)
                 rc2, wall2, err2 = spawn(argv2, run_dir, run_dir / "cli2.log", TIMEOUT_S)
                 total_wall += wall2
@@ -570,8 +574,10 @@ def main() -> None:
         with global_sem:
             with member_locks[member]:
                 try:
+                    th = (thinking.get(member, thinking.get("default", "low"))
+                          if isinstance(thinking, dict) else thinking)
                     return do_run(round_id, member, cid, case, system_text,
-                                  thinking, fix_pass, toolkit_file, toolkit_url,
+                                  th, fix_pass, toolkit_file, toolkit_url,
                                   a.force)
                 except Exception as e:  # never let one run kill the batch
                     log(f"ERROR {member} {cid}: {e}")
