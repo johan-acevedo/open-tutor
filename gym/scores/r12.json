@@ -1,6 +1,6 @@
 {
  "round": "r12",
- "generated_at": "2026-11-10T21:50:23+00:00",
+ "generated_at": "2026-11-10T21:56:32+00:00",
  "notes": "Haiku: r9 recipe (reference examples, thinking medium) but fix pass only when the layout script finds text off screen, overlaps or JS errors (no review otherwise). Tests whether the examples hold quality without the always-review time cost.",
  "targets": {
   "median_wall_s": 20.0,

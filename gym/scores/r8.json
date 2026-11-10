@@ -1,6 +1,6 @@
 {
  "round": "r8",
- "generated_at": "2026-11-10T21:50:23+00:00",
+ "generated_at": "2026-11-10T21:56:32+00:00",
  "notes": "Haiku: thinking medium, r5 framing, fix pass only when the layout script finds text off screen, overlaps or JS errors (no review otherwise).",
  "targets": {
   "median_wall_s": 20.0,

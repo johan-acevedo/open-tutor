@@ -1,6 +1,6 @@
 {
  "round": "r13",
- "generated_at": "2026-11-10T21:50:23+00:00",
+ "generated_at": "2026-11-10T21:56:32+00:00",
  "notes": "Haiku: r12 (examples, medium, findings-only fix) with sharpened unit-staircase example: per-step factor from the equality (hg->g is x100), no blanket x10 rule, ton/kg/hg/g only, no dekagram. One new variable: the staircase text.",
  "targets": {
   "median_wall_s": 20.0,
@@ -9,12 +9,21 @@
  },
  "members": {
   "claude-haiku-5-5": {
+   "hidden": {
+    "n": 11,
+    "judged": 11,
+    "fail": 0,
+    "pct_correct": 72.7,
+    "mean_clarity": 3.91,
+    "median_wall": 19.94,
+    "p90_wall": 36.09
+   },
    "tune": {
     "n": 14,
     "judged": 14,
     "fail": 0,
     "pct_correct": 85.7,
-    "mean_clarity": 4.21,
+    "mean_clarity": 4.29,
     "median_wall": 17.88,
     "p90_wall": 35.14
    }
