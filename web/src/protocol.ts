@@ -30,7 +30,7 @@ export type BoardItem =
   | { id: string; kind: 'svg'; title?: string; svg: string }
   | { id: string; kind: 'html'; title?: string; html: string; height?: number }
   | { id: string; kind: 'image'; title?: string; url: string; alt: string }
-  | { id: string; kind: 'pending'; title: string }
+  | { id: string; kind: 'pending'; title: string; height?: number }
   | {
       id: string;
       kind: 'resource';
@@ -86,6 +86,7 @@ export type TutorMode = 'talking' | 'quiet' | 'resource' | 'ending';
 export const BOARD_RPC_SHOW = 'board.show';
 export const BOARD_RPC_UPDATE = 'board.update';
 export const BOARD_RPC_FOCUS = 'board.focus';
+export const BOARD_RPC_REMOVE = 'board.remove';
 
 export const TOPIC_CHAT = 'lk.chat';
 export const TOPIC_TRANSCRIPTION = 'lk.transcription';

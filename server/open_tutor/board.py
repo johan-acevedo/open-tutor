@@ -55,6 +55,8 @@ class ImageItem(_Item):
 class PendingItem(_Item):
     kind: Literal["pending"] = "pending"
     title: str = Field(max_length=120)
+    # Expected frame height (80–900) so the placeholder has the finished size.
+    height: int | None = Field(default=None, ge=80, le=900)
 
 
 class ResourceItem(_Item):

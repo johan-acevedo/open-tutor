@@ -28,7 +28,8 @@ from livekit import rtc
 from open_tutor.web import create_app
 
 TOOL_NAMES = ("show_steps", "focus_step", "show_text", "show_ideas", "show_svg", "show_html",
-              "find_resources", "share_resource", "start_quiet_work", "stay_quiet", "save_note")
+              "announce_drawing", "find_resources", "share_resource", "start_quiet_work",
+              "stay_quiet", "save_note")
 LEAK = re.compile(r"\b(?:%s)\b|default_api|tool_code|\"(?:tex|steps|markdown|title)\"\s*:|[{}]" % "|".join(TOOL_NAMES))
 
 TURNS = [

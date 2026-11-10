@@ -113,7 +113,18 @@ export function validateBoardItem(raw: unknown): ValidateResult {
     }
     case 'pending': {
       if (typeof raw.title !== 'string') return { ok: false, error: 'pending item needs title string' };
-      return { ok: true, item: { id, kind: 'pending', title: raw.title } };
+      if (raw.height !== undefined && typeof raw.height !== 'number') {
+        return { ok: false, error: 'pending height must be a number' };
+      }
+      return {
+        ok: true,
+        item: {
+          id,
+          kind: 'pending',
+          title: raw.title,
+          ...(typeof raw.height === 'number' ? { height: raw.height } : {}),
+        },
+      };
     }
     case 'resource': {
       if (typeof raw.title !== 'string' || typeof raw.url !== 'string') {

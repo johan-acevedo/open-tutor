@@ -6,6 +6,7 @@ import {
   ATTR_AGENT_STATE,
   ATTR_TUTOR_MODE,
   BOARD_RPC_FOCUS,
+  BOARD_RPC_REMOVE,
   BOARD_RPC_SHOW,
   BOARD_RPC_UPDATE,
   TOPIC_CHAT,
@@ -182,7 +183,8 @@ export function useSession(mobile = false) {
     audioContextRef.current = null;
     if (context) void context.close().catch(() => undefined);
     if (!room) return;
-    for (const m of [BOARD_RPC_SHOW, BOARD_RPC_UPDATE, BOARD_RPC_FOCUS]) unregisterRpc(room, m);
+    for (const m of [BOARD_RPC_SHOW, BOARD_RPC_UPDATE, BOARD_RPC_FOCUS, BOARD_RPC_REMOVE])
+      unregisterRpc(room, m);
     try {
       room.unregisterTextStreamHandler(TOPIC_TRANSCRIPTION);
     } catch {
@@ -367,6 +369,22 @@ export function useSession(mobile = false) {
         });
         setActiveItemId(v.item.id);
         await waitForMounted(v.item.id);
+        return '{"ok":true}';
+      });
+
+      registerRpc(room, BOARD_RPC_REMOVE, async (data) => {
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(data.payload);
+        } catch {
+          throw new RpcError(1500, 'board.remove payload is not JSON');
+        }
+        const id =
+          typeof parsed === 'object' && parsed !== null
+            ? (parsed as Record<string, unknown>).id
+            : undefined;
+        if (typeof id !== 'string' || !id) throw new RpcError(1500, 'board.remove needs id string');
+        setItems((prev) => prev.filter((b) => b.id !== id));
         return '{"ok":true}';
       });
 

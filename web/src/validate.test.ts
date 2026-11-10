@@ -63,6 +63,10 @@ describe('validateBoardItem', () => {
 
   it('accepts pending and html/sizes', () => {
     expect(validateBoardItem({ id: 'p1', kind: 'pending', title: 'Ritar…' }).ok).toBe(true);
+    const sized = validateBoardItem({ id: 'p1', kind: 'pending', title: 'Ritar…', height: 360 });
+    expect(sized.ok).toBe(true);
+    if (sized.ok) expect(sized.item).toEqual({ id: 'p1', kind: 'pending', title: 'Ritar…', height: 360 });
+    expect(validateBoardItem({ id: 'p1', kind: 'pending', title: 'Ritar…', height: 'tall' }).ok).toBe(false);
     expect(validateBoardItem({ id: 'h1', kind: 'html', html: '<b>x</b>', height: 'tall' }).ok).toBe(false);
     expect(validateBoardItem({ id: 'h1', kind: 'html', html: '<b>x</b>', height: 420 }).ok).toBe(true);
   });
