@@ -238,6 +238,7 @@ def build_site(records: list, agg: dict, rounds: list):
                        "fits": j.get("fits_request"), "issues": j.get("issues", []),
                        "png": rel})
 
+    KICKED = {"longcat-2.5-free": "kicked 2026-11-10: unstable (ignores thinking level, 18/25 timeouts)"}
     # Leaderboard: best round per member by hidden pct_correct.
     members = sorted({r["member"] for r in records})
     lb_rows = []
@@ -257,7 +258,8 @@ def build_site(records: list, agg: dict, rounds: list):
             good = (v <= tgt) if low_good else (v >= tgt)
             cls = "pass" if good else "fail"
             return f"<td class={cls}>{v}{suffix}</td>"
-        lb_rows.append(f"<tr><td>{m}</td><td>{best}</td>"
+        name = m if m not in KICKED else f"<s>{m}</s> <span class=muted>{KICKED[m]}</span>"
+        lb_rows.append(f"<tr><td>{name}</td><td>{best}</td>"
                        f"{cell(pc, TARGET_CORRECT, suffix='%')}"
                        f"{cell(cl, TARGET_CLARITY)}"
                        f"{cell(w, TARGET_WALL, low_good=True, suffix=' s')}</tr>")
