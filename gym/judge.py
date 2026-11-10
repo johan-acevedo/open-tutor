@@ -33,6 +33,8 @@ from pathlib import Path
 
 GYM = Path(__file__).resolve().parent
 DATA = Path(os.environ.get("GYM_DATA", Path.home() / "gym-data" / "board-gym"))
+sys.path.insert(0, str(GYM))
+from run import parse_pi_jsonl  # noqa: E402
 CASES = DATA / "cases"
 RUNS = DATA / "runs"
 JUDGE_DIR = DATA / "judge"
@@ -346,7 +348,41 @@ def run_sol(bdir: Path, prompt: str, anons: list) -> list:
     return extract_verdicts(parse_codex_reply(raw), anons)
 
 
-RUNNERS = {"opus": run_opus, "sol": run_sol}
+PI_JUDGES = {"spark": ("opencode-go/muse-spark-1.3-contributor", "high"),
+             "deepseek": ("opencode-go/deepseek-v4.1-flash", "high")}
+PI_SYSTEM = ("You are a careful, strict and fair reviewer of teaching boards for children. "
+             "You look closely at every image before scoring it. You answer only with the JSON "
+             "the rubric asks for.")
+
+
+def make_pi_runner(name: str):
+    model, thinking = PI_JUDGES[name]
+
+    def run(bdir: Path, prompt: str, anons: list) -> list:
+        pf = bdir / f"prompt-{name}.md"
+        pf.write_text(prompt, encoding="utf-8")
+        argv = ["pi", "-p", "--model", model, "--thinking", thinking, "--no-tools",
+                "--no-session", "--no-context-files", "--no-skills", "--no-extensions",
+                "--mode", "json", "--system-prompt", PI_SYSTEM]
+        argv += [f"@{(bdir / f'{a}.png').resolve()}" for a in anons]
+        argv += [f"@{pf.resolve()}", "Score every board in this batch now."]
+        rc, wall, err = spawn(argv, bdir, bdir / f"judge-{name}.log", TIMEOUT_S)
+        raw = (bdir / f"judge-{name}.log").read_text(encoding="utf-8", errors="replace")
+        if err is not None:
+            raise RuntimeError(err)
+        if rc != 0:
+            raise RuntimeError(f"pi exit={rc}: {raw[-500:]}")
+        return extract_verdicts(parse_pi_jsonl(raw).get("reply", ""), anons)
+    return run
+
+
+RUNNERS = {"opus": run_opus, "sol": run_sol,
+           "spark": make_pi_runner("spark"), "deepseek": make_pi_runner("deepseek")}
+# A judge never scores its own family's board alone: such boards also get this judge,
+# and the verdicts are combined (correct ANDed, numbers averaged).
+FAMILY = {"spark": ("muse-spark-1.3-contributor", "deepseek"),
+          "opus": ("claude-haiku-5-5", "sol"),
+          "deepseek": ("deepseek-v4.1-flash", "spark")}
 
 
 def combine(judged: dict) -> dict:
@@ -369,7 +405,8 @@ def combine(judged: dict) -> dict:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--round", required=True)
-    ap.add_argument("--judge", default="auto", choices=["opus", "sol", "auto"])
+    ap.add_argument("--judge", default="auto", choices=["opus", "sol", "auto", "spark", "deepseek"])
+    ap.add_argument("--parallel", type=int, default=3)
     ap.add_argument("--force", action="store_true")
     a = ap.parse_args()
 
@@ -387,7 +424,7 @@ def main() -> None:
     stored = {}
     for p in raw_dir.glob("*.json"):
         try:
-            m = re.fullmatch(r"(B\d+)\.(opus|sol)", p.stem)
+            m = re.fullmatch(r"(B\d+)\.(opus|sol|spark|deepseek)", p.stem)
             if m:
                 stored[(m.group(1), m.group(2))] = json.loads(p.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
@@ -397,35 +434,53 @@ def main() -> None:
     batches = [anons[i:i + BATCH_SIZE] for i in range(0, len(anons), BATCH_SIZE)]
     log(f"round {a.round}: {len(anons)} boards in {len(batches)} batches")
 
-    auto_flip = 0
-    for i, batch in enumerate(batches):
-        bid = f"b{i + 1:02d}"
-        haiku = any(by_anon[x]["member"] == HAIKU_MEMBER for x in batch)
-        if haiku:
-            judges = ["opus", "sol"]
-        elif a.judge == "auto":
-            judges = ["sol" if auto_flip % 2 else "opus"]
-            auto_flip += 1
-        else:
-            judges = [a.judge]
-        need = [j for j in judges
-                if a.force or not all((x, j) in stored for x in batch)]
-        if not need:
-            log(f"skip {bid} ({' '.join(batch)} already judged by {'+'.join(judges)})")
-            continue
-        bdir = write_batch(a.round, bid, batch, by_anon)
-        for j in need:
-            try:
-                log(f"judge {bid} [{','.join(batch)}] with {j} ...")
-                verdicts = RUNNERS[j](bdir, judge_prompt(batch, by_anon, bdir, j), batch)
-                for v in verdicts:
-                    p = raw_dir / f"{v['id']}.{j}.json"
-                    p.write_text(json.dumps(v, ensure_ascii=False, indent=1) + "\n",
-                                 encoding="utf-8")
-                    stored[(v["id"], j)] = v
-                log(f"judge {bid} with {j}: ok")
-            except Exception as e:
-                log(f"judge {bid} with {j} FAILED: {e}")
+    jobs = []  # (batch id, boards, judge)
+    if a.judge in PI_JUDGES:
+        for i, batch in enumerate(batches):
+            jobs.append((f"b{i + 1:02d}", batch, a.judge))
+        own, second = FAMILY[a.judge]
+        fam = [x for x in anons if by_anon[x]["member"] == own]
+        for i in range(0, len(fam), BATCH_SIZE):
+            jobs.append((f"f{i // BATCH_SIZE + 1:02d}", fam[i:i + BATCH_SIZE], second))
+    else:
+        auto_flip = 0
+        for i, batch in enumerate(batches):
+            bid = f"b{i + 1:02d}"
+            if any(by_anon[x]["member"] == HAIKU_MEMBER for x in batch):
+                judges = ["opus", "sol"]
+            elif a.judge == "auto":
+                judges = ["sol" if auto_flip % 2 else "opus"]
+                auto_flip += 1
+            else:
+                judges = [a.judge]
+            jobs += [(bid, batch, j) for j in judges]
+    jobs = [(b, bt, j) for b, bt, j in jobs
+            if a.force or not all((x, j) in stored for x in bt)]
+    log(f"{len(jobs)} judge calls to make")
+
+    def do(job):
+        bid, batch, j = job
+        bdir = write_batch(a.round, f"{bid}-{j}", batch, by_anon)
+        try:
+            log(f"judge {bid} [{','.join(batch)}] with {j} ...")
+            verdicts = RUNNERS[j](bdir, judge_prompt(batch, by_anon, bdir, j), batch)
+            for v in verdicts:
+                (raw_dir / f"{v['id']}.{j}.json").write_text(
+                    json.dumps(v, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+                stored[(v["id"], j)] = v
+            log(f"judge {bid} with {j}: ok")
+        except Exception as e:
+            log(f"judge {bid} with {j} FAILED: {e}")
+
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(a.parallel) as ex:
+        list(ex.map(do, jobs))
+
+    # Only verdicts from this run's judge family count when a pi judge is chosen,
+    # so a round is scored by one consistent panel.
+    if a.judge in PI_JUDGES:
+        keep = {a.judge, FAMILY[a.judge][1]}
+        stored = {k: v for k, v in stored.items() if k[1] in keep}
 
     # Rebuild combined verdicts from all raw files.
     per_anon: dict = {}

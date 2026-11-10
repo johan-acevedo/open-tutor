@@ -17,13 +17,19 @@ Each member renders excellent teaching boards fast. Targets on the hidden panel:
 ## Members
 claude-haiku-5-5, deepseek-v4.1-flash, longcat-2.5-free, muse-spark-1.3-contributor, minimax-m3.1-flash (all `pi --model opencode-go/<id>`, image input verified 2026-11-10: 3–8 s for a trivial image prompt).
 
+## Judges (decision log)
+- 2026-11-10 Johan: **Muse Spark 1.3 (high) is the judge**, to spare Opus. Boards by member muse-spark also get DeepSeek v4.1 Flash (high) as a second judge, combined (correct ANDed, scores averaged), so Spark never scores its own family alone.
+- Opus/Sol remain available for spot checks. Sol (Codex) hit its usage limit 2026-11-10, back 2026-11-11 09:07.
+- Lead verifies a sample of each round's verdicts against the PNGs.
+- Render fix 2026-11-10: judges see the *settled* board (timers fast-forwarded 15 s, finite animations finished) plus an early frame at 1.5 s. 99/125 r0 boards animate; the first r0 judging at 1.5 s was discarded. One-shot wall = model time only (render counts only with a fix pass).
+
 ## Rounds
 | Round | What changed | Status |
 |---|---|---|
-| r0 | Baseline: plain scenario framing (`prompts/r0`), thinking low, one shot, no toolkit, palette given as information | harness being built |
+| r0 | Baseline: plain scenario framing (`prompts/r0`), thinking low, one shot, no toolkit, palette given as information | boards done; judging with Spark |
 
 ## Kicks
-None yet.
+- longcat-2.5-free (pending r0 scores): ignores `--thinking` (off/minimal still reason >120 s with no HTML); 18/25 r0 boards timed out at 180 s.
 
 ## Open questions / next
-- Harness (run/judge/report/site): Muse worker, in progress.
+- Harness done (Muse worker, 05ff675) + lead fixes (434883f).
