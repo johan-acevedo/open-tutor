@@ -1,6 +1,6 @@
 {
  "round": "r9",
- "generated_at": "2026-11-10T21:13:33+00:00",
+ "generated_at": "2026-11-10T21:22:38+00:00",
  "notes": "r6 + Swedish-convention reference examples in the framing (kort division, minnessiffra, unit staircase with unit names, terms). One new variable: the examples.",
  "targets": {
   "median_wall_s": 20.0,

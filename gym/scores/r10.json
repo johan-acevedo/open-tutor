@@ -1,0 +1,23 @@
+{
+ "round": "r10",
+ "generated_at": "2026-11-10T21:22:38+00:00",
+ "notes": "Haiku: r9 (reference examples, thinking medium) but the review pass on every board runs at thinking high, to catch residual factual/wording errors. One new variable: review thinking.",
+ "targets": {
+  "median_wall_s": 20.0,
+  "pct_correct": 90.0,
+  "mean_clarity": 4.5
+ },
+ "members": {
+  "claude-haiku-5-5": {
+   "tune": {
+    "n": 14,
+    "judged": 14,
+    "fail": 0,
+    "pct_correct": 64.3,
+    "mean_clarity": 3.93,
+    "median_wall": 22.03,
+    "p90_wall": 36.81
+   }
+  }
+ }
+}
