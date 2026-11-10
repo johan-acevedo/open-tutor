@@ -1,0 +1,23 @@
+{
+ "round": "r9",
+ "generated_at": "2026-11-10T18:18:29+00:00",
+ "notes": "r6 + Swedish-convention reference examples in the framing (kort division, minnessiffra, unit staircase with unit names, terms). One new variable: the examples.",
+ "targets": {
+  "median_wall_s": 20.0,
+  "pct_correct": 90.0,
+  "mean_clarity": 4.5
+ },
+ "members": {
+  "claude-haiku-5-5": {
+   "tune": {
+    "n": 14,
+    "judged": 14,
+    "fail": 0,
+    "pct_correct": 92.9,
+    "mean_clarity": 4.5,
+    "median_wall": 23.98,
+    "p90_wall": 32.98
+   }
+  }
+ }
+}

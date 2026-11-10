@@ -1,6 +1,6 @@
 {
  "round": "r0",
- "generated_at": "2026-11-10T18:00:59+00:00",
+ "generated_at": "2026-11-10T18:18:29+00:00",
  "notes": "Baseline: plain scenario framing (prompts/r0), thinking low, one shot, no fix pass, no toolkit. Palette given as information.",
  "targets": {
   "median_wall_s": 20.0,

@@ -1,6 +1,6 @@
 {
  "round": "r6",
- "generated_at": "2026-11-10T18:00:59+00:00",
+ "generated_at": "2026-11-10T18:18:29+00:00",
  "notes": "r5 for Haiku with thinking medium (both calls), to see whether more reasoning fixes the remaining content errors and what it costs in time.",
  "targets": {
   "median_wall_s": 20.0,
