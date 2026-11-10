@@ -522,7 +522,9 @@ def main() -> None:
     round_id = cfg["round"]
     prompt_rel = cfg.get("prompt", "prompts/r0")
     thinking = cfg.get("thinking", "low")
-    fix_pass = bool(cfg.get("fix_pass", False))
+    fix_pass = cfg.get("fix_pass", False)
+    if not isinstance(fix_pass, dict):
+        fix_pass = bool(fix_pass)
     toolkit = cfg.get("toolkit")
     toolkit_file = toolkit_url = None
     if isinstance(toolkit, dict):
@@ -576,8 +578,10 @@ def main() -> None:
                 try:
                     th = (thinking.get(member, thinking.get("default", "low"))
                           if isinstance(thinking, dict) else thinking)
+                    fx = (bool(fix_pass.get(member, fix_pass.get("default", False)))
+                          if isinstance(fix_pass, dict) else fix_pass)
                     return do_run(round_id, member, cid, case, system_text,
-                                  th, fix_pass, toolkit_file, toolkit_url,
+                                  th, fx, toolkit_file, toolkit_url,
                                   a.force)
                 except Exception as e:  # never let one run kill the batch
                     log(f"ERROR {member} {cid}: {e}")
