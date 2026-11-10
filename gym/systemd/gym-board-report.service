@@ -1,0 +1,6 @@
+[Unit]
+Description=Board gym: regenerate progress page
+[Service]
+Type=oneshot
+WorkingDirectory=%h/.t3/worktrees/open-tutor/gym-board-renderer-925f199f1daf53a1
+ExecStart=/usr/bin/python3 gym/report.py

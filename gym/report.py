@@ -167,7 +167,13 @@ SITE_TMPL = """<!doctype html>
 <h1>Board gym</h1>
 <p class=muted>Generated {at} · targets: hidden &ge;90% correct · clarity &ge;4.5 · median wall &le;15 s</p>
 
-<h2>Leaderboard</h2>
+<h2>Runs so far</h2>
+<div class=card><table>
+<tr><th>Round</th><th>Member</th><th>Panel</th><th>Boards</th><th>Failed</th><th>Judged</th><th>% correct</th><th>Clarity</th><th>Median wall</th></tr>
+{progress_rows}
+</table></div>
+
+<h2>Leaderboard (hidden panel)</h2>
 <div class=card><table id=lb>
 <tr><th>Member</th><th>Best round</th><th>Hidden % correct</th><th>Clarity</th><th>Median wall</th></tr>
 {lb_rows}
@@ -270,6 +276,14 @@ def build_site(records: list, agg: dict, rounds: list):
                       f"<p class=muted>median wall (s) per round</p>"
                       f"{svg_line(s, 'wall', fmt='{:.1f}')}</div>")
 
+    progress_rows = []
+    for (rnd, mm, sp) in sorted(agg):
+        a = agg[(rnd, mm, sp)]
+        f = lambda v, suf="": "–" if v is None else f"{v}{suf}"
+        progress_rows.append(f"<tr><td>{rnd}</td><td>{mm}</td><td>{sp}</td><td>{a['n']}</td>"
+                             f"<td>{a['fail']}</td><td>{a['judged']}</td><td>{f(a['pct_correct'], '%')}</td>"
+                             f"<td>{f(a['mean_clarity'])}</td><td>{f(a['median_wall'], ' s')}</td></tr>")
+
     notes = []
     for rnd in rounds:
         n = round_notes(rnd) or "(no notes)"
@@ -298,7 +312,7 @@ def build_site(records: list, agg: dict, rounds: list):
     data = {"cases": case_list, "boards": sorted(boards, key=lambda b: (b["case"], b["round"], b["member"]))}
     html = SITE_TMPL.format(
         css=CSS, at=datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
-        lb_rows="\n".join(lb_rows), charts="\n".join(charts),
+        lb_rows="\n".join(lb_rows), progress_rows="\n".join(progress_rows), charts="\n".join(charts),
         notes="\n".join(notes),
         data=json.dumps(data, ensure_ascii=False).replace("</", "<\\/"))
     (SITE / "index.html").write_text(html, encoding="utf-8")
