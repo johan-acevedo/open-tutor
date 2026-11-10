@@ -349,6 +349,7 @@ def run_sol(bdir: Path, prompt: str, anons: list) -> list:
 
 
 PI_JUDGES = {"spark": ("opencode-go/muse-spark-1.3-contributor", "high"),
+             "sparkx": ("opencode-go/muse-spark-1.3-contributor", "xhigh"),
              "deepseek": ("opencode-go/deepseek-v4.1-flash", "high")}
 PI_SYSTEM = ("You are a careful, strict and fair reviewer of teaching boards for children. "
              "You look closely at every image before scoring it. You answer only with the JSON "
@@ -377,11 +378,13 @@ def make_pi_runner(name: str):
 
 
 RUNNERS = {"opus": run_opus, "sol": run_sol,
-           "spark": make_pi_runner("spark"), "deepseek": make_pi_runner("deepseek")}
+           "spark": make_pi_runner("spark"), "sparkx": make_pi_runner("sparkx"),
+           "deepseek": make_pi_runner("deepseek")}
 # A judge never scores its own family's board alone: such boards also get this judge,
 # and the verdicts are combined (correct ANDed, numbers averaged).
 FAMILY = {"spark": ("muse-spark-1.3-contributor", "deepseek"),
           "opus": ("claude-haiku-5-5", "sol"),
+          "sparkx": ("muse-spark-1.3-contributor", "deepseek"),
           "deepseek": ("deepseek-v4.1-flash", "spark")}
 
 
@@ -405,7 +408,9 @@ def combine(judged: dict) -> dict:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--round", required=True)
-    ap.add_argument("--judge", default="auto", choices=["opus", "sol", "auto", "spark", "deepseek"])
+    ap.add_argument("--judge", default="auto", choices=["opus", "sol", "auto", "spark", "sparkx", "deepseek"])
+    ap.add_argument("--batch", type=int, default=BATCH_SIZE)
+    ap.add_argument("--only", default="", help="comma-separated anon ids (calibration)")
     ap.add_argument("--parallel", type=int, default=3)
     ap.add_argument("--force", action="store_true")
     a = ap.parse_args()
@@ -424,14 +429,16 @@ def main() -> None:
     stored = {}
     for p in raw_dir.glob("*.json"):
         try:
-            m = re.fullmatch(r"(B\d+)\.(opus|sol|spark|deepseek)", p.stem)
+            m = re.fullmatch(r"(B\d+)\.(opus|sol|spark|sparkx|deepseek)", p.stem)
             if m:
                 stored[(m.group(1), m.group(2))] = json.loads(p.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             pass
 
     anons = sorted(by_anon)
-    batches = [anons[i:i + BATCH_SIZE] for i in range(0, len(anons), BATCH_SIZE)]
+    if a.only:
+        anons = [x for x in anons if x in set(a.only.split(","))]
+    batches = [anons[i:i + a.batch] for i in range(0, len(anons), a.batch)]
     log(f"round {a.round}: {len(anons)} boards in {len(batches)} batches")
 
     jobs = []  # (batch id, boards, judge)
@@ -440,8 +447,8 @@ def main() -> None:
             jobs.append((f"b{i + 1:02d}", batch, a.judge))
         own, second = FAMILY[a.judge]
         fam = [x for x in anons if by_anon[x]["member"] == own]
-        for i in range(0, len(fam), BATCH_SIZE):
-            jobs.append((f"f{i // BATCH_SIZE + 1:02d}", fam[i:i + BATCH_SIZE], second))
+        for i in range(0, len(fam), a.batch):
+            jobs.append((f"f{i // a.batch + 1:02d}", fam[i:i + a.batch], second))
     else:
         auto_flip = 0
         for i, batch in enumerate(batches):
@@ -461,20 +468,26 @@ def main() -> None:
     def do(job):
         bid, batch, j = job
         bdir = write_batch(a.round, f"{bid}-{j}", batch, by_anon)
-        try:
-            log(f"judge {bid} [{','.join(batch)}] with {j} ...")
+        for attempt in (1, 2):  # one retry: pi judges sometimes emit malformed JSON
+          try:
+            log(f"judge {bid} [{','.join(batch)}] with {j} (try {attempt}) ...")
             verdicts = RUNNERS[j](bdir, judge_prompt(batch, by_anon, bdir, j), batch)
             for v in verdicts:
                 (raw_dir / f"{v['id']}.{j}.json").write_text(
                     json.dumps(v, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
                 stored[(v["id"], j)] = v
             log(f"judge {bid} with {j}: ok")
-        except Exception as e:
-            log(f"judge {bid} with {j} FAILED: {e}")
+            break
+          except Exception as e:
+            log(f"judge {bid} with {j} FAILED: {str(e)[:300]}")
 
     from concurrent.futures import ThreadPoolExecutor
     with ThreadPoolExecutor(a.parallel) as ex:
         list(ex.map(do, jobs))
+
+    if a.only:
+        log("calibration run (--only): raw verdicts written, round verdicts untouched")
+        return
 
     # Only verdicts from this run's judge family count when a pi judge is chosen,
     # so a round is scored by one consistent panel.

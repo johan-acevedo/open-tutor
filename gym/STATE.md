@@ -15,7 +15,7 @@ Each member renders excellent teaching boards fast. Targets on the hidden panel:
 - Each case gives the member the tutor's own draft (tool + title + content) as "what the tutor asked to show". `after` (tutor's next lines) goes to judges only.
 
 ## Members
-claude-haiku-5-5, deepseek-v4.1-flash, longcat-2.5-free, muse-spark-1.3-contributor, minimax-m3.1-flash (all `pi --model opencode-go/<id>`, image input verified 2026-11-10: 3–8 s for a trivial image prompt).
+claude-haiku-5-5, deepseek-v4.1-flash, muse-spark-1.3-contributor, minimax-m3.1-flash (longcat-2.5-free kicked after r0) (all `pi --model opencode-go/<id>`, image input verified 2026-11-10: 3–8 s for a trivial image prompt).
 
 ## Judges (decision log)
 - 2026-11-10 Johan: **Muse Spark 1.3 (high) is the judge**, to spare Opus. Boards by member muse-spark also get DeepSeek v4.1 Flash (high) as a second judge, combined (correct ANDed, scores averaged), so Spark never scores its own family alone.
@@ -29,7 +29,7 @@ claude-haiku-5-5, deepseek-v4.1-flash, longcat-2.5-free, muse-spark-1.3-contribu
 | r0 | Baseline: plain scenario framing (`prompts/r0`), thinking low, one shot, no toolkit, palette given as information | boards done; judging with Spark |
 
 ## Kicks
-- longcat-2.5-free (pending r0 scores): ignores `--thinking` (off/minimal still reason >120 s with no HTML); 18/25 r0 boards timed out at 180 s.
+- **longcat-2.5-free: kicked 2026-11-10 (Johan: not stable enough).** Ignores `--thinking` (off/minimal still reason >120 s with no HTML); 18/25 r0 boards timed out at 180 s. Its r0 boards stay in the data for reference; it runs in no further round.
 
 ## Open questions / next
 - Harness done (Muse worker, 05ff675) + lead fixes (434883f).
