@@ -31,6 +31,8 @@ With Screen capability, prepared teaching visuals use a fixed one-page-at-a-time
 
 Duplicate intent ids return their existing outcome. Stale commands cannot mutate a newer page. A `show` intent authorises the main Screen to promote a matching prepared candidate when ready; subagents and anticipatory work remain invisible until then. The fox waits for `ready` and normally observes the page before teaching from it. RPC calls remain short; asynchronous preparation and observation happen through the correlated streams above.
 
+On interruption recovery, the browser sends one `ready` event with intent id `resume-<lessonId>` after the restored page renders. It holds Screen events until the fox advertises an active session state, so a fast browser cannot send recovery state before the fox installs its stream handlers. The resume event updates the fox's current page without interrupting its greeting or starting preparation.
+
 An intentional new lesson has a fresh visible deck and a new `lessonId`. Device-local prior summaries still orient both agents. Closing without ending leaves the current local lesson resumable.
 
 ## Legacy BoardItem protocol

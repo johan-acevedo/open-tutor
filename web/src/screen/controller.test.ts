@@ -116,6 +116,37 @@ afterEach(() => {
 });
 
 describe('init and resume', () => {
+  it('announces a restored page once after rendering so a restarted fox can observe and reveal it', async () => {
+    const store = createMemoryScreenStore();
+    await store.saveDeck({
+      profileId: 'profil', lessonId: 'lektion-1', pages: [candidate()], current: 0,
+      drafts: { 'p-1:r1': 'mitt svar' }, updatedAt: 1,
+    });
+    const h = setup({ store });
+    await h.controller.init();
+    expect(h.events).toEqual([]);
+    h.controller.notifyRendered('p-1', 'r1');
+    expect(h.events).toHaveLength(1);
+    expect(h.events[0]).toMatchObject({
+      type: 'ready', lessonId: 'lektion-1', page: { id: 'p-1', revision: 'r1' },
+    });
+    h.controller.notifyRendered('p-1', 'r1');
+    expect(h.events).toHaveLength(1);
+    const observed = await h.controller.captureObservation({
+      observationId: 'resume-observe', lessonId: 'lektion-1', pageId: 'p-1', revision: 'r1',
+    });
+    expect(observed.context.visibleText).toContain('mitt svar');
+    expect(observed.context.visibleText).not.toContain('Facit 2');
+    expect(observed.context.privateTeaching).toBe('Facit 2');
+    await h.controller.handleIntent(intent({
+      intentId: 'resume-reveal', op: 'reveal', target: { pageId: 'p-1', revision: 'r1' },
+    }));
+    h.controller.notifyRendered('p-1', 'r1');
+    expect(h.controller.getSnapshot().pages[0].revealed).toBe(true);
+    expect(eventsFor(h, 'resume-reveal')).toHaveLength(1);
+    await h.controller.close();
+  });
+
   it('starts empty and resumes the interrupted lesson from the same store', async () => {
     const first = setup();
     await first.controller.init();

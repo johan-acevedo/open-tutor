@@ -435,13 +435,25 @@ export function useSession(mobile = false) {
         return;
       }
 
+      // Connecting to the room can finish before the dispatched fox has
+      // installed its stream handlers. Keep restored-page events until its
+      // session advertises an active state.
+      const screenRecipientReady = () => room.state === ConnectionState.Connected &&
+        [...room.remoteParticipants.values()].some((participant) =>
+          ['listening', 'thinking', 'speaking'].includes(participant.attributes[ATTR_AGENT_STATE] ?? ''));
+
       const deliverScreenEvent = (event: ScreenEvent) => {
         if (roomRef.current !== room) return;
-        if (room.state !== ConnectionState.Connected) {
+        if (!screenRecipientReady()) {
           if (screenEventQueueRef.current.length < 64) screenEventQueueRef.current.push(event);
           return;
         }
         void room.localParticipant.sendText(JSON.stringify(event), { topic: TOPIC_SCREEN_EVENT }).catch(() => undefined);
+      };
+
+      const flushScreenEvents = () => {
+        if (roomRef.current !== room || !screenRecipientReady()) return;
+        for (const event of screenEventQueueRef.current.splice(0)) deliverScreenEvent(event);
       };
 
       const controller = createScreenController({
@@ -565,13 +577,20 @@ export function useSession(mobile = false) {
           if (st === 'speaking') setHasSpokenFirst(true);
         }
         if (typeof mode === 'string' && mode) setTutorMode(mode);
+        flushScreenEvents();
       });
-      room.on(RoomEvent.ParticipantConnected, () => readParticipantStates(room));
+      room.on(RoomEvent.ParticipantConnected, () => {
+        readParticipantStates(room);
+        flushScreenEvents();
+      });
       room.on(RoomEvent.Reconnecting, () => {
         if (!intentionalEndRef.current) setConnBanner('reconnecting');
       });
       room.on(RoomEvent.ConnectionStateChanged, (state: ConnectionState) => {
-        if (state === ConnectionState.Connected) setConnBanner(null);
+        if (state === ConnectionState.Connected) {
+          setConnBanner(null);
+          flushScreenEvents();
+        }
         else if (state === ConnectionState.Reconnecting && !intentionalEndRef.current) {
           setConnBanner('reconnecting');
         }
@@ -715,7 +734,7 @@ export function useSession(mobile = false) {
         return;
       }
       readParticipantStates(room);
-      for (const event of screenEventQueueRef.current.splice(0)) deliverScreenEvent(event);
+      flushScreenEvents();
       // The session request only knew the window size (the board pane is not
       // mounted until we go live). Watch the real pane and report resizes,
       // rotation and layout changes over the existing session-event channel;

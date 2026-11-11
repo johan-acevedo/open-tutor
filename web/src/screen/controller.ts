@@ -216,6 +216,17 @@ export function createScreenController(options: ScreenControllerOptions): Screen
   let inFlightObservations = new Map<string, Promise<ScreenObservationResult>>();
   let closed = false;
   let initialized = false;
+  let resumePage: { id: string; revision: string } | null = null;
+
+  function announceRestoredPage(pageId: string, revision: string): void {
+    const visible = currentPage(deck);
+    if (closed || visible?.id !== pageId || visible.revision !== revision ||
+        !resumePage || resumePage.id !== pageId || resumePage.revision !== revision) return;
+    resumePage = null;
+    // There is no waiting fox intent behind this event. The fox's tracker uses
+    // it to learn the current page/revision after a tutor restart.
+    emit({ type: "ready", intentId: `resume-${lessonId}`, lessonId, page: { id: pageId, revision } });
+  }
 
   function emit(event: ScreenOutboundEvent): void {
     if (event.intentId) lastEventByIntent.set(event.intentId, event);
@@ -311,6 +322,7 @@ export function createScreenController(options: ScreenControllerOptions): Screen
     }
     if (my !== renderSeq) return; // a newer render won; it completes the pendings
     lastRendered = { pageId: target.id, revision: target.revision };
+    announceRestoredPage(target.id, target.revision);
     if (!relevant) return;
     for (const pending of pendingRenders.filter((p) => p.pageId === target.id && p.revision === target.revision)) {
       completeRender(pending);
@@ -330,6 +342,7 @@ export function createScreenController(options: ScreenControllerOptions): Screen
 
   function notifyRendered(pageId: string, revision: string): void {
     lastRendered = { pageId, revision };
+    announceRestoredPage(pageId, revision);
     for (const pending of pendingRenders.filter((p) => p.pageId === pageId && p.revision === revision)) {
       completeRender(pending);
     }
@@ -995,6 +1008,7 @@ export function createScreenController(options: ScreenControllerOptions): Screen
     for (const pending of pendingRenders) if (pending.timer) clearTimeout(pending.timer);
     pendingRenders.length = 0;
     lastRendered = null;
+    resumePage = null;
     try {
       worker?.terminate();
     } catch {
@@ -1021,6 +1035,8 @@ export function createScreenController(options: ScreenControllerOptions): Screen
     }
     if (shouldResumeDeck(persisted, lessonId)) {
       deck = persisted;
+      const restored = currentPage(deck);
+      resumePage = restored ? { id: restored.id, revision: restored.revision } : null;
     } else {
       deck = createEmptyDeck(options.profileId, lessonId, now());
       await persist();
