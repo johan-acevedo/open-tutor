@@ -341,7 +341,7 @@ export function useSession(mobile = false) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'x-tutor-code': familyCode() },
             body: JSON.stringify({ learner: { name: p.name, grade: p.grade, notes },
-              board }),
+              board, screen: { version: 1 } }),
           });
         };
         let res = await request();

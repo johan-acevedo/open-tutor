@@ -46,9 +46,14 @@ class Learner(BaseModel):
     notes: list[NoteIn] = Field(default_factory=list, max_length=5)
 
 
+class ScreenCapability(BaseModel):
+    version: int = Field(ge=1, le=1)
+
+
 class SessionRequest(BaseModel):
     learner: Learner
     board: BoardInfo = BoardInfo()
+    screen: ScreenCapability | None = None
 
 
 class SessionLimiter:
@@ -104,7 +109,8 @@ def create_app(environ: dict[str, str] | None = None) -> FastAPI:
         room = "tutor-" + secrets.token_urlsafe(9)
         identity = "learner-" + secrets.token_hex(4)
         metadata = json.dumps({"learner": body.learner.model_dump(exclude_none=True),
-                               "board": body.board.model_dump()}, ensure_ascii=False)
+                               "board": body.board.model_dump(),
+                               **({"screen": body.screen.model_dump()} if body.screen else {})}, ensure_ascii=False)
         token = (
             api.AccessToken(env["LIVEKIT_API_KEY"], env["LIVEKIT_API_SECRET"])
             .with_identity(identity)
