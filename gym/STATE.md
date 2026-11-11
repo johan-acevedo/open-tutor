@@ -57,6 +57,7 @@ claude-haiku-5-5, deepseek-v4.1-flash, muse-spark-1.3-contributor, minimax-m3.1-
 | r18 | Johan r18: style = bg + font only, interactive boards allowed, compact API docs inlined per lib, reasoning at length. Tests whether API knowledge unlocks toolkit use | done tune. **78.6%, clarity 4.1, median 19.0 s.** Best freedom round; one fail is an unrequested interactive quiz box |
 | r19 | DeepSeek v4.1-flash (ultrafast) on latest prompt (r12), thinking off, argon judge | running (tune only) |
 | r20 | Same model via Fireworks ultrafast router (smoke test 0.5 s). Heads-up vs r19 | STOPPED by Johan 2026-11-11 (cost; do not use Fireworks until he says so). 5/14 boards at ~15-18 s before stop; 12/12 initial fails were the thinking-parse bug, fixed mid-round |
+| r21 | Adopted prompt-review edits (prompts/r13: settled-immediately, ≥18px, tutor-leads line, conventions one-liner, textcolor tip). DeepSeek opencode-go. Clock single-board manual test first | running (clock case) |
 
 ## Deliverable (2026-11-11 ~01:30, lead Muse Spark)
 - **Winning config: r13** (`gym/configs/r13.yaml`, framing `gym/prompts/r7`): Haiku 5.5, Swedish-convention reference examples (kort division with raised remainder, minnessiffra/"1 i minne", unit staircase with per-step factor from the equality, ton/kg/hg/g only), thinking medium, fix pass only on layout-script findings.
