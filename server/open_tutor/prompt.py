@@ -67,14 +67,12 @@ tavlan)", no tool names, no JSON), and never write equations, lists or code into
 they go on the board, and your words talk about them. \
 - `commission_board` returns only once the child can actually see the board. Talk about it \
 after that, not before. \
-- Drawing takes many seconds: commissioning is silent, so the child waits hearing nothing. When \
-you decide on a board, first call `announce_drawing` with a short title in the language you are \
-speaking, say one short natural sentence in the same turn (for example "Vänta lite, jag ritar \
-det åt dig…") — once only, never again — and only then call `commission_board` with the \
-`pending_id` it returned. The \
-turn is not done until that `commission_board` call has returned: the placeholder stays until \
-the finished board replaces it. If the drawing fails, the placeholder is removed: explain in \
-words instead. \
+- Drawing takes many seconds: call `commission_board` with `need`, `background` and a short
+`title` in the language you are speaking. The call shows a placeholder at once, then replaces
+it with the finished board; it returns only when the child can see the board. Say one short
+natural sentence while it draws (for example "Vänta lite, jag ritar det åt dig…") - once only.
+When the call returns, teach from the board immediately. If the drawing fails, the placeholder
+is removed: explain in words instead.
 - You see every finished board as a screenshot before you teach from it. You otherwise only \
 see what the child shares in this session: homework photos, PDF pages, pasted screenshots and \
 text, and what they say or type. You cannot see their screen, other tabs or camera. \

@@ -190,99 +190,62 @@ class Tutor(Agent):
                 "The placeholder was removed. Explain in words instead, briefly.")
 
     @function_tool()
-    async def announce_drawing(self, context: RunContext, title: str, height: int = 360) -> str:
-        """Show a drawing placeholder on the board NOW, before a slow drawing.
-
-        Call this first when you are about to commission a board with `commission_board`
-        (drawing takes many seconds, silent to the child): the child sees the
-        placeholder at once and knows something is coming. Then say one short natural
-        sentence (for example "Vänta lite, jag ritar det åt dig…") and call
-        `commission_board` with the `pending_id` returned here, so the finished
-        board replaces the placeholder in place. If this call fails, just explain
-        in words instead.
-
-        Args:
-            title: Short title of what you are about to draw, in the language you
-                are speaking (Swedish unless practising another language),
-                e.g. "Vattnets kretslopp".
-            height: Expected frame height in pixels, 80–900 (default 360, the
-                `show_html` default), so the placeholder has the finished size.
-        """
-        try:
-            item = PendingItem(id=self.ids.next(), title=title, height=height)
-        except ValidationError as error:
-            return f"Invalid drawing announcement: {error.errors()[0]['msg']}"
-        shown = await self._rpc("board.show", item.model_dump(exclude_none=True))
-        if not shown:
-            return "The board is not visible right now. Explain in words instead, briefly."
-        return (
-            f"Placeholder {item.id} is visible on the board (\"Ritar…\"). Say one short "
-            f"natural sentence so the child knows the drawing is coming, then call "
-            f"`commission_board` with pending_id=\"{item.id}\" so it replaces "
-            f"the placeholder."
-        )
-
-    @function_tool()
     async def commission_board(self, context: RunContext, need: str, background: str,
-                               pending_id: str = "") -> str:
-        """Ask the board model to make the board for this moment.
+                               title: str = "") -> str:
+        """Ask the board model to make the board for this moment. One call does it all.
 
         You commission with background, never with content: describe what the child
         needs (who they are, what was just said, what should land), not what the
         board should look like. The board model decides the visualization, including
-        whether anything interactive helps. Its result comes back here with a short
-        note and a screenshot: look at both, then teach from what the board actually
-        shows, in your own words as its author ("jag skriver upp...", never the board
-        as a character).
+        whether anything interactive helps. This call first shows a placeholder so the
+        child sees something is coming, then replaces it with the finished board.
+        Say one short natural sentence while it draws (for example "Vänta lite, jag
+        ritar det åt dig…") - once only. When this call returns, the board is on
+        screen with a short note and a screenshot: look at both, then teach from what
+        the board actually shows, in your own words as its author ("jag skriver
+        upp...", never the board as a character).
 
         Args:
             need: What this moment needs, e.g. "Henning, grade 1, wants to see how a
                 clock shows whole hours after asking to see the clock".
             background: 2-3 sentences a stranger would need: who the child is (level,
                 language), what was just said, and what should land next.
-            pending_id: When you announced this drawing with `announce_drawing`, its id so the
-                finished board replaces the placeholder in place. Omit it when you did not announce.
+            title: Short title of the board in the language you are speaking,
+                e.g. "Klockan". Shown briefly on the placeholder.
         """
         from .board_model import render_board
-        pid = pending_id.strip()[:40]
         learner = (self.learner or {}).get("name", "") or ""
+        pid = self.ids.next()
+        try:
+            ph = PendingItem(id=pid, title=(title or need)[:120], height=640)
+            await self._rpc("board.show", ph.model_dump(exclude_none=True))
+        except Exception:
+            pass
         try:
             result = await render_board(need, background, learner_name=learner,
                                         board_w=self.board_w, board_h=self.board_h,
                                         device=self.board_device)
         except Exception as error:
-            if pid:
-                await self._remove(pid)
+            await self._remove(pid)
             return (f"The board could not be made ({type(error).__name__}). "
-                    + ("The placeholder was removed. " if pid else "")
-                    + "Explain in words instead, briefly.")
+                    "The placeholder was removed. Explain in words instead, briefly.")
         html = (result.get("html") or "")
         if "<html" not in html.lower():
-            if pid:
-                await self._remove(pid)
+            await self._remove(pid)
             return ("Invalid board: no HTML document. "
-                    + ("The placeholder was removed. " if pid else "")
-                    + "Explain in words instead.")
+                    "The placeholder was removed. Explain in words instead.")
         try:
-            item = HtmlItem(id=pid or self.ids.next(), title=need[:120],
+            item = HtmlItem(id=pid, title=(title or need)[:120],
                             html=html[:100000], height=640)
         except ValidationError as error:
-            if pid:
-                await self._remove(pid)
+            await self._remove(pid)
             return (f"Invalid board: {error.errors()[0]['msg']} "
-                    + ("The placeholder was removed. " if pid else "")
-                    + "Explain in words instead.")
-        if pid:
-            shown = await self._rpc("board.update", item.model_dump(exclude_none=True))
-            if not shown:
-                await self._remove(pid)
-                return ("The drawing failed to appear "
-                        f"(item {pid}). The placeholder was removed. Explain in words instead, briefly.")
-        else:
-            shown = await self._rpc("board.show", item.model_dump(exclude_none=True))
-            if not shown:
-                return (f"The board could not show item {item.id}. "
-                        "Explain in words instead, briefly.")
+                    "The placeholder was removed. Explain in words instead.")
+        shown = await self._rpc("board.update", item.model_dump(exclude_none=True))
+        if not shown:
+            await self._remove(pid)
+            return ("The drawing failed to appear "
+                    f"(item {pid}). The placeholder was removed. Explain in words instead, briefly.")
         await self.add_board_seen(result.get("png"), result.get("note", ""),
                                   f"board {item.id}")
         return ("The board is on screen now and you can see its screenshot above. "
