@@ -112,6 +112,25 @@ bin/with-env uv run python scripts/debug_sessions.py --show tutor-XXXX
 
 Default off, so open-source adopters get no behaviour or file change.
 
+## Teaching boards
+
+- `commission_board` makes a new board for a new topic: placeholder first, then the
+  finished drawing at the same new id. The tool result names the board id.
+- `edit_board` sends the saved HTML and the requested change back to the renderer.
+  It updates the same board id, using an explicit id or the most recent board when
+  omitted. The renderer is instructed to preserve unrelated content and controls.
+  Failed edits restore the saved source. The tutor receives confirmation only when
+  the browser acknowledges that restoration. Concurrent edits to one board run in
+  order, each using the latest successful source. Boards live only in the session.
+  Input values changed inside the sandbox are not currently saved with that source.
+- Board engine defaults: `BOARD_MODEL=opencode-go/deepseek-v4.1-flash`,
+  `BOARD_THINKING=off` (env overrides stay). The renderer prompt is adapted from the
+  `gym/prompts/r13/system.md` on the `gym/board-renderer` branch, used by the r21
+  configuration. Production requests a short tutor note and has no automatic review pass.
+- Dimension handshake: `board.show`/`board.update` acks return
+  `{ok:true, board:{w,h,device}}` once the pane has settled; the worker uses those
+  dims for the frozen design box. Plain `{ok:true}` peers still work.
+
 ## Tests
 
 ```bash

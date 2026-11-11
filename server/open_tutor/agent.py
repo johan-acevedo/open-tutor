@@ -118,6 +118,9 @@ class Tutor(Agent):
         self.board_device = str(board.get("device", "desktop"))[:20]
         self.room = room
         self.ids = Ids()
+        self.boards: dict[str, HtmlItem] = {}
+        self._board_edit_locks: dict[str, asyncio.Lock] = {}
+        self.current_board_id: str | None = None
         self.child_identity: str | None = None
         self.mode = "talking"
         self.notes_saved = 0
@@ -143,7 +146,11 @@ class Tutor(Agent):
                 payload=json.dumps(payload, ensure_ascii=False),
                 response_timeout=BOARD_RPC_TIMEOUT,
             )
-            ok = bool(json.loads(reply or "{}").get("ok"))
+            try:
+                data = json.loads(reply or "{}")
+            except json.JSONDecodeError:
+                data = {}
+            ok = bool(data.get("ok"))
         except Exception as error:  # timeout, child left, or render error
             log.warning("board rpc %s failed: %s", method, error)
             record_active("board_ack", {"method": method, "id": payload.get("id"), "ok": False,
@@ -153,6 +160,18 @@ class Tutor(Agent):
         record_active("board_ack", {"method": method, "id": payload.get("id"),
                                      "kind": payload.get("kind"), "title": payload.get("title"),
                                      "ok": ok})
+        if ok:
+            # Settled-size handshake: show/update acks carry the mounted pane
+            # size after the arrival->teaching transition. Plain {ok:true}
+            # peers keep working: no board key means no size update.
+            board = data.get("board")
+            if isinstance(board, dict) and board.get("w") is not None and board.get("h") is not None:
+                try:
+                    ack_w, ack_h = int(board.get("w")), int(board.get("h"))
+                except (TypeError, ValueError, OverflowError):
+                    pass
+                else:
+                    self.update_board_size(ack_w, ack_h, board.get("device"))
         return ok
 
     async def _show(self, item) -> str:
@@ -216,17 +235,18 @@ class Tutor(Agent):
         from .board_model import render_board
         learner = (self.learner or {}).get("name", "") or ""
         pid = self.ids.next()
-        # Freeze the commissioned design size before any await: a board-size
-        # update arriving during the placeholder RPC (arrival->teaching layout
-        # shift, resize, rotation) must not change what the model lays out,
-        # what the placeholder reserves, or what the screenshot captures.
-        # The client scales this design box to fit the current pane.
-        design_w, design_h, design_device = self.board_w, self.board_h, self.board_device
+        # Placeholder reserves the initial height so the child sees something
+        # at once. The ack carries the settled teaching-pane size
+        # (arrival->teaching layout shift); freeze w/h/device AFTER it, before
+        # rendering, so model, HtmlItem and screenshot all match even if later
+        # board-size events arrive during the model await. The client scales
+        # this design box to fit the current pane.
         try:
-            ph = PendingItem(id=pid, title=(title or need)[:120], height=design_h)
+            ph = PendingItem(id=pid, title=(title or need)[:120], height=self.board_h)
             await self._rpc("board.show", ph.model_dump(exclude_none=True))
         except Exception:
             pass
+        design_w, design_h, design_device = self.board_w, self.board_h, self.board_device
         try:
             result = await render_board(need, background, learner_name=learner,
                                         board_w=design_w, board_h=design_h,
@@ -242,7 +262,7 @@ class Tutor(Agent):
                     "The placeholder was removed. Explain in words instead.")
         try:
             item = HtmlItem(id=pid, title=(title or need)[:120],
-                            html=html[:100000], height=design_h, width=design_w)
+                            html=html, height=design_h, width=design_w)
         except ValidationError as error:
             await self._remove(pid)
             return (f"Invalid board: {error.errors()[0]['msg']} "
@@ -252,11 +272,98 @@ class Tutor(Agent):
             await self._remove(pid)
             return ("The drawing failed to appear "
                     f"(item {pid}). The placeholder was removed. Explain in words instead, briefly.")
+        self.boards[pid] = item
+        self.current_board_id = pid
         await self.add_board_seen(result.get("png"), result.get("note", ""),
                                   f"board {item.id}")
         return ("The board is on screen now and you can see its screenshot above. "
                 "Start teaching from what it actually shows, as its author, right away. "
                 "Do not repeat the waiting sentence - that moment has passed. "
+                f"Its board id is {pid}: use edit_board with that id for requested changes, "
+                f"commission_board only for a new topic. "
+                f"[Board note: {result.get('note', '')[:500]}]")
+
+    @function_tool()
+    async def edit_board(self, context: RunContext, changes: str,
+                         board_id: str = "") -> str:
+        """Change the board already on screen. Same id, revised drawing.
+
+        Use this for a requested change or correction to the existing
+        visualization (fix, add, simplify, adjust what is shown). Use
+        `commission_board` only when the topic itself changes. The call shows
+        a brief placeholder at the same id, asks the board model to change
+        only what was requested (previous HTML is sent, unrelated content and
+        controls are preserved), then replaces the same id in place. Say one
+        short waiting sentence once only, then teach from the screenshot when
+        this call returns, as its author.
+
+        Args:
+            changes: What should change, e.g. "Make the clock show half past
+                instead, keep everything else the same".
+            board_id: Which saved board to edit, e.g. "b1". Omit to edit the
+                most recent board.
+        """
+        target = (board_id or "").strip() or (self.current_board_id or "")
+        if not target or target not in self.boards:
+            if not self.boards:
+                return ("There is no board on screen yet. Use commission_board "
+                        "for a new topic instead of editing. No board was changed.")
+            known = ", ".join(sorted(self.boards))
+            recent = self.current_board_id or ""
+            if not target:
+                return (f"No board found (most recent is {recent}. Available: {known}). "
+                        "No board was changed or rendered.")
+            return (f"Unknown board id '{target}'. Available: {known}. Most recent is "
+                    f"{recent}: omit board_id to edit it. No board was changed or rendered.")
+        # Parallel tool calls editing one board must each start from the latest revision.
+        async with self._board_edit_locks.setdefault(target, asyncio.Lock()):
+            return await self._edit_saved_board(self.boards[target], changes)
+
+    async def _failed_board_edit(self, saved: HtmlItem, reason: str) -> str:
+        restored = await self._rpc("board.update", saved.model_dump(exclude_none=True))
+        outcome = (f"The original board {saved.id} was restored." if restored else
+                   f"I could not confirm restoring board {saved.id} on screen. "
+                   "Its previous source is retained for a later retry.")
+        return f"{reason} {outcome} Explain in words instead, briefly."
+
+    async def _edit_saved_board(self, saved: HtmlItem, changes: str) -> str:
+        from .board_model import render_board
+        learner = (self.learner or {}).get("name", "") or ""
+        target = saved.id
+        # Edits keep the commissioned baseline size, not the current pane.
+        edit_w = saved.width or self.board_w
+        edit_h = saved.height or self.board_h
+        try:
+            ph = PendingItem(id=target, title=(saved.title or changes)[:120], height=edit_h)
+            await self._rpc("board.update", ph.model_dump(exclude_none=True))
+        except Exception:
+            pass
+        edit_device = self.board_device
+        try:
+            result = await render_board(changes, f"Revision of saved board {target}",
+                                        learner_name=learner, board_w=edit_w, board_h=edit_h,
+                                        device=edit_device, previous_html=saved.html)
+        except Exception as error:
+            return await self._failed_board_edit(
+                saved, f"The board could not be changed ({type(error).__name__}).")
+        html = (result.get("html") or "")
+        if "<html" not in html.lower():
+            return await self._failed_board_edit(saved, "Invalid revised board: no HTML document.")
+        try:
+            item = HtmlItem(id=target, title=saved.title,
+                            html=html, height=edit_h, width=edit_w)
+        except ValidationError as error:
+            return await self._failed_board_edit(saved, f"Invalid revised board: {error.errors()[0]['msg']}.")
+        shown = await self._rpc("board.update", item.model_dump(exclude_none=True))
+        if not shown:
+            return await self._failed_board_edit(saved, f"The revised drawing failed to appear (item {target}).")
+        self.boards[target] = item
+        self.current_board_id = target
+        await self.add_board_seen(result.get("png"), result.get("note", ""),
+                                  f"board {item.id} revised")
+        return ("The revised board is on screen now and you can see its screenshot above. "
+                "Start teaching from what it actually shows, as its author, right away. "
+                f"Its board id is still {target}. "
                 f"[Board note: {result.get('note', '')[:500]}]")
 
     # ---- resources ---------------------------------------------------------------

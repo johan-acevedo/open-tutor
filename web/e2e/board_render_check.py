@@ -17,10 +17,11 @@ frame inside the visible .ot-board-scroll pane on desktop and phone, including
 after a window resize/orientation change.
 
 Sizes are never hand-coded: each viewport measures its own live
-.ot-board-scroll content box (the same surface readBoardSize reports over the
-existing session-event board-size channel) and commissions exactly that size,
-so a stale or padded measurement fails the fit check instead of passing
-against an unrelated fixture.
+.ot-board-scroll content box, sends the placeholder first (production order),
+and commissions at the settled teaching-pane size from the real browser ack —
+returned to the real Tutor commission path through the fake participant, so
+the settled-size handshake is exercised, not stubbed. A stale (arrival-width)
+measurement fails the fit check instead of passing against an unrelated fixture.
 
 Run from the repo root:
     uv run --project server --with playwright python web/e2e/board_render_check.py
@@ -70,11 +71,21 @@ from open_tutor.agent import Tutor  # noqa: E402 (main thread: LiveKit plugins r
 
 
 class FakeParticipant:
-    def __init__(self) -> None:
+    """Stands in for the browser on the server side of the commission path.
+
+    show_ack is the real browser pending acknowledgement captured earlier in
+    the test (post-transition teaching size); returning it here drives the
+    real Tutor._rpc settled-size consumption path, exactly as in production.
+    """
+
+    def __init__(self, show_ack: str = '{"ok":true}') -> None:
         self.calls: list[tuple[str, str, dict]] = []
+        self.show_ack = show_ack
 
     async def perform_rpc(self, *, destination_identity, method, payload, response_timeout):
         self.calls.append((destination_identity, method, json.loads(payload)))
+        if method == "board.show":
+            return self.show_ack
         return '{"ok":true}'
 
     async def set_attributes(self, attributes):
@@ -82,8 +93,8 @@ class FakeParticipant:
 
 
 class FakeRoom:
-    def __init__(self) -> None:
-        self.local_participant = FakeParticipant()
+    def __init__(self, show_ack: str = '{"ok":true}') -> None:
+        self.local_participant = FakeParticipant(show_ack)
 
 
 def make_board_html(w: int, h: int) -> str:
@@ -159,20 +170,21 @@ setTimeout(report, 6000);
 </body></html>"""
 
 
-def commission_sync(w: int, h: int, device: str) -> dict:
+def commission_sync(w: int, h: int, device: str, show_ack: str) -> dict:
     """Run the async commission path from inside the sync Playwright driver."""
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-        return ex.submit(lambda: asyncio.run(commission_at(w, h, device))).result()
+        return ex.submit(lambda: asyncio.run(commission_at(w, h, device, show_ack))).result()
 
 
-async def commission_at(w: int, h: int, device: str) -> dict:
-    room = FakeRoom()
+async def commission_at(w: int, h: int, device: str, show_ack: str) -> dict:
+    room = FakeRoom(show_ack)
     tutor = Tutor({"name": "Leo", "grade": 7}, room, board={"w": w, "h": h, "device": device})
     tutor.child_identity = "learner-1"
-    html = make_board_html(w, h)
+    confirmed = json.loads(show_ack)["board"]
+    html = make_board_html(confirmed["w"], confirmed["h"])
 
     async def fake_render(need, background, learner_name="", **kw):
-        assert (kw["board_w"], kw["board_h"]) == (w, h), f"model got {kw}, pane is {w}x{h}"
+        assert (kw["board_w"], kw["board_h"]) == (confirmed["w"], confirmed["h"]), f"model got {kw}, settled pane is {confirmed}"
         return {"html": html, "note": "Linjen y=kx+m.", "png": None}
 
     async def noseen(*a, **k):
@@ -347,26 +359,69 @@ def run_browser(csp: str) -> None:
                     and abs(reported["h"] - arrival["h"]) <= 2
                     and reported["device"] == arrival["device"],
                 )
-                payload = commission_sync(arrival["w"], arrival["h"], arrival["device"])
+                # First pending -> teaching transition, in production order:
+                # the placeholder goes out before commissioning, and its ack
+                # carries the settled teaching-pane size the tutor freezes
+                # the board design to (not the narrower arrival pane).
+                show_ack_raw = rpc(
+                    "board.show",
+                    {"id": "b1", "kind": "pending", "title": "Ritar…", "height": arrival["h"]},
+                )
+                show_ack = json.loads(show_ack_raw)
+                check(f"{label}: pending acknowledged", show_ack.get("ok") is True)
                 check(
-                    f"agent {label}: placeholder has finished pane height",
+                    f"{label}: pending ack carries the settled board size",
+                    isinstance(show_ack.get("board"), dict)
+                    and show_ack["board"].get("w", 0) >= 1
+                    and show_ack["board"].get("h", 0) >= 1,
+                )
+                page.wait_for_selector("main.ot-main-teaching", timeout=5000)
+                check(f"{label}: first pending switches arrival to teaching", True)
+                # The ack must describe the post-transition pane, not arrival.
+                settled = page.evaluate(MEASURE_SURFACE)
+                confirmed = show_ack["board"]
+                check(
+                    f"{label}: pending ack matches the live teaching pane",
+                    abs(confirmed["w"] - settled["w"]) <= 2
+                    and abs(confirmed["h"] - settled["h"]) <= 2
+                    and confirmed.get("device") == settled["device"],
+                )
+                if label == "desktop":
+                    check(
+                        f"{label}: teaching pane is wider than arrival "
+                        f"({arrival['w']}->{settled['w']})",
+                        settled["w"] > arrival["w"],
+                    )
+                    check(
+                        f"{label}: teaching pane keeps arrival height",
+                        settled["h"] == arrival["h"],
+                    )
+
+                # Commission through the real Tutor path at the confirmed
+                # size; the fake returns the real browser ack so _rpc freezes
+                # the design to the settled pane. The model stub lays out
+                # fixed pixels for exactly that size.
+                payload = commission_sync(arrival["w"], arrival["h"], arrival["device"], show_ack_raw)
+                check(
+                    f"agent {label}: placeholder starts at arrival pane height",
                     payload["pending"].get("height") == arrival["h"],
                 )
                 check(
-                    f"agent {label}: html frame size matches pane ({arrival['w']}x{arrival['h']})",
-                    payload["html"].get("height") == arrival["h"]
-                    and payload["html"].get("width") == arrival["w"],
+                    f"agent {label}: html frame size matches confirmed pane "
+                    f"({confirmed['w']}x{confirmed['h']})",
+                    payload["html"].get("height") == confirmed["h"]
+                    and payload["html"].get("width") == confirmed["w"],
                 )
                 check(
                     f"agent {label}: placeholder replaced in place",
                     payload["pending"]["id"] == payload["html"]["id"],
                 )
-
-                # First pending -> teaching transition: the arrival layout
-                # becomes teaching as soon as the first board item lands.
-                check(f"{label}: pending acknowledged", rpc("board.show", payload["pending"]) == '{"ok":true}')
-                page.wait_for_selector("main.ot-main-teaching", timeout=5000)
-                check(f"{label}: first pending switches arrival to teaching", True)
+                if label == "desktop":
+                    check(
+                        f"agent {label}: design uses the teaching width, not arrival "
+                        f"({arrival['w']}->{payload['html']['width']})",
+                        payload["html"]["width"] == settled["w"] > arrival["w"],
+                    )
                 page.wait_for_timeout(400)  # fit clamp + avatar pose settle
                 pending_fits = page.evaluate("""() => {
                   const card = document.querySelector('article[data-board-id]');
@@ -393,7 +448,22 @@ def run_browser(csp: str) -> None:
                 page.screenshot(path=str(OUT / f"board-{label}-pending.png"))
 
                 page.evaluate("window.__boardMetrics = null; window.__boardInteraction = null; window.__boardClicked = null; window.__boardInputValue = null;")
-                check(f"{label}: html acknowledged", rpc("board.update", payload["html"]) == '{"ok":true}')
+                update_ack = json.loads(rpc("board.update", payload["html"]))
+                check(f"{label}: html acknowledged", update_ack.get("ok") is True)
+                check(
+                    f"{label}: update ack carries the board size",
+                    isinstance(update_ack.get("board"), dict)
+                    and update_ack["board"].get("w", 0) >= 1
+                    and update_ack["board"].get("h", 0) >= 1,
+                )
+                # Desktop: the drawing uses the full available width and the
+                # same height; portrait phone: exactly the phone pane dims.
+                taught = page.evaluate(MEASURE_SURFACE)
+                check(
+                    f"{label}: commissioned drawing matches the live pane exactly",
+                    payload["html"]["width"] == taught["w"]
+                    and payload["html"]["height"] == taught["h"],
+                )
                 try:
                     page.wait_for_function("window.__boardMetrics !== null", timeout=15000)
                 except Exception:

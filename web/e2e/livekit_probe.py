@@ -92,7 +92,8 @@ try:
         page.get_by_text('Bra jobbat idag, Leo!',exact=True).wait_for(timeout=10000)
         report['contexts_after_end']=page.evaluate('probeContexts.map(c=>c.state)')
         report['browser_errors']=errors
-        assert report['board_ack']=='{"ok":true}' and report['focus_ack']=='{"ok":true}'
+        _board_ack=json.loads(report['board_ack'])
+        assert _board_ack.get('ok') is True and _board_ack.get('board',{}).get('w',0)>=1 and report['focus_ack']=='{"ok":true}'
         assert report['audio']['inboundAudioBytes']>0 and report['muted_on_return']
         assert all(x=='closed' for x in report['contexts_after_end']) and not errors
         browser.close()

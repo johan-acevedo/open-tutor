@@ -1,12 +1,13 @@
-"""Render teaching boards with the dedicated board model (Haiku).
+"""Render teaching boards with the dedicated board model.
 
 The voice tutor commissions a board with background (`need`), never with
-content. This module sends the gym-winning prompt + session context to the
+content. This module sends the renderer prompt (adapted from the
+gym/board-renderer r13 system prompt at r21 config) + session context to the
 board model, extracts board.html, screenshots it for the tutor's vision
 feedback, and returns both plus the model's short note.
 
-Board model: BOARD_MODEL env (default opencode-go/claude-haiku-5-5),
-thinking BOARD_THINKING (default medium), via the pi CLI.
+Board model: BOARD_MODEL env (default opencode-go/deepseek-v4.1-flash),
+thinking BOARD_THINKING (default off), via the pi CLI.
 Screenshots need headless Chromium (playwright); without it the tutor
 still gets the note, and rendering is skipped with a warning.
 """
@@ -21,8 +22,8 @@ import tempfile
 
 log = logging.getLogger("open-tutor")
 
-BOARD_MODEL = os.environ.get("BOARD_MODEL", "opencode-go/claude-haiku-5-5")
-BOARD_THINKING = os.environ.get("BOARD_THINKING", "medium")
+BOARD_MODEL = os.environ.get("BOARD_MODEL", "opencode-go/deepseek-v4.1-flash")
+BOARD_THINKING = os.environ.get("BOARD_THINKING", "off")
 BOARD_TIMEOUT_S = float(os.environ.get("BOARD_TIMEOUT_S", "150"))
 BOARD_W = int(os.environ.get("BOARD_W", "1920"))
 BOARD_H = int(os.environ.get("BOARD_H", "1080"))
@@ -48,9 +49,9 @@ The child
 
 Your space
 - One board, [[BOARD_W]]x[[BOARD_H]] CSS pixels, on a [[DEVICE]], next to the tutor's avatar, seen from a normal distance. Keep every label, caption, symbol and helper text effortlessly readable at a glance - nothing under 18px.
-- The frame never scrolls and never scales your content. Anything outside is simply cut off, and nobody can scroll to it. Make sure everything fits, including any content that appears later.
+- Your document has the stated design viewport and does not scroll. The app can shrink the whole view if the screen becomes smaller; anything outside the design viewport is still cut off. Make sure everything fits, including any content that appears later.
 - The board stays on screen while the tutor talks about it, usually for a minute or more. Show the complete, settled state immediately on load - never hide or dim steps, parts of a calculation, or answers behind timed reveals. If you animate, what matters most is the state it settles in.
-- One complete HTML document. It runs in an isolated frame with full internet access.
+- One complete HTML document. It runs in an isolated frame: scripts, styles and fonts can load from https://cdn.jsdelivr.net, and images and map tiles over HTTPS. Other network access is blocked.
 - The app's board, for your information: background #181B22. App font: "Segoe UI", Roboto, system-ui, sans-serif.
 - The board may be interactive: the child can type into it, click on it, and answer things on it while the tutor talks. The tutor handles prompting, hints, and checking answers aloud - you illustrate the current step, never build a standalone quiz app around it.
 
@@ -196,13 +197,32 @@ async def screenshot_board(html: str, width: int, height: int) -> bytes | None:
 
 async def render_board(need: str, background: str, learner_name: str = "",
                        board_w: int = BOARD_W, board_h: int = BOARD_H,
-                       device: str = "desktop", lang: str = "Swedish") -> dict:
-    """Commission a board. Returns {html, note, png} (png may be None)."""
+                       device: str = "desktop", lang: str = "Swedish",
+                       previous_html: str | None = None) -> dict:
+    """Commission a board. Returns {html, note, png} (png may be None).
+
+    When previous_html is given, revise that exact source: change only what
+    `need` requests, preserving unrelated content, layout and controls, and
+    return the complete revised document.
+    """
     system = fill_system(board_w, board_h, device, lang)
-    user_message = (
-        f"## The child\n{learner_name}\n\n"
-        f"## What is needed\n{background}\n\n"
-        f"## The tutor's handover\n{need}\n\nMake the board now.")
+    if previous_html is None:
+        user_message = (
+            f"## The child\n{learner_name}\n\n"
+            f"## What is needed\n{background}\n\n"
+            f"## The tutor's handover\n{need}\n\nMake the board now.")
+    else:
+        user_message = (
+            f"## The child\n{learner_name}\n\n"
+            f"## Current board (complete HTML source, {board_w}x{board_h})\n"
+            f"{previous_html}\n\n"
+            f"## Requested change\n{need}\n\n"
+            f"## Context\n{background}\n\n"
+            "Revise the current board: change only what was requested, preserving "
+            "unrelated content, layout, text and controls. Return the complete "
+            "revised HTML document starting with <!doctype html>, then after "
+            "</html> explain in 2-3 sentences what changed and what the tutor "
+            "should start from.")
     reply = await call_board_model(system, user_message)
     html, note = extract_board(reply)
     if not html:

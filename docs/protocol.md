@@ -23,9 +23,9 @@ The browser shows homework on the board itself as soon as the child adds it (kin
 
 | Channel | Topic / method | Payload |
 |---|---|---|
-| RPC to browser | `board.show` | `BoardItem` JSON. The browser renders it, scrolls to it, and responds `{ "ok": true }` once it is in the DOM (images: after load). The tutor speaks about the item only after this reply. Timeout 5 s. |
+| RPC to browser | `board.show` | `BoardItem` JSON. The browser renders it, scrolls to it, and responds `{ "ok": true, "board": { "w", "h", "device" } }` after mounting and the layout transition finishes (images: after load). Dimensions describe the visible drawing area. The tutor speaks about the item only after this reply. |
 | RPC to browser | `board.focus` | `{ "id", "step"?: number }` highlights one step of a `steps` item, or the whole item. Responds `{ "ok": true }`. |
-| RPC to browser | `board.update` | `BoardItem` with an existing `id` replaces it in place: a `pending` placeholder becomes the finished board (same position, same `id`). |
+| RPC to browser | `board.update` | `BoardItem` with an existing `id` replaces it in place. New drawings replace their placeholder; edits replace the existing board. It returns the same acknowledgement and dimensions as `board.show`. |
 | RPC to browser | `board.remove` | `{ "id" }` removes that board item, for example a `pending` placeholder whose drawing failed. Responds `{ "ok": true }`. |
 | Text stream | `note` | JSON `Note`. The browser saves it to the current profile in IndexedDB. |
 | Text stream | `lk.transcription` | Built-in agent captions, streamed in step with the audio. The browser shows the sentence being spoken. |
@@ -61,3 +61,8 @@ model for the drawing, and replaces the placeholder through `board.update` with 
 The tutor says one short waiting sentence and teaches when the tool returns. Räven uses the
 working pose while a board is pending. If generation or display fails, the worker removes
 the placeholder through `board.remove` and the tutor explains in words.
+
+`edit_board` sends a saved board's HTML back to the renderer with the requested change.
+The placeholder and revised board use the original id. Failed edits restore the saved
+board through `board.update`, rather than removing it. The tutor receives a new screenshot
+after a successful edit. Saved HTML belongs to the session and is discarded when it ends.

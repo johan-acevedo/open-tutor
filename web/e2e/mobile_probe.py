@@ -46,7 +46,8 @@ try:
       if w==390: page.screenshot(path=str(OUT/'02-greeting.png'))
       def rpc(method,payload):
         return page.evaluate('async ([method,payload])=>await mobileProbe.rooms.at(-1).rpc.get(method)({payload:JSON.stringify(payload)})',[method,payload])
-      check(f'{w}: board rendered acknowledgement',rpc('board.show',STEPS)=='{"ok":true}')
+      _show_ack = json.loads(rpc('board.show',STEPS))
+      check(f'{w}: board rendered acknowledgement',_show_ack.get('ok') is True and _show_ack.get('board',{}).get('w',0) >= 1)
       rpc('board.focus',{'id':'equation','step':1})
       rpc('board.show',{'id':'other','kind':'text','title':'Annat ämne','markdown':'En kort förklaring.'})
       rpc('board.update',{**STEPS,'title':'Ekvationer'})
