@@ -8,11 +8,8 @@ type Props = {
   focused: BoardFocusPayload | null;
   onItemMounted: (id: string) => void;
   onResourceClosed: (id: string) => void;
-  dragOver: boolean;
   mobile?: boolean;
   activeItemId?: string | null;
-  onCamera?: () => void;
-  onFiles?: () => void;
   onEnd?: () => void;
   ending?: boolean;
 };
@@ -25,7 +22,6 @@ export default function Board({
   focused,
   onItemMounted,
   onResourceClosed,
-  dragOver,
   mobile = false,
   activeItemId,
   onEnd,
@@ -38,7 +34,6 @@ export default function Board({
   const pausedAt = useRef(0);
   const selected = items.find((item) => item.id === (activeItemId ?? focused?.id)) ?? items.at(-1);
   const homework = items.filter((item) => item.kind === 'homework').at(-1);
-  const homeworkCount = items.filter((item) => item.kind === 'homework').length;
   const visibleId = view.kind === 'homework' ? view.id : selected?.id;
 
   function follow() {
@@ -73,7 +68,6 @@ export default function Board({
     <>
       {mobile && (
         <nav className="ot-board-nav" aria-label="Tavlans vyer">
-          {items.length === 0 && <strong>Open Tutor</strong>}
           {homework && (
             <button
               type="button"
@@ -123,26 +117,6 @@ export default function Board({
           </button>
         </div>
       )}
-      <div className="ot-live-head">
-        <div className="ot-greeting">
-          <h1>Hej {learnerName}!</h1>
-        </div>
-        <div
-          className={`ot-inbox${dragOver ? ' dragover' : ''}`}
-          aria-label="Inkorg för läxor"
-          aria-live="polite"
-        >
-          <span className="ot-inbox-icon" aria-hidden="true">
-            📥
-          </span>
-          <span className="ot-inbox-text">
-            {homeworkCount === 0
-              ? 'Inkorg · tom'
-              : `Inkorg · ${homeworkCount} ${homeworkCount === 1 ? 'uppgift' : 'uppgifter'}`}
-          </span>
-          {!mobile && <span className="ot-inbox-hint">släpp fil här</span>}
-        </div>
-      </div>
       <div
         className={`ot-board-scroll${mobile ? ' ot-focus-surface' : ''}`}
         data-view={mobile ? view.kind : 'all'}
@@ -152,9 +126,7 @@ export default function Board({
       >
         {items.length === 0 && (
           <div className="ot-board-empty" role="status" aria-label="Whiteboard">
-            <div className="ot-board-empty-icon" aria-hidden="true">
-              ✎
-            </div>
+            <h1 className="ot-board-empty-greeting">Hej {learnerName}!</h1>
             <p>Här hamnar det vi jobbar med.</p>
             <span>Säg hej — tutorn ritar upp här.</span>
           </div>

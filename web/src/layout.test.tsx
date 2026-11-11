@@ -2,71 +2,35 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { BoardItem } from './protocol';
 import Board from './components/Board';
+import TopMenu from './components/TopMenu';
 
 afterEach(() => cleanup());
 
 const noop = vi.fn();
 
-describe('Board layout switch', () => {
-  it('shows the greeting, an empty whiteboard and an empty inbox strip', () => {
-    render(
-      <Board
-        learnerName="Leo"
-        items={[]}
-        focused={null}
-        onItemMounted={noop}
-        onResourceClosed={noop}
-        dragOver={false}
-      />,
-    );
-    expect(screen.getByText('Hej Leo!')).toBeTruthy();
-    expect(screen.getByText('Inkorg · tom')).toBeTruthy();
-    expect(screen.getByText('släpp fil här')).toBeTruthy();
-    expect(screen.getByText('Här hamnar det vi jobbar med.')).toBeTruthy();
-    expect(screen.queryByText('Släpp en fil eller klistra in')).toBeNull();
-  });
+const homeworkOne: BoardItem = {
+  id: 'h1',
+  kind: 'homework',
+  title: 'matte1.jpg',
+  images: ['data:image/jpeg;base64,x'],
+};
+const homeworkTwo: BoardItem = {
+  id: 'h2',
+  kind: 'homework',
+  title: 'matte2.jpg',
+  images: ['data:image/jpeg;base64,y'],
+};
 
-  it('reflects real homework state in the inbox strip', () => {
+describe('Board greeting lives in the empty state', () => {
+  it('greets by name only while the board is empty', () => {
     const { rerender } = render(
-      <Board
-        learnerName="Leo"
-        items={[]}
-        focused={null}
-        onItemMounted={noop}
-        onResourceClosed={noop}
-        dragOver={false}
-      />,
+      <Board learnerName="Leo" items={[]} focused={null} onItemMounted={noop} onResourceClosed={noop} />,
     );
-    expect(screen.getByText('Inkorg · tom')).toBeTruthy();
-
-    rerender(
-      <Board
-        learnerName="Leo"
-        items={[
-          { id: 'h1', kind: 'homework', title: 'matte1.jpg', images: ['data:image/jpeg;base64,x'] },
-          { id: 'h2', kind: 'homework', title: 'matte2.jpg', images: ['data:image/jpeg;base64,y'] },
-        ]}
-        focused={null}
-        onItemMounted={noop}
-        onResourceClosed={noop}
-        dragOver={false}
-      />,
-    );
-    expect(screen.getByText('Inkorg · 2 uppgifter')).toBeTruthy();
-  });
-
-  it('keeps the greeting and inbox visible once teaching starts', () => {
-    const { rerender } = render(
-      <Board
-        learnerName="Leo"
-        items={[]}
-        focused={null}
-        onItemMounted={noop}
-        onResourceClosed={noop}
-        dragOver={false}
-      />,
-    );
+    expect(screen.getByRole('heading', { name: 'Hej Leo!' })).toBeTruthy();
     expect(screen.getByText('Här hamnar det vi jobbar med.')).toBeTruthy();
+    // No permanent surface: no greeting header or inbox strip outside the empty state.
+    expect(screen.queryByText('Inkorg · tom')).toBeNull();
+    expect(screen.queryByText('släpp fil här')).toBeNull();
 
     rerender(
       <Board
@@ -75,15 +39,12 @@ describe('Board layout switch', () => {
         focused={null}
         onItemMounted={noop}
         onResourceClosed={noop}
-        dragOver={false}
       />,
     );
     expect(screen.queryByText('Här hamnar det vi jobbar med.')).toBeNull();
+    expect(screen.queryByText('Hej Leo!')).toBeNull();
     expect(screen.getByText('Ekvationer')).toBeTruthy();
     expect(screen.getByText(/Vi löser/)).toBeTruthy();
-    // Greeting + inbox stay on top while teaching.
-    expect(screen.getByText('Hej Leo!')).toBeTruthy();
-    expect(screen.getByText('Inkorg · tom')).toBeTruthy();
   });
 
   it('renders homework as a paper card', () => {
@@ -94,17 +55,57 @@ describe('Board layout switch', () => {
         focused={null}
         onItemMounted={noop}
         onResourceClosed={noop}
-        dragOver={false}
       />,
     );
     expect(screen.getByText('matteprov.jpg')).toBeTruthy();
   });
 });
 
+describe('Header menu inbox', () => {
+  const menuProps = { dragOver: false, onCamera: noop, onFiles: noop };
+
+  it('opens from the hamburger and shows a live empty inbox', () => {
+    render(<TopMenu items={[]} {...menuProps} />);
+    expect(screen.queryByText('Inkorg · tom')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Meny' }));
+    expect(screen.getByText('Inkorg · tom')).toBeTruthy();
+    expect(screen.getByText('släpp fil här')).toBeTruthy();
+  });
+
+  it('reflects real homework state in the menu', () => {
+    const { rerender } = render(<TopMenu items={[]} {...menuProps} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Meny' }));
+    expect(screen.getByText('Inkorg · tom')).toBeTruthy();
+
+    rerender(<TopMenu items={[homeworkOne, homeworkTwo]} {...menuProps} />);
+    expect(screen.getByText('Inkorg · 2 uppgifter')).toBeTruthy();
+  });
+
+  it('wires the add buttons to the real handlers', () => {
+    const onCamera = vi.fn();
+    const onFiles = vi.fn();
+    render(<TopMenu items={[]} dragOver={false} onCamera={onCamera} onFiles={onFiles} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Meny' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Fota läxan' }));
+    expect(onCamera).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Välj bild' }));
+    expect(onFiles).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens the about note from the menu', () => {
+    render(<TopMenu items={[]} {...menuProps} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Meny' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Om Open Tutor' }));
+    expect(screen.getByText('by Johan Acevedo')).toBeTruthy();
+  });
+});
+
 describe('Mobile board continuity', () => {
   const equation: BoardItem = { id: 'a', kind: 'steps', title: 'Equation', steps: [{ tex: '3x=15' }, { tex: 'x=5' }] };
   const other: BoardItem = { id: 'b', kind: 'text', title: 'Other task', markdown: 'A different task' };
-  const defaults = { learnerName: 'Leo', onResourceClosed: noop, dragOver: false, mobile: true };
+  const defaults = { learnerName: 'Leo', onResourceClosed: noop, mobile: true };
 
   it('keeps the selected older item in focus and reveals future steps only in the full board', () => {
     const { container } = render(

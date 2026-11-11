@@ -7,6 +7,7 @@ import ProfilePicker from './components/ProfilePicker';
 import Avatar from './components/Avatar';
 import Board from './components/Board';
 import BottomBar from './components/BottomBar';
+import TopMenu from './components/TopMenu';
 import EndCard from './components/EndCard';
 import HomeworkTray from './components/HomeworkTray';
 import { useViewport } from './useViewport';
@@ -52,11 +53,21 @@ export default function App() {
     >
       <header className="ot-topbar">
         <div className="ot-wordmark">Open Tutor</div>
-        {profile && inSession && (
-          <div className="ot-learner-pill" aria-label="Inloggad profil">
-            {pillLabel(profile)}
-          </div>
-        )}
+        <div className="ot-topbar-right">
+          {profile && inSession && (
+            <div className="ot-learner-pill" aria-label="Inloggad profil">
+              {pillLabel(profile)}
+            </div>
+          )}
+          {inSession && (
+            <TopMenu
+              items={session.items}
+              dragOver={session.dragOver}
+              onCamera={() => cameraRef.current?.click()}
+              onFiles={() => fileRef.current?.click()}
+            />
+          )}
+        </div>
       </header>
 
       {phase === 'profiles' && (
@@ -83,11 +94,8 @@ export default function App() {
               focused={session.focused}
               onItemMounted={session.onItemMounted}
               onResourceClosed={(id) => void session.resourceClosed(id)}
-              dragOver={session.dragOver}
               mobile={mobile}
               activeItemId={session.activeItemId}
-              onCamera={() => cameraRef.current?.click()}
-              onFiles={() => fileRef.current?.click()}
               onEnd={() => void session.endSession()}
               ending={phase === 'ending'}
             />
