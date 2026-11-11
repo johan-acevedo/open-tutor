@@ -10,6 +10,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@earendil-works/chord": "1.5.2",
+    "@earendil-works/pi-ai": "1.5.2",
+    "@earendil-works/pi-durable": "1.5.2",
+    "@earendil-works/pi-schema": "1.5.2",
     "katex": "0.19.1",
     "livekit-client": "2.23.0",
     "pdfjs-dist": "6.5.438",
