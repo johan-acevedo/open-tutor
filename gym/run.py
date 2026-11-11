@@ -150,9 +150,16 @@ def parse_pi_jsonl(text: str) -> dict:
             msg = d.get("message", {}) or {}
             if msg.get("role") == "assistant":
                 content = msg.get("content", [])
+                think_texts = []
                 if isinstance(content, list):
                     texts = [c.get("text", "") for c in content
                              if isinstance(c, dict) and c.get("type") == "text"]
+                    think_texts = [c.get("thinking", "") for c in content
+                                   if isinstance(c, dict) and c.get("type") == "thinking"]
+                # Reasoner endpoints (e.g. Fireworks DeepSeek) sometimes put the
+                # whole answer in reasoning with no text part: fall back to it.
+                if not any(texts) and any(think_texts):
+                    texts = think_texts
                 usage = msg.get("usage", {}) or {}
                 if usage:
                     out["input_tokens"] = usage.get("input")
