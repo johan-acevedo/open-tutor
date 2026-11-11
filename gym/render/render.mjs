@@ -97,7 +97,8 @@ await page.route('**/*', (route) => {
   }
   if (url.startsWith('file://') || url.startsWith('data:') ||
       url.startsWith('about:') || url.startsWith('blob:') ||
-      url.startsWith('https://cdn.jsdelivr.net')) {
+      url.startsWith('https://cdn.jsdelivr.net') ||
+      /^https:\/\/(([a-c]\.)?tile\.openstreetmap\.org|([a-d]\.)?basemaps\.cartocdn\.com)/.test(url)) {
     return route.continue();
   }
   blocked.push(url.slice(0, 300));
