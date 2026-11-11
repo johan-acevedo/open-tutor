@@ -1,0 +1,10 @@
+round: r18
+notes: "Johan r18: style reduced to bg+font, interactive boards allowed, compact API docs inlined per library, reasoning note at length. Tests whether full API knowledge unlocks toolkit use."
+prompt: prompts/r12
+thinking: medium
+fix_pass: true
+toolkit: null
+board: {w: 1920, h: 1080, device: desktop, lang: Swedish}
+members:
+  - claude-haiku-5-5
+panels: [tune]
