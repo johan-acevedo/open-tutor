@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { validateBoardFocus, validateBoardItem } from './validate';
+import { validateBoardFocus, validateBoardItem, validateScreenIntent, validateScreenObservation } from './validate';
 
 describe('validateBoardItem', () => {
   it('accepts a minimal text item', () => {
@@ -89,5 +89,31 @@ describe('validateBoardFocus', () => {
     expect(validateBoardFocus({ id: 's1', step: -1 }).ok).toBe(false);
     expect(validateBoardFocus({ id: 's1', step: 1.5 }).ok).toBe(false);
     expect(validateBoardFocus(null).ok).toBe(false);
+  });
+});
+
+describe('Screen protocol validation', () => {
+  const viewport = { w: 1200, h: 800, device: 'desktop' };
+  const target = { pageId: 'p1', revision: 'r1' };
+
+  it('accepts a show intent with bounded lesson context', () => {
+    const result = validateScreenIntent({
+      intentId: 'i1', lessonId: 'l1', op: 'show', need: 'En karta', background: 'Frankrike', viewport,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.op).toBe('show');
+  });
+
+  it('requires page id + revision for reveal and observation', () => {
+    expect(validateScreenIntent({ intentId: 'i1', lessonId: 'l1', op: 'reveal', viewport }).ok).toBe(false);
+    expect(validateScreenIntent({ intentId: 'i1', lessonId: 'l1', op: 'reveal', viewport, target }).ok).toBe(true);
+    expect(validateScreenObservation({ observationId: 'o1', lessonId: 'l1' }).ok).toBe(false);
+    expect(validateScreenObservation({ observationId: 'o1', lessonId: 'l1', ...target }).ok).toBe(true);
+  });
+
+  it('rejects stale-shaped targets, unknown ops and invalid viewports', () => {
+    expect(validateScreenIntent({ intentId: 'i1', lessonId: 'l1', op: 'show', viewport, target: { pageId: 'p1' } }).ok).toBe(false);
+    expect(validateScreenIntent({ intentId: 'i1', lessonId: 'l1', op: 'delete', viewport }).ok).toBe(false);
+    expect(validateScreenIntent({ intentId: 'i1', lessonId: 'l1', op: 'show', viewport: { ...viewport, w: 12 } }).ok).toBe(false);
   });
 });

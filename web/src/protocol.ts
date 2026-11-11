@@ -58,6 +58,57 @@ export type SessionLearner = {
 export type SessionRequest = {
   learner: SessionLearner;
   board: { w: number; h: number; device: string };
+  /** Browser-owned Pi Durable Screen protocol capability. */
+  screen?: { version: 1 };
+};
+
+export type ScreenViewport = { w: number; h: number; device: string };
+export type ScreenPageRef = { pageId: string; revision: string };
+
+export type ScreenIntent = {
+  intentId: string;
+  lessonId: string;
+  op: 'prepare' | 'show' | 'reveal';
+  need?: string;
+  background?: string;
+  target?: ScreenPageRef;
+  viewport: ScreenViewport;
+};
+
+export type ScreenIntentAck =
+  | { accepted: true; intentId: string }
+  | { accepted: false; intentId: string; reason: string };
+
+export type ScreenEvent = {
+  type: 'ready' | 'rejected' | 'failed' | 'answer-submitted';
+  intentId?: string;
+  lessonId: string;
+  page?: { id: string; revision: string };
+  reason?: string;
+  answer?: string;
+};
+
+export type ScreenObservationRequest = ScreenPageRef & {
+  observationId: string;
+  lessonId: string;
+};
+
+export type ScreenContext = {
+  observationId: string;
+  lessonId: string;
+  page: { id: string; revision: string };
+  visibleText: string;
+  privateTeaching?: string;
+  viewport: ScreenViewport & { scale?: number };
+  sources?: Array<{ sourceUrl: string; attribution?: string; license?: string }>;
+  widgets?: Record<string, string | number | boolean>;
+};
+
+export type ScreenPixelsAttributes = {
+  observationId: string;
+  lessonId: string;
+  pageId: string;
+  revision: string;
 };
 
 export type SessionResponse = {
@@ -89,6 +140,8 @@ export const BOARD_RPC_SHOW = 'board.show';
 export const BOARD_RPC_UPDATE = 'board.update';
 export const BOARD_RPC_FOCUS = 'board.focus';
 export const BOARD_RPC_REMOVE = 'board.remove';
+export const SCREEN_RPC_INTENT = 'screen.intent';
+export const SCREEN_RPC_OBSERVE = 'screen.observe';
 
 export const TOPIC_CHAT = 'lk.chat';
 export const TOPIC_TRANSCRIPTION = 'lk.transcription';
@@ -96,6 +149,9 @@ export const TOPIC_HOMEWORK = 'homework';
 export const TOPIC_HOMEWORK_TEXT = 'homework-text';
 export const TOPIC_SESSION_EVENT = 'session-event';
 export const TOPIC_NOTE = 'note';
+export const TOPIC_SCREEN_EVENT = 'screen-event';
+export const TOPIC_SCREEN_PIXELS = 'screen-pixels';
+export const TOPIC_SCREEN_CONTEXT = 'screen-context';
 
 export const ATTR_AGENT_STATE = 'lk.agent.state';
 export const ATTR_TUTOR_MODE = 'tutor.mode';

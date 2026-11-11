@@ -1,7 +1,14 @@
 // Validation for incoming board RPC payloads (docs/protocol.md).
 // Unknown kinds are rejected so the RPC handler can answer with an error.
 
-import type { BoardFocusPayload, BoardItem } from './protocol';
+import type {
+  BoardFocusPayload,
+  BoardItem,
+  ScreenIntent,
+  ScreenObservationRequest,
+  ScreenPageRef,
+  ScreenViewport,
+} from './protocol';
 
 export type ValidateOk = { ok: true; item: BoardItem };
 export type ValidateErr = { ok: false; error: string };
@@ -199,4 +206,74 @@ export function validateBoardFocus(raw: unknown): FocusOk | FocusErr {
 /** Loose check for incoming note payloads (topic 'note'). */
 export function isNoteLike(raw: unknown): raw is { topic: string } & Record<string, unknown> {
   return isRecord(raw) && typeof raw.topic === 'string';
+}
+
+function screenPageRef(raw: unknown): ScreenPageRef | null {
+  if (!isRecord(raw) || !isNonEmptyString(raw.pageId) || !isNonEmptyString(raw.revision)) return null;
+  if (raw.pageId.length > 100 || raw.revision.length > 100) return null;
+  return { pageId: raw.pageId, revision: raw.revision };
+}
+
+function screenViewport(raw: unknown): ScreenViewport | null {
+  if (!isRecord(raw) || !Number.isInteger(raw.w) || !Number.isInteger(raw.h)) return null;
+  const w = raw.w as number;
+  const h = raw.h as number;
+  if (w < 320 || h < 320 || w > 3840 || h > 3840) return null;
+  if (typeof raw.device !== 'string' || raw.device.length === 0 || raw.device.length > 20) return null;
+  return { w, h, device: raw.device };
+}
+
+export type ScreenValidation<T> = { ok: true; value: T } | { ok: false; error: string };
+
+/** Validate the immediate fox -> browser Screen RPC payload. */
+export function validateScreenIntent(raw: unknown): ScreenValidation<ScreenIntent> {
+  if (!isRecord(raw)) return { ok: false, error: 'Screen intent must be an object' };
+  if (!isNonEmptyString(raw.intentId) || raw.intentId.length > 100) {
+    return { ok: false, error: 'Screen intent needs a bounded intentId' };
+  }
+  if (!isNonEmptyString(raw.lessonId) || raw.lessonId.length > 100) {
+    return { ok: false, error: 'Screen intent needs a bounded lessonId' };
+  }
+  if (raw.op !== 'prepare' && raw.op !== 'show' && raw.op !== 'reveal') {
+    return { ok: false, error: 'Unknown Screen operation' };
+  }
+  const viewport = screenViewport(raw.viewport);
+  if (!viewport) return { ok: false, error: 'Screen intent needs a valid viewport' };
+  if (raw.need !== undefined && (typeof raw.need !== 'string' || raw.need.length > 4000)) {
+    return { ok: false, error: 'Screen need must be a bounded string' };
+  }
+  if (raw.background !== undefined && (typeof raw.background !== 'string' || raw.background.length > 12000)) {
+    return { ok: false, error: 'Screen background must be a bounded string' };
+    }
+  const target = raw.target === undefined ? undefined : screenPageRef(raw.target);
+  if (raw.target !== undefined && !target) return { ok: false, error: 'Invalid Screen target' };
+  if (raw.op === 'reveal' && !target) return { ok: false, error: 'Reveal needs page id + revision' };
+  return {
+    ok: true,
+    value: {
+      intentId: raw.intentId,
+      lessonId: raw.lessonId,
+      op: raw.op,
+      viewport,
+      ...(typeof raw.need === 'string' ? { need: raw.need } : {}),
+      ...(typeof raw.background === 'string' ? { background: raw.background } : {}),
+      ...(target ? { target } : {}),
+    },
+  };
+}
+
+export function validateScreenObservation(raw: unknown): ScreenValidation<ScreenObservationRequest> {
+  if (!isRecord(raw)) return { ok: false, error: 'Screen observation must be an object' };
+  if (!isNonEmptyString(raw.observationId) || raw.observationId.length > 100) {
+    return { ok: false, error: 'Screen observation needs a bounded observationId' };
+  }
+  if (!isNonEmptyString(raw.lessonId) || raw.lessonId.length > 100) {
+    return { ok: false, error: 'Screen observation needs a bounded lessonId' };
+  }
+  const target = screenPageRef(raw);
+  if (!target) return { ok: false, error: 'Screen observation needs page id + revision' };
+  return {
+    ok: true,
+    value: { observationId: raw.observationId, lessonId: raw.lessonId, ...target },
+  };
 }
