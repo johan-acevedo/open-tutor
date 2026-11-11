@@ -1,6 +1,6 @@
 {
  "round": "r19",
- "generated_at": "2026-11-11T09:54:37+00:00",
+ "generated_at": "2026-11-11T10:04:33+00:00",
  "notes": "DeepSeek v4.1-flash (ultrafast access) on the latest prompt (r12: philosophy rewrite + API docs + interactive). Thinking off for speed. Same judge (argon) for comparability.",
  "targets": {
   "median_wall_s": 20.0,

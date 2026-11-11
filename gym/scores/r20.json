@@ -1,6 +1,6 @@
 {
  "round": "r20",
- "generated_at": "2026-11-11T09:54:37+00:00",
+ "generated_at": "2026-11-11T10:04:33+00:00",
  "notes": "DeepSeek V4.1 Flash via Fireworks ultrafast router (1200-1600 tok/s) on the latest prompt (r12), thinking off, argon judge. Heads-up vs r19 (same model, opencode-go pipe).",
  "targets": {
   "median_wall_s": 20.0,

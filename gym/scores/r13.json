@@ -1,6 +1,6 @@
 {
  "round": "r13",
- "generated_at": "2026-11-11T09:54:37+00:00",
+ "generated_at": "2026-11-11T10:04:33+00:00",
  "notes": "Haiku: r12 (examples, medium, findings-only fix) with sharpened unit-staircase example: per-step factor from the equality (hg->g is x100), no blanket x10 rule, ton/kg/hg/g only, no dekagram. One new variable: the staircase text.",
  "targets": {
   "median_wall_s": 20.0,
