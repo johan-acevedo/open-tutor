@@ -60,6 +60,25 @@ async def test_commissioned_board_reaches_the_board_and_feeds_back(monkeypatch):
     assert "Leo behöver se" in seen["need"]
 
 
+async def test_client_board_size_reaches_the_board_model(monkeypatch):
+    room = FakeRoom()
+    t = Tutor({"name": "Leo"}, room, board={"w": 390, "h": 844, "device": "mobile"})
+    assert (t.board_w, t.board_h, t.board_device) == (390, 844, "mobile")
+    sizes = {}
+
+    async def fake_render(need, background, learner_name="", **kw):
+        sizes.update(kw)
+        return {"html": "<!doctype html><html></html>", "note": "n", "png": None}
+
+    async def noseen(*a, **k):
+        pass
+
+    monkeypatch.setattr(board_model, "render_board", fake_render)
+    monkeypatch.setattr(t, "add_board_seen", noseen)
+    await t.commission_board(None, need="x", background="y")
+    assert sizes == {"board_w": 390, "board_h": 844, "device": "mobile"}
+
+
 async def test_a_board_that_does_not_acknowledge_is_reported_to_the_model(monkeypatch):
     t = tutor(FakeRoom(error=TimeoutError("no reply")))
     result, _ = await commission(t, monkeypatch, None)

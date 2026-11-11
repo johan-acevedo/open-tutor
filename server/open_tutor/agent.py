@@ -89,9 +89,13 @@ def tts_route(engine) -> str:
 
 
 class Tutor(Agent):
-    def __init__(self, learner: dict[str, Any], room: rtc.Room) -> None:
+    def __init__(self, learner: dict[str, Any], room: rtc.Room, board: dict[str, Any] | None = None) -> None:
         super().__init__(instructions=prompt.instructions(learner))
         self.learner = learner
+        board = board or {}
+        self.board_w = max(320, min(int(board.get("w", 1920)), 3840))
+        self.board_h = max(320, min(int(board.get("h", 1080)), 3840))
+        self.board_device = str(board.get("device", "desktop"))[:20]
         self.room = room
         self.ids = Ids()
         self.child_identity: str | None = None
@@ -215,7 +219,9 @@ class Tutor(Agent):
         pid = pending_id.strip()[:40]
         learner = (self.learner or {}).get("name", "") or ""
         try:
-            result = await render_board(need, background, learner_name=learner)
+            result = await render_board(need, background, learner_name=learner,
+                                        board_w=self.board_w, board_h=self.board_h,
+                                        device=self.board_device)
         except Exception as error:
             if pid:
                 await self._remove(pid)
@@ -478,11 +484,14 @@ async def entrypoint(ctx: JobContext) -> None:
     await ctx.connect()
     child = await ctx.wait_for_participant()
     try:
-        learner = json.loads(child.metadata or "{}").get("learner", {})
+        meta = json.loads(child.metadata or "{}")
+        learner = meta.get("learner", {})
+        board = meta.get("board", {}) or {}
     except json.JSONDecodeError:
         learner = {}
+        board = {}
 
-    tutor = Tutor(learner, ctx.room)
+    tutor = Tutor(learner, ctx.room, board=board)
     tutor.child_identity = child.identity
 
     debug = DebugLog.create(ctx.room.name, learner, getattr(getattr(ctx, "job", None), "id", "?"))
