@@ -83,7 +83,7 @@ export default function App() {
       )}
 
       {(phase === 'live' || phase === 'ending') && profile && (
-        <main className={`ot-main ot-main-${mode}`}>
+        <main className={`ot-main ot-main-${mode}${session.screenDeck?.pages.length ? ' ot-main-screen' : ''}`}>
           <section className="ot-board" aria-label="Whiteboard">
             {session.screenDeck ? (
               <ScreenBoard

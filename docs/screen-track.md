@@ -1,6 +1,6 @@
 # Browser-owned Screen track
 
-Status: design and integration reconnaissance, 2026-11-11.
+Status: integrated development build; live generation blocked by provider quota, 2026-11-11.
 Lead: this thread. Workers receive focused briefs; the lead owns integration and decisions.
 
 ## Source of truth
@@ -196,8 +196,35 @@ Focused tests run during implementation; the full server and web suites plus the
 
 ## Next
 
-1. Consolidate worker findings and fix the initial external protocol and module boundaries.
-2. Add the browser Screen skeleton and protocol adapter behind an isolated development path.
-3. Implement maths vertical slice, then the artifact/candidate geography slice.
-4. Run focused and full automated checks, then the real voice/browser acceptance scenarios.
-5. Review the diff with a different model family before any merge or deployment decision.
+1. Wait for the OpenCode Go quota reset before another fresh maths or geography generation run. The model gateway returned upstream HTTP 429 during the latest live test. The requested Muse review also failed with `GoUsageLimitError`; no substitute provider was selected.
+2. Verify fresh maths preparation and the complete geography research, candidate, promotion, and pixel-observation path with live models.
+3. Finish the remaining acceptance checks, including supersession during research, a greeting based on prior work, and real microphone interaction. The latest browser session used typed input because microphone permission was unavailable.
+4. Obtain a fresh cross-family review before merge or production deployment. Earlier integration reviews do not cover the latest recovery and phone-layout fixes.
+
+## Development verification, 2026-11-11
+
+The development build runs on dell5500 at <https://dell5500.tail2e1c4e.ts.net:9444/>. Its services are `open-tutor-screen-dev-web.service` and `open-tutor-screen-dev-agent.service`. Production and `origin/main@05c23a4` are unchanged.
+
+The latest real-browser run used the served build, a real LiveKit room, and the existing development fox. It verified:
+
+- Reload restores the interrupted maths page and its typed draft from IndexedDB.
+- The browser announces the restored page only after rendering. It queues the announcement until the fox advertises an active session state. A live run without that queue reproduced the fox reporting an empty screen despite a visible exercise.
+- The restarted fox's `observe_screen` receives PNG bytes from the visible canvas and separate private teaching context. The screenshot keeps the solution hidden before reveal.
+- Explicit submission sends `answer-submitted`; the fox receives the submitted answer and responds to it.
+- The fox's `reveal_screen` reveals the restored page, receives another real pixel observation, and leaves the page id and revision intact.
+- The 390 by 844 phone viewport shows the question, draft, revealed solution, and stable controls without overlapping the fox. Compact rendering reserves space for each section instead of clipping the question. This was a browser CSS viewport check, not a physical-phone test.
+- After intentional **Avsluta**, starting the same learner's next lesson opens an empty workspace and hides the canvas.
+
+Regression evidence: the restored-page test failed before the recovery change because no event was emitted. The 390 by 240 renderer test failed before the layout change because the question was omitted. Both pass after the fixes.
+
+Validation commands from the final code tree:
+
+```sh
+cd web
+npm test          # 136 passed
+npm run build    # TypeScript and Vite pass
+cd ../server
+uv run --frozen pytest -q  # 175 passed
+```
+
+The build retains its existing Pi `node:fs` browser-externalization and bundle-size warnings. Fresh generation, complete geography acceptance, and full voice acceptance remain unverified. The development gateway records upstream quota failures as HTTP 502 responses containing `upstream error 429`, which currently triggers SDK retries before the fox's request times out.

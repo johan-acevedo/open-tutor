@@ -75,6 +75,7 @@ export function drawScreenPage(
   assets: ScreenRenderAssets = {},
 ): void {
   const { w, h } = size;
+  const compact = w < 600 || h < 480;
   // Background.
   const bg = ctx.createLinearGradient(0, 0, 0, h);
   bg.addColorStop(0, BG_TOP);
@@ -85,11 +86,11 @@ export function drawScreenPage(
   ctx.fillStyle = ACCENT;
   ctx.fillRect(0, 0, w, 6);
 
-  const margin = Math.max(20, Math.min(56, w * 0.045));
+  const margin = compact ? 12 : Math.max(20, Math.min(56, w * 0.045));
   const cardX = margin;
-  const cardY = 26;
+  const cardY = compact ? 12 : 26;
   const cardW = w - margin * 2;
-  const cardH = h - cardY - 20;
+  const cardH = h - cardY - (compact ? 12 : 20);
   roundRect(ctx, cardX, cardY, cardW, cardH, 18);
   ctx.fillStyle = CARD;
   ctx.fill();
@@ -97,15 +98,28 @@ export function drawScreenPage(
   ctx.lineWidth = 1.5;
   ctx.stroke();
 
-  let y = cardY + 30;
-  const innerX = cardX + 28;
-  const innerW = cardW - 56;
+  let y = cardY + (compact ? 20 : 30);
+  const padding = compact ? 16 : 28;
+  const innerX = cardX + padding;
+  const innerW = cardW - padding * 2;
+  const footerH = compact ? 20 : 44;
+  const answerH = compact ? 44 : 96;
+  ctx.font = `400 ${clamp(w * 0.019, 16, 22)}px ${FONT}`;
+  const solutionLines = wrapText(ctx, page.solution, innerW - 28).slice(0, compact && h < 320 ? 1 : 3);
+  const compactSolutionH = 44 + Math.max(0, solutionLines.length - 1) * lineHeight(ctx) * 0.95;
+  const solutionH = compact ? (page.revealed ? compactSolutionH : 32) : (page.revealed ? 110 : 56);
+  const gap = compact ? 6 : 12;
+  const hasVisual = page.asset?.id || page.svgAsset;
+  const visualH = hasVisual ? (compact ? Math.min(110, h * 0.2) : clamp(h * 0.22, 110, 200)) : 0;
+  const answerY = cardY + cardH - footerH - answerH - solutionH - gap;
+  const visualY = answerY - gap - visualH;
+  const bodyBottom = (hasVisual ? visualY : answerY) - gap;
 
   // Subject chip + page label.
   const chip = page.subject || (page.kind === "geography" ? "Geografi" : page.kind === "homework" ? "Läxa" : "Matte");
   ctx.font = `700 15px ${FONT}`;
   const chipW = ctx.measureText(chip).width + 28;
-  roundRect(ctx, innerX, y - 20, chipW, 30, 15);
+  roundRect(ctx, innerX, y - (compact ? 14 : 20), chipW, compact ? 24 : 30, 15);
   ctx.fillStyle = ACCENT;
   ctx.fill();
   ctx.fillStyle = ACCENT_INK;
@@ -115,21 +129,23 @@ export function drawScreenPage(
     ctx.fillStyle = MUTED;
     ctx.font = `500 15px ${FONT}`;
     ctx.textAlign = "right";
-    ctx.fillText(assets.pageLabel, cardX + cardW - 28, y - 4);
+    ctx.fillText(assets.pageLabel, cardX + cardW - padding, y - 4);
     ctx.textAlign = "left";
   }
-  y += 22;
+  y += compact ? 14 : 22;
 
   // Title.
   ctx.fillStyle = INK;
-  ctx.font = `700 ${clamp(w * 0.032, 24, 40)}px ${FONT}`;
+  ctx.font = `700 ${compact ? 18 : clamp(w * 0.032, 24, 40)}px ${FONT}`;
   ctx.textBaseline = "alphabetic";
   for (const line of wrapText(ctx, page.title, innerW)) {
-    y += lineHeight(ctx);
-    if (y > cardY + cardH - 170) break;
+    const nextY = y + lineHeight(ctx);
+    const titleBottom = page.kind === "homework" ? cardY + cardH - 60 : bodyBottom;
+    if (nextY > titleBottom) break;
+    y = nextY;
     ctx.fillText(line, innerX, y);
   }
-  y += 14;
+  y += compact ? 6 : 14;
 
   // Homework pages: child-uploaded content. Image contain-fit with
   // attribution (never a permanent loading placeholder), expanded body text,
@@ -190,20 +206,17 @@ export function drawScreenPage(
     ctx.font = `400 12.5px ${FONT}`;
     const hwSources = page.sources.slice(0, 2).join(" · ");
     if (hwSources) ctx.fillText(truncate(ctx, `Källor: ${hwSources}`, hwBoxW * 0.62), hwBoxX, cardY + cardH - 14);
-    const hwMeta = `${page.id} ${page.revision}`;
-    ctx.textAlign = "right";
-    ctx.fillText(hwMeta, hwBoxX + hwBoxW, cardY + cardH - 14);
-    ctx.textAlign = "left";
     return;
   }
 
   // Body / question lines.
-  ctx.font = `400 ${clamp(w * 0.02, 17, 24)}px ${FONT}`;
+  ctx.font = `400 ${compact ? 15 : clamp(w * 0.02, 17, 24)}px ${FONT}`;
   ctx.fillStyle = "#dce6f7";
   for (const paragraph of page.body.slice(0, 6)) {
     for (const line of wrapText(ctx, paragraph, innerW)) {
-      y += lineHeight(ctx) * 0.96;
-      if (y > cardY + cardH - 230) break;
+      const nextY = y + lineHeight(ctx) * 0.96;
+      if (nextY > bodyBottom) break;
+      y = nextY;
       ctx.fillText(line, innerX, y);
     }
     y += 8;
@@ -211,16 +224,11 @@ export function drawScreenPage(
 
   const boxW = innerW;
   const boxX = innerX;
-  const footerH = 44;
-  const answerH = 96;
-  const solutionH = page.revealed ? 110 : 56;
-  const hasVisual = page.asset?.id || page.svgAsset;
-  const visualH = hasVisual ? clamp(h * 0.22, 110, 200) : 0;
 
   // Visual asset box (image or generated-SVG placeholder).
   if (hasVisual) {
-    const boxY = cardY + cardH - footerH - answerH - solutionH - visualH - 44;
-    if (boxY > y + 6) {
+    const boxY = visualY;
+    if (boxY > cardY + 30) {
       y = boxY;
       const image = page.asset?.id ? assets.images?.get(page.asset.id) : undefined;
       const svgDrawable = !image && page.svgAsset ? assets.svgImage : undefined;
@@ -256,8 +264,7 @@ export function drawScreenPage(
   }
 
   // Answer area (child-owned; drawn so pixels match what the child sees).
-  const answerY = cardY + cardH - footerH - answerH - solutionH - 16;
-  const answerBoxY = Math.max(y + 6, answerY);
+  const answerBoxY = answerY;
   roundRect(ctx, boxX, answerBoxY, boxW, answerH, 12);
   ctx.fillStyle = ANSWER_BG;
   ctx.fill();
@@ -265,20 +272,20 @@ export function drawScreenPage(
   ctx.stroke();
   ctx.fillStyle = MUTED;
   ctx.font = `600 14px ${FONT}`;
-  ctx.fillText(page.answerLabel || "Ditt svar", boxX + 14, answerBoxY + 22);
+  ctx.fillText(page.answerLabel || "Ditt svar", boxX + 14, answerBoxY + (compact ? 16 : 22));
   const draft = (assets.draftText ?? "").trim();
   ctx.font = `400 ${clamp(w * 0.019, 16, 22)}px ${FONT}`;
   if (draft) {
     ctx.fillStyle = INK;
-    const lines = wrapText(ctx, draft, boxW - 28).slice(0, 2);
-    lines.forEach((line, i) => ctx.fillText(line, boxX + 14, answerBoxY + 50 + i * lineHeight(ctx) * 0.95));
+    const lines = wrapText(ctx, draft, boxW - 28).slice(0, compact ? 1 : 2);
+    lines.forEach((line, i) => ctx.fillText(line, boxX + 14, answerBoxY + (compact ? 36 : 50) + i * lineHeight(ctx) * 0.95));
   } else {
     ctx.fillStyle = "#5c6c8d";
-    ctx.fillText("Skriv ditt svar här …", boxX + 14, answerBoxY + 54);
+    ctx.fillText("Skriv ditt svar här …", boxX + 14, answerBoxY + (compact ? 36 : 54));
   }
 
   // Solution area: hidden until the fox-gated reveal.
-  const solutionY = answerBoxY + answerH + 12;
+  const solutionY = answerBoxY + answerH + gap;
   roundRect(ctx, boxX, solutionY, boxW, solutionH, 12);
   if (page.revealed) {
     ctx.fillStyle = SOLUTION_BG;
@@ -287,11 +294,10 @@ export function drawScreenPage(
     ctx.stroke();
     ctx.fillStyle = "#7ee2a8";
     ctx.font = `600 14px ${FONT}`;
-    ctx.fillText("Facit", boxX + 14, solutionY + 22);
+    ctx.fillText("Facit", boxX + 14, solutionY + (compact ? 16 : 22));
     ctx.fillStyle = "#e8f7ee";
     ctx.font = `400 ${clamp(w * 0.019, 16, 22)}px ${FONT}`;
-    const lines = wrapText(ctx, page.solution, boxW - 28).slice(0, 3);
-    lines.forEach((line, i) => ctx.fillText(line, boxX + 14, solutionY + 50 + i * lineHeight(ctx) * 0.95));
+    solutionLines.forEach((line, i) => ctx.fillText(line, boxX + 14, solutionY + (compact ? 36 : 50) + i * lineHeight(ctx) * 0.95));
   } else {
     ctx.fillStyle = HIDDEN_BG;
     ctx.fill();
@@ -302,15 +308,11 @@ export function drawScreenPage(
     ctx.fillText("🔒 Facit är dolt", boxX + 14, solutionY + solutionH / 2 + 6);
   }
 
-  // Footer: sources + stable page/revision metadata.
+  // Source attribution stays on the teaching surface.
   ctx.fillStyle = MUTED;
   ctx.font = `400 12.5px ${FONT}`;
   const sources = page.sources.slice(0, 2).join(" · ");
   if (sources) ctx.fillText(truncate(ctx, `Källor: ${sources}`, boxW * 0.62), boxX, cardY + cardH - 14);
-  const meta = `${page.id} ${page.revision}`;
-  ctx.textAlign = "right";
-  ctx.fillText(meta, boxX + boxW, cardY + cardH - 14);
-  ctx.textAlign = "left";
 }
 
 function lineHeight(ctx: CanvasRenderingContext2D): number {

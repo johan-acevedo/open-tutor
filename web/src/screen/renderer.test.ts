@@ -11,7 +11,7 @@ import {
 import type { ScreenPage } from './types';
 
 function mockContext() {
-  const texts: { text: string; font: string }[] = [];
+  const texts: { text: string; font: string; y: number }[] = [];
   let font = '400 16px sans-serif';
   const ctx = new Proxy(
     {},
@@ -21,8 +21,8 @@ function mockContext() {
         if (prop === 'measureText') return (text: string) => ({ width: text.length * 10 });
         if (prop === 'createLinearGradient') return () => ({ addColorStop() {} });
         if (prop === 'fillText') {
-          return (text: string) => {
-            texts.push({ text, font });
+          return (text: string, _x: number, y: number) => {
+            texts.push({ text, font, y });
           };
         }
         return (..._args: unknown[]) => undefined;
@@ -89,6 +89,14 @@ describe('sanitizeSvg', () => {
 });
 
 describe('drawScreenPage', () => {
+  it.each([240, 400])('keeps the question and revealed solution visible on a 390 by %i phone canvas', (h) => {
+    const { ctx, texts } = mockContext();
+    drawScreenPage(ctx, { w: 390, h }, exercisePage({ revealed: true }), { draftText: '12' });
+    expect(texts.map((t) => t.text).join('\n')).toContain('Hur mycket är 7 + 5?');
+    expect(texts.map((t) => t.text).join('\n')).toContain('Svaret är 12');
+    expect(texts.every((t) => t.y > 0 && t.y < h)).toBe(true);
+  });
+
   it('renders the question and draft but keeps a hidden solution out of pixels', () => {
     const { ctx, texts } = mockContext();
     drawScreenPage(ctx, { w: 1280, h: 800 }, exercisePage(), {
