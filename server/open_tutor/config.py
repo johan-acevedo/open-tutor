@@ -26,7 +26,18 @@ AGENT_NAME = os.environ.get("TUTOR_AGENT_NAME", "open-tutor")
 # OpenAI-compatible Chat Completions). It is kept only to reproduce the board/voice bug
 # it caused: it often writes board content into its spoken reply instead of calling a
 # board tool. Do not deploy it.
+# "sol" is GPT-6.1 Sol on low reasoning for voice trials (Johan's Codex
+# subscription). Needs SOL_API_KEY in the backend environment; switch with
+# TUTOR_LLM=sol. Still experimental: must prove first-audio latency,
+# interruption handling and tool reliability against "go" before family use.
 LLM_ROUTES = {
+    "sol": {
+        "api": "chat",
+        "base_url": "https://api.openai.com/v1",
+        "model": "gpt-6.1-sol",
+        "key": "SOL_API_KEY",
+        "reasoning_effort": "low",
+    },
     "go": {
         "api": "responses",
         "base_url": "https://opencode.ai/inference/go/openai/v1",
