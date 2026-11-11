@@ -714,7 +714,10 @@ async function boot(init: {
     auth: {
       apiKey: {
         name: "Family code (memory only)",
-        resolve: async () => ({ auth: { apiKey: accessCode }, source: "screen init" }),
+        // Pi requires a non-empty key even when our tailnet-only development
+        // service deliberately allows passwordless access. This placeholder is
+        // not a credential; real deployments still send the actual family code.
+        resolve: async () => ({ auth: { apiKey: accessCode || "public-screen" }, source: "screen init" }),
       },
     },
     models: [proxyModel],
