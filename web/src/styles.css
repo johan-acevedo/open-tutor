@@ -811,9 +811,44 @@ a:focus-visible {
 
 /* HTML / SVG / image cards */
 
+/* Generated boards bring their own surface: no outer padding, border or
+   background, no headline — just the frame, scaled to fit the pane. */
+.ot-bcard.ot-bcard-html,
+.ot-bcard.ot-bcard-pending {
+  padding: 0;
+  border: none;
+  background: transparent;
+  max-width: 100%;
+}
+
+.ot-bcard-pending .ot-pending {
+  min-height: inherit;
+  display: grid;
+  place-items: center;
+}
+
+/* Fit wrapper: sized to the scaled design box so the whole board stays
+   inside the visible scroll surface. The inner frame keeps exact design
+   pixels and is scaled with transform (interactivity preserved). */
+.ot-html-fit {
+  max-width: 100%;
+  overflow: hidden;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.ot-html-fit > .ot-html-frame {
+  display: block;
+  max-width: none;
+  border: none;
+  border-radius: 0;
+  background: #fff;
+}
+
 .ot-html-frame {
+  display: block;
   width: 100%;
-  border: 1px solid var(--ot-border);
+  border: none;
   border-radius: 12px;
   background: #fff;
 }

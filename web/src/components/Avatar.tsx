@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Pill, Pose } from '../avatarState';
 
 type Props = {
@@ -64,6 +64,9 @@ function PillIcon({ pill }: { pill: Pill }) {
 
 export default function Avatar({ pose, pill, caption, captionFading, decorative, compact, onToggleSize }: Props) {
   const [missing, setMissing] = useState(false);
+  // A pose image may be absent (e.g. working.webp before it ships); when the
+  // pose changes, retry the new image instead of sticking on the fallback.
+  useEffect(() => setMissing(false), [pose]);
   const toneClass = pill ? `ot-pill-${pill.tone}` : '';
 
   return (

@@ -94,6 +94,9 @@ export function validateBoardItem(raw: unknown): ValidateResult {
       if (raw.height !== undefined && typeof raw.height !== 'number') {
         return { ok: false, error: 'html height must be a number' };
       }
+      if (raw.width !== undefined && typeof raw.width !== 'number') {
+        return { ok: false, error: 'html width must be a number' };
+      }
       return {
         ok: true,
         item: {
@@ -102,6 +105,7 @@ export function validateBoardItem(raw: unknown): ValidateResult {
           title,
           html: raw.html,
           ...(typeof raw.height === 'number' ? { height: raw.height } : {}),
+          ...(typeof raw.width === 'number' ? { width: raw.width } : {}),
         },
       };
     }

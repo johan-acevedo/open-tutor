@@ -43,7 +43,12 @@ class SvgItem(_Item):
 class HtmlItem(_Item):
     kind: Literal["html"] = "html"
     html: str = Field(max_length=100000)
-    height: int | None = Field(default=None, ge=120, le=900)
+    # The commissioned design size (the visible .ot-board-scroll content box
+    # at commission time). The client scales this design box down to fit the
+    # current pane, preserving aspect, so fixed-pixel board content always
+    # fits without clipping. Upper bounds match BOARD_MAX in agent.py.
+    height: int | None = Field(default=None, ge=120, le=3840)
+    width: int | None = Field(default=None, ge=120, le=3840)
 
 
 class ImageItem(_Item):
@@ -55,8 +60,9 @@ class ImageItem(_Item):
 class PendingItem(_Item):
     kind: Literal["pending"] = "pending"
     title: str = Field(max_length=120)
-    # Expected frame height (80–900) so the placeholder has the finished size.
-    height: int | None = Field(default=None, ge=80, le=900)
+    # Expected frame height so the placeholder has the finished size.
+    # Upper bound matches BOARD_MAX in agent.py (the client-reported size clamp).
+    height: int | None = Field(default=None, ge=80, le=3840)
 
 
 class ResourceItem(_Item):

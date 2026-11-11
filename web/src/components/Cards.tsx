@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import katex from 'katex';
 import type { BoardItem } from '../protocol';
 import { renderMarkdown } from '../markdown';
@@ -136,27 +136,115 @@ function SvgCard({ item, onMounted }: CardProps) {
   );
 }
 
+// Shared with the tutor's screenshot renderer; test_board_render.py checks parity.
 const HTML_CSP =
-  "default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'unsafe-inline'; img-src data: https:";
+  "default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'unsafe-inline' https://cdn.jsdelivr.net; font-src https://cdn.jsdelivr.net; img-src data: https:";
+
+/** Visible content-box size of the board scroll surface around a card. */
+function scrollAvail(wrap: HTMLElement | null): { w: number; h: number } | null {
+  const scroller = wrap?.closest<HTMLElement>('.ot-board-scroll');
+  if (!scroller) return null;
+  const style = window.getComputedStyle(scroller);
+  const padX = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
+  const padY = (parseFloat(style.paddingTop) || 0) + (parseFloat(style.paddingBottom) || 0);
+  return { w: scroller.clientWidth - padX, h: scroller.clientHeight - padY };
+}
 
 function HtmlCard({ item, onMounted }: CardProps) {
   if (item.kind !== 'html') return null;
   const { ref } = useReportMounted(item, onMounted);
   const srcDoc = useMemo(
-    () => `<meta http-equiv="Content-Security-Policy" content="${HTML_CSP}">\n${item.html}`,
+    () => {
+      const meta = `<meta http-equiv="Content-Security-Policy" content="${HTML_CSP}">`;
+      // Keep the doctype first so the frame uses the screenshot's standards mode.
+      for (const tag of [/<head\b[^>]*>/i, /<html\b[^>]*>/i]) {
+        if (tag.test(item.html)) return item.html.replace(tag, (opening) => opening + meta);
+      }
+      return meta + item.html;
+    },
     [item.html],
   );
-  const height = item.height ?? 360;
+  // Preserve the model's viewport and shrink the whole drawing on smaller screens.
+  const designH = item.height ?? 360;
+  const designW = item.width ?? null;
+  const [scale, setScale] = useState(1);
+  useEffect(() => {
+    const wrap = ref.current;
+    if (!wrap) return;
+    const compute = () => {
+      const avail = scrollAvail(wrap);
+      if (!avail || !(avail.w >= 1 && avail.h >= 1)) {
+        setScale(1);
+        return;
+      }
+      const dW = designW ?? avail.w;
+      const next = Math.min(avail.w / dW, avail.h / designH, 1);
+      setScale(Number.isFinite(next) && next > 0 ? next : 1);
+    };
+    compute();
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      const scroller = wrap.closest('.ot-board-scroll');
+      if (scroller) {
+        ro = new ResizeObserver(compute);
+        ro.observe(scroller);
+      }
+    }
+    window.addEventListener('resize', compute);
+    window.addEventListener('orientationchange', compute);
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener('resize', compute);
+      window.removeEventListener('orientationchange', compute);
+    };
+  }, [designW, designH]);
+  if (designW == null) {
+    return (
+      <article
+        className="ot-bcard ot-bcard-html"
+        ref={ref}
+        data-board-id={item.id}
+        aria-label={item.title ?? 'Interaktivt innehåll'}
+      >
+        <iframe
+          className="ot-html-frame"
+          title={item.title ?? 'Interaktivt innehåll'}
+          sandbox="allow-scripts"
+          srcDoc={srcDoc}
+          style={{ height: Math.max(1, Math.floor(designH * scale)) }}
+        />
+      </article>
+    );
+  }
+  const showW = Math.max(1, Math.floor(designW * scale));
+  const showH = Math.max(1, Math.floor(designH * scale));
   return (
-    <article className="ot-bcard" ref={ref} data-board-id={item.id} aria-label={item.title ?? 'Interaktiv'}>
-      {item.title && <h2>{item.title}</h2>}
-      <iframe
-        className="ot-html-frame"
-        title={item.title ?? 'Interaktivt innehåll'}
-        sandbox="allow-scripts"
-        srcDoc={srcDoc}
-        style={{ height }}
-      />
+    <article
+      className="ot-bcard ot-bcard-html"
+      ref={ref}
+      data-board-id={item.id}
+      aria-label={item.title ?? 'Interaktivt innehåll'}
+    >
+      <div
+        className="ot-html-fit"
+        data-scale={scale.toFixed(4)}
+        data-design-w={designW}
+        data-design-h={designH}
+        style={{ width: showW, height: showH }}
+      >
+        <iframe
+          className="ot-html-frame"
+          title={item.title ?? 'Interaktivt innehåll'}
+          sandbox="allow-scripts"
+          srcDoc={srcDoc}
+          style={{
+            width: designW,
+            height: designH,
+            transform: `scale(${scale})`,
+            transformOrigin: 'top left',
+          }}
+        />
+      </div>
     </article>
   );
 }
@@ -175,15 +263,38 @@ function ImageCard({ item, onMounted }: CardProps) {
 function PendingCard({ item, onMounted }: CardProps) {
   if (item.kind !== 'pending') return null;
   const { ref } = useReportMounted(item, onMounted);
+  const [availH, setAvailH] = useState<number | null>(null);
+  useEffect(() => {
+    const wrap = ref.current;
+    if (!wrap) return;
+    const compute = () => setAvailH(scrollAvail(wrap)?.h ?? null);
+    compute();
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      const scroller = wrap.closest('.ot-board-scroll');
+      if (scroller) {
+        ro = new ResizeObserver(compute);
+        ro.observe(scroller);
+      }
+    }
+    window.addEventListener('resize', compute);
+    window.addEventListener('orientationchange', compute);
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener('resize', compute);
+      window.removeEventListener('orientationchange', compute);
+    };
+  }, []);
+  const minHeight =
+    item.height == null ? undefined : availH == null ? item.height : Math.min(item.height, Math.max(1, Math.floor(availH)));
   return (
     <article
-      className="ot-bcard"
+      className="ot-bcard ot-bcard-pending"
       ref={ref}
       data-board-id={item.id}
       aria-label={item.title}
-      style={item.height ? { minHeight: item.height } : undefined}
+      style={minHeight ? { minHeight } : undefined}
     >
-      <h2>{item.title}</h2>
       <div className="ot-pending" role="status">
         Ritar…
       </div>

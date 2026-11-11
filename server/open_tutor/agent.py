@@ -216,15 +216,21 @@ class Tutor(Agent):
         from .board_model import render_board
         learner = (self.learner or {}).get("name", "") or ""
         pid = self.ids.next()
+        # Freeze the commissioned design size before any await: a board-size
+        # update arriving during the placeholder RPC (arrival->teaching layout
+        # shift, resize, rotation) must not change what the model lays out,
+        # what the placeholder reserves, or what the screenshot captures.
+        # The client scales this design box to fit the current pane.
+        design_w, design_h, design_device = self.board_w, self.board_h, self.board_device
         try:
-            ph = PendingItem(id=pid, title=(title or need)[:120], height=640)
+            ph = PendingItem(id=pid, title=(title or need)[:120], height=design_h)
             await self._rpc("board.show", ph.model_dump(exclude_none=True))
         except Exception:
             pass
         try:
             result = await render_board(need, background, learner_name=learner,
-                                        board_w=self.board_w, board_h=self.board_h,
-                                        device=self.board_device)
+                                        board_w=design_w, board_h=design_h,
+                                        device=design_device)
         except Exception as error:
             await self._remove(pid)
             return (f"The board could not be made ({type(error).__name__}). "
@@ -236,7 +242,7 @@ class Tutor(Agent):
                     "The placeholder was removed. Explain in words instead.")
         try:
             item = HtmlItem(id=pid, title=(title or need)[:120],
-                            html=html[:100000], height=640)
+                            html=html[:100000], height=design_h, width=design_w)
         except ValidationError as error:
             await self._remove(pid)
             return (f"Invalid board: {error.errors()[0]['msg']} "
