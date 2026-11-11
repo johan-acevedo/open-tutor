@@ -199,10 +199,16 @@ async def test_render_board_rejects_html_missing_close_tag(monkeypatch):
     async def no_screenshot(html, width, height):
         raise AssertionError("truncated HTML must never be screenshotted")
 
-    monkeypatch.setattr(board_model, "call_board_model", partial)
+    calls = []
+    async def counting(system, user_message):
+        calls.append(1)
+        return await partial(system, user_message)
+
+    monkeypatch.setattr(board_model, "call_board_model", counting)
     monkeypatch.setattr(board_model, "screenshot_board", no_screenshot)
-    with pytest.raises(ValueError, match="missing </html>"):
+    with pytest.raises(ValueError, match="no HTML document"):
         await board_model.render_board("need", "background")
+    assert len(calls) == 2  # one retry before giving up
 
 
 async def test_render_board_accepts_complete_document(monkeypatch):

@@ -274,12 +274,19 @@ async def render_board(need: str, background: str, learner_name: str = "",
             "revised HTML document starting with <!doctype html>, then after "
             "</html> explain in 2-3 sentences what changed and what the tutor "
             "should start from.")
-    reply = await call_board_model(system, user_message)
-    low_reply = reply.lower()
-    if ("<!doctype html" in low_reply or "<html" in low_reply) and "</html>" not in low_reply:
-        raise ValueError("board model returned truncated HTML (missing </html>)")
-    html, note = extract_board(reply)
-    if not html:
-        raise ValueError("board model returned no HTML document")
-    png = await screenshot_board(html, board_w, board_h)
-    return {"html": html, "note": note, "png": png}
+    last_reply = ""
+    for attempt in (1, 2):
+        reply = await call_board_model(system, user_message)
+        last_reply = reply
+        low_reply = reply.lower()
+        if ("<!doctype html" in low_reply or "<html" in low_reply) and "</html>" not in low_reply:
+            log.warning("board render attempt %d truncated (missing </html>), retrying", attempt)
+            continue
+        html, note = extract_board(reply)
+        if not html:
+            log.warning("board render attempt %d had no HTML (reply %.120s), retrying",
+                        attempt, reply.strip()[:120])
+            continue
+        png = await screenshot_board(html, board_w, board_h)
+        return {"html": html, "note": note, "png": png}
+    raise ValueError("board model returned no HTML document" + (f" (reply: {last_reply.strip()[:200]})" if last_reply.strip() else ""))
