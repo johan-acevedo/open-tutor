@@ -21,6 +21,7 @@ from livekit import api
 from pydantic import BaseModel, Field
 
 from .config import AGENT_NAME
+from .screen_gateway import register_screen_routes
 
 WEB_DIST = Path(os.environ.get("TUTOR_WEB_DIST", Path(__file__).resolve().parents[2] / "web" / "dist"))
 TOKEN_TTL = timedelta(hours=3)
@@ -96,6 +97,8 @@ def create_app(environ: dict[str, str] | None = None) -> FastAPI:
     @app.get("/api/health")
     async def health() -> dict[str, Any]:
         return {"ok": True, "livekit": bool(env.get("LIVEKIT_URL"))}
+
+    register_screen_routes(app, env)
 
     @app.post("/api/session")
     async def create_session(body: SessionRequest, request: Request) -> dict[str, str]:
