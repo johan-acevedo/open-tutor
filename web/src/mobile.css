@@ -222,35 +222,27 @@
   width: 100%;
   min-height: 0;
   overflow: visible;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--companion-w);
-  grid-template-rows: minmax(0, 1fr);
-  gap: 4px;
-  padding-left: 8px;
-  align-items: start;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 8px;
 }
 .ot-phone .ot-main .ot-companion {
-  grid-column: 2;
-  grid-row: 1;
-  height: 100%;
-  max-height: none;
-  width: 100%;
+  width: min(64vw, 300px);
 }
 .ot-phone .ot-main .ot-avatar-img {
-  flex: 1;
-  max-height: 100%;
-  height: 100%;
   width: 100%;
 }
 .ot-phone .ot-voice-bubble {
-  grid-column: 1;
-  grid-row: 1;
-  margin-top: 10px;
-  align-items: flex-start;
-  padding: 10px 12px;
+  align-items: center;
+  text-align: center;
+  margin-top: -24px;
+  z-index: 2;
+  padding: 0 8px;
   gap: 8px;
   border: 1px solid var(--ot-border);
-  border-radius: 18px 18px 6px 18px;
+  border-radius: 18px;
   background: var(--ot-elevated);
   max-height: 100%;
   overflow: hidden;
@@ -312,9 +304,12 @@
 }
 /* Live header: desktop is a row (greeting left, inbox right).
    On phone the head dissolves so the order becomes
-   greeting -> board -> inbox strip (avatar is the next grid row). */
+   inbox strip -> greeting -> board (avatar is the next grid row). */
 .ot-phone .ot-live-head {
   display: contents;
+}
+.ot-phone .ot-inbox {
+  order: 0;
 }
 .ot-phone .ot-greeting {
   order: 1;
@@ -323,12 +318,13 @@
   order: 2;
 }
 .ot-phone .ot-inbox {
-  order: 3;
   margin: 4px 10px 8px;
   max-width: none;
   white-space: normal;
   border-radius: 14px;
   flex-wrap: wrap;
+  font-size: 15px;
+  padding: 10px 16px;
 }
 .ot-phone .ot-follow-btn {
   order: 4;

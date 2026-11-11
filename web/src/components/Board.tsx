@@ -4,7 +4,6 @@ import BoardCard from './Cards';
 
 type Props = {
   learnerName: string;
-  lastTopic: string | null;
   items: BoardItem[];
   focused: BoardFocusPayload | null;
   onItemMounted: (id: string) => void;
@@ -22,7 +21,6 @@ type View = { kind: 'focus' } | { kind: 'all' } | { kind: 'homework'; id: string
 
 export default function Board({
   learnerName,
-  lastTopic,
   items,
   focused,
   onItemMounted,
@@ -30,8 +28,6 @@ export default function Board({
   dragOver,
   mobile = false,
   activeItemId,
-  onCamera,
-  onFiles,
   onEnd,
   ending,
 }: Props) {
@@ -130,8 +126,6 @@ export default function Board({
       <div className="ot-live-head">
         <div className="ot-greeting">
           <h1>Hej {learnerName}!</h1>
-          <p className="ot-greeting-sub">Vad har du med dig idag?</p>
-          {lastTopic && <span className="ot-last-chip">Förra gången: {lastTopic}</span>}
         </div>
         <div
           className={`ot-inbox${dragOver ? ' dragover' : ''}`}
@@ -146,18 +140,7 @@ export default function Board({
               ? 'Inkorg · tom'
               : `Inkorg · ${homeworkCount} ${homeworkCount === 1 ? 'uppgift' : 'uppgifter'}`}
           </span>
-          {mobile ? (
-            <span className="ot-inbox-actions">
-              <button type="button" onClick={onCamera}>
-                Fota läxan
-              </button>
-              <button type="button" onClick={onFiles}>
-                Välj bild eller PDF
-              </button>
-            </span>
-          ) : (
-            <span className="ot-inbox-hint">släpp fil här</span>
-          )}
+          {!mobile && <span className="ot-inbox-hint">släpp fil här</span>}
         </div>
       </div>
       <div

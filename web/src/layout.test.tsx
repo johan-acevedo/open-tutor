@@ -12,7 +12,6 @@ describe('Board layout switch', () => {
     render(
       <Board
         learnerName="Leo"
-        lastTopic="ekvationer"
         items={[]}
         focused={null}
         onItemMounted={noop}
@@ -21,8 +20,6 @@ describe('Board layout switch', () => {
       />,
     );
     expect(screen.getByText('Hej Leo!')).toBeTruthy();
-    expect(screen.getByText('Vad har du med dig idag?')).toBeTruthy();
-    expect(screen.getByText(/Förra gången: ekvationer/)).toBeTruthy();
     expect(screen.getByText('Inkorg · tom')).toBeTruthy();
     expect(screen.getByText('släpp fil här')).toBeTruthy();
     expect(screen.getByText('Här hamnar det vi jobbar med.')).toBeTruthy();
@@ -33,7 +30,6 @@ describe('Board layout switch', () => {
     const { rerender } = render(
       <Board
         learnerName="Leo"
-        lastTopic={null}
         items={[]}
         focused={null}
         onItemMounted={noop}
@@ -46,7 +42,6 @@ describe('Board layout switch', () => {
     rerender(
       <Board
         learnerName="Leo"
-        lastTopic={null}
         items={[
           { id: 'h1', kind: 'homework', title: 'matte1.jpg', images: ['data:image/jpeg;base64,x'] },
           { id: 'h2', kind: 'homework', title: 'matte2.jpg', images: ['data:image/jpeg;base64,y'] },
@@ -64,7 +59,6 @@ describe('Board layout switch', () => {
     const { rerender } = render(
       <Board
         learnerName="Leo"
-        lastTopic={null}
         items={[]}
         focused={null}
         onItemMounted={noop}
@@ -77,7 +71,6 @@ describe('Board layout switch', () => {
     rerender(
       <Board
         learnerName="Leo"
-        lastTopic={null}
         items={[{ id: 't1', kind: 'text', title: 'Ekvationer', markdown: 'Vi löser **3x = 15**.' }]}
         focused={null}
         onItemMounted={noop}
@@ -97,7 +90,6 @@ describe('Board layout switch', () => {
     render(
       <Board
         learnerName="Elsa"
-        lastTopic={null}
         items={[{ id: 'h1', kind: 'homework', title: 'matteprov.jpg', images: ['data:image/jpeg;base64,x'] }]}
         focused={null}
         onItemMounted={noop}
@@ -112,7 +104,7 @@ describe('Board layout switch', () => {
 describe('Mobile board continuity', () => {
   const equation: BoardItem = { id: 'a', kind: 'steps', title: 'Equation', steps: [{ tex: '3x=15' }, { tex: 'x=5' }] };
   const other: BoardItem = { id: 'b', kind: 'text', title: 'Other task', markdown: 'A different task' };
-  const defaults = { learnerName: 'Leo', lastTopic: null, onResourceClosed: noop, dragOver: false, mobile: true };
+  const defaults = { learnerName: 'Leo', onResourceClosed: noop, dragOver: false, mobile: true };
 
   it('keeps the selected older item in focus and reveals future steps only in the full board', () => {
     const { container } = render(

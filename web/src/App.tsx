@@ -33,9 +33,6 @@ export default function App() {
   const inSession = phase === 'live' || phase === 'ending' || phase === 'connecting';
   const showBottomBar = phase === 'live' || phase === 'ending';
   const mode = layoutMode(session.items.length);
-  const lastTopic =
-    profile && profile.notes.length > 0 ? (profile.notes[profile.notes.length - 1].topic ?? null) : null;
-
   const avatar = mapAvatarState({
     agentState: session.agentState,
     tutorMode: session.tutorMode,
@@ -82,7 +79,6 @@ export default function App() {
           <section className="ot-board" aria-label="Whiteboard">
             <Board
               learnerName={profile.name}
-              lastTopic={lastTopic}
               items={session.items}
               focused={session.focused}
               onItemMounted={session.onItemMounted}
