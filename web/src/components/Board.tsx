@@ -4,16 +4,12 @@ import BoardCard from './Cards';
 
 type Props = {
   learnerName: string;
-  lastTopic: string | null;
   items: BoardItem[];
   focused: BoardFocusPayload | null;
   onItemMounted: (id: string) => void;
   onResourceClosed: (id: string) => void;
-  dragOver: boolean;
   mobile?: boolean;
   activeItemId?: string | null;
-  onCamera?: () => void;
-  onFiles?: () => void;
   onEnd?: () => void;
   ending?: boolean;
 };
@@ -22,16 +18,12 @@ type View = { kind: 'focus' } | { kind: 'all' } | { kind: 'homework'; id: string
 
 export default function Board({
   learnerName,
-  lastTopic,
   items,
   focused,
   onItemMounted,
   onResourceClosed,
-  dragOver,
   mobile = false,
   activeItemId,
-  onCamera,
-  onFiles,
   onEnd,
   ending,
 }: Props) {
@@ -76,7 +68,6 @@ export default function Board({
     <>
       {mobile && (
         <nav className="ot-board-nav" aria-label="Tavlans vyer">
-          {items.length === 0 && <strong>Open Tutor</strong>}
           {homework && (
             <button
               type="button"
@@ -134,26 +125,10 @@ export default function Board({
         onTouchMove={pauseFollow}
       >
         {items.length === 0 && (
-          <div className="ot-greeting">
-            <h1>Hej {learnerName}!</h1>
-            <p className="ot-greeting-sub">Vad har du med dig idag?</p>
-            {lastTopic && <span className="ot-last-chip">Förra gången: {lastTopic}</span>}
-            {mobile ? (
-              <div className="ot-arrival-actions">
-                <button type="button" onClick={onCamera}>
-                  Fota läxan
-                </button>
-                <button type="button" onClick={onFiles}>
-                  Välj bild eller PDF
-                </button>
-              </div>
-            ) : (
-              <div className={`ot-dropzone${dragOver ? ' dragover' : ''}`} aria-hidden="true">
-                <div>📄</div>
-                <div>Släpp en fil eller klistra in</div>
-                <span className="ot-key-hint">Ctrl + V</span>
-              </div>
-            )}
+          <div className="ot-board-empty" role="status" aria-label="Whiteboard">
+            <h1 className="ot-board-empty-greeting">Hej {learnerName}!</h1>
+            <p>Här hamnar det vi jobbar med.</p>
+            <span>Säg hej — tutorn ritar upp här.</span>
           </div>
         )}
         {items.map((item) => (

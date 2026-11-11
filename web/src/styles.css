@@ -80,6 +80,114 @@ a:focus-visible {
   padding: 0 24px;
 }
 
+.ot-topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+}
+
+/* ---------- Header menu (hamburger): inbox + about ---------- */
+
+.ot-menu-wrap {
+  position: relative;
+}
+
+.ot-menu-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  border: 1px solid var(--ot-border);
+  background: var(--ot-elevated);
+  color: var(--ot-text);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.ot-menu-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 30;
+  background: var(--ot-elevated);
+  border: 1px solid var(--ot-border);
+  border-radius: 16px;
+  box-shadow: 0 12px 32px #00000088;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 280px;
+  max-width: min(360px, calc(100vw - 32px));
+}
+
+.ot-menu-panel .ot-inbox {
+  max-width: none;
+  white-space: normal;
+  flex-wrap: wrap;
+  border-radius: 12px;
+  row-gap: 4px;
+}
+
+.ot-menu-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.ot-menu-actions button {
+  flex: 1 1 0;
+  min-height: 44px;
+  border: 1px solid var(--ot-border);
+  border-radius: 12px;
+  background: var(--ot-bottombar);
+  color: var(--ot-text);
+  padding: 8px 12px;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.ot-menu-about-row {
+  background: none;
+  border: none;
+  color: var(--ot-text-dim);
+  font-size: 15px;
+  text-align: left;
+  padding: 8px 4px;
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.ot-menu-about {
+  border-top: 1px solid var(--ot-border);
+  padding-top: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ot-menu-about p {
+  margin: 0;
+  font-size: 15px;
+  color: var(--ot-text);
+}
+
+.ot-menu-about button {
+  min-height: 44px;
+  border: 1px solid var(--ot-border);
+  border-radius: 10px;
+  background: var(--ot-bottombar);
+  color: var(--ot-text);
+  padding: 6px 14px;
+  font-size: 15px;
+  cursor: pointer;
+}
+
 .ot-wordmark {
   font-size: 22px;
   font-weight: 700;
@@ -265,18 +373,56 @@ a:focus-visible {
   border-radius: 24px;
 }
 
-/* ---------- Arrival greeting ---------- */
+/* ---------- Inbox (lives in the header menu) ---------- */
 
-.ot-greeting h1 {
-  font-size: 32px;
-  font-weight: 600;
-  margin: 12px 0 4px;
+.ot-inbox {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--ot-elevated);
+  border: 1px solid var(--ot-border);
+  border-radius: 999px;
+  padding: 12px 24px;
+  font-size: 16px;
+  color: var(--ot-text);
+  max-width: 420px;
+  white-space: nowrap;
 }
 
-.ot-greeting-sub {
-  font-size: 22px;
+.ot-inbox.dragover {
+  border-color: var(--ot-cyan);
+  background: var(--ot-cyan-fill);
+}
+
+.ot-inbox-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.ot-inbox-text {
+  font-weight: 600;
+}
+
+.ot-inbox-hint {
+  font-size: 14px;
+  color: var(--ot-text-dim);
+}
+
+.ot-inbox-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ot-inbox-actions button {
+  min-height: 44px;
+  border: 1px solid var(--ot-border);
+  border-radius: 12px;
+  background: var(--ot-elevated);
   color: var(--ot-text);
-  margin: 0 0 12px;
+  padding: 8px 12px;
+  font-size: 16px;
 }
 
 .ot-last-chip {
@@ -315,6 +461,42 @@ a:focus-visible {
   font-size: 15px;
   color: var(--ot-text-dim);
   background: var(--ot-elevated);
+}
+
+/* ---------- Board empty state (central whiteboard) ---------- */
+
+.ot-board-empty {
+  flex: 1 1 auto;
+  min-height: 320px;
+  border: 1px solid var(--ot-border);
+  border-radius: 16px;
+  background: var(--ot-elevated);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+  padding: 48px 24px;
+  color: var(--ot-text-dim);
+}
+
+.ot-board-empty-greeting {
+  margin: 0;
+  font-size: 40px;
+  font-weight: 600;
+  color: var(--ot-text);
+}
+
+.ot-board-empty p {
+  margin: 0;
+  color: var(--ot-text);
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.ot-board-empty span {
+  font-size: 15px;
 }
 
 /* ---------- Avatar column ---------- */
@@ -723,6 +905,28 @@ a:focus-visible {
 
 .ot-mic-btn.muted {
   color: var(--ot-text-dim);
+}
+
+.ot-mic-glyph {
+  position: relative;
+  display: inline-block;
+  line-height: 1;
+}
+
+.ot-mic-btn.muted .ot-mic-glyph {
+  opacity: 0.65;
+}
+
+.ot-mic-btn.muted .ot-mic-glyph::after {
+  content: '';
+  position: absolute;
+  left: -4px;
+  right: -4px;
+  top: 50%;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+  transform: rotate(-45deg);
 }
 
 .ot-chat-input {

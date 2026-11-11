@@ -75,7 +75,9 @@ export default function BottomBar({
         title={micEnabled ? 'Mikrofon på' : 'Mikrofon av'}
         aria-pressed={micEnabled}
       >
-        <span aria-hidden="true">{micEnabled && !micBlocked ? '🎙️' : '🚫'}</span>
+        <span className="ot-mic-glyph" aria-hidden="true">
+          🎙️
+        </span>
       </button>
       {!mobile && (
         <button type="button" className="ot-end-btn" onClick={onEnd} aria-label="Avsluta sessionen">

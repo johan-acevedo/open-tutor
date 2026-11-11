@@ -7,6 +7,7 @@ import ProfilePicker from './components/ProfilePicker';
 import Avatar from './components/Avatar';
 import Board from './components/Board';
 import BottomBar from './components/BottomBar';
+import TopMenu from './components/TopMenu';
 import EndCard from './components/EndCard';
 import HomeworkTray from './components/HomeworkTray';
 import { useViewport } from './useViewport';
@@ -33,9 +34,6 @@ export default function App() {
   const inSession = phase === 'live' || phase === 'ending' || phase === 'connecting';
   const showBottomBar = phase === 'live' || phase === 'ending';
   const mode = layoutMode(session.items.length);
-  const lastTopic =
-    profile && profile.notes.length > 0 ? (profile.notes[profile.notes.length - 1].topic ?? null) : null;
-
   const avatar = mapAvatarState({
     agentState: session.agentState,
     tutorMode: session.tutorMode,
@@ -55,11 +53,21 @@ export default function App() {
     >
       <header className="ot-topbar">
         <div className="ot-wordmark">Open Tutor</div>
-        {profile && inSession && (
-          <div className="ot-learner-pill" aria-label="Inloggad profil">
-            {pillLabel(profile)}
-          </div>
-        )}
+        <div className="ot-topbar-right">
+          {profile && inSession && (
+            <div className="ot-learner-pill" aria-label="Inloggad profil">
+              {pillLabel(profile)}
+            </div>
+          )}
+          {inSession && (
+            <TopMenu
+              items={session.items}
+              dragOver={session.dragOver}
+              onCamera={() => cameraRef.current?.click()}
+              onFiles={() => fileRef.current?.click()}
+            />
+          )}
+        </div>
       </header>
 
       {phase === 'profiles' && (
@@ -82,16 +90,12 @@ export default function App() {
           <section className="ot-board" aria-label="Whiteboard">
             <Board
               learnerName={profile.name}
-              lastTopic={lastTopic}
               items={session.items}
               focused={session.focused}
               onItemMounted={session.onItemMounted}
               onResourceClosed={(id) => void session.resourceClosed(id)}
-              dragOver={session.dragOver}
               mobile={mobile}
               activeItemId={session.activeItemId}
-              onCamera={() => cameraRef.current?.click()}
-              onFiles={() => fileRef.current?.click()}
               onEnd={() => void session.endSession()}
               ending={phase === 'ending'}
             />
