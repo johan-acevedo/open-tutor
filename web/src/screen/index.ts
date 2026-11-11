@@ -17,6 +17,9 @@ export type {
   ScreenRenderPageFn,
 } from "./controller";
 export {
+  decodeSvgDrawable,
+  drawContain,
+  drawCover,
   drawScreenPage,
   renderScreenPage,
   resolveScreenAssets,
@@ -62,6 +65,7 @@ export {
 } from "./assets";
 export {
   buildObservationContext,
+  buildVisibleText,
   publicRecordLeaksSolution,
   toPublicObservationRecord,
   validateObservationRequest,
@@ -79,12 +83,17 @@ export {
   type SupersessionGate,
 } from "./childTasks";
 export {
+  decodeDataUrl,
   downloadAssetBytes,
   fetchGeographyResearch,
   normalizeFeature,
+  normalizeMap,
   normalizeResearchResult,
   selectGeographyVisual,
   type GeographyFeature,
+  type GeographyGatewayResponse,
+  type GeographyMap,
+  type GeographyPlace,
   type GeographyResearchQuery,
   type GeographyResearchResult,
   type GeographyVisual,

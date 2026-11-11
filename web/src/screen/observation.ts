@@ -19,12 +19,13 @@ import type {
 
 export type ObservationValidation =
   | { ok: true }
-  | { ok: false; reason: "no-visible-page" | "stale-observation" };
+  | { ok: false; reason: "no-visible-page" | "stale-observation" | "lesson-mismatch" };
 
 export function validateObservationRequest(
   deck: ScreenDeckSnapshot,
   req: ScreenObservationRequest,
 ): ObservationValidation {
+  if (req.lessonId !== deck.lessonId) return { ok: false, reason: "lesson-mismatch" };
   const page = deck.pages[Math.min(Math.max(deck.current, 0), deck.pages.length - 1)];
   if (!page) return { ok: false, reason: "no-visible-page" };
   if (page.id !== req.pageId || page.revision !== req.revision) {
@@ -33,11 +34,32 @@ export function validateObservationRequest(
   return { ok: true };
 }
 
+/** Visible page text for the fox. Solution appears only after reveal. */
+export function buildVisibleText(
+  page: { title: string; body: string[]; solution: string; revealed: boolean },
+  draftText: string,
+): string {
+  const lines: string[] = [];
+  if (page.title.trim()) lines.push(page.title.trim());
+  for (const paragraph of page.body) {
+    const trimmed = paragraph.trim();
+    if (trimmed) lines.push(trimmed);
+  }
+  const draft = draftText.trim();
+  if (draft) lines.push(`Svar: ${draft}`);
+  if (page.revealed) {
+    const solution = page.solution.trim();
+    if (solution) lines.push(`Facit: ${solution}`);
+  }
+  return lines.join("\n").slice(0, 4000);
+}
+
 export function buildObservationContext(
   deck: ScreenDeckSnapshot,
   req: ScreenObservationRequest,
-  viewport: { w: number; h: number },
+  viewport: { w: number; h: number; device?: string },
 ): ScreenObservationContext {
+  if (req.lessonId !== deck.lessonId) throw new Error("lesson-mismatch");
   const page = deck.pages.find((p) => p.id === req.pageId && p.revision === req.revision);
   if (!page) throw new Error("stale-observation");
   const draft = readDraft(deck, page.id, page.revision);
@@ -45,7 +67,8 @@ export function buildObservationContext(
     observationId: req.observationId,
     lessonId: deck.lessonId,
     page: { id: page.id, revision: page.revision },
-    viewport: { w: viewport.w, h: viewport.h },
+    visibleText: buildVisibleText(page, draft),
+    viewport: { w: viewport.w, h: viewport.h, device: viewport.device ?? "desktop" },
     answerState: {
       hasDraft: draft.length > 0,
       draftLength: draft.length,

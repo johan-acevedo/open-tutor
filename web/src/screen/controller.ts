@@ -143,6 +143,8 @@ interface OutstandingShow {
   need: string;
   needText?: string;
   backgroundText?: string;
+  /** Synthetic prepare intent spawned by this show (show-starts-prepare). */
+  prepIntentId?: string;
   timer: ReturnType<typeof setTimeout>;
 }
 
@@ -184,6 +186,7 @@ export function createScreenController(options: ScreenControllerOptions): Screen
   const registry: IntentRegistry = new Map();
   const lastEventByIntent = new Map<string, ScreenOutboundEvent>();
   const needByIntent = new Map<string, string>();
+  const opByIntent = new Map<string, ScreenIntent["op"]>();
   const candidates: CandidateStore = new Map();
   const gate: SupersessionGate = createSupersessionGate();
   const pendingRenders: PendingRender[] = [];
@@ -193,6 +196,8 @@ export function createScreenController(options: ScreenControllerOptions): Screen
   let canvas: HTMLCanvasElement | null = null;
   let worker: ScreenWorkerPort | null = null;
   let workerFailed = false;
+  let harnessReady = false;
+  const queuedPrepares: Array<{ intent: ScreenIntent; seq: number }> = [];
   let inFlightObservations = new Map<string, Promise<ScreenObservationResult>>();
   let closed = false;
   let initialized = false;
@@ -315,6 +320,21 @@ export function createScreenController(options: ScreenControllerOptions): Screen
     }
   }
 
+  function flushQueuedPrepares(): void {
+    if (!worker || workerFailed || !harnessReady) return;
+    const pending = queuedPrepares.splice(0, queuedPrepares.length);
+    for (const item of pending) {
+      try {
+        worker.post({ kind: "prepare", intent: item.intent, seq: item.seq });
+      } catch {
+        workerFailed = true;
+        worker = null;
+        queuedPrepares.unshift(item);
+        break;
+      }
+    }
+  }
+
   function ensureWorker(): void {
     if (worker || workerFailed || closed) return;
     const factory = options.createWorker ?? createPiScreenWorker;
@@ -330,6 +350,7 @@ export function createScreenController(options: ScreenControllerOptions): Screen
       void handleWorkerMessage(message);
     };
     workerFailed = false;
+    harnessReady = false;
     try {
       worker.post({
         kind: "init",
@@ -350,7 +371,11 @@ export function createScreenController(options: ScreenControllerOptions): Screen
   }
 
   async function handleWorkerMessage(message: ScreenWorkerToMain): Promise<void> {
-    if (message.kind === "harness-ready") return;
+    if (message.kind === "harness-ready") {
+      harnessReady = true;
+      flushQueuedPrepares();
+      return;
+    }
     if (message.kind === "worker-log") return;
     if (message.kind === "worker-failed") {
       if (message.intentId && getIntentOutcome(registry, message.intentId)?.status === "pending") {
@@ -395,20 +420,56 @@ export function createScreenController(options: ScreenControllerOptions): Screen
     const need = needByIntent.get(intentId);
     const seq = raw.requestSeq;
 
+    const sanitizedSvg = raw.svgAsset ? sanitizeSvg(raw.svgAsset) : null;
+    // Real path: the worker already stored researched bytes in the shared
+    // per-profile blob store and ships a validated ScreenAssetRef. Accept
+    // and verify it instead of discarding — no external browser download.
+    let verifiedAsset: CandidatePage["asset"] = null;
+    if (raw.asset) {
+      const issues = validateAssetRef(raw.asset);
+      if (issues.length === 0 && raw.asset.lessonId === lessonId && raw.asset.status === "ready") {
+        try {
+          const record = await blobStore.get(raw.asset.id);
+          if (
+            record &&
+            record.hash.toLowerCase() === raw.asset.hash.toLowerCase() &&
+            record.meta.mimeType === raw.asset.mimeType
+          ) {
+            verifiedAsset = raw.asset;
+          }
+        } catch {
+          // treat lookup failures as unverified below
+        }
+      }
+      if (!verifiedAsset && !sanitizedSvg && !researchImage) {
+        if (getIntentOutcome(registry, intentId)?.status === "pending") {
+          settle(intentId, lessonId, { status: "failed", reason: "asset-invalid" });
+        }
+        return;
+      }
+      // Invalid ref with an SVG fallback keeps the SVG; legacy image path
+      // below still applies when a researchImage was supplied.
+      if (!verifiedAsset) {
+        // fall through: keep svgAsset, try legacy researchImage if present
+      }
+    }
+
     let candidate: CandidatePage = {
       ...raw,
       id: raw.id || newId("p"),
       revision: raw.revision || newId("r"),
       body: [...raw.body],
       sources: [...(raw.sources ?? [])],
-      svgAsset: raw.svgAsset ? sanitizeSvg(raw.svgAsset) : null,
-      asset: null,
+      svgAsset: sanitizedSvg,
+      asset: verifiedAsset,
       revealed: false,
       status: "ready",
       receivedAt: now(),
     };
 
-    if (researchImage) {
+    // Legacy compat path: a raw image URL the main thread downloads,
+    // verifies and stores. The real asset-ref path above needs no download.
+    if (!verifiedAsset && researchImage) {
       try {
         const bytes = await downloadAssetBytes(researchImage.url, options.accessCode);
         const mimeType = sniffMimeType(bytes) ?? "image/png";
@@ -460,17 +521,23 @@ export function createScreenController(options: ScreenControllerOptions): Screen
       return;
     }
 
+    // Ready-gating: only prepare intents settle ready at invisible commit.
+    // A show must settle exactly once after promote+render (via the
+    // outstanding-show path below), never at candidate commit — otherwise
+    // ready would fire before actual pixels and could emit twice.
     const outcome = getIntentOutcome(registry, intentId);
-    if (outcome?.status === "pending") {
+    if (outcome?.status === "pending" && opByIntent.get(intentId) === "prepare") {
       settle(intentId, lessonId, { status: "ready", page: { id: candidate.id, revision: candidate.revision } });
     }
 
     // An outstanding show satisfied by this candidate promotes without a
-    // second request.
+    // second request. Matches the show itself, its auto-prepare child, or
+    // any candidate with the same normalised need.
     const showIndex = outstandingShows.findIndex(
       (show) =>
         show.lessonId === lessonId &&
         (candidate.intentId === show.intentId ||
+          (show.prepIntentId !== undefined && candidate.intentId === show.prepIntentId) ||
           (need !== undefined && need === show.need && show.need !== "\n")),
     );
     if (showIndex !== -1) {
@@ -530,14 +597,20 @@ export function createScreenController(options: ScreenControllerOptions): Screen
       }
       return;
     }
-    // 2. Durable Harness worker.
+    // 2. Durable Harness worker (queued until harness-ready, worker-side
+    // boot promise is the second fence — no rootHandle-null race).
     ensureWorker();
     if (worker && !workerFailed) {
+      if (!harnessReady) {
+        queuedPrepares.push({ intent, seq });
+        return;
+      }
       try {
         worker.post({ kind: "prepare", intent, seq });
         return;
       } catch {
         workerFailed = true;
+        harnessReady = false;
         worker = null;
       }
     }
@@ -602,6 +675,7 @@ export function createScreenController(options: ScreenControllerOptions): Screen
       }
       registerIntent(registry, intent.intentId);
       needByIntent.set(intent.intentId, needKey(intent));
+      opByIntent.set(intent.intentId, "reveal");
       const { deck: next, outcome } = applyReveal(deck, intent.target.pageId, intent.target.revision, now());
       if (outcome.kind === "stale") {
         settle(intent.intentId, lessonId, { status: "rejected", reason: outcome.reason });
@@ -626,6 +700,7 @@ export function createScreenController(options: ScreenControllerOptions): Screen
       registerIntent(registry, intent.intentId);
       const want = needKey(intent);
       needByIntent.set(intent.intentId, want);
+      opByIntent.set(intent.intentId, "show");
       const match = findPromotionCandidate(candidates, intent, needByIntent);
       if (match) {
         try {
@@ -642,8 +717,10 @@ export function createScreenController(options: ScreenControllerOptions): Screen
         scheduleRender(intent.intentId, match.id, match.revision);
         return { accepted: true, intentId: intent.intentId };
       }
-      // No ready candidate yet: hold as an outstanding request so a matching
-      // background candidate promotes without a second request.
+      // No ready candidate yet: hold as an outstanding request AND start
+      // preparation for this show intent immediately, so the hold does not
+      // wait 60s for work that was never started. Prepare-only behaviour is
+      // preserved: without an outstanding show, prepare stays invisible.
       const timer = setTimeout(() => {
         const index = outstandingShows.findIndex((s) => s.intentId === intent.intentId);
         if (index === -1) return;
@@ -652,14 +729,22 @@ export function createScreenController(options: ScreenControllerOptions): Screen
           settle(intent.intentId, lessonId, { status: "rejected", reason: "no-matching-candidate" });
         }
       }, outstandingShowTimeoutMs);
+      const prepIntentId = `${intent.intentId}:auto-prepare`;
+      needByIntent.set(prepIntentId, want);
+      opByIntent.set(prepIntentId, "prepare");
+      const prepSeq = gate.next();
+      gate.noteSuperseded(want, prepSeq);
       outstandingShows.push({
         intentId: intent.intentId,
         lessonId,
         need: want,
         needText: intent.need,
         backgroundText: intent.background,
+        prepIntentId,
         timer,
       });
+      const prepIntent: ScreenIntent = { ...intent, op: "prepare", intentId: prepIntentId };
+      void runPrepare(prepIntent, prepSeq);
       return { accepted: true, intentId: intent.intentId };
     }
 
@@ -667,6 +752,7 @@ export function createScreenController(options: ScreenControllerOptions): Screen
       registerIntent(registry, intent.intentId);
       const want = needKey(intent);
       needByIntent.set(intent.intentId, want);
+      opByIntent.set(intent.intentId, "prepare");
       const seq = gate.next();
       gate.noteSuperseded(want, seq);
       void runPrepare(intent, seq);
@@ -752,6 +838,8 @@ export function createScreenController(options: ScreenControllerOptions): Screen
     candidates.clear();
     for (const show of outstandingShows) if (show.timer) clearTimeout(show.timer);
     outstandingShows.length = 0;
+    queuedPrepares.length = 0;
+    harnessReady = false;
     for (const pending of pendingRenders) if (pending.timer) clearTimeout(pending.timer);
     pendingRenders.length = 0;
     lastRendered = null;
@@ -794,6 +882,7 @@ export function createScreenController(options: ScreenControllerOptions): Screen
     closed = true;
     for (const show of outstandingShows) if (show.timer) clearTimeout(show.timer);
     outstandingShows.length = 0;
+    queuedPrepares.length = 0;
     for (const pending of pendingRenders) if (pending.timer) clearTimeout(pending.timer);
     pendingRenders.length = 0;
     try {

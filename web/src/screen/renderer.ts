@@ -17,6 +17,8 @@ import type { ScreenPage } from "./types";
 export interface ScreenRenderAssets {
   /** Drawable images keyed by asset id (Image, ImageBitmap, canvas, …). */
   images?: Map<string, CanvasImageSource>;
+  /** Rasterised generated-SVG drawable, when the page carries `svgAsset`. */
+  svgImage?: CanvasImageSource | null;
   /** Child draft text drawn into the answer area. */
   draftText?: string;
   /** e.g. "Sida 2 av 3". Unknown to the deck core, supplied by the lead. */
@@ -58,7 +60,7 @@ export function renderScreenPage(
   canvas.width = Math.round(cssW * dpr);
   canvas.height = Math.round(cssH * dpr);
   const ctx = canvas.getContext("2d");
-  if (!ctx) return;
+  if (!ctx) throw new Error("no-2d-context");
   ctx.save();
   ctx.scale(dpr, dpr);
   drawScreenPage(ctx, { w: cssW, h: cssH }, page, assets);
@@ -155,6 +157,7 @@ export function drawScreenPage(
     if (boxY > y + 6) {
       y = boxY;
       const image = page.asset?.id ? assets.images?.get(page.asset.id) : undefined;
+      const svgDrawable = !image && page.svgAsset ? assets.svgImage : undefined;
       roundRect(ctx, boxX, y, boxW, visualH, 12);
       ctx.fillStyle = "#0a1122";
       ctx.fill();
@@ -165,7 +168,13 @@ export function drawScreenPage(
         ctx.save();
         roundRect(ctx, boxX, y, boxW, visualH, 12);
         ctx.clip();
-        drawCover(ctx, image, boxX, y, boxW, visualH);
+        drawContain(ctx, image, boxX, y, boxW, visualH);
+        ctx.restore();
+      } else if (svgDrawable) {
+        ctx.save();
+        roundRect(ctx, boxX, y, boxW, visualH, 12);
+        ctx.clip();
+        drawContain(ctx, svgDrawable, boxX, y, boxW, visualH);
         ctx.restore();
       } else {
         drawMapPlaceholder(ctx, boxX, y, boxW, visualH, page);
@@ -287,7 +296,37 @@ function roundRect(
   ctx.roundRect(x, y, w, h, r);
 }
 
-function drawCover(
+/**
+ * Contain-fit draw: the whole map/image stays visible (letterboxed),
+ * never cropped. Map images prefer this over cover-fit.
+ */
+export function drawContain(
+  ctx: CanvasRenderingContext2D,
+  image: CanvasImageSource,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+): void {
+  const iw = (image as { width?: number }).width ?? 0;
+  const ih = (image as { height?: number }).height ?? 0;
+  // SVG drawables without intrinsic size still paint via drawImage stretch.
+  if (!iw || !ih) {
+    try {
+      ctx.drawImage(image, x, y, w, h);
+    } catch {
+      // ignore undecodable drawables; placeholder path handles the rest
+    }
+    return;
+  }
+  const scale = Math.min(w / iw, h / ih);
+  const dw = iw * scale;
+  const dh = ih * scale;
+  ctx.drawImage(image, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
+}
+
+/** Legacy cover-fit kept for callers that explicitly want cropping. */
+export function drawCover(
   ctx: CanvasRenderingContext2D,
   image: CanvasImageSource,
   x: number,
@@ -368,10 +407,11 @@ export function sanitizeSvg(svg: string): string {
 }
 
 /**
- * Resolve blob image assets for a page into drawables. Call before
- * `renderScreenPage` when the page references researched image assets.
- * Generated-SVG pages need no resolution: the SVG string travels with the
- * page (sanitised at commit time, never an iframe).
+ * Resolve blob image assets and generated SVG into drawables. Call before
+ * `renderScreenPage`. Researched raster bytes come from the blob store;
+ * generated sanitized SVG is rasterised via `createImageBitmap` with an
+ * `Image`/object-URL fallback so a real canvas never keeps a permanent
+ * "Karta laddas" placeholder when SVG exists.
  */
 export async function resolveScreenAssets(
   page: ScreenPage,
@@ -388,7 +428,59 @@ export async function resolveScreenAssets(
       if (drawable) images.set(ref.id, drawable);
     }
   }
-  return { images, draftText, pageLabel };
+  let svgImage: CanvasImageSource | null = null;
+  if (page.svgAsset && page.svgAsset.trim()) {
+    svgImage = await decodeSvgDrawable(page.svgAsset);
+  }
+  return { images, svgImage, draftText, pageLabel };
+}
+
+export async function decodeSvgDrawable(svg: string): Promise<CanvasImageSource | null> {
+  const text = svg.trim();
+  if (!text) return null;
+  try {
+    if (typeof createImageBitmap !== "undefined") {
+      const blob = new Blob([text], { type: "image/svg+xml" });
+      const bmp = await createImageBitmap(blob);
+      if (bmp) return bmp;
+    }
+  } catch {
+    // fall through to the Image/object-URL path
+  }
+  try {
+    const g = globalThis as unknown as {
+      Image?: new () => HTMLImageElement;
+      URL?: { createObjectURL(b: Blob): string; revokeObjectURL(u: string): void };
+    };
+    if (g.Image && g.URL?.createObjectURL) {
+      const blob = new Blob([text], { type: "image/svg+xml" });
+      const url = g.URL.createObjectURL(blob);
+      try {
+        return await loadImageElement(url, g.Image);
+      } finally {
+        try {
+          g.URL.revokeObjectURL(url);
+        } catch {
+          // ignore revocation failures
+        }
+      }
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function loadImageElement(
+  url: string,
+  ImageCtor: new () => HTMLImageElement,
+): Promise<CanvasImageSource> {
+  return new Promise((resolve, reject) => {
+    const img = new ImageCtor();
+    img.onload = () => resolve(img as unknown as CanvasImageSource);
+    img.onerror = () => reject(new Error("svg-load-failed"));
+    img.src = url;
+  });
 }
 
 async function decodeDrawable(bytes: Uint8Array, mimeType: string): Promise<CanvasImageSource | null> {

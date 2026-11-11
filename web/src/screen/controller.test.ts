@@ -324,19 +324,30 @@ describe('observation', () => {
       saveCalls += 1;
       return originalSave(snapshot);
     };
-    const pending = h.controller.captureObservation({ observationId: 'o1', pageId: 'p-1', revision: 'r1' });
+    const pending = h.controller.captureObservation({
+      observationId: 'o1',
+      lessonId: 'lektion-1',
+      pageId: 'p-1',
+      revision: 'r1',
+    });
     await expect(
-      h.controller.captureObservation({ observationId: 'o2', pageId: 'p-1', revision: 'r1' }),
+      h.controller.captureObservation({ observationId: 'o2', lessonId: 'lektion-1', pageId: 'p-1', revision: 'r1' }),
     ).rejects.toThrow('observation-busy');
     release('data:image/png;base64,QUJD');
     const result = await pending;
     expect(saveCalls).toBe(0);
     expect(result.pngBase64).toBe('QUJD');
     expect(result.context.page).toEqual({ id: 'p-1', revision: 'r1' });
+    expect(result.context.lessonId).toBe('lektion-1');
+    expect(result.context.viewport).toMatchObject({ w: 1280, h: 800, device: 'desktop' });
     expect(result.context.answerState).toMatchObject({ hasDraft: true, draftLength: 3 });
+    expect(result.context.visibleText).toContain('Sida');
     await expect(
-      h.controller.captureObservation({ observationId: 'o3', pageId: 'p-1', revision: 'r0' }),
+      h.controller.captureObservation({ observationId: 'o3', lessonId: 'lektion-1', pageId: 'p-1', revision: 'r0' }),
     ).rejects.toThrow('stale-observation');
+    await expect(
+      h.controller.captureObservation({ observationId: 'o4', lessonId: 'annan-lektion', pageId: 'p-1', revision: 'r1' }),
+    ).rejects.toThrow('lesson-mismatch');
     await h.controller.close();
   });
 });
@@ -421,6 +432,10 @@ describe('worker candidates with researched images', () => {
     await h.controller.init();
     await h.controller.handleIntent(intent({ intentId: 'prep-geo', op: 'prepare', need: 'Sveriges landskap' }));
     expect(worker.posted[0]).toMatchObject({ kind: 'init' });
+    // Worker prepares queue until Harness boot completes (no rootHandle race).
+    expect(worker.posted).toHaveLength(1);
+    worker.emit({ kind: 'harness-ready' });
+    await waitFor(() => worker.posted.length >= 2);
     expect(worker.posted[1]).toMatchObject({ kind: 'prepare' });
 
     const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x99]);
@@ -449,6 +464,215 @@ describe('worker candidates with researched images', () => {
     expect(promoted?.asset?.status).toBe('ready');
     expect(promoted?.asset?.provenance).toBe('Wikimedia');
     expect(await blobStore.has(promoted?.asset?.id ?? '')).toBe(true);
+    await h.controller.close();
+  });
+});
+
+describe('show starts preparation', () => {
+  it('a show with no candidate starts prepare itself and auto-promotes the match', async () => {
+    const seen: Array<{ intentId: string; seq: number }> = [];
+    const h = setup({
+      prepareHandler: async (i, seq) => {
+        seen.push({ intentId: i.intentId, seq });
+        // prepareHandler runs for the synthetic auto-prepare; produce a candidate
+        return candidate({ intentId: i.intentId, requestSeq: seq, title: `Auto ${seq}` });
+      },
+      outstandingShowTimeoutMs: 2000,
+    });
+    await h.controller.init();
+    // No prior prepare: show alone must kick off preparation using its need.
+    await h.controller.handleIntent(intent({ intentId: 'show-only', op: 'show', need: 'bråk' }));
+    await waitFor(() => seen.length >= 1, 2000);
+    expect(seen[0]?.intentId).toContain('show-only');
+    // The matching candidate auto-promotes without a second show request.
+    // No canvas is attached, so the commit lands first and ready follows the
+    // external render ack (no 60s wait for work that was never started).
+    await waitFor(() => h.controller.getSnapshot().pages.length === 1, 2000);
+    expect(eventsFor(h, 'show-only')).toHaveLength(0);
+    const page = h.controller.getSnapshot().pages[0];
+    expect(page).toBeDefined();
+    h.controller.notifyRendered(page!.id, page!.revision);
+    await waitFor(() => eventsFor(h, 'show-only').length === 1, 2000);
+    // The synthetic prepare itself stays invisible (no extra ready for it).
+    expect(h.events.filter((e) => e.intentId?.endsWith(':auto-prepare'))).toHaveLength(0);
+    expect(eventsFor(h, 'show-only')[0]).toMatchObject({ type: 'ready' });
+    await h.controller.close();
+  });
+
+  it('prepare-only stays invisible (no auto-promotion without an outstanding show)', async () => {
+    const h = setup();
+    await h.controller.init();
+    await h.controller.handleIntent(intent({ intentId: 'prep-1', op: 'prepare' }));
+    await waitFor(() => eventsFor(h, 'prep-1').length === 1);
+    expect(h.controller.getSnapshot().pages).toHaveLength(0);
+    expect(eventsFor(h, 'prep-1')[0]).toMatchObject({ type: 'ready' });
+    await h.controller.close();
+  });
+
+  it('show settles exactly once after promote+render, never at commit (canvas ordering)', async () => {
+    let releaseRender!: () => void;
+    const renderGate = new Promise<void>((resolve) => {
+      releaseRender = resolve;
+    });
+    const h = setup({
+      prepareHandler: async (i, seq) => candidate({ intentId: i.intentId, requestSeq: seq }),
+      renderPage: async () => {
+        await renderGate;
+      },
+    });
+    await h.controller.init();
+    h.controller.attachCanvas({} as HTMLCanvasElement);
+    await h.controller.handleIntent(intent({ intentId: 'show-canvas', op: 'show', need: 'bråk' }));
+    // Candidate commit promotes the page but must NOT settle show ready yet:
+    // actual-pixels ready fires only after the canvas render completes.
+    await waitFor(() => h.controller.getSnapshot().pages.length === 1, 2000);
+    await sleep(30);
+    expect(eventsFor(h, 'show-canvas')).toHaveLength(0);
+    releaseRender();
+    await waitFor(() => eventsFor(h, 'show-canvas').length === 1, 2000);
+    await sleep(30);
+    // Exactly one ready — no premature commit-ready plus a second render-ready.
+    expect(eventsFor(h, 'show-canvas')).toHaveLength(1);
+    expect(eventsFor(h, 'show-canvas')[0]).toMatchObject({ type: 'ready' });
+    await h.controller.close();
+  });
+});
+
+describe('worker boot ordering', () => {
+  it('queues worker prepares until harness-ready, then flushes in order', async () => {
+    const worker = fakeWorker();
+    const h = setup({
+      prepareHandler: undefined,
+      createWorker: () => worker.port,
+    });
+    await h.controller.init();
+    await h.controller.handleIntent(intent({ intentId: 'prep-1', op: 'prepare', need: 'ett' }));
+    await h.controller.handleIntent(intent({ intentId: 'prep-2', op: 'prepare', need: 'två' }));
+    await sleep(20);
+    // Nothing leaves the main thread before the worker signals readiness.
+    expect(worker.posted.filter((m) => (m as { kind: string }).kind === 'prepare')).toHaveLength(0);
+    worker.emit({ kind: 'harness-ready' });
+    await waitFor(
+      () => worker.posted.filter((m) => (m as { kind: string }).kind === 'prepare').length === 2,
+    );
+    const prepares = worker.posted.filter((m) => (m as { kind: string }).kind === 'prepare') as Array<{
+      kind: string;
+      intent: ScreenIntent;
+      seq: number;
+    }>;
+    expect(prepares[0]?.seq).toBeLessThan(prepares[1]?.seq ?? 99);
+    await h.controller.close();
+  });
+});
+
+describe('asset candidate ingestion (real geography path)', () => {
+  it('accepts and verifies a raw candidate.asset with no external download', async () => {
+    const blobStore = createMemoryBlobStore();
+    const fetchSpy = vi.fn(async () => {
+      throw new Error('must not fetch for the real asset path');
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+    const h = setup({ prepareHandler: undefined, createWorker: () => null, blobStore });
+    await h.controller.init();
+    // Pre-store researched bytes as the worker would (shared per-profile blob store).
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x42]);
+    const assetId = 'b-real-1';
+    await blobStore.put(assetId, png, {
+      mimeType: 'image/png',
+      provenance: 'Wikimedia:File:Sverige.png',
+      lessonId: 'lektion-1',
+    });
+    const record = await blobStore.get(assetId);
+    const ref = {
+      id: assetId,
+      hash: record!.hash,
+      mimeType: 'image/png',
+      provenance: 'Wikimedia:File:Sverige.png',
+      lessonId: 'lektion-1',
+      status: 'ready' as const,
+      attribution: 'Wikimedia Commons',
+    };
+    // Inject the worker-produced candidate directly with its validated ref.
+    const { createScreenController: _unused } = await import('./controller');
+    void _unused;
+    // Simulate ingestion via a prepare handler that returns the asset-bearing candidate.
+    const h2 = setup({
+      prepareHandler: async (i, seq) => ({
+        id: 'geo-real',
+        revision: 'rgeo1',
+        lessonId: 'lektion-1',
+        kind: 'geography' as const,
+        subject: 'Geografi',
+        title: 'Sverige',
+        body: ['Var ligger Sverige?'],
+        asset: ref,
+        svgAsset: '<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>',
+        answerLabel: 'Ditt svar',
+        solution: 'I Norden',
+        sources: ['Wikimedia Commons'],
+        revealed: false,
+        createdAt: 1,
+        intentId: i.intentId,
+        requestSeq: seq,
+      }),
+      createWorker: () => null,
+      blobStore,
+    });
+    await h2.controller.init();
+    await h2.controller.handleIntent(intent({ intentId: 'prep-real', op: 'prepare', need: 'Sverige' }));
+    await waitFor(() => eventsFor(h2, 'prep-real').length === 1);
+    await h2.controller.handleIntent(intent({ intentId: 'show-real', op: 'show', need: 'Sverige' }));
+    h2.controller.notifyRendered('geo-real', 'rgeo1');
+    await waitFor(() => eventsFor(h2, 'show-real').length === 1);
+    const promoted = h2.controller.getSnapshot().pages[0];
+    expect(promoted?.asset?.id).toBe(assetId);
+    expect(promoted?.asset?.hash).toBe(record!.hash);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    await h.controller.close();
+    await h2.controller.close();
+  });
+
+  it('rejects an invalid asset ref and keeps the SVG fallback', async () => {
+    const blobStore = createMemoryBlobStore();
+    const h = setup({
+      prepareHandler: async (i, seq) => ({
+        id: 'geo-bad',
+        revision: 'rbad1',
+        lessonId: 'lektion-1',
+        kind: 'geography' as const,
+        subject: 'Geografi',
+        title: 'Norden',
+        body: ['Vilka länder ingår?'],
+        asset: {
+          id: 'missing-blob',
+          hash: 'a'.repeat(64),
+          mimeType: 'image/png',
+          provenance: 'bogus',
+          lessonId: 'lektion-1',
+          status: 'ready' as const,
+        },
+        svgAsset: '<svg xmlns=\"http://www.w3.org/2000/svg\"><circle cx=\"5\" cy=\"5\" r=\"4\"/></svg>',
+        answerLabel: 'Ditt svar',
+        solution: 'Sverige, Norge, Danmark',
+        sources: [],
+        revealed: false,
+        createdAt: 1,
+        intentId: i.intentId,
+        requestSeq: seq,
+      }),
+      createWorker: () => null,
+      blobStore,
+    });
+    await h.controller.init();
+    await h.controller.handleIntent(intent({ intentId: 'prep-bad', op: 'prepare', need: 'Norden' }));
+    await waitFor(() => eventsFor(h, 'prep-bad').length === 1);
+    // Invalid ref without a stored blob must not promote an asset; SVG fallback survives.
+    await h.controller.handleIntent(intent({ intentId: 'show-bad', op: 'show', need: 'Norden' }));
+    h.controller.notifyRendered('geo-bad', 'rbad1');
+    await waitFor(() => eventsFor(h, 'show-bad').length === 1);
+    const promoted = h.controller.getSnapshot().pages[0];
+    expect(promoted?.asset).toBeNull();
+    expect(promoted?.svgAsset).toContain('<circle');
     await h.controller.close();
   });
 });

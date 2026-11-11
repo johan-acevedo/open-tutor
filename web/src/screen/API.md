@@ -22,7 +22,7 @@ const screen = createScreenController({
   grade: "åk 3",                // optional
   priorNotes: [{ text: "Gillar rymden" }], // device-local, newest last
   room: "abc123",               // random LiveKit room id (upstream scoping)
-  accessCode: "familjekod",      // in-memory only, sent as x-tutor-code, never stored
+  accessCode: "familjekod",      // in-memory only, sent as x-tutor-code, never stored ("" in public Swedish mode)
   lessonId: "lektion-1",
   viewport: { w: 1280, h: 800, device: "desktop" }, // default shown
   onDeckChange: (snapshot) => render(snapshot),    // optional
@@ -65,8 +65,9 @@ or assets):
 `setAnswerDraft` throws `unknown-page-revision` for stale targets.
 `submitAnswer` throws `stale-page` unless the target is the current visible
 page, and is the **only** path that shares child input (as
-`answer-submitted`). `captureObservation` throws `stale-observation`,
-`observation-busy` (overlapping observation) or `no-canvas`.
+`answer-submitted`). `captureObservation` throws `lesson-mismatch`
+(stale lesson), `stale-observation`, `observation-busy` (overlapping
+observation) or `no-canvas`.
 
 ## Render / ready flow
 
@@ -75,13 +76,18 @@ page, and is the **only** path that shares child input (as
 1. `prepare` never changes pixels: `ready` fires when the invisible candidate
    is committed. The visible deck is untouched. A prepare whose candidate was
    superseded by a newer intent settles as `rejected` (`superseded`) instead
-   of hanging.
+   of hanging. Prepare-only work stays invisible by design.
 2. `show` / `reveal` change pixels: the controller commits, persists, emits
    `onDeckChange`, then renders the promoted page+revision and only afterwards
    emits `ready` for that page+revision. A `show` with no ready candidate is
-   held as an *outstanding request* (accepted, no event yet); when a matching
-   candidate arrives it promotes without a second request, otherwise the hold
-   lapses into `rejected` after `outstandingShowTimeoutMs`.
+   held as an *outstanding request* **and starts preparation itself using
+   that show intent** (synthetic `<showId>:auto-prepare` sharing the show's
+   need): the hold never waits 60s for work that was never started. When the
+   matching candidate arrives it auto-promotes without a second request,
+   otherwise the hold lapses into `rejected` after
+   `outstandingShowTimeoutMs`. The controller tracks op per intent: only
+   `prepare` settles `ready` at invisible commit, while a `show` settles
+   exactly once after promote+render (never at commit, never twice).
 3. Rendering target, in order:
    - attached canvas (`attachCanvas`): the controller renders itself via
      `renderPage` (default: `resolveScreenAssets` → `renderScreenPage`), which
@@ -93,10 +99,14 @@ page, and is the **only** path that shares child input (as
      re-notified page resolves immediately.
    - render errors (or `renderAckTimeoutMs` lapsing) settle the intent as
      `failed` (`render-failed` / `render-timeout`) — a `ready` is never
-     fabricated.
+     fabricated. A real canvas without a 2d context throws (`no-2d-context`)
+     instead of faking success.
 4. `captureObservation` reads the attached canvas (`toDataURL("image/png")`)
    or the injected `pixelReader`, and returns `{ pngBase64, context }`. The
-   PNG is transient and never written to any store.
+   PNG is transient and never written to any store. The request carries
+   `lessonId` (stale lessons rejected as `lesson-mismatch`); the context
+   carries `lessonId`, `visibleText` (solution only when revealed),
+   `viewport { w, h, device }`, `sources` and `privateTeaching`.
 
 ## Canvas rendering
 
@@ -108,13 +118,15 @@ renderScreenPage(canvas, page, assets);
 ```
 
 One page at a time, Swedish labels, dark-UI friendly. Draws subject chip,
-title, wrapped body lines, one visual (researched image, cover-fit, or a
-deterministic map placeholder while a generated SVG awaits preloading),
-child answer box, hidden (`🔒 Facit är dolt`) vs revealed solution, and a
-footer with sources plus stable `pageId revision` metadata. No arbitrary
+title, wrapped body lines, one visual (researched image contain-fit, rasterised
+generated SVG, or a deterministic map placeholder only while neither drawable
+exists), child answer box, hidden (`🔒 Facit är dolt`) vs revealed solution,
+and a footer with sources plus stable `pageId revision` metadata. No arbitrary
 iframe HTML; `sanitizeSvg()` strips scripts/event-handlers/iframes from
-generated SVG at candidate commit time. `drawScreenPage(ctx, size, page,
-assets)` is the testable core; `wrapText` is exported for tests.
+generated SVG at candidate commit time. Map images use contain-fit
+(letterboxed, never cropped). `drawScreenPage(ctx, size, page, assets)` is the
+testable core; `wrapText`, `drawContain`/`drawCover` and `decodeSvgDrawable`
+are exported for tests.
 
 ## Agents, tools and background work
 
@@ -124,20 +136,32 @@ assets)` is the testable core; `wrapText` is exported for tests.
   `cache: "no-store"`, `max_tokens` clamped to 8192, model pinned —
   mirroring the proven proof-proxy pattern). The provider key stays
   server-side; nothing persists.
+- Same-origin gateway clients (`postScreenChat`, `fetchGeographyResearch`, worker `fetch_geography`) work with an empty access code in the existing Swedish public mode: `TUTOR_ACCESS_CODE` may be empty, the backend `family_authorized()` permits it, and the clients never require a non-empty credential.
 - Narrow worker tools: `prepare_exercise`, `propose_geography`,
   `record_artifact`, `fetch_geography`, `request_geography_research`. No
-  shell, no files. Subagents may create artifacts/candidates but never
+  shell, no files. Subagents may create artifact blobs/candidates but never
   visible pages — promotion is main-thread only.
+- Worker prepare messages are queued on both sides of boot: the controller
+  holds `prepare` posts until `harness-ready`, and the worker awaits its
+  boot promise before touching `rootHandle` — no `rootHandle`-null race.
 - Geography research runs in a Durable-native **background child
   conversation** (`Harness.createConversation` with `ownerless` ownership,
   spawned by `request_geography_research`; the main turn returns
   immediately). The child calls the bounded gateway
-  (`fetchGeographyResearch` → `GET /api/screen/research/geography`, provenance
-  required) and proposes the candidate. The Screen chooses the medium:
-  `selectGeographyVisual` prefers a researched image URL when the gateway
-  returns one, otherwise a generated SVG; researched bytes are downloaded,
-  sniff-checked, hashed and stored in the blob store by the main thread
-  (docs/records carry only the `ScreenAssetRef`).
+  (`POST /api/screen/research/geography` JSON `{ query }` → JSON
+  `{ query, place, maps: [{ dataUrl, mime, bytes, sourceUrl, retrievedAt,
+  attribution, license }], retrievedAt }`) and proposes the candidate. The
+  worker `fetch_geography` tool parses/validates maps, decodes bytes, stores
+  them in the per-profile blob store as artifact assets, records concise
+  provenance, and returns only concise place + map assetIds/metadata to the
+  model — never base64. `propose_geography` accepts a chosen `assetId` and
+  constructs the candidate with a validated `ScreenAssetRef` plus source
+  attribution; generated-SVG remains as fallback. `selectGeographyVisual`
+  prefers a researched map when one exists, otherwise generated SVG.
+  `ingestCandidate` accepts/verifies a raw `candidate.asset` (hash + blob
+  lookup + lesson scope) instead of discarding it; the legacy `researchImage`
+  URL download path is retained only for compatibility, while the real path
+  needs no external browser download (docs/records carry only the ref).
 - Stale background results are fenced twice: the worker checks the
   `screen.control` doc (`latestByNeed`) before proposing, and the controller
   re-checks its `SupersessionGate` on ingest — newer intents supersede older

@@ -151,9 +151,10 @@ export interface LessonSummary {
   greetingHint: string;
 }
 
-/** RPC `screen.observe` payload (fox → browser). */
+/** RPC `screen.observe` payload (fox → browser). Mirrors protocol `screen.observe`. */
 export interface ScreenObservationRequest {
   observationId: string;
+  lessonId: string;
   pageId: string;
   revision: string;
 }
@@ -167,7 +168,9 @@ export interface ScreenObservationContext {
   observationId: string;
   lessonId: string;
   page: { id: string; revision: string };
-  viewport: { w: number; h: number };
+  /** What is visibly on the page; solution text only when revealed. */
+  visibleText: string;
+  viewport: { w: number; h: number; device: string };
   answerState: { hasDraft: boolean; draftLength: number; revealed: boolean };
   sources: string[];
   privateTeaching: string;

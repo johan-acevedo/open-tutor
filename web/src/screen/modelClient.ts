@@ -31,11 +31,13 @@ function clampMaxTokens(body: Record<string, unknown>): Record<string, unknown> 
   return { ...body, max_tokens: MAX_TOKENS_CAP };
 }
 
-/** POST one bounded chat-completions request. Throws on missing credentials. */
+/** POST one bounded chat-completions request. Throws on missing room only.
+ * Public Swedish mode may run with an empty TUTOR_ACCESS_CODE: the backend
+ * family_authorized() permits it, so never require a non-empty credential.
+ * Always call same-origin; the code is sent as-is (possibly empty) and never stored. */
 export async function postScreenChat(request: ScreenChatRequest): Promise<Response> {
   const room = request.room.trim();
   if (!room) throw new Error("screen-chat: missing room");
-  if (!request.accessCode) throw new Error("screen-chat: missing access code");
   const body = clampMaxTokens({ ...request.body, model: SCREEN_MODEL_ID });
   const fetchFn = request.fetchFn ?? fetch;
   return fetchFn(SCREEN_CHAT_PATH(room), {
