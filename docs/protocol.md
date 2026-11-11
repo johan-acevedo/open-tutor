@@ -8,6 +8,33 @@ The browser and the tutor worker share one LiveKit room per session. Audio goes 
 2. The web service creates a room `tutor-<random>`, dispatches the `open-tutor` agent into it, and returns `{ "url", "token", "room" }`. The learner JSON becomes the participant's metadata, so it travels with the token.
 3. The browser connects, publishes the microphone, and waits. The tutor speaks first.
 
+A browser with the Screen agent includes `"screen": {"version": 1}` in the session request. The same capability is copied into participant metadata. Without it, the tutor keeps using the legacy board protocol below.
+
+## Browser-owned Screen (protocol v1)
+
+With Screen capability, prepared teaching visuals use a fixed one-page-at-a-time canvas deck rather than the scrolling `BoardItem` surface. The browser worker owns the Pi Durable session, artifacts, candidates, pages and revisions. Räven sends intents; it does not send finished HTML or write the deck.
+
+### Fox → Screen
+
+| Channel | Topic / method | Payload |
+|---|---|---|
+| RPC to browser | `screen.intent` | `{ intentId, lessonId, op: "prepare" \| "show" \| "reveal", need?, background?, target?: { pageId, revision }, viewport: { w, h, device } }`. Returns immediately with `{ accepted, intentId, reason? }`, never after model/render work. Reveal requires page id + revision. |
+| RPC to browser | `screen.observe` | `{ observationId, lessonId, pageId, revision }`. Returns immediately after accepting a current-page observation. |
+
+### Screen → fox
+
+| Channel | Topic / method | Payload |
+|---|---|---|
+| Text stream | `screen-event` | `{ type: "ready" \| "rejected" \| "failed" \| "answer-submitted", intentId?, lessonId, page?: { id, revision }, reason?, answer? }`. `ready` is sent only after the visible canvas has rendered. Draft keystrokes are never sent. |
+| Byte stream | `screen-pixels` | One PNG of the actual visible canvas after an accepted observation. Attributes correlate `observationId`, `lessonId`, `pageId`, and `revision`. |
+| Text stream | `screen-context` | Bounded JSON with the same observation ids, visible interaction state, viewport, sources, and optional `privateTeaching` such as a hidden solution. Never the Screen transcript. |
+
+Duplicate intent ids return their existing outcome. Stale commands cannot mutate a newer page. A `show` intent authorises the main Screen to promote a matching prepared candidate when ready; subagents and anticipatory work remain invisible until then. The fox waits for `ready` and normally observes the page before teaching from it. RPC calls remain short; asynchronous preparation and observation happen through the correlated streams above.
+
+An intentional new lesson has a fresh visible deck and a new `lessonId`. Device-local prior summaries still orient both agents. Closing without ending leaves the current local lesson resumable.
+
+## Legacy BoardItem protocol
+
 ## Browser → tutor
 
 | Channel | Topic / method | Payload |
