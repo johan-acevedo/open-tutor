@@ -250,8 +250,12 @@ export async function downloadAssetBytes(
     throw new Error("asset-download: bad url");
   }
   if (parsed.protocol !== "https:") throw new Error("asset-download: https only");
+  const sameOrigin =
+    typeof location !== "undefined" && parsed.origin === location.origin;
   const res = await fetchFn(parsed.toString(), {
-    headers: accessCode ? { "x-tutor-code": accessCode } : {},
+    // The family code is a credential for our own service only. Never send it
+    // to a model-selected third-party asset URL.
+    headers: sameOrigin && accessCode ? { "x-tutor-code": accessCode } : {},
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`asset-download: ${res.status}`);

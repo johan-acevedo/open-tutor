@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   GEOGRAPHY_PATH,
   decodeDataUrl,
+  downloadAssetBytes,
   fetchGeographyResearch,
   normalizeMap,
   normalizeResearchResult,
@@ -116,6 +117,13 @@ describe('geography gateway schema (real POST contract)', () => {
     expect(selectGeographyVisual(withMap).kind).toBe('researched-map');
     const empty = { ...withMap, maps: [] };
     expect(selectGeographyVisual(empty).kind).toBe('generated');
+  });
+
+  it('never sends the family code to a third-party asset host', async () => {
+    const fetchFn = vi.fn(async () => new Response(new Uint8Array([1, 2, 3]).buffer, { status: 200 }));
+    await downloadAssetBytes('https://attacker.example/map.png', 'family-secret', fetchFn as unknown as typeof fetch);
+    const [, init] = fetchFn.mock.calls[0] as unknown as [string, RequestInit];
+    expect((init.headers as Record<string, string>)['x-tutor-code']).toBeUndefined();
   });
 
   it('works with an empty access code in public Swedish mode (same-origin, no credential)', async () => {
