@@ -191,6 +191,8 @@ Focused tests run during implementation; the full server and web suites plus the
 - 2026-11-11: Existing proof reviewed. Its fox is simulated and its observation runs in the same Screen Durable session; it proves live pixel vision, not yet two independent agents.
 - 2026-11-11: Worker reconnaissance completed for LiveKit/UI integration, Pi Durable 1.5.2, and model/research gateways. Durable child conversations/background tasks/docs are API-native; binary assets require a separate browser blob store.
 - 2026-11-11: Protocol v1 fixed around immediate RPC acceptance plus correlated asynchronous ready/observation streams. First production renderer chosen as a visible canvas to preserve actual-pixel observation.
+- 2026-11-11: FastAPI model/research gateways and fox intent/observation tools integrated. Session metadata now carries a stable device-local lesson id. Capable fox prompts no longer contain legacy board-owner instructions.
+- 2026-11-11: Real public geography probe returned a bounded 208 KB Wikimedia PNG with attribution after fixing thumbnail host/bucket handling. Gateway/session tests: 43 passed. Fox/web focused tests: 29 server + 14 web passed.
 
 ## Next
 
