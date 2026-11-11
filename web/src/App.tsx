@@ -12,10 +12,6 @@ import EndCard from './components/EndCard';
 import HomeworkTray from './components/HomeworkTray';
 import { useViewport } from './useViewport';
 
-function pillLabel(p: Profile): string {
-  return p.grade <= 9 ? `${p.name} · åk ${p.grade}` : `${p.name} · gy ${p.grade - 9}`;
-}
-
 export default function App() {
   const { mobile, keyboard } = useViewport();
   const session = useSession(mobile);
@@ -54,10 +50,10 @@ export default function App() {
       <header className="ot-topbar">
         <div className="ot-wordmark">Open Tutor</div>
         <div className="ot-topbar-right">
-          {profile && inSession && (
-            <div className="ot-learner-pill" aria-label="Inloggad profil">
-              {pillLabel(profile)}
-            </div>
+          {inSession && (
+            <button type="button" className="ot-end-btn ot-end-top" onClick={() => void session.endSession()} aria-label="Avsluta sessionen">
+              Avsluta
+            </button>
           )}
           {inSession && (
             <TopMenu
@@ -97,7 +93,6 @@ export default function App() {
               mobile={mobile}
               activeItemId={session.activeItemId}
               onEnd={() => void session.endSession()}
-              ending={phase === 'ending'}
             />
             {session.homeworkDraft && (
               <HomeworkTray
@@ -197,7 +192,6 @@ export default function App() {
           onSendText={(t) => void session.sendChat(t)}
           onToggleMic={() => void session.toggleMic()}
           onAttach={() => (mobile ? session.setHomeworkDraft({ kind: 'picker' }) : fileRef.current?.click())}
-          onEnd={() => void session.endSession()}
         />
       )}
 

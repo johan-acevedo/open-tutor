@@ -7,7 +7,6 @@ type Props = {
   onSendText: (text: string) => void;
   onToggleMic: () => void;
   onAttach: () => void;
-  onEnd: () => void;
   mobile?: boolean;
 };
 
@@ -18,7 +17,6 @@ export default function BottomBar({
   onSendText,
   onToggleMic,
   onAttach,
-  onEnd,
   mobile,
 }: Props) {
   const [draft, setDraft] = useState('');
@@ -86,11 +84,6 @@ export default function BottomBar({
           </svg>
         </span>
       </button>
-      {!mobile && (
-        <button type="button" className="ot-end-btn" onClick={onEnd} aria-label="Avsluta sessionen">
-          Avsluta
-        </button>
-      )}
     </footer>
   );
 }
