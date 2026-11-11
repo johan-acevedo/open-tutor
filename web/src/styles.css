@@ -86,6 +86,12 @@ a:focus-visible {
   gap: 12px;
   margin-left: auto;
 }
+.ot-end-top {
+  min-height: 44px;
+  border-radius: 12px;
+  padding: 8px 16px;
+  font-size: 15px;
+}
 
 /* ---------- Header menu (hamburger): inbox + about ---------- */
 
@@ -398,6 +404,10 @@ a:focus-visible {
 .ot-inbox-icon {
   font-size: 20px;
   line-height: 1;
+}
+.ot-inbox-icon svg,
+.ot-icon svg {
+  display: block;
 }
 
 .ot-inbox-text {

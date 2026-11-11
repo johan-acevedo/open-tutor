@@ -286,7 +286,8 @@ class Tutor(Agent):
         await self.add_board_seen(result.get("png"), result.get("note", ""),
                                   f"board {item.id}")
         return ("The board is on screen now and you can see its screenshot above. "
-                "Teach from what it actually shows, as its author. "
+                "Start teaching from what it actually shows, as its author, right away. "
+                "Do not repeat the waiting sentence - that moment has passed. "
                 f"[Board note: {result.get('note', '')[:500]}]")
 
     # ---- resources ---------------------------------------------------------------

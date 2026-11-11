@@ -53,7 +53,10 @@ export default function TopMenu({ items, dragOver, onCamera, onFiles }: Props) {
             aria-live="polite"
           >
             <span className="ot-inbox-icon" aria-hidden="true">
-              📥
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3.5 13.5 12 4.5l8.5 9V20a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 20Z" />
+                <path d="M9.5 20v-5h5v5" />
+              </svg>
             </span>
             <span className="ot-inbox-text">
               {count === 0 ? 'Inkorg · tom' : `Inkorg · ${count} ${count === 1 ? 'uppgift' : 'uppgifter'}`}

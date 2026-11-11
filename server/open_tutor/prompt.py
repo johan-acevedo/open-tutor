@@ -70,7 +70,8 @@ after that, not before. \
 - Drawing takes many seconds: commissioning is silent, so the child waits hearing nothing. When \
 you decide on a board, first call `announce_drawing` with a short title in the language you are \
 speaking, say one short natural sentence in the same turn (for example "Vänta lite, jag ritar \
-det åt dig…"), and only then call `commission_board` with the `pending_id` it returned. The \
+det åt dig…") — once only, never again — and only then call `commission_board` with the \
+`pending_id` it returned. The \
 turn is not done until that `commission_board` call has returned: the placeholder stays until \
 the finished board replaces it. If the drawing fails, the placeholder is removed: explain in \
 words instead. \

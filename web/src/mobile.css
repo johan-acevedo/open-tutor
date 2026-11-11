@@ -240,7 +240,7 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-end;
   padding: 0 8px;
 }
 .ot-phone .ot-main .ot-companion {
@@ -250,15 +250,15 @@
   width: 100%;
 }
 .ot-phone .ot-voice-bubble {
+  width: min(64vw, 300px);
   align-items: center;
   text-align: center;
   margin-top: -24px;
   z-index: 2;
   padding: 0 8px;
   gap: 8px;
-  border: 1px solid var(--ot-border);
-  border-radius: 18px;
-  background: var(--ot-elevated);
+  background: transparent;
+  border: none;
   max-height: 100%;
   overflow: hidden;
 }

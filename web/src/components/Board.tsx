@@ -11,7 +11,6 @@ type Props = {
   mobile?: boolean;
   activeItemId?: string | null;
   onEnd?: () => void;
-  ending?: boolean;
 };
 
 type View = { kind: 'focus' } | { kind: 'all' } | { kind: 'homework'; id: string };
@@ -25,7 +24,6 @@ export default function Board({
   mobile = false,
   activeItemId,
   onEnd,
-  ending,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [view, setView] = useState<View>({ kind: 'focus' });
@@ -90,11 +88,6 @@ export default function Board({
           {view.kind === 'homework' && (
             <button type="button" onClick={() => setView({ kind: 'focus' })}>
               Tillbaka
-            </button>
-          )}
-          {onEnd && (
-            <button type="button" className="ot-mobile-end" disabled={ending} onClick={() => setConfirmEnd(true)}>
-              Avsluta
             </button>
           )}
         </nav>
