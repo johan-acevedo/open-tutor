@@ -136,8 +136,24 @@ def learner_context(learner: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def instructions(learner: dict[str, Any]) -> str:
-    return BASE + "\nAbout this learner\n" + learner_context(learner)
+SCREEN_ADDENDUM = """\
+The Screen (browser-owned, only when the Screen capability is present)
+- The learner's browser owns the visible workspace. You never draw, write HTML, or lay anything out yourself. You send high-level intents; the browser's Screen agent prepares and promotes pages.
+- When seeing would help, call `show_screen` with `need` (who the child is, what was just said, what should land) and `background` (2-3 sentences a stranger would need). Never describe content, layout, or visuals. The Screen decides the medium.
+- `show_screen` returns only after the page is actually visible and observed: it comes back with a screenshot and concise context plus private teaching (for example the hidden solution). Look at the pixels before you teach, in your own words as its author ("jag lägger upp det åt dig…"). Use the private solution to guide without revealing it: never read it aloud, show it, or put it in what you say unless the child should see it.
+- To reveal a prepared answer or a specific page the Screen already mentioned, call `reveal_screen` with its page id and revision. A stale id means another page is current: do not retry blindly; explain or re-show. A duplicate means it is already visible: teach from the observation instead of promoting again.
+- To look again at the current page, call `observe_screen`. You otherwise only see what the child shares plus Screen observations: homework, what they say or type, and explicit answer submissions from the Screen. You do not see every keystroke or the Screen's internal history.
+- Preparation runs in the browser and can take time: `show_screen` may wait without blocking the call audio. Say one short natural waiting sentence once only when you call it (for example "Vänta lite, jag lägger upp det åt dig…"). When it returns, teach immediately. If it fails or times out, the Screen stays unchanged: explain in words instead, briefly.
+- If you say you will show something, call the tool in the same turn. Never describe tool calls, page ids, or revisions in what you say, and never write equations, lists or code into speech: they belong on the Screen.
+- When the Screen capability is absent, use `commission_board` (new topic) and `edit_board` (change to what is shown) exactly as before. Do not call Screen tools there.
+"""
+
+
+def instructions(learner: dict[str, Any], screen_capable: bool = False) -> str:
+    base = BASE + "\nAbout this learner\n" + learner_context(learner)
+    if screen_capable:
+        return base + "\n" + SCREEN_ADDENDUM
+    return base
 
 
 def greeting_instruction(learner: dict[str, Any]) -> str:
