@@ -47,6 +47,18 @@ function clampBoard(n: number, fallback: number): number {
   return Math.max(BOARD_MIN, Math.min(Math.round(n), BOARD_MAX));
 }
 
+/** Await the pane transition, excluding the pending card's infinite animation. */
+async function waitForBoardLayout(): Promise<void> {
+  const board = document.querySelector('.ot-board');
+  if (!board || typeof board.getAnimations !== 'function') return;
+  const running = board.getAnimations({ subtree: false }).filter(
+    (animation) => (animation.playState === 'running' || animation.pending)
+      && Number.isFinite(Number(animation.effect?.getComputedTiming().endTime)),
+  );
+  await Promise.allSettled(running.map((animation) => animation.finished));
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+}
+
 /** Measure the real board surface: the visible .ot-board-scroll content box
  *  where the frame sits. The outer .ot-board also holds the phone nav and the
  *  follow button, and its width includes the scroller padding, so measuring
@@ -415,7 +427,11 @@ export function useSession(mobile = false) {
         setFocused(null);
         setActiveItemId(v.item.id);
         await waitForMounted(v.item.id);
-        return '{"ok":true}';
+        // For the first pending item this mount flips arrival->teaching:
+        // report the size only once that transition has settled, so the
+        // tutor commissions the finished pane, not the arrival one.
+        await waitForBoardLayout();
+        return JSON.stringify({ ok: true, board: readBoardSize() });
       });
 
       registerRpc(room, BOARD_RPC_UPDATE, async (data) => {
@@ -438,7 +454,8 @@ export function useSession(mobile = false) {
         });
         setActiveItemId(v.item.id);
         await waitForMounted(v.item.id);
-        return '{"ok":true}';
+        await waitForBoardLayout();
+        return JSON.stringify({ ok: true, board: readBoardSize() });
       });
 
       registerRpc(room, BOARD_RPC_REMOVE, async (data) => {
