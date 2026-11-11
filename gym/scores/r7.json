@@ -1,6 +1,6 @@
 {
  "round": "r7",
- "generated_at": "2026-11-11T08:58:29+00:00",
+ "generated_at": "2026-11-11T09:54:37+00:00",
  "notes": "Haiku: r6 (r5 framing, thinking medium) but the review pass on every board runs at thinking low, to cut time.",
  "targets": {
   "median_wall_s": 20.0,

@@ -1,6 +1,6 @@
 {
  "round": "r2",
- "generated_at": "2026-11-11T08:58:29+00:00",
+ "generated_at": "2026-11-11T09:54:37+00:00",
  "notes": "r1 framing + one automatic fix pass for Haiku, MiniMax and Muse Spark: the board is rendered, and if the layout script finds text off screen, overlaps or JS errors, the member gets its HTML, the settled screenshot and the findings once and returns a fixed board (render + fix count toward wall time). DeepSeek: thinking off, no fix pass (speed test).",
  "targets": {
   "median_wall_s": 20.0,
