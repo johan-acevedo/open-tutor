@@ -569,6 +569,7 @@ def main() -> None:
                 continue
             if r.get("round") == a.round:
                 verdict[(r.get("member"), r.get("case"))] = r
+                verdict[(str(r.get("member")).replace("/", "__"), r.get("case"))] = r
         for line in vpath.read_text(encoding="utf-8").splitlines():
             if not line.strip():
                 continue

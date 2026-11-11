@@ -7,6 +7,7 @@ name=$1; shift
 logs=${GYM_DATA:-$HOME/gym-data/board-gym}/logs; mkdir -p "$logs"
 cd "$(dirname "$0")/../.."
 systemd-run --user --unit="gym-$name" --same-dir -p Environment="PATH=$PATH" \
+  ${FIREWORKS_API_KEY:+ -p Environment="FIREWORKS_API_KEY=$FIREWORKS_API_KEY"} \
   -p StandardOutput=append:"$logs/$name.log" -p StandardError=append:"$logs/$name.log" \
   bash -c "$* && echo JOB-DONE"
 echo "unit gym-$name, log $logs/$name.log"

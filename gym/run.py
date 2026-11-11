@@ -318,7 +318,8 @@ def count_lint(lint: dict) -> int:
 def member_argv(member: str, thinking: str, system_text: str,
                 user_file: Path, extra_args: list,
                 use_append_system: bool, system_file: Path) -> list:
-    base = ["pi", "-p", "--model", f"opencode-go/{member}",
+    model = member if "/" in member else f"opencode-go/{member}"
+    base = ["pi", "-p", "--model", model,
             "--thinking", thinking,
             "--no-tools", "--no-session", "--no-context-files",
             "--no-skills", "--no-extensions", "--mode", "json"]
@@ -347,11 +348,15 @@ REVIEW_TEXT = {
 REVIEW_STYLE = {"style": "plain"}
 
 
+def member_slug(member: str) -> str:
+    return member.replace("/", "__")
+
+
 def do_run(round_id: str, member: str, case_id: str, case: dict,
            system_text: str, thinking: str, fix_pass: bool,
            toolkit_file: str | None, toolkit_url: str | None,
            force: bool) -> dict:
-    run_dir = DATA / "runs" / round_id / member / case_id
+    run_dir = DATA / "runs" / round_id / member_slug(member) / case_id
     run_dir.mkdir(parents=True, exist_ok=True)
 
     needed = [run_dir / "board.html", run_dir / "board.png",
@@ -598,7 +603,7 @@ def main() -> None:
                 log(f"missing case {cid}, skipping")
                 continue
             case = json.loads(cpath.read_text(encoding="utf-8"))
-            run_dir = DATA / "runs" / round_id / member / cid
+            run_dir = DATA / "runs" / round_id / member_slug(member) / cid
             run_dir.mkdir(parents=True, exist_ok=True)
             m_sys, m_user = tpl_for(member)
             system_text = fill_template(m_sys, case)

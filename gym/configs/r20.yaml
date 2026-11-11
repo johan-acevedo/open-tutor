@@ -1,0 +1,10 @@
+round: r20
+notes: "DeepSeek V4.1 Flash via Fireworks ultrafast router (1200-1600 tok/s) on the latest prompt (r12), thinking off, argon judge. Heads-up vs r19 (same model, opencode-go pipe)."
+prompt: prompts/r12
+thinking: "off"
+fix_pass: true
+toolkit: null
+board: {w: 1920, h: 1080, device: desktop, lang: Swedish}
+members:
+  - fireworks/accounts/fireworks/routers/deepseek-v4p1-flash-1017-ultrafast
+panels: [tune]

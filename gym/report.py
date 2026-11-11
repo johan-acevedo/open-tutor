@@ -226,7 +226,8 @@ def build_site(records: list, agg: dict, rounds: list):
     # Copy PNGs into the site (private dir, never git).
     boards = []
     for r in records:
-        png = RUNS_DIR / r["round"] / r["member"] / r["case"] / "board.png"
+        slug = str(r["member"]).replace("/", "__")
+        png = RUNS_DIR / r["round"] / slug / r["case"] / "board.png"
         dest = SITE / "boards" / r["round"] / r["member"] / f"{r['case']}.png"
         if png.exists():
             dest.parent.mkdir(parents=True, exist_ok=True)
