@@ -29,9 +29,20 @@ export default function ScreenBoard({
   const storedDraft = page && snapshot ? snapshot.drafts[pageKey] ?? '' : '';
 
   useEffect(() => {
-    onAttachCanvas(canvasRef.current);
-    return () => onAttachCanvas(null);
-  }, [onAttachCanvas]);
+    const canvas = canvasRef.current;
+    onAttachCanvas(canvas);
+    let observer: ResizeObserver | null = null;
+    if (canvas && typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(() => onAttachCanvas(canvas));
+      observer.observe(canvas);
+    }
+    return () => {
+      observer?.disconnect();
+      onAttachCanvas(null);
+    };
+    // Reattach after an empty->page canvas becomes visible and after page changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onAttachCanvas, pageKey]);
 
   useEffect(() => {
     setText(storedDraft);
