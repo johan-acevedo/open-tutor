@@ -15,7 +15,7 @@ The browser and the tutor worker share one LiveKit room per session. Audio goes 
 | Text stream | `lk.chat` | What the child typed. The agent treats it like speech. |
 | Byte stream | `homework` | One image (PNG/JPEG/WebP) per stream. Attributes: `kind` = `photo` \| `screenshot` \| `pdf-page`, `source` = original file name, `page` = page number (PDF only), `pages` = total pages, `itemId` = the board id the browser already gave it. |
 | Text stream | `homework-text` | Pasted text. Attributes: `itemId`. |
-| Text stream | `session-event` | JSON `{ "type": "end" }` when Avsluta is pressed, `{ "type": "resource-closed", "id" }`, `{ "type": "quiet", "on": true }` (reserved). |
+| Text stream | `session-event` | JSON `{ "type": "end" }` when Avsluta is pressed, `{ "type": "resource-closed", "id" }`, `{ "type": "board-size", "w", "h", "device" }` (real board-pane size, ResizeObserver; debounced, on change), `{ "type": "quiet", "on": true }` (reserved). |
 
 The browser shows homework on the board itself as soon as the child adds it (kind `homework`), then sends it. The tutor never re-sends homework images.
 

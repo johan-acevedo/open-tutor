@@ -57,6 +57,7 @@ export type SessionLearner = {
 
 export type SessionRequest = {
   learner: SessionLearner;
+  board: { w: number; h: number; device: string };
 };
 
 export type SessionResponse = {
@@ -68,6 +69,7 @@ export type SessionResponse = {
 export type SessionEvent =
   | { type: 'end' }
   | { type: 'resource-closed'; id: string }
+  | { type: 'board-size'; w: number; h: number; device: string }
   | { type: 'quiet'; on: boolean };
 
 /** Byte-stream attributes for topic 'homework'. */
