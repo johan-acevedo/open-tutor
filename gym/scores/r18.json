@@ -1,6 +1,6 @@
 {
  "round": "r18",
- "generated_at": "2026-11-11T10:04:33+00:00",
+ "generated_at": "2026-11-11T10:20:29+00:00",
  "notes": "Johan r18: style reduced to bg+font, interactive boards allowed, compact API docs inlined per library, reasoning note at length. Tests whether full API knowledge unlocks toolkit use.",
  "targets": {
   "median_wall_s": 20.0,

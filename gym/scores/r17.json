@@ -1,6 +1,6 @@
 {
  "round": "r17",
- "generated_at": "2026-11-11T10:04:33+00:00",
+ "generated_at": "2026-11-11T10:20:29+00:00",
  "notes": "Johan-philosophy rewrite (prompts/r11): situation + inventory only, no method. No Swedish examples, no toolkit rules, open internet, dynamic board/device/lang placeholders. Heads-up vs r13.",
  "targets": {
   "median_wall_s": 20.0,

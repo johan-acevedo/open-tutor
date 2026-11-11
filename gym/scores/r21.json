@@ -1,6 +1,6 @@
 {
  "round": "r21",
- "generated_at": "2026-11-11T10:04:33+00:00",
+ "generated_at": "2026-11-11T10:20:29+00:00",
  "notes": "Adopted prompt-review edits (prompts/r13): settled-state-immediately, >=18px text, tutor-leads interactivity line, school-conventions one-liner, KaTeX textcolor tip. DeepSeek opencode-go.",
  "targets": {
   "median_wall_s": 20.0,
