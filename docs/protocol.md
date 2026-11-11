@@ -8,7 +8,7 @@ The browser and the tutor worker share one LiveKit room per session. Audio goes 
 2. The web service creates a room `tutor-<random>`, dispatches the `open-tutor` agent into it, and returns `{ "url", "token", "room" }`. The learner JSON becomes the participant's metadata, so it travels with the token.
 3. The browser connects, publishes the microphone, and waits. The tutor speaks first.
 
-A browser with the Screen agent includes `"screen": {"version": 1}` in the session request. The same capability is copied into participant metadata. Without it, the tutor keeps using the legacy board protocol below.
+A browser with the Screen agent includes `"screen": {"version": 1, "lessonId": "lesson-…"}` in the session request. The same capability and stable local lesson id are copied into participant metadata. Without the capability, the tutor keeps using the legacy board protocol below.
 
 ## Browser-owned Screen (protocol v1)
 

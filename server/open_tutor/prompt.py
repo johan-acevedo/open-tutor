@@ -12,7 +12,7 @@ and clearly, like a kind upper-secondary student, never like a textbook or a cal
 
 Language follows the child. Greet in Swedish and stay in Swedish unless they ask to practise \
 another language (for example English). If they do, speak that language with them and do not slip \
-back to Swedish unasked. Board text is normally Swedish; when practising another language, the \
+back to Swedish unasked. Visual text is normally Swedish; when practising another language, the \
 language being practised stays as it is and brief explanations follow what you are speaking. You \
 cannot change the page language: buttons and labels stay Swedish.
 
@@ -27,7 +27,7 @@ their thinking for them. Never turn every difficulty into another question they 
 - If an explanation does not land, reconsider representation, prerequisite, or step size: a smaller \
 step, a different picture, a concrete example. Do not repeat the same explanation louder or longer.
 - Carry the child's requests about how to help across the session, until their needs change. In \
-self-testing, leave the answer for them, including on the board; a request for explanation can change \
+self-testing, leave the answer for them, including in visuals; a request for explanation can change \
 that agreement.
 - The child leads the choice of task, pace and when to stop. Suggest a plan, a change or a pause \
 when helpful; if they want to continue or work on the hard part, help them do so. Rest is an offer, \
@@ -157,6 +157,9 @@ def instructions(learner: dict[str, Any], screen_capable: bool = False) -> str:
         board_start = BASE.index("\nThe board ")
         board_end = BASE.index("\nCapabilities", board_start)
         base_text = BASE[:board_start] + BASE[board_end:]
+        resources_start = base_text.index("\nResources")
+        resources_end = base_text.index("\nMemory", resources_start)
+        base_text = base_text[:resources_start] + base_text[resources_end:]
     base = base_text + "\nAbout this learner\n" + learner_context(learner)
     if screen_capable:
         return base + "\n" + SCREEN_ADDENDUM

@@ -127,6 +127,7 @@ async def test_show_returns_only_after_ready_plus_observation():
     obs_id = obs_payload["observationId"]
     assert tutor.handle_screen_pixels(obs_id, b"PNGDATA", {"observationId": obs_id})
     assert tutor.handle_screen_context(obs_id, {"observationId": obs_id, "lessonId": "L1",
+                                                "page": {"id": "p1", "revision": "r1"},
                                                 "summary": "clock shows 3",
                                                 "privateTeaching": "solution x=3"})
     result = await asyncio.wait_for(task, timeout=2.0)
@@ -147,7 +148,7 @@ async def test_prepare_returns_immediately_after_accept():
     assert participant.calls[0][2]["op"] == "prepare"
     # Fire-and-forget: no waiter left behind, but latest tracks the intent.
     assert not tutor.screen_tracker._intents
-    assert tutor.screen_tracker.latest_intent_id is not None
+    assert tutor.screen_tracker.latest_intent_id is None
 
 
 async def test_reveal_stale_does_not_observe():
@@ -161,7 +162,7 @@ async def test_reveal_stale_does_not_observe():
         {"type": "rejected", "intentId": intent_id, "lessonId": "L1",
          "reason": "stale: current is p2 r3"}) == "resolved"
     result = await asyncio.wait_for(task, timeout=2.0)
-    assert "stale" in result.lower() and "p9" in result or "stale" in result.lower()
+    assert "stale" in result.lower() and "p2" in result and "r3" in result
     assert not [c for c in participant.calls if c[1] == "screen.observe"]
 
 
@@ -178,6 +179,7 @@ async def test_reveal_duplicate_still_observes_once():
     obs_id = [c[2]["observationId"] for c in participant.calls if c[1] == "screen.observe"][0]
     tutor.handle_screen_pixels(obs_id, b"PNG", {})
     tutor.handle_screen_context(obs_id, {"observationId": obs_id, "lessonId": "L1",
+                                         "page": {"id": "p1", "revision": "r1"},
                                          "summary": "already here"})
     result = await asyncio.wait_for(task, timeout=2.0)
     assert "Already visible" in result and "p1" in result
@@ -195,11 +197,32 @@ async def test_duplicate_ready_is_idempotent():
     assert (await fut)["type"] == "ready"
 
 
+async def test_late_ready_updates_current_but_prepare_does_not():
+    tracker = ScreenTracker(lesson_id="L1")
+    tracker.track_intent("show-1")
+    tracker.abandon_intent("show-1")  # e.g. tool timeout; late page still arrives
+    assert tracker.resolve_event({"type": "ready", "intentId": "show-1", "lessonId": "L1",
+                                  "page": {"id": "p1", "revision": "r1"}}) == "unknown"
+    assert tracker.current_page == {"id": "p1", "revision": "r1"}
+    tracker.note_intent_sent("prepare-1")
+    assert tracker.resolve_event({"type": "ready", "intentId": "prepare-1", "lessonId": "L1",
+                                  "page": {"id": "candidate", "revision": "r0"}}) == "unknown"
+    assert tracker.current_page == {"id": "p1", "revision": "r1"}
+
+
+def test_ids_are_namespaced_per_tutor_instance():
+    first = ScreenTracker(lesson_id="L1")
+    second = ScreenTracker(lesson_id="L1")
+    assert first.new_intent_id() != second.new_intent_id()
+    assert first.new_observation_id() != second.new_observation_id()
+
+
 async def test_pixels_and_context_correlation():
     tracker = ScreenTracker(lesson_id="L1", observe_timeout=1.0, context_grace=0.2)
     tracker.track_observation("o1", "p1", "r1")
     # Context may arrive before pixels; both must correlate on the observation id.
-    assert tracker.feed_context("o1", {"observationId": "o1", "lessonId": "L1", "summary": "s"})
+    assert tracker.feed_context("o1", {"observationId": "o1", "lessonId": "L1",
+                                       "page": {"id": "p1", "revision": "r1"}, "summary": "s"})
     assert tracker.feed_pixels("o1", b"PNG", {"observationId": "o1"})
     png, context = await tracker.wait_observation("o1")
     assert png == b"PNG" and context["summary"] == "s"
@@ -211,6 +234,10 @@ async def test_pixels_and_context_correlation():
     assert tracker.feed_pixels("o2", b"wrong", {"pageId": "p2", "revision": "r1"}) is False
     assert tracker.feed_pixels("o2", b"wrong", {"pageId": "p1", "revision": "r2"}) is False
     assert tracker.feed_pixels("o2", b"right", {"pageId": "p1", "revision": "r1", "lessonId": "L1"}) is True
+    tracker.track_observation("o3", "p1", "r1")
+    assert tracker.feed_context("o3", {"observationId": "o3", "lessonId": "L1",
+                                       "page": {"id": "p2", "revision": "r9"},
+                                       "privateTeaching": "wrong solution"}) is False
 
 
 async def test_missing_context_still_teaches_from_pixels():
@@ -226,7 +253,7 @@ async def test_show_timeout_falls_back_to_words():
     tutor = make_tutor(participant, intent_timeout=0.15)
     result = await asyncio.wait_for(
         tutor.show_screen(None, need="n", background="b"), timeout=2.0)
-    assert "still preparing" in result and "Explain in words instead" in result
+    assert "may still finish" in result and "Continue in words" in result
     assert not [c for c in participant.calls if c[1] == "screen.observe"]
 
 
@@ -267,6 +294,15 @@ async def test_capability_fallback_keeps_legacy_boards():
     assert "commission_board" in await tutor.observe_screen(None)
 
 
+async def test_screen_mode_blocks_all_legacy_visible_writes():
+    participant = FakeScreenParticipant()
+    tutor = make_tutor(participant)
+    assert "disabled" in await tutor.commission_board(None, need="n", background="b")
+    assert "disabled" in await tutor.edit_board(None, changes="c")
+    assert "disabled" in await tutor.share_resource(None, title="t", url="https://example.com")
+    assert participant.calls == []
+
+
 async def test_answer_submitted_becomes_child_input():
     participant = FakeScreenParticipant()
     tutor = make_tutor(participant)
@@ -295,14 +331,15 @@ async def test_superseded_show_notes_newer_intent():
     await wait_until(lambda: any(c[1] == "screen.intent" for c in participant.calls))
     intent_id = participant.calls[0][2]["intentId"]
     # A newer intent arrives while the first is still preparing.
-    tutor.screen_tracker.note_intent_sent("i999")
+    tutor.screen_tracker.note_intent_sent("i999", "show")
     assert await tutor.handle_screen_event(
         {"type": "ready", "intentId": intent_id, "lessonId": "L1",
          "page": {"id": "p1", "revision": "r1"}}) == "resolved"
     await wait_until(lambda: any(c[1] == "screen.observe" for c in participant.calls))
     obs_id = [c[2]["observationId"] for c in participant.calls if c[1] == "screen.observe"][0]
     tutor.handle_screen_pixels(obs_id, b"PNG", {})
-    tutor.handle_screen_context(obs_id, {"observationId": obs_id, "lessonId": "L1"})
+    tutor.handle_screen_context(obs_id, {"observationId": obs_id, "lessonId": "L1",
+                                         "page": {"id": "p1", "revision": "r1"}})
     result = await asyncio.wait_for(task, timeout=2.0)
     assert "superseded" in result.lower()
 

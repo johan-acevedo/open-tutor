@@ -270,6 +270,9 @@ class Tutor(Agent):
                 e.g. "Klockan". Shown briefly on the placeholder.
         """
         from .board_model import render_board
+        if self.screen_capable:
+            return ("Legacy board writes are disabled in this Screen session. "
+                    "Use show_screen with the current need; no board was changed.")
         learner = (self.learner or {}).get("name", "") or ""
         pid = self.ids.next()
         # Placeholder reserves the initial height so the child sees something
@@ -340,6 +343,9 @@ class Tutor(Agent):
             board_id: Which saved board to edit, e.g. "b1". Omit to edit the
                 most recent board.
         """
+        if self.screen_capable:
+            return ("Legacy board edits are disabled in this Screen session. "
+                    "Use show_screen for a revised page; no board was changed.")
         target = (board_id or "").strip() or (self.current_board_id or "")
         if not target or target not in self.boards:
             if not self.boards:
@@ -590,9 +596,9 @@ class Tutor(Agent):
         try:
             event = await self.screen_tracker.wait_intent(intent_id)
         except TimeoutError:
-            return ("The Screen is still preparing (no ready after waiting). "
-                    "The Screen is unchanged. Explain in words instead, briefly, "
-                    "and try show_screen again later if seeing would still help.")
+            return ("No Screen page was ready in time. Preparation may still finish and the page may appear. "
+                    "Continue in words for now; if a page appears, observe_screen can read the current page, "
+                    "or call show_screen for a newer need.")
         except asyncio.CancelledError:
             return ("The Screen request was cancelled (session ending). "
                     "Explain in words instead, briefly.")
@@ -668,7 +674,7 @@ class Tutor(Agent):
             return ("reveal_screen needs both page_id and revision exactly as the Screen announced them. "
                     "No Screen was changed.")
         intent_id = self.screen_tracker.new_intent_id()
-        self.screen_tracker.track_intent(intent_id)
+        self.screen_tracker.track_intent(intent_id, "reveal")
         payload = build_intent_payload(intent_id, self.screen_tracker.lesson_id, "reveal",
                                         target={"pageId": page_id, "revision": revision},
                                         viewport=self.screen_viewport())
@@ -788,6 +794,9 @@ class Tutor(Agent):
             url: The resource URL from find_resources.
             think_about: One short thing to think about while watching, in Swedish.
         """
+        if self.screen_capable:
+            return ("Legacy resource cards are disabled in this Screen session. "
+                    "No resource was placed on the board; continue without embedding it for now.")
         from urllib.parse import urlparse
 
         if urlparse(url).scheme != "https":
@@ -1088,7 +1097,19 @@ async def entrypoint(ctx: JobContext) -> None:
 
     def spawn(coro_fn):
         def handler(reader, identity):
-            asyncio.create_task(coro_fn(reader, identity))
+            async def run() -> None:
+                try:
+                    await coro_fn(reader, identity)
+                finally:
+                    # LiveKit stream readers own FFI subscriptions. Close on
+                    # success, rejection, oversized payloads and early returns.
+                    close = getattr(reader, "aclose", None)
+                    if callable(close):
+                        try:
+                            await close()
+                        except Exception:
+                            pass
+            asyncio.create_task(run())
         return handler
 
     async def on_screen_event(reader: rtc.TextStreamReader, identity: str) -> None:

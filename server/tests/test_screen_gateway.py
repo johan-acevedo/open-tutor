@@ -15,11 +15,13 @@ from fastapi.testclient import TestClient
 
 from open_tutor import screen_gateway
 from open_tutor.screen_gateway import (
+    BodyTooLarge,
     GEO_TOTAL_MAX_BYTES,
     MAX_TOKENS,
     _shape_commons_candidates,
     _shape_place,
     ensure_safe_geo_url,
+    read_body_limited,
     reset_rate_limits,
     validate_chat_body,
 )
@@ -178,6 +180,24 @@ def test_chat_needs_provider_key():
     response = c.post(f"/api/screen/openai/{ROOM}/chat/completions", json=chat_body(),
                       headers=auth_headers())
     assert response.status_code == 503
+
+
+async def test_streamed_body_cap_stops_before_buffering_remaining_chunks():
+    consumed = []
+
+    class Request:
+        async def stream(self):
+            for chunk in (b"12345", b"67890", b"unread"):
+                consumed.append(chunk)
+                yield chunk
+
+    request = Request()
+    try:
+        await read_body_limited(request, 8)
+        raise AssertionError("expected BodyTooLarge")
+    except BodyTooLarge:
+        pass
+    assert consumed == [b"12345", b"67890"]
 
 
 # ---- chat validation ----

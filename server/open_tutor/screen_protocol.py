@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import secrets
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -190,12 +191,14 @@ class ScreenTracker:
         observe_timeout: float = SCREEN_OBSERVE_TIMEOUT,
         context_grace: float = SCREEN_CONTEXT_GRACE,
         max_pending: int = MAX_PENDING,
+        instance_id: str | None = None,
     ) -> None:
         self.lesson_id = lesson_id or ""
         self.intent_timeout = intent_timeout
         self.observe_timeout = observe_timeout
         self.context_grace = context_grace
         self.max_pending = max_pending
+        self.instance_id = instance_id or secrets.token_urlsafe(6)
         self.current_page: dict[str, str] | None = None
         self.latest_intent_id: str | None = None
         self._intent_seq = 0
@@ -203,17 +206,18 @@ class ScreenTracker:
         self._intents: dict[str, asyncio.Future] = {}
         self._outcomes: dict[str, dict[str, Any]] = {}
         self._observations: dict[str, _ObservationWait] = {}
+        self._intent_ops: dict[str, str] = {}
         self._closed = False
 
     # ---- ids ---------------------------------------------------------------
 
     def new_intent_id(self) -> str:
         self._intent_seq += 1
-        return f"i{self._intent_seq}"
+        return f"i{self.instance_id}-{self._intent_seq}"
 
     def new_observation_id(self) -> str:
         self._obs_seq += 1
-        return f"o{self._obs_seq}"
+        return f"o{self.instance_id}-{self._obs_seq}"
 
     # ---- intents -----------------------------------------------------------
 
@@ -224,18 +228,21 @@ class ScreenTracker:
             if not fut.done():
                 fut.cancel()
 
-    def track_intent(self, intent_id: str) -> asyncio.Future:
-        """Register a future for an intent we will wait for. Updates latest."""
+    def track_intent(self, intent_id: str, op: str = "show") -> asyncio.Future:
+        """Register a future for an intent we will wait for. Updates latest visible intent."""
         self._evict_intents()
         loop = asyncio.get_running_loop()
         fut = loop.create_future()
         self._intents[intent_id] = fut
+        self._intent_ops[intent_id] = op
         self.latest_intent_id = intent_id
         return fut
 
-    def note_intent_sent(self, intent_id: str) -> None:
-        """Fire-and-forget intents (prepare): track latest without a waiter."""
-        self.latest_intent_id = intent_id
+    def note_intent_sent(self, intent_id: str, op: str = "prepare") -> None:
+        """Track fire-and-forget work without making invisible work a visible page."""
+        self._intent_ops[intent_id] = op
+        if op != "prepare":
+            self.latest_intent_id = intent_id
 
     def abandon_intent(self, intent_id: str) -> None:
         fut = self._intents.pop(intent_id, None)
@@ -254,6 +261,16 @@ class ScreenTracker:
         intent_id = str(event.get("intentId") or "")
         if not intent_id:
             return "ignored"
+        # A late ready still describes the real visible page even if its tool
+        # waiter timed out. Prepare candidates are invisible and never current.
+        if (event.get("type") == "ready" and self._intent_ops.get(intent_id) != "prepare"
+                and isinstance(event.get("page"), dict)):
+            page = event["page"]
+            if page.get("id"):
+                self.current_page = {
+                    "id": str(page.get("id"))[:80],
+                    "revision": str(page.get("revision") or "")[:80],
+                }
         if intent_id in self._outcomes and intent_id not in self._intents:
             return "duplicate"
         self._outcomes[intent_id] = dict(event)
@@ -264,13 +281,6 @@ class ScreenTracker:
             return "unknown"
         if fut.done():
             return "duplicate"
-        if event.get("type") == "ready" and isinstance(event.get("page"), dict):
-            page = event["page"]
-            if page.get("id"):
-                self.current_page = {
-                    "id": str(page.get("id"))[:80],
-                    "revision": str(page.get("revision") or "")[:80],
-                }
         fut.set_result(dict(event))
         return "resolved"
 
@@ -337,9 +347,15 @@ class ScreenTracker:
         wait = self._observations.get(observation_id)
         if wait is None or wait.context.done():
             return False
-        if isinstance(context, dict) and context.get("lessonId"):
-            if str(context.get("lessonId")) != self.lesson_id:
-                return False
+        if str(context.get("lessonId") or "") != self.lesson_id:
+            return False
+        if str(context.get("observationId") or observation_id) != observation_id:
+            return False
+        page = context.get("page")
+        if not isinstance(page, dict):
+            return False
+        if str(page.get("id") or "") != wait.page_id or str(page.get("revision") or "") != wait.revision:
+            return False
         wait.context.set_result(dict(context))
         return True
 

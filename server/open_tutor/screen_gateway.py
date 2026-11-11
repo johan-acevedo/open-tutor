@@ -98,9 +98,10 @@ def is_room_valid(room: str) -> bool:
 def client_ip(request: Request) -> str:
     forwarded = request.headers.get("x-forwarded-for", "")
     if forwarded:
-        first = forwarded.split(",")[0].strip()
-        if first:
-            return first[:80]
+        # The last entry is the nearest proxy hop, not a client-spoofed chain prefix.
+        last = forwarded.split(",")[-1].strip()
+        if last:
+            return last[:80]
     client = getattr(request, "client", None)
     host = getattr(client, "host", None) if client else None
     return (host or "unknown")[:80]
@@ -218,6 +219,13 @@ def validate_chat_body(body: Any) -> str | None:
 def _rate_limited(bucket: dict[str, list[float]], key: str, limit: int,
                   window: float, now: float | None = None) -> bool:
     moment = time.monotonic() if now is None else now
+    if len(bucket) > 2048:
+        for old_key, old_values in list(bucket.items()):
+            fresh = [t for t in old_values if moment - t < window]
+            if fresh:
+                bucket[old_key] = fresh
+            else:
+                bucket.pop(old_key, None)
     hits = [t for t in bucket.get(key, []) if moment - t < window]
     if len(hits) >= limit:
         bucket[key] = hits
@@ -225,6 +233,20 @@ def _rate_limited(bucket: dict[str, list[float]], key: str, limit: int,
     hits.append(moment)
     bucket[key] = hits
     return False
+
+
+class BodyTooLarge(Exception):
+    pass
+
+
+async def read_body_limited(request: Request, limit: int) -> bytes:
+    """Reject an oversized streamed body before buffering the whole request."""
+    data = bytearray()
+    async for chunk in request.stream():
+        if len(data) + len(chunk) > limit:
+            raise BodyTooLarge()
+        data.extend(chunk)
+    return bytes(data)
 
 
 # ---- SSRF guards ----
@@ -297,7 +319,7 @@ def _commons_url(query: str) -> str:
 
 
 async def _fetch_json(url: str, *, max_bytes: int = GEO_JSON_MAX_BYTES) -> Any:
-    current = ensure_safe_geo_url(url)
+    current = await asyncio.to_thread(ensure_safe_geo_url, url)
     timeout = aiohttp.ClientTimeout(total=GEO_TIMEOUT_S)
     for _ in range(4):
         async with aiohttp.ClientSession(timeout=timeout) as session:
@@ -310,7 +332,7 @@ async def _fetch_json(url: str, *, max_bytes: int = GEO_JSON_MAX_BYTES) -> Any:
                     location = resp.headers.get("Location", "")
                     if not location:
                         raise RuntimeError("bad redirect")
-                    current = ensure_safe_geo_url(urljoin(current, location))
+                    current = await asyncio.to_thread(ensure_safe_geo_url, urljoin(current, location))
                     continue
                 if resp.status != 200:
                     raise RuntimeError(f"geo upstream {resp.status}")
@@ -337,7 +359,7 @@ async def _fetch_json(url: str, *, max_bytes: int = GEO_JSON_MAX_BYTES) -> Any:
 
 
 async def _fetch_image_bytes(url: str) -> tuple[bytes, str]:
-    current = ensure_safe_geo_url(url)
+    current = await asyncio.to_thread(ensure_safe_geo_url, url)
     timeout = aiohttp.ClientTimeout(total=GEO_TIMEOUT_S)
     for _ in range(4):
         async with aiohttp.ClientSession(timeout=timeout) as session:
@@ -350,7 +372,7 @@ async def _fetch_image_bytes(url: str) -> tuple[bytes, str]:
                     location = resp.headers.get("Location", "")
                     if not location:
                         raise RuntimeError("bad redirect")
-                    current = ensure_safe_geo_url(urljoin(current, location))
+                    current = await asyncio.to_thread(ensure_safe_geo_url, urljoin(current, location))
                     continue
                 if resp.status != 200:
                     raise RuntimeError(f"image upstream {resp.status}")
@@ -513,7 +535,9 @@ async def geography_lookup(query: str) -> dict[str, Any]:
 
 
 def upstream_chat_url(env: dict[str, str]) -> str:
-    base = (env.get("TUTOR_LLM_BASE_URL") or GO_DEFAULT_BASE).rstrip("/")
+    # Never send the Screen's Go key to a base URL selected for another tutor
+    # provider. A dedicated override is available for a deliberate Go proxy.
+    base = (env.get("TUTOR_SCREEN_LLM_BASE_URL") or GO_DEFAULT_BASE).rstrip("/")
     return f"{base}/chat/completions"
 
 
@@ -541,11 +565,11 @@ def register_screen_routes(app: FastAPI, env: dict[str, str]) -> None:
             except ValueError:
                 pass
         try:
-            raw = await request.body()
+            raw = await read_body_limited(request, MAX_BODY_BYTES)
+        except BodyTooLarge:
+            return JSONResponse(status_code=413, content={"error": "payload too large"})
         except Exception:
             return JSONResponse(status_code=400, content={"error": "invalid body"})
-        if len(raw) > MAX_BODY_BYTES:
-            return JSONResponse(status_code=413, content={"error": "payload too large"})
         try:
             body = json.loads(raw.decode("utf-8") if raw else "")
         except (UnicodeDecodeError, json.JSONDecodeError):
@@ -582,6 +606,9 @@ def register_screen_routes(app: FastAPI, env: dict[str, str]) -> None:
         try:
             try:
                 upstream = await session.post(upstream_url, json=body, headers=headers)
+            except asyncio.CancelledError:
+                await session.close()
+                raise
             except asyncio.TimeoutError:
                 await session.close()
                 log.warning("screen chat upstream timeout")
@@ -639,11 +666,11 @@ def register_screen_routes(app: FastAPI, env: dict[str, str]) -> None:
             except ValueError:
                 pass
         try:
-            raw = await request.body()
+            raw = await read_body_limited(request, GEO_BODY_MAX_BYTES)
+        except BodyTooLarge:
+            return JSONResponse(status_code=413, content={"error": "payload too large"})
         except Exception:
             return JSONResponse(status_code=400, content={"error": "invalid body"})
-        if len(raw) > GEO_BODY_MAX_BYTES:
-            return JSONResponse(status_code=413, content={"error": "payload too large"})
         try:
             data = json.loads(raw.decode("utf-8") if raw else "")
         except (UnicodeDecodeError, json.JSONDecodeError):
