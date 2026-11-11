@@ -78,7 +78,7 @@ class FakeUpstreamResp:
         self.content = FakeContent(chunks or [b"data: {\"ok\":1}\n\n", b"data: [DONE]\n\n"])
         self.released = False
 
-    async def release(self):
+    def release(self):
         self.released = True
 
 
@@ -154,6 +154,9 @@ def test_chat_same_origin_checks(fake_upstream):
     evil = c.post(f"/api/screen/openai/{ROOM}/chat/completions", json=chat_body(),
                   headers={**auth_headers(), "origin": "http://evil.example"})
     assert evil.status_code == 403
+    different_port = c.post(f"/api/screen/openai/{ROOM}/chat/completions", json=chat_body(),
+                            headers={**auth_headers(), "origin": "http://testserver:9999"})
+    assert different_port.status_code == 403
     same = c.post(f"/api/screen/openai/{ROOM}/chat/completions", json=chat_body(),
                   headers={**auth_headers(), "origin": "http://testserver"})
     assert same.status_code == 200

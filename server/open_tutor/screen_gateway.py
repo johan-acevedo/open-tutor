@@ -132,16 +132,6 @@ def same_origin_ok(request: Request, allowed_origins: set[str]) -> bool:
             continue
         if netloc and netloc == host_header:
             return True
-        # Host header may carry an explicit port while the origin omits the
-        # default one; accept a hostname-only match as same-origin too.
-        try:
-            if netloc and urlparse(value).hostname == host_header.split(":")[0]:
-                # Only when the request host itself matches by name; ports are
-                # not a security boundary for this family service.
-                if urlparse(value).hostname:
-                    return True
-        except Exception:
-            continue
     if allowed_origins:
         for value in candidates:
             try:
@@ -598,7 +588,7 @@ def register_screen_routes(app: FastAPI, env: dict[str, str]) -> None:
             if upstream.status < 200 or upstream.status >= 300:
                 status = upstream.status
                 try:
-                    await upstream.release()
+                    upstream.release()
                 except Exception:
                     pass
                 await session.close()
@@ -613,7 +603,7 @@ def register_screen_routes(app: FastAPI, env: dict[str, str]) -> None:
                             yield chunk
                 finally:
                     try:
-                        await upstream.release()
+                        upstream.release()
                     except Exception:
                         pass
                     await session.close()
