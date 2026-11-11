@@ -7,7 +7,10 @@ board model, extracts board.html, screenshots it for the tutor's vision
 feedback, and returns both plus the model's short note.
 
 Board model: BOARD_MODEL env (default opencode-go/deepseek-v4.1-flash),
-thinking BOARD_THINKING (default off), via the pi CLI.
+thinking BOARD_THINKING (default low), via the pi CLI.
+
+BOARD_MAX_TOKENS (default 16384) limits output through the app's explicit
+board_budget.js Pi extension. A lower provider limit is preserved.
 Screenshots need headless Chromium (playwright); without it the tutor
 still gets the note, and rendering is skipped with a warning.
 """
@@ -18,15 +21,29 @@ import asyncio
 import json
 import logging
 import os
+import pathlib
 import tempfile
 
 log = logging.getLogger("open-tutor")
 
 BOARD_MODEL = os.environ.get("BOARD_MODEL", "opencode-go/deepseek-v4.1-flash")
-BOARD_THINKING = os.environ.get("BOARD_THINKING", "off")
+BOARD_THINKING = os.environ.get("BOARD_THINKING", "low")
 BOARD_TIMEOUT_S = float(os.environ.get("BOARD_TIMEOUT_S", "150"))
 BOARD_W = int(os.environ.get("BOARD_W", "1920"))
 BOARD_H = int(os.environ.get("BOARD_H", "1080"))
+
+
+def _board_max_tokens() -> int:
+    """Output-token cap for board requests, validated at the env boundary."""
+    try:
+        value = int(os.environ.get("BOARD_MAX_TOKENS", "16384"))
+    except ValueError:
+        return 16384
+    return value if value > 0 else 16384
+
+
+BOARD_MAX_TOKENS = _board_max_tokens()
+BOARD_BUDGET_EXTENSION = pathlib.Path(__file__).with_name("board_budget.js")
 
 # Served-board iframe policy. Must match HTML_CSP in web/src/components/Cards.tsx:
 # the tutor's screenshot shares the child's effective policy, so what the tutor
@@ -34,7 +51,8 @@ BOARD_H = int(os.environ.get("BOARD_H", "1080"))
 # for neither). server/tests/test_board_render.py asserts they are identical.
 # Allows the documented renderer libraries: jsdelivr scripts + styles + fonts;
 # images (incl. Leaflet map tiles) over https. Everything else stays blocked.
-HTML_CSP = ("default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net; "
+# JSXGraph compiles function plots inside the board's opaque sandbox.
+HTML_CSP = ("default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; "
              "style-src 'unsafe-inline' https://cdn.jsdelivr.net; "
              "font-src https://cdn.jsdelivr.net; img-src data: https:")
 
@@ -68,7 +86,12 @@ Useful commands: \\frac{a}{b}, \\sqrt{x}, \\times \\div \\cdot, \\text{words}, x
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jsxgraph@1.11.0/distrib/jsxgraph.css">
 <script src="https://cdn.jsdelivr.net/npm/jsxgraph@1.11.0/distrib/jsxgraphcore.js"></script>
 var bd = JXG.JSXGraph.initBoard('id', {boundingbox: [xmin, ymax, xmax, ymin], axis: true, grid: true});
-bd.create(kind, parents, attributes). Kinds: 'point' [[x,y]], 'line' [[p1],[p2]], 'circle' [[center],[radiusPoint]], 'functiongraph' [function(x){...}], 'polygon' [[p1,p2,p3]], 'angle' [[p1,p2,p3]], 'text' [[x,y],'label'], 'slider' [[[x1,y1],[x2,y2],[min,start,max]]]. Attributes: {name:'', strokeColor:'', fillColor:'', fixed:true, withLabel:true}. Read points with p.X(), p.Y().
+bd.create(kind, parents, attributes). Examples of exact signatures:
+bd.create('point', [1, 3], {name: 'P'});
+bd.create('line', [[0, 1], [1, 3]], {strokeColor: '#22d3ee'});
+bd.create('functiongraph', [function(x){ return 2*x+1; }], {strokeWidth: 3});
+bd.create('text', [0, 1, 'label'], {fontSize: 22});
+The text string is inside the parents array, not a separate argument. Other parents: circle [center, radiusOrPoint], polygon [pointA, pointB, pointC], angle [pointA, vertex, pointB], slider [[x1,y1],[x2,y2],[min,start,max]]. Attributes include {name:'', strokeColor:'', fillColor:'', fixed:true, withLabel:true}. Read points with p.X(), p.Y().
 
 - Chart.js 4.4.7 (charts). Docs: https://www.chartjs.org/docs/latest/
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
@@ -123,19 +146,35 @@ def extract_board(reply: str) -> tuple[str | None, str]:
     return html, note
 
 
+async def _kill_and_reap(proc) -> None:
+    try:
+        proc.kill()
+    except ProcessLookupError:
+        pass
+    await proc.wait()
+
+
 async def call_board_model(system: str, user_message: str) -> str:
     proc = await asyncio.create_subprocess_exec(
         "pi", "-p", "--model", BOARD_MODEL, "--thinking", BOARD_THINKING,
         "--no-tools", "--no-session", "--no-context-files",
-        "--no-skills", "--no-extensions", "--mode", "json",
+        "--no-skills", "--no-extensions",
+        "--extension", str(BOARD_BUDGET_EXTENSION),
+        "--mode", "json",
         "--system-prompt", system, user_message,
-        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
+        env={**os.environ, "BOARD_MAX_TOKENS": str(BOARD_MAX_TOKENS)})
     try:
         out, _ = await asyncio.wait_for(proc.communicate(), timeout=BOARD_TIMEOUT_S)
     except asyncio.TimeoutError:
-        proc.kill()
+        await _kill_and_reap(proc)
         raise TimeoutError(f"board model timed out after {BOARD_TIMEOUT_S}s")
+    except asyncio.CancelledError:
+        await _kill_and_reap(proc)
+        raise
     reply = ""
+    failure: str | None = None
+    truncated = False
     for line in out.decode("utf-8", errors="replace").splitlines():
         line = line.strip()
         if not line.startswith("{"):
@@ -150,6 +189,18 @@ async def call_board_model(system: str, user_message: str) -> str:
                 for c in msg.get("content", []) or []:
                     if isinstance(c, dict) and c.get("type") == "text":
                         reply += c.get("text", "")
+            error_message = msg.get("errorMessage")
+            if error_message or msg.get("stopReason") in ("error", "aborted"):
+                failure = str(error_message or msg.get("stopReason"))
+            elif msg.get("stopReason") == "length":
+                truncated = True
+    if failure:
+        raise RuntimeError(f"board model error: {failure[:500]}")
+    if truncated:
+        raise ValueError("board model reply truncated (length stop reason)")
+    if not reply and proc.returncode:
+        tail = out.decode("utf-8", errors="replace").strip()[-500:]
+        raise RuntimeError(f"board model failed (exit {proc.returncode}): {tail}")
     return reply
 
 
@@ -224,6 +275,9 @@ async def render_board(need: str, background: str, learner_name: str = "",
             "</html> explain in 2-3 sentences what changed and what the tutor "
             "should start from.")
     reply = await call_board_model(system, user_message)
+    low_reply = reply.lower()
+    if ("<!doctype html" in low_reply or "<html" in low_reply) and "</html>" not in low_reply:
+        raise ValueError("board model returned truncated HTML (missing </html>)")
     html, note = extract_board(reply)
     if not html:
         raise ValueError("board model returned no HTML document")

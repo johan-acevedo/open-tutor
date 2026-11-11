@@ -138,7 +138,7 @@ function SvgCard({ item, onMounted }: CardProps) {
 
 // Shared with the tutor's screenshot renderer; test_board_render.py checks parity.
 const HTML_CSP =
-  "default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'unsafe-inline' https://cdn.jsdelivr.net; font-src https://cdn.jsdelivr.net; img-src data: https:";
+  "default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; style-src 'unsafe-inline' https://cdn.jsdelivr.net; font-src https://cdn.jsdelivr.net; img-src data: https:";
 
 /** Visible content-box size of the board scroll surface around a card. */
 function scrollAvail(wrap: HTMLElement | null): { w: number; h: number } | null {
