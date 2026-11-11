@@ -1,0 +1,23 @@
+{
+ "round": "r16",
+ "generated_at": "2026-11-11T08:35:31+00:00",
+ "notes": "Diagnostic (Johan): r15 + model appends a short reasoning note after </html> (what it showed and why, which toolkit libs used/considered and why none). Timing ignored; goal is quality + insight into Haiku's toolkit decisions.",
+ "targets": {
+  "median_wall_s": 20.0,
+  "pct_correct": 90.0,
+  "mean_clarity": 4.5
+ },
+ "members": {
+  "claude-haiku-5-5": {
+   "tune": {
+    "n": 14,
+    "judged": 14,
+    "fail": 0,
+    "pct_correct": 64.3,
+    "mean_clarity": 3.93,
+    "median_wall": 19.39,
+    "p90_wall": 30.82
+   }
+  }
+ }
+}

@@ -1,6 +1,6 @@
 {
  "round": "r10",
- "generated_at": "2026-11-11T08:23:08+00:00",
+ "generated_at": "2026-11-11T08:35:31+00:00",
  "notes": "Haiku: r9 (reference examples, thinking medium) but the review pass on every board runs at thinking high, to catch residual factual/wording errors. One new variable: review thinking.",
  "targets": {
   "median_wall_s": 20.0,
