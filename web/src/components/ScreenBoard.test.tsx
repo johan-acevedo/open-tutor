@@ -57,6 +57,15 @@ describe('ScreenBoard', () => {
     expect(base.onGoTo).toHaveBeenCalledWith(1);
   });
 
+  it('shows homework without exercise answer controls', () => {
+    const homework = deck();
+    homework.pages = [{ ...page('h1'), kind: 'homework', subject: 'Läxa', solution: '' }];
+    render(<ScreenBoard {...base} snapshot={homework} />);
+    expect(screen.queryByRole('button', { name: 'Skicka till Räven' })).toBeNull();
+    expect(screen.queryByPlaceholderText('Skriv här …')).toBeNull();
+    expect(screen.getByText('Sida 1 av 1')).toBeTruthy();
+  });
+
   it('keeps drafts local until explicit submission', async () => {
     const onDraft = vi.fn().mockResolvedValue(undefined);
     const onSubmit = vi.fn().mockResolvedValue(undefined);

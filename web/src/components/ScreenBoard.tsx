@@ -69,7 +69,7 @@ export default function ScreenBoard({
       />
 
       {page && snapshot && (
-        <div className="ot-screen-controls">
+        <div className={`ot-screen-controls${page.kind === 'homework' ? ' homework' : ''}`}>
           <nav className="ot-screen-pager" aria-label="Sidnavigering">
             <button type="button" onClick={() => void onGoTo(snapshot.current - 1)} disabled={snapshot.current <= 0}>
               ← Föregående
@@ -83,6 +83,8 @@ export default function ScreenBoard({
               Nästa →
             </button>
           </nav>
+          {page.kind !== 'homework' && (
+            <>
           <label className="ot-screen-answer">
             <span>{page.answerLabel || 'Ditt svar'}</span>
             <textarea
@@ -111,6 +113,8 @@ export default function ScreenBoard({
           >
             {submitting ? 'Skickar …' : 'Skicka till Räven'}
           </button>
+            </>
+          )}
         </div>
       )}
       {busy && page && <div className="ot-screen-working" role="status">Skärmen förbereder …</div>}

@@ -944,6 +944,10 @@ export function useSession(mobile = false) {
       try {
         const down = await downscaleImage(file);
         const title = file.name || 'Bild';
+        await screenRef.current?.addHomeworkPage({
+          title,
+          images: [{ bytes: down.bytes, mimeType: 'image/jpeg', provenance: title }],
+        });
         setItems((prev) => [...prev, { id: itemId, kind: 'homework', title, images: [down.dataUrl] }]);
         setActiveItemId(itemId);
         if (room) {
@@ -971,6 +975,14 @@ export function useSession(mobile = false) {
           return false;
         }
         const images = pages.map((pg) => pg.dataUrl);
+        await screenRef.current?.addHomeworkPage({
+          title: file.name || 'PDF',
+          images: pages.map((pg, index) => ({
+            bytes: dataUrlToBytes(pg.dataUrl),
+            mimeType: 'image/png',
+            provenance: `${file.name || 'PDF'} · sida ${index + 1}`,
+          })),
+        });
         setItems((prev) => [...prev, { id: itemId, kind: 'homework', title: file.name || 'PDF', images }]);
         setActiveItemId(itemId);
         if (room) {
@@ -1001,6 +1013,7 @@ export function useSession(mobile = false) {
       const trimmed = text.trim();
       if (!trimmed) return;
       const itemId = uid();
+      await screenRef.current?.addHomeworkPage({ title: 'Inklistrad text', text: trimmed });
       setItems((prev) => [...prev, { id: itemId, kind: 'homework', title: 'Inklistrad text', text: trimmed }]);
       setActiveItemId(itemId);
       if (room) {

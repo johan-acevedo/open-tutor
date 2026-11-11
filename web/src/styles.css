@@ -289,6 +289,14 @@ a:focus-visible {
   gap: 12px;
 }
 
+.ot-screen-controls.homework {
+  grid-template-columns: 1fr;
+}
+
+.ot-screen-controls.homework .ot-screen-pager {
+  justify-content: center;
+}
+
 .ot-screen-pager {
   display: flex;
   align-items: center;
