@@ -58,6 +58,7 @@ async def test_commissioned_board_reaches_the_board_and_feeds_back(monkeypatch):
     assert (identity, method, payload["id"], payload["kind"]) == ("learner-1", "board.show", "b1", "html")
     assert seen["png"] == b"PNG" and "hälsning" in seen["note"].lower()
     assert "Leo behöver se" in seen["need"]
+    assert "Do not repeat the waiting sentence" in result
 
 
 async def test_client_board_size_reaches_the_board_model(monkeypatch):

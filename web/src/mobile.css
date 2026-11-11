@@ -257,9 +257,8 @@
   z-index: 2;
   padding: 0 8px;
   gap: 8px;
-  border: 1px solid var(--ot-border);
-  border-radius: 18px;
-  background: var(--ot-elevated);
+  background: transparent;
+  border: none;
   max-height: 100%;
   overflow: hidden;
 }
