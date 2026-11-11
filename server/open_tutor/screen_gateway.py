@@ -68,6 +68,7 @@ GEO_ALLOWED_HOSTS = frozenset({
     "nominatim.openstreetmap.org",
     "commons.wikimedia.org",
     "upload.wikimedia.org",
+    "thumb.wikimedia.org",
 })
 GEO_TIMEOUT_S = 10.0
 GEO_JSON_MAX_BYTES = 256_000
@@ -286,7 +287,11 @@ def _commons_url(query: str) -> str:
         "prop": "imageinfo",
         "iiprop": "url|size|mime|extmetadata",
         "iiextmetadatafilter": "Artist|LicenseShortName",
-        "iiurlwidth": "800",
+        # Wikimedia's thumbnail service may round larger requests up to a
+        # multi-megabyte bucket. 320 keeps the static research artifact small
+        # enough for the bounded gateway; generated SVG remains available for
+        # diagrams that need larger scalable output.
+        "iiurlwidth": "320",
     })
     return f"https://commons.wikimedia.org/w/api.php?{params}"
 
