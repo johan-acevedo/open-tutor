@@ -47,6 +47,10 @@ def log(*a):
     print(*a, flush=True)
 
 
+# Runtime board context (round config `board:` block; production: the client):
+# [[BOARD_W]], [[BOARD_H]], [[DEVICE]], [[CHILD_LANG]].
+BOARD_CTX = {"w": "1920", "h": "1080", "device": "desktop", "lang": "Swedish"}
+
 # ---------------------------------------------------------------- templates
 
 def format_learner(learner: dict) -> str:
@@ -110,7 +114,11 @@ def fill_template(text: str, case: dict) -> str:
                 .replace("{conversation}", convo)
                 .replace("{homework}", hw)
                 .replace("{tool}", tool)
-                .replace("{request}", format_request(req)))
+                .replace("{request}", format_request(req))
+                .replace("[[BOARD_W]]", BOARD_CTX["w"])
+                .replace("[[BOARD_H]]", BOARD_CTX["h"])
+                .replace("[[DEVICE]]", BOARD_CTX["device"])
+                .replace("[[CHILD_LANG]]", BOARD_CTX["lang"]))
 
 
 def homework_image_args(case: dict) -> list:
@@ -545,6 +553,11 @@ def main() -> None:
     prompt_rel = cfg.get("prompt", "prompts/r0")
     thinking = cfg.get("thinking", "low")
     fix_pass = cfg.get("fix_pass", False)  # bool, "always", or {member: ...}
+    board = cfg.get("board", {}) or {}
+    BOARD_CTX["w"] = str(board.get("w", "1920"))
+    BOARD_CTX["h"] = str(board.get("h", "1080"))
+    BOARD_CTX["device"] = str(board.get("device", "desktop"))
+    BOARD_CTX["lang"] = str(board.get("lang", "Swedish"))
     REVIEW_STYLE["style"] = cfg.get("review_style", "plain")
     REVIEW_STYLE["thinking"] = cfg.get("review_thinking")  # thinking for the fix/review call
     toolkit = cfg.get("toolkit")
