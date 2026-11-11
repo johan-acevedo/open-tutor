@@ -8,7 +8,7 @@ afterEach(() => cleanup());
 const noop = vi.fn();
 
 describe('Board layout switch', () => {
-  it('shows the arrival greeting with drop zone when empty', () => {
+  it('shows the greeting, an empty whiteboard and an empty inbox strip', () => {
     render(
       <Board
         learnerName="Leo"
@@ -23,10 +23,13 @@ describe('Board layout switch', () => {
     expect(screen.getByText('Hej Leo!')).toBeTruthy();
     expect(screen.getByText('Vad har du med dig idag?')).toBeTruthy();
     expect(screen.getByText(/Förra gången: ekvationer/)).toBeTruthy();
-    expect(screen.getByText('Släpp en fil eller klistra in')).toBeTruthy();
+    expect(screen.getByText('Inkorg · tom')).toBeTruthy();
+    expect(screen.getByText('släpp fil här')).toBeTruthy();
+    expect(screen.getByText('Här hamnar det vi jobbar med.')).toBeTruthy();
+    expect(screen.queryByText('Släpp en fil eller klistra in')).toBeNull();
   });
 
-  it('renders the first board item and leaves arrival behind', () => {
+  it('reflects real homework state in the inbox strip', () => {
     const { rerender } = render(
       <Board
         learnerName="Leo"
@@ -38,7 +41,38 @@ describe('Board layout switch', () => {
         dragOver={false}
       />,
     );
-    expect(screen.queryAllByText('Släpp en fil eller klistra in').length).toBeGreaterThan(0);
+    expect(screen.getByText('Inkorg · tom')).toBeTruthy();
+
+    rerender(
+      <Board
+        learnerName="Leo"
+        lastTopic={null}
+        items={[
+          { id: 'h1', kind: 'homework', title: 'matte1.jpg', images: ['data:image/jpeg;base64,x'] },
+          { id: 'h2', kind: 'homework', title: 'matte2.jpg', images: ['data:image/jpeg;base64,y'] },
+        ]}
+        focused={null}
+        onItemMounted={noop}
+        onResourceClosed={noop}
+        dragOver={false}
+      />,
+    );
+    expect(screen.getByText('Inkorg · 2 uppgifter')).toBeTruthy();
+  });
+
+  it('keeps the greeting and inbox visible once teaching starts', () => {
+    const { rerender } = render(
+      <Board
+        learnerName="Leo"
+        lastTopic={null}
+        items={[]}
+        focused={null}
+        onItemMounted={noop}
+        onResourceClosed={noop}
+        dragOver={false}
+      />,
+    );
+    expect(screen.getByText('Här hamnar det vi jobbar med.')).toBeTruthy();
 
     rerender(
       <Board
@@ -51,9 +85,12 @@ describe('Board layout switch', () => {
         dragOver={false}
       />,
     );
-    expect(screen.queryAllByText('Släpp en fil eller klistra in')).toHaveLength(0);
+    expect(screen.queryByText('Här hamnar det vi jobbar med.')).toBeNull();
     expect(screen.getByText('Ekvationer')).toBeTruthy();
     expect(screen.getByText(/Vi löser/)).toBeTruthy();
+    // Greeting + inbox stay on top while teaching.
+    expect(screen.getByText('Hej Leo!')).toBeTruthy();
+    expect(screen.getByText('Inkorg · tom')).toBeTruthy();
   });
 
   it('renders homework as a paper card', () => {

@@ -42,6 +42,7 @@ export default function Board({
   const pausedAt = useRef(0);
   const selected = items.find((item) => item.id === (activeItemId ?? focused?.id)) ?? items.at(-1);
   const homework = items.filter((item) => item.kind === 'homework').at(-1);
+  const homeworkCount = items.filter((item) => item.kind === 'homework').length;
   const visibleId = view.kind === 'homework' ? view.id : selected?.id;
 
   function follow() {
@@ -126,6 +127,39 @@ export default function Board({
           </button>
         </div>
       )}
+      <div className="ot-live-head">
+        <div className="ot-greeting">
+          <h1>Hej {learnerName}!</h1>
+          <p className="ot-greeting-sub">Vad har du med dig idag?</p>
+          {lastTopic && <span className="ot-last-chip">Förra gången: {lastTopic}</span>}
+        </div>
+        <div
+          className={`ot-inbox${dragOver ? ' dragover' : ''}`}
+          aria-label="Inkorg för läxor"
+          aria-live="polite"
+        >
+          <span className="ot-inbox-icon" aria-hidden="true">
+            📥
+          </span>
+          <span className="ot-inbox-text">
+            {homeworkCount === 0
+              ? 'Inkorg · tom'
+              : `Inkorg · ${homeworkCount} ${homeworkCount === 1 ? 'uppgift' : 'uppgifter'}`}
+          </span>
+          {mobile ? (
+            <span className="ot-inbox-actions">
+              <button type="button" onClick={onCamera}>
+                Fota läxan
+              </button>
+              <button type="button" onClick={onFiles}>
+                Välj bild eller PDF
+              </button>
+            </span>
+          ) : (
+            <span className="ot-inbox-hint">släpp fil här</span>
+          )}
+        </div>
+      </div>
       <div
         className={`ot-board-scroll${mobile ? ' ot-focus-surface' : ''}`}
         data-view={mobile ? view.kind : 'all'}
@@ -134,26 +168,12 @@ export default function Board({
         onTouchMove={pauseFollow}
       >
         {items.length === 0 && (
-          <div className="ot-greeting">
-            <h1>Hej {learnerName}!</h1>
-            <p className="ot-greeting-sub">Vad har du med dig idag?</p>
-            {lastTopic && <span className="ot-last-chip">Förra gången: {lastTopic}</span>}
-            {mobile ? (
-              <div className="ot-arrival-actions">
-                <button type="button" onClick={onCamera}>
-                  Fota läxan
-                </button>
-                <button type="button" onClick={onFiles}>
-                  Välj bild eller PDF
-                </button>
-              </div>
-            ) : (
-              <div className={`ot-dropzone${dragOver ? ' dragover' : ''}`} aria-hidden="true">
-                <div>📄</div>
-                <div>Släpp en fil eller klistra in</div>
-                <span className="ot-key-hint">Ctrl + V</span>
-              </div>
-            )}
+          <div className="ot-board-empty" role="status" aria-label="Whiteboard">
+            <div className="ot-board-empty-icon" aria-hidden="true">
+              ✎
+            </div>
+            <p>Här hamnar det vi jobbar med.</p>
+            <span>Säg hej — tutorn ritar upp här.</span>
           </div>
         )}
         {items.map((item) => (

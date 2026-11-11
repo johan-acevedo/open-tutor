@@ -265,10 +265,79 @@ a:focus-visible {
   border-radius: 24px;
 }
 
+/* ---------- Live header: greeting + inbox strip ---------- */
+
+.ot-live-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 8px 0 12px;
+}
+
+.ot-live-head .ot-greeting {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.ot-inbox {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--ot-elevated);
+  border: 1px solid var(--ot-border);
+  border-radius: 999px;
+  padding: 8px 16px;
+  font-size: 14px;
+  color: var(--ot-text);
+  max-width: 360px;
+  white-space: nowrap;
+}
+
+.ot-inbox.dragover {
+  border-color: var(--ot-cyan);
+  background: var(--ot-cyan-fill);
+}
+
+.ot-inbox-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.ot-inbox-text {
+  font-weight: 600;
+}
+
+.ot-inbox-hint {
+  border: 1px dashed var(--ot-border);
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 13px;
+  color: var(--ot-text-dim);
+}
+
+.ot-inbox-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ot-inbox-actions button {
+  min-height: 44px;
+  border: 1px solid var(--ot-border);
+  border-radius: 12px;
+  background: var(--ot-elevated);
+  color: var(--ot-text);
+  padding: 8px 12px;
+  font-size: 16px;
+}
+
 /* ---------- Arrival greeting ---------- */
 
 .ot-greeting h1 {
-  font-size: 32px;
+  font-size: 40px;
   font-weight: 600;
   margin: 12px 0 4px;
 }
@@ -315,6 +384,40 @@ a:focus-visible {
   font-size: 15px;
   color: var(--ot-text-dim);
   background: var(--ot-elevated);
+}
+
+/* ---------- Board empty state (central whiteboard) ---------- */
+
+.ot-board-empty {
+  flex: 1 1 auto;
+  min-height: 320px;
+  border: 1px solid var(--ot-border);
+  border-radius: 16px;
+  background: var(--ot-elevated);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+  padding: 48px 24px;
+  color: var(--ot-text-dim);
+}
+
+.ot-board-empty-icon {
+  font-size: 40px;
+  line-height: 1;
+}
+
+.ot-board-empty p {
+  margin: 0;
+  color: var(--ot-text);
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.ot-board-empty span {
+  font-size: 15px;
 }
 
 /* ---------- Avatar column ---------- */
