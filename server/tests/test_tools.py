@@ -2,8 +2,8 @@
 
 import json
 
+import open_tutor.board_model as board_model
 from open_tutor.agent import Tutor
-from open_tutor.board import Step
 from open_tutor.prompt import instructions
 
 
@@ -32,39 +32,87 @@ def tutor(room, identity="learner-1", learner=None):
     return t
 
 
-async def test_show_steps_reaches_the_board_and_is_acknowledged():
+async def commission(t, monkeypatch, room, **kwargs):
+    seen = {}
+
+    async def fake_render(need, background, learner_name="", **kw):
+        seen.update(need=need, background=background)
+        return {"html": "<!doctype html><html><body> Hej </body></html>",
+                "note": "Enkel hälsningstavla.", "png": b"PNG"}
+
+    async def fake_seen(png, note, label):
+        seen.update(png=png, note=note, label=label)
+
+    monkeypatch.setattr(board_model, "render_board", fake_render)
+    monkeypatch.setattr(t, "add_board_seen", fake_seen)
+    params = {"need": "Leo behöver se en hälsning", "background": "Leo, 7, svenska."}
+    params.update(kwargs)
+    result = await t.commission_board(None, **params)
+    return result, seen
+async def test_commissioned_board_reaches_the_board_and_feeds_back(monkeypatch):
     room = FakeRoom()
     t = tutor(room)
-    result = await t.show_steps(None, title="Ekvation", steps=[Step(tex="3x + 5 = 20"), Step(tex="3x = 15", op="-5")])
-    assert "b1 is now visible" in result
+    result, seen = await commission(t, monkeypatch, room)
+    assert "on screen now" in result
     identity, method, payload = room.local_participant.calls[0]
-    assert (identity, method, payload["id"], payload["kind"]) == ("learner-1", "board.show", "b1", "steps")
-    assert payload["steps"][1] == {"tex": "3x = 15", "op": "-5"}
-    assert await t.focus_step(None, item_id="b1", step=1) == "Highlighted."
-    assert room.local_participant.calls[1][1:] == ("board.focus", {"id": "b1", "step": 1})
+    assert (identity, method, payload["id"], payload["kind"]) == ("learner-1", "board.show", "b1", "html")
+    assert seen["png"] == b"PNG" and "hälsning" in seen["note"].lower()
+    assert "Leo behöver se" in seen["need"]
 
 
-async def test_a_board_that_does_not_acknowledge_is_reported_to_the_model():
-    t = tutor(FakeRoom(error=TimeoutError("no reply")))
-    assert "could not show" in await t.show_text(None, title="Ord", markdown="fotosyntes")
-    t = tutor(FakeRoom(reply='{"ok":false}'))
-    assert "could not show" in await t.show_text(None, title="Ord", markdown="fotosyntes")
-
-
-async def test_invalid_tool_payload_is_rejected_before_the_board():
+async def test_client_board_size_reaches_the_board_model(monkeypatch):
     room = FakeRoom()
-    result = await tutor(room).show_steps(None, title="Tom", steps=[])
-    assert result.startswith("Invalid steps") and room.local_participant.calls == []
+    t = Tutor({"name": "Leo"}, room, board={"w": 390, "h": 844, "device": "mobile"})
+    assert (t.board_w, t.board_h, t.board_device) == (390, 844, "mobile")
+    sizes = {}
+
+    async def fake_render(need, background, learner_name="", **kw):
+        sizes.update(kw)
+        return {"html": "<!doctype html><html></html>", "note": "n", "png": None}
+
+    async def noseen(*a, **k):
+        pass
+
+    monkeypatch.setattr(board_model, "render_board", fake_render)
+    monkeypatch.setattr(t, "add_board_seen", noseen)
+    await t.commission_board(None, need="x", background="y")
+    assert sizes == {"board_w": 390, "board_h": 844, "device": "mobile"}
 
 
-async def test_a_new_session_starts_clean():
+async def test_a_board_that_does_not_acknowledge_is_reported_to_the_model(monkeypatch):
+    t = tutor(FakeRoom(error=TimeoutError("no reply")))
+    result, _ = await commission(t, monkeypatch, None)
+    assert "could not show" in result
+    t = tutor(FakeRoom(reply='{"ok":false}'))
+    result, _ = await commission(t, monkeypatch, None)
+    assert "could not show" in result
+
+
+async def test_a_board_model_failure_is_reported_to_the_model(monkeypatch):
+    room = FakeRoom()
+    t = tutor(room)
+
+    async def boom(*a, **k):
+        raise TimeoutError("board model silent")
+
+    async def noseen(*a, **k):
+        raise AssertionError("must not feed back a missing board")
+
+    monkeypatch.setattr(board_model, "render_board", boom)
+    monkeypatch.setattr(t, "add_board_seen", noseen)
+    result = await t.commission_board(None, need="x", background="y")
+    assert "could not be made" in result and "Explain in words" in result
+    assert room.local_participant.calls == []
+
+
+async def test_a_new_session_starts_clean(monkeypatch):
     first_room, second_room = FakeRoom(), FakeRoom()
     first = tutor(first_room, "learner-a")
-    await first.show_text(None, title="Ett", markdown="1")
-    await first.show_text(None, title="Två", markdown="2")
+    await commission(first, monkeypatch, first_room)
+    await commission(first, monkeypatch, first_room)
     notes = [{"at": "2026-11-04T10:00:00+00:00", "topic": "Ekvationer", "next": "fler ekvationer"}]
     second = tutor(second_room, "learner-b", {"name": "Leo", "grade": 7, "notes": notes})
-    await second.show_text(None, title="Nytt", markdown="3")
+    await commission(second, monkeypatch, second_room)
     # Ids restart, RPCs go only to the new learner, and nothing reaches the old room.
     assert [c[2]["id"] for c in second_room.local_participant.calls] == ["b1"]
     assert {c[0] for c in second_room.local_participant.calls} == {"learner-b"}
@@ -77,7 +125,7 @@ async def test_a_new_session_starts_clean():
 
 def test_prompt_forbids_narrating_tool_calls():
     text = instructions({"name": "Leo"})
-    assert "only when you call a board tool" in text and "Never describe or narrate a tool call" in text
+    assert "call the tool in the same turn" in text and "Never describe or narrate a tool call" in text
 
 
 def test_prompt_announces_slow_drawings_before_writing_them():
@@ -116,41 +164,51 @@ async def test_announce_drawing_shows_a_pending_placeholder():
     assert payload == {"id": "b1", "kind": "pending", "title": "Vattnets kretslopp", "height": 360}
 
 
-async def test_announced_html_replaces_the_placeholder_in_place():
+async def test_announced_board_replaces_the_placeholder_in_place(monkeypatch):
     room = FakeRoom()
     t = tutor(room)
     announced = await t.announce_drawing(None, title="Kretslopp")
     assert 'pending_id="b1"' in announced
-    result = await t.show_html(None, title="Kretslopp", html="<p>hej</p>", pending_id="b1")
-    assert "b1 is now visible" in result
+    result, seen = await commission(t, monkeypatch, room, pending_id="b1")
+    assert "on screen now" in result
     assert [c[1] for c in room.local_participant.calls] == ["board.show", "board.update"]
     _, _, payload = room.local_participant.calls[1]
     assert payload["id"] == "b1" and payload["kind"] == "html"
+    assert seen["label"] == "board b1"
 
 
-async def test_unannounced_svg_still_shows_directly():
+async def test_unannounced_board_still_shows_directly(monkeypatch):
     room = FakeRoom()
-    result = await tutor(room).show_svg(None, title="Triangel", svg='<svg viewBox="0 0 10 10"></svg>')
-    assert "b1 is now visible" in result
+    result, _ = await commission(tutor(room), monkeypatch, room)
+    assert "on screen now" in result
     assert [c[1] for c in room.local_participant.calls] == ["board.show"]
 
 
-async def test_a_failed_final_board_removes_its_placeholder():
+async def test_a_failed_final_board_removes_its_placeholder(monkeypatch):
     room = flaky_room(None, TimeoutError("no reply"))  # announce works, the update times out
     t = tutor(room)
     await t.announce_drawing(None, title="Kretslopp")
-    result = await t.show_html(None, title="Kretslopp", html="<p>hej</p>", pending_id="b1")
+    result, _ = await commission(t, monkeypatch, room, pending_id="b1")
     assert "placeholder was removed" in result and "Explain in words" in result
     assert [c[1] for c in room.local_participant.calls] == ["board.show", "board.update", "board.remove"]
     assert room.local_participant.calls[2][2] == {"id": "b1"}
 
 
-async def test_rejected_drawing_removes_its_placeholder():
+async def test_rejected_board_removes_its_placeholder(monkeypatch):
     room = FakeRoom()
     t = tutor(room)
     await t.announce_drawing(None, title="Kretslopp")
-    result = await t.show_svg(None, title="Kretslopp", svg="x" * 70000, pending_id="b1")
-    assert result.startswith("Invalid svg") and "placeholder was removed" in result
+
+    async def empty(*a, **k):
+        return {"html": "<p>no doctype</p>", "note": "", "png": None}
+
+    async def noseen(*a, **k):
+        raise AssertionError("must not feed back")
+
+    monkeypatch.setattr(board_model, "render_board", empty)
+    monkeypatch.setattr(t, "add_board_seen", noseen)
+    result = await t.commission_board(None, need="x", background="y", pending_id="b1")
+    assert "Invalid board" in result and "placeholder was removed" in result
     assert [c[1] for c in room.local_participant.calls] == ["board.show", "board.remove"]
 
 

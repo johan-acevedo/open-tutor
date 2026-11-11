@@ -36,14 +36,9 @@ from . import prompt
 from .board import (
     HtmlItem,
     Ids,
-    MindmapItem,
     Note,
     PendingItem,
     ResourceItem,
-    Step,
-    StepsItem,
-    SvgItem,
-    TextItem,
     youtube_embed,
 )
 from .config import AGENT_NAME, DEFAULT_TTS_MODEL, DEFAULT_TTS_VOICE, env_float
@@ -94,9 +89,13 @@ def tts_route(engine) -> str:
 
 
 class Tutor(Agent):
-    def __init__(self, learner: dict[str, Any], room: rtc.Room) -> None:
+    def __init__(self, learner: dict[str, Any], room: rtc.Room, board: dict[str, Any] | None = None) -> None:
         super().__init__(instructions=prompt.instructions(learner))
         self.learner = learner
+        board = board or {}
+        self.board_w = max(320, min(int(board.get("w", 1920)), 3840))
+        self.board_h = max(320, min(int(board.get("h", 1080)), 3840))
+        self.board_device = str(board.get("device", "desktop"))[:20]
         self.room = room
         self.ids = Ids()
         self.child_identity: str | None = None
@@ -166,11 +165,11 @@ class Tutor(Agent):
     async def announce_drawing(self, context: RunContext, title: str, height: int = 360) -> str:
         """Show a drawing placeholder on the board NOW, before a slow drawing.
 
-        Call this first when you are about to draw with `show_html` or `show_svg`
-        (writing them takes many seconds, silent to the child): the child sees the
+        Call this first when you are about to commission a board with `commission_board`
+        (drawing takes many seconds, silent to the child): the child sees the
         placeholder at once and knows something is coming. Then say one short natural
         sentence (for example "Vänta lite, jag ritar det åt dig…") and call
-        `show_html`/`show_svg` with the `pending_id` returned here, so the finished
+        `commission_board` with the `pending_id` returned here, so the finished
         board replaces the placeholder in place. If this call fails, just explain
         in words instead.
 
@@ -191,120 +190,76 @@ class Tutor(Agent):
         return (
             f"Placeholder {item.id} is visible on the board (\"Ritar…\"). Say one short "
             f"natural sentence so the child knows the drawing is coming, then call "
-            f"`show_html` or `show_svg` with pending_id=\"{item.id}\" so it replaces "
+            f"`commission_board` with pending_id=\"{item.id}\" so it replaces "
             f"the placeholder."
         )
 
     @function_tool()
-    async def show_steps(self, context: RunContext, title: str, steps: list[Step]) -> str:
-        """Show a worked equation or process step by step on the board.
+    async def commission_board(self, context: RunContext, need: str, background: str,
+                               pending_id: str = "") -> str:
+        """Ask the board model to make the board for this moment.
 
-        All rows are visible immediately. focus_step highlights a row; it does not hide later rows.
-        Renders as one equation per row, in order. It is not a handwritten column layout
-        (uppställning): for a written column method (for example long division) use show_html
-        or show_svg instead.
-
-        Args:
-            title: Short heading in the language you are speaking (Swedish unless practising
-                another language), e.g. "Ekvationer · ett steg i taget".
-            steps: Rows in order. `tex` is plain LaTeX without $ (e.g. "3x + 5 = 20"). From the
-                second row on, `op` is the operation that turned the PREVIOUS row into THIS row (e.g.
-                "-5" or "\\div 3") and `note` says the same in a few words in the language you are
-                speaking ("Ta bort 5 på båda sidor"). The first row has no op. Titles use ordinary
-                notation, not spoken words.
-        """
-        try:
-            item = StepsItem(id=self.ids.next(), title=title, steps=steps)
-        except ValidationError as error:
-            return f"Invalid steps: {error.errors()[0]['msg']}"
-        result = await self._show(item)
-        return result + " Use focus_step with this id to highlight a row (0-based) as you talk about it."
-
-    @function_tool()
-    async def focus_step(self, context: RunContext, item_id: str, step: int) -> str:
-        """Highlight one row (0-based) of a steps item while you talk about it."""
-        ok = await self._rpc("board.focus", {"id": item_id, "step": step})
-        return "Highlighted." if ok else "Could not highlight that row."
-
-    @function_tool()
-    async def show_text(self, context: RunContext, title: str, markdown: str) -> str:
-        """Show a short explanation, key words or a task on the board.
+        You commission with background, never with content: describe what the child
+        needs (who they are, what was just said, what should land), not what the
+        board should look like. The board model decides the visualization, including
+        whether anything interactive helps. Its result comes back here with a short
+        note and a screenshot: look at both, then teach from what the board actually
+        shows, in your own words as its author ("jag skriver upp...", never the board
+        as a character).
 
         Args:
-            title: Short heading in the language you are speaking (Swedish unless practising
-                another language).
-            markdown: A few short lines. Simple Markdown; LaTeX inside $…$ or $$…$$.
-        """
-        try:
-            return await self._show(TextItem(id=self.ids.next(), title=title, markdown=markdown))
-        except ValidationError as error:
-            return f"Invalid text: {error.errors()[0]['msg']}"
-
-    @function_tool()
-    async def show_ideas(self, context: RunContext, center: str, ideas: list[str], title: str = "") -> str:
-        """Organise the child's own ideas around a centre, in their words (for writing, essays, book reviews).
-
-        Args:
-            center: The subject, e.g. a book title.
-            ideas: 1–8 short phrases, quoting what the child said where possible.
-            title: Optional heading in the language you are speaking, e.g. "Dina tankar om boken".
-        """
-        try:
-            item = MindmapItem(id=self.ids.next(), title=title or None, center=center, ideas=ideas)
-        except ValidationError as error:
-            return f"Invalid ideas: {error.errors()[0]['msg']}"
-        return await self._show(item)
-
-    @function_tool()
-    async def show_svg(self, context: RunContext, title: str, svg: str, pending_id: str = "") -> str:
-        """Draw a diagram as a complete SVG document (viewBox set, no scripts).
-
-        Use the board palette: background transparent, lines #F3F5F8 or #A78BFA, highlights #22D3EE,
-        text in the language you are speaking (Swedish unless practising another language) at
-        font-size >= 18. Can also lay out a written column method (for example long division) as
-        columns here when the child asks for that form; use your judgement.
-
-        Args:
-            pending_id: When you announced this drawing with `announce_drawing`, its id so the
-                finished diagram replaces the placeholder in place. Omit it when you did not announce.
-        """
-        pid = pending_id.strip()[:40]
-        try:
-            item = SvgItem(id=pid or self.ids.next(), title=title, svg=svg)
-        except ValidationError as error:
-            if pid:
-                await self._remove(pid)
-                return (f"Invalid svg: {error.errors()[0]['msg']} "
-                        "The placeholder was removed. Explain in words instead.")
-            return f"Invalid svg: {error.errors()[0]['msg']}"
-        return await self._show_final(item, pid)
-
-    @function_tool()
-    async def show_html(self, context: RunContext, title: str, html: str, height: int = 360,
-                      pending_id: str = "") -> str:
-        """Show an interactive or animated explanation as a self-contained HTML document.
-
-        It runs in an isolated frame with no network except scripts from cdn.jsdelivr.net. Dark
-        background #181B22, text #F3F5F8, accents #22D3EE and #A78BFA. Keep it small and clear.
-        Text in the language you are speaking (Swedish unless practising another language). Can lay
-        out a written column method (for example long division) as columns here when the child asks
-        for that form; use your judgement.
-
-        Args:
-            height: Frame height in pixels, 120–900.
+            need: What this moment needs, e.g. "Henning, grade 1, wants to see how a
+                clock shows whole hours after asking to see the clock".
+            background: 2-3 sentences a stranger would need: who the child is (level,
+                language), what was just said, and what should land next.
             pending_id: When you announced this drawing with `announce_drawing`, its id so the
                 finished board replaces the placeholder in place. Omit it when you did not announce.
         """
+        from .board_model import render_board
         pid = pending_id.strip()[:40]
+        learner = (self.learner or {}).get("name", "") or ""
         try:
-            item = HtmlItem(id=pid or self.ids.next(), title=title, html=html, height=max(120, min(height, 900)))
+            result = await render_board(need, background, learner_name=learner,
+                                        board_w=self.board_w, board_h=self.board_h,
+                                        device=self.board_device)
+        except Exception as error:
+            if pid:
+                await self._remove(pid)
+            return (f"The board could not be made ({type(error).__name__}). "
+                    + ("The placeholder was removed. " if pid else "")
+                    + "Explain in words instead, briefly.")
+        html = (result.get("html") or "")
+        if "<html" not in html.lower():
+            if pid:
+                await self._remove(pid)
+            return ("Invalid board: no HTML document. "
+                    + ("The placeholder was removed. " if pid else "")
+                    + "Explain in words instead.")
+        try:
+            item = HtmlItem(id=pid or self.ids.next(), title=need[:120],
+                            html=html[:100000], height=640)
         except ValidationError as error:
             if pid:
                 await self._remove(pid)
-                return (f"Invalid html: {error.errors()[0]['msg']} "
-                        "The placeholder was removed. Explain in words instead.")
-            return f"Invalid html: {error.errors()[0]['msg']}"
-        return await self._show_final(item, pid)
+            return (f"Invalid board: {error.errors()[0]['msg']} "
+                    + ("The placeholder was removed. " if pid else "")
+                    + "Explain in words instead.")
+        if pid:
+            shown = await self._rpc("board.update", item.model_dump(exclude_none=True))
+            if not shown:
+                await self._remove(pid)
+                return ("The drawing failed to appear "
+                        f"(item {pid}). The placeholder was removed. Explain in words instead, briefly.")
+        else:
+            shown = await self._rpc("board.show", item.model_dump(exclude_none=True))
+            if not shown:
+                return (f"The board could not show item {item.id}. "
+                        "Explain in words instead, briefly.")
+        await self.add_board_seen(result.get("png"), result.get("note", ""),
+                                  f"board {item.id}")
+        return ("The board is on screen now and you can see its screenshot above. "
+                "Teach from what it actually shows, as its author. "
+                f"[Board note: {result.get('note', '')[:500]}]")
 
     # ---- resources ---------------------------------------------------------------
 
@@ -464,6 +419,20 @@ class Tutor(Agent):
 
     # ---- homework ----------------------------------------------------------------
 
+    async def add_board_seen(self, png: bytes | None, note: str, label: str) -> None:
+        """Feed the finished board back to the tutor: screenshot + short note."""
+        parts: list[Any] = []
+        if png:
+            parts.append(llm.ImageContent(
+                image=f"data:image/png;base64,{base64.b64encode(png).decode()}",
+                inference_detail="high"))
+        text = f"[Board now on screen ({label}). {note[:500]} Look at the screenshot and teach from what it actually shows.]"
+        record_active("board_seen", {"label": label, "note": note[:300],
+                                       "image": bool(png)})
+        ctx = self.chat_ctx.copy()
+        ctx.add_message(role="user", content=[text, *parts])
+        await self.update_chat_ctx(ctx)
+
     async def add_homework(self, parts: list[Any], description: str) -> None:
         record_active("homework_added", {"description": description[:300],
                                            "parts": len(parts),
@@ -515,11 +484,14 @@ async def entrypoint(ctx: JobContext) -> None:
     await ctx.connect()
     child = await ctx.wait_for_participant()
     try:
-        learner = json.loads(child.metadata or "{}").get("learner", {})
+        meta = json.loads(child.metadata or "{}")
+        learner = meta.get("learner", {})
+        board = meta.get("board", {}) or {}
     except json.JSONDecodeError:
         learner = {}
+        board = {}
 
-    tutor = Tutor(learner, ctx.room)
+    tutor = Tutor(learner, ctx.room, board=board)
     tutor.child_identity = child.identity
 
     debug = DebugLog.create(ctx.room.name, learner, getattr(getattr(ctx, "job", None), "id", "?"))

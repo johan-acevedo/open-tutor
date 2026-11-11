@@ -257,12 +257,16 @@ export function useSession(mobile = false) {
       const notes = p.notes.slice(-5).reverse(); // newest first
       let session: SessionResponse;
       try {
-        const request = () =>
-          fetch('/api/session', {
+        const request = () => {
+          const mobile = window.matchMedia('(max-width: 600px), (max-width: 950px) and (max-height: 500px) and (pointer: coarse)').matches;
+          return fetch('/api/session', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'x-tutor-code': familyCode() },
-            body: JSON.stringify({ learner: { name: p.name, grade: p.grade, notes } }),
+            body: JSON.stringify({ learner: { name: p.name, grade: p.grade, notes },
+              board: { w: window.innerWidth, h: window.innerHeight,
+                device: mobile ? 'mobile' : 'desktop' } }),
           });
+        };
         let res = await request();
         if (res.status === 401) {
           // The owner can protect the instance with a family code; asked once per browser.

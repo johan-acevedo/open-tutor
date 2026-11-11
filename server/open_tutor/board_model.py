@@ -1,0 +1,184 @@
+"""Render teaching boards with the dedicated board model (Haiku).
+
+The voice tutor commissions a board with background (`need`), never with
+content. This module sends the gym-winning prompt + session context to the
+board model, extracts board.html, screenshots it for the tutor's vision
+feedback, and returns both plus the model's short note.
+
+Board model: BOARD_MODEL env (default opencode-go/claude-haiku-5-5),
+thinking BOARD_THINKING (default medium), via the pi CLI.
+Screenshots need headless Chromium (playwright); without it the tutor
+still gets the note, and rendering is skipped with a warning.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+import os
+import tempfile
+
+log = logging.getLogger("open-tutor")
+
+BOARD_MODEL = os.environ.get("BOARD_MODEL", "opencode-go/claude-haiku-5-5")
+BOARD_THINKING = os.environ.get("BOARD_THINKING", "medium")
+BOARD_TIMEOUT_S = float(os.environ.get("BOARD_TIMEOUT_S", "150"))
+BOARD_W = int(os.environ.get("BOARD_W", "1920"))
+BOARD_H = int(os.environ.get("BOARD_H", "1080"))
+
+SYSTEM_PROMPT = """You are the board renderer for Räven, a live voice tutor for school children.
+
+Right now a child is in a voice call with the tutor. The tutor has just decided to show something on the shared board, and the child is waiting for it to appear. As soon as your board is on screen, the tutor will talk about it with the child. You receive everything the tutor knows up to this moment: who the child is and what is needed.
+
+You are trusted as an excellent teacher and designer. Decide yourself what the child should see so that the tutor's next words land.
+
+The child
+- The child speaks [[CHILD_LANG]]. Use the school conventions and mathematical notation taught in that language's curriculum (symbols, decimal separator, written arithmetic layout, units).
+
+Your space
+- One board, [[BOARD_W]]x[[BOARD_H]] CSS pixels, on a [[DEVICE]], next to the tutor's avatar, seen from a normal distance. Keep every label, caption, symbol and helper text effortlessly readable at a glance - nothing under 18px.
+- The frame never scrolls and never scales your content. Anything outside is simply cut off, and nobody can scroll to it. Make sure everything fits, including any content that appears later.
+- The board stays on screen while the tutor talks about it, usually for a minute or more. Show the complete, settled state immediately on load - never hide or dim steps, parts of a calculation, or answers behind timed reveals. If you animate, what matters most is the state it settles in.
+- One complete HTML document. It runs in an isolated frame with full internet access.
+- The app's board, for your information: background #181B22. App font: "Segoe UI", Roboto, system-ui, sans-serif.
+- The board may be interactive: the child can type into it, click on it, and answer things on it while the tutor talks. The tutor handles prompting, hints, and checking answers aloud - you illustrate the current step, never build a standalone quiz app around it.
+
+Available libraries
+These are installed and loadable in the frame. Compact API docs follow; full docs are linked per library.
+
+- KaTeX 0.16.11 (math notation). Docs: https://katex.org/docs/api.html
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+katex.render(texString, element, {displayMode: false, throwOnError: false, output: 'html'});
+Useful commands: \\frac{a}{b}, \\sqrt{x}, \\times \\div \\cdot, \\text{words}, x^2 x_{n}, \\textcolor{#f59e0b}{x} (keep a full expression in one render call so spacing around = and operators stays intact). Decimal comma with correct spacing: 47{,}5. Keep backslash strings in a JS array or double every backslash inside HTML script blocks.
+
+- JSXGraph 1.11.0 (coordinate geometry, function graphs). Docs: https://jsxgraph.org/docs/
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jsxgraph@1.11.0/distrib/jsxgraph.css">
+<script src="https://cdn.jsdelivr.net/npm/jsxgraph@1.11.0/distrib/jsxgraphcore.js"></script>
+var bd = JXG.JSXGraph.initBoard('id', {boundingbox: [xmin, ymax, xmax, ymin], axis: true, grid: true});
+bd.create(kind, parents, attributes). Kinds: 'point' [[x,y]], 'line' [[p1],[p2]], 'circle' [[center],[radiusPoint]], 'functiongraph' [function(x){...}], 'polygon' [[p1,p2,p3]], 'angle' [[p1,p2,p3]], 'text' [[x,y],'label'], 'slider' [[[x1,y1],[x2,y2],[min,start,max]]]. Attributes: {name:'', strokeColor:'', fillColor:'', fixed:true, withLabel:true}. Read points with p.X(), p.Y().
+
+- Chart.js 4.4.7 (charts). Docs: https://www.chartjs.org/docs/latest/
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+new Chart(document.getElementById('id'), {type: 'bar', data: {labels: [...], datasets: [{label:'', data:[...], backgroundColor:'', borderColor:''}]}, options: {animation: false, plugins: {legend: {}, title: {display: true, text: ''}}, scales: {y: {beginAtZero: true}}}});
+Types: 'bar', 'line', 'pie', 'doughnut', 'scatter' (scatter uses data: [{x:, y:}]).
+
+- Leaflet 1.9.4 (maps; map tiles are reachable). Docs: https://leafletjs.com/reference.html
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+var map = L.map('id').setView([lat, lng], zoom);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 18}).addTo(map);
+L.marker([lat, lng]).addTo(map).bindPopup('text');
+L.circle([lat, lng], {radius: meters}).addTo(map);
+L.polygon([[lat1,lng1],[lat2,lng2],...]).addTo(map);
+map.fitBounds(L.latLngBounds([...]).pad(0.1));
+
+- Three.js 0.160.0 (3D). Docs: https://threejs.org/docs/
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"}}</script>
+import * as THREE from 'three';
+var renderer = new THREE.WebGLRenderer({antialias: true}); renderer.setSize(w, h); parent.appendChild(renderer.domElement);
+var scene = new THREE.Scene();
+var camera = new THREE.PerspectiveCamera(45, w/h, 0.1, 100); camera.position.set(x,y,z); camera.lookAt(0,0,0);
+var mesh = new THREE.Mesh(new THREE.CylinderGeometry(rTop, rBottom, height, segments), new THREE.MeshBasicMaterial({color: 0x22d3ee, wireframe: false}));
+Geometries: BoxGeometry(w,h,d), SphereGeometry(r, wSeg, hSeg), CylinderGeometry, ConeGeometry, PlaneGeometry. Lit materials (MeshStandardMaterial) need lights: scene.add(new THREE.AmbientLight(0xffffff, 1)); plus a DirectionalLight. MeshBasicMaterial/MeshNormalMaterial need no lights. Finish with renderer.render(scene, camera).
+
+Time
+- The child is waiting in silence while you work.
+
+First answer with the HTML document, starting with <!doctype html>. After the closing </html>, explain in 2-3 sentences what the board shows and what the tutor should start from.
+"""
+
+
+def fill_system(board_w: int, board_h: int, device: str, lang: str) -> str:
+    return (SYSTEM_PROMPT.replace("[[BOARD_W]]", str(board_w))
+            .replace("[[BOARD_H]]", str(board_h))
+            .replace("[[DEVICE]]", device)
+            .replace("[[CHILD_LANG]]", lang))
+
+
+def extract_board(reply: str) -> tuple[str | None, str]:
+    """Split a board-model reply into (html, note)."""
+    low = reply.lower()
+    if "<!doctype html" not in low and "<html" not in low:
+        return None, reply.strip()[:2000]
+    i = low.find("<!doctype html")
+    if i < 0:
+        i = low.find("<html")
+    tail = reply[i:]
+    j = tail.lower().rfind("</html>")
+    html = tail[: j + len("</html>")] if j >= 0 else tail
+    note = (tail[j + len("</html>"):] if j >= 0 else "").strip()[:2000]
+    return html, note
+
+
+async def call_board_model(system: str, user_message: str) -> str:
+    proc = await asyncio.create_subprocess_exec(
+        "pi", "-p", "--model", BOARD_MODEL, "--thinking", BOARD_THINKING,
+        "--no-tools", "--no-session", "--no-context-files",
+        "--no-skills", "--no-extensions", "--mode", "json",
+        "--system-prompt", system, user_message,
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
+    try:
+        out, _ = await asyncio.wait_for(proc.communicate(), timeout=BOARD_TIMEOUT_S)
+    except asyncio.TimeoutError:
+        proc.kill()
+        raise TimeoutError(f"board model timed out after {BOARD_TIMEOUT_S}s")
+    reply = ""
+    for line in out.decode("utf-8", errors="replace").splitlines():
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            d = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if d.get("type") == "message_end":
+            msg = d.get("message", {}) or {}
+            if msg.get("role") == "assistant":
+                for c in msg.get("content", []) or []:
+                    if isinstance(c, dict) and c.get("type") == "text":
+                        reply += c.get("text", "")
+    return reply
+
+
+async def screenshot_board(html: str, width: int, height: int) -> bytes | None:
+    """Render the settled board to PNG. None when Chromium is unavailable."""
+    try:
+        from playwright.async_api import async_playwright
+    except ImportError:
+        log.warning("playwright missing: tutor gets no board screenshot")
+        return None
+    try:
+        async with async_playwright() as p:
+            browser = await p.chromium.launch()
+            page = await browser.new_page(viewport={"width": width, "height": height})
+            await page.set_content(html, wait_until="load", timeout=30000)
+            await page.wait_for_timeout(500)
+            try:
+                await page.evaluate("() => { for (const a of document.getAnimations()) { try { a.finish(); } catch {} } }")
+            except Exception:
+                pass
+            png = await page.screenshot()
+            await browser.close()
+            return png
+    except Exception as error:
+        log.warning("board screenshot failed: %s", error)
+        return None
+
+
+async def render_board(need: str, background: str, learner_name: str = "",
+                       board_w: int = BOARD_W, board_h: int = BOARD_H,
+                       device: str = "desktop", lang: str = "Swedish") -> dict:
+    """Commission a board. Returns {html, note, png} (png may be None)."""
+    system = fill_system(board_w, board_h, device, lang)
+    user_message = (
+        f"## The child\n{learner_name}\n\n"
+        f"## What is needed\n{background}\n\n"
+        f"## The tutor's handover\n{need}\n\nMake the board now.")
+    reply = await call_board_model(system, user_message)
+    html, note = extract_board(reply)
+    if not html:
+        raise ValueError("board model returned no HTML document")
+    png = await screenshot_board(html, board_w, board_h)
+    return {"html": html, "note": note, "png": png}

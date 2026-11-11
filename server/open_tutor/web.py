@@ -34,6 +34,12 @@ class NoteIn(BaseModel):
     next: str | None = Field(default=None, max_length=300)
 
 
+class BoardInfo(BaseModel):
+    w: int = Field(default=1920, ge=320, le=3840)
+    h: int = Field(default=1080, ge=320, le=3840)
+    device: str = Field(default="desktop", max_length=20)
+
+
 class Learner(BaseModel):
     name: str = Field(min_length=1, max_length=40)
     grade: int | None = Field(default=None, ge=1, le=12)
@@ -42,6 +48,7 @@ class Learner(BaseModel):
 
 class SessionRequest(BaseModel):
     learner: Learner
+    board: BoardInfo = BoardInfo()
 
 
 class SessionLimiter:
@@ -96,7 +103,8 @@ def create_app(environ: dict[str, str] | None = None) -> FastAPI:
             raise HTTPException(status_code=429, detail="busy")
         room = "tutor-" + secrets.token_urlsafe(9)
         identity = "learner-" + secrets.token_hex(4)
-        metadata = json.dumps({"learner": body.learner.model_dump(exclude_none=True)}, ensure_ascii=False)
+        metadata = json.dumps({"learner": body.learner.model_dump(exclude_none=True),
+                               "board": body.board.model_dump()}, ensure_ascii=False)
         token = (
             api.AccessToken(env["LIVEKIT_API_KEY"], env["LIVEKIT_API_SECRET"])
             .with_identity(identity)
