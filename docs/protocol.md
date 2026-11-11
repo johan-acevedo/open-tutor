@@ -56,10 +56,8 @@ The frame preserves its commissioned `width` and `height`. It scales down propor
 
 ## Slow drawings
 
-`show_html`/`show_svg` take many seconds to generate, silently: the model writes the whole
-document inside the tool-call arguments, so no speech streams meanwhile. The tutor therefore
-announces first: `announce_drawing` publishes a `pending` placeholder through `board.show` (with
-the expected height, so it already has the finished size), says one short natural sentence, and
-then calls `show_html`/`show_svg` with that `pending_id`. The finished board arrives through
-`board.update` with the same `id`, replacing the placeholder in place. If the drawing fails or
-is rejected, the worker removes the placeholder through `board.remove` and explains in words.
+`commission_board` publishes a `pending` placeholder through `board.show`, asks the board
+model for the drawing, and replaces the placeholder through `board.update` with the same `id`.
+The tutor says one short waiting sentence and teaches when the tool returns. Räven uses the
+working pose while a board is pending. If generation or display fails, the worker removes
+the placeholder through `board.remove` and the tutor explains in words.
