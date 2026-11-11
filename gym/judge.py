@@ -368,9 +368,10 @@ PI_JUDGES = {"spark": ("opencode-go/muse-spark-1.3-contributor", "high"),
              "deepseek": ("opencode-go/deepseek-v4.1-flash", "high"),
              "deepseekc": ("opencode-go/deepseek-v4.1-flash", "high"),
              "mimo": ("opencode-go/mimo-v2.6-pro", "high"),
+             "kimi": ("opencode-go/kimi-k3.1-pro", "high"),
              "argon": ("opencode-go/gemini-4-argon", "high")}
 _V2 = (GYM / "prompts" / "judge-v2.md").read_text(encoding="utf-8")
-RUBRIC_FOR = {"sparkc": _V2, "deepseekc": _V2, "mimo": _V2, "argon": _V2, "gemini": _V2}
+RUBRIC_FOR = {"sparkc": _V2, "deepseekc": _V2, "mimo": _V2, "argon": _V2, "gemini": _V2, "kimi": _V2}
 PI_SYSTEM = ("You are a careful, strict and fair reviewer of teaching boards for children. "
              "You look closely at every image before scoring it. You answer only with the JSON "
              "the rubric asks for.")
@@ -418,7 +419,7 @@ def run_gemini(bdir: Path, prompt: str, anons: list) -> list:
 
 RUNNERS = {"opus": run_opus, "gemini": run_gemini, "sol": run_sol,
            "spark": make_pi_runner("spark"), "sparkx": make_pi_runner("sparkx"), "sparkc": make_pi_runner("sparkc"), "deepseekc": make_pi_runner("deepseekc"), "mimo": make_pi_runner("mimo"), "argon": make_pi_runner("argon"),
-           "deepseek": make_pi_runner("deepseek")}
+           "deepseek": make_pi_runner("deepseek"), "kimi": make_pi_runner("kimi")}
 # A judge never scores its own family's board alone: such boards also get this judge,
 # and the verdicts are combined (correct ANDed, numbers averaged).
 FAMILY = {"spark": ("muse-spark-1.3-contributor", "deepseek"),
@@ -428,6 +429,7 @@ FAMILY = {"spark": ("muse-spark-1.3-contributor", "deepseek"),
           "deepseek": ("deepseek-v4.1-flash", "spark"),
           "deepseekc": ("deepseek-v4.1-flash", "sparkc"),
           "mimo": (None, None),
+          "kimi": (None, None),
           "argon": (None, None),
           "gemini": (None, None)}  # MiMo (Xiaomi) is no member's family
 
@@ -452,7 +454,7 @@ def combine(judged: dict) -> dict:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--round", required=True)
-    ap.add_argument("--judge", default="auto", choices=["opus", "sol", "auto", "spark", "sparkx", "sparkc", "deepseek", "deepseekc", "mimo", "argon", "gemini"])
+    ap.add_argument("--judge", default="auto", choices=["opus", "sol", "auto", "spark", "sparkx", "sparkc", "deepseek", "deepseekc", "mimo", "argon", "gemini", "kimi"])
     ap.add_argument("--batch", type=int, default=BATCH_SIZE)
     ap.add_argument("--only", default="", help="comma-separated anon ids (calibration)")
     ap.add_argument("--parallel", type=int, default=3)
@@ -473,7 +475,7 @@ def main() -> None:
     stored = {}
     for p in raw_dir.glob("*.json"):
         try:
-            m = re.fullmatch(r"(B\d+)\.(opus|sol|spark|sparkx|sparkc|deepseek|deepseekc|mimo|argon|gemini)", p.stem)
+            m = re.fullmatch(r"(B\d+)\.(opus|sol|spark|sparkx|sparkc|deepseek|deepseekc|mimo|argon|gemini|kimi)", p.stem)
             if m:
                 stored[(m.group(1), m.group(2))] = json.loads(p.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
