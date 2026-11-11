@@ -24,6 +24,8 @@ against an unrelated fixture.
 
 Run from the repo root:
     uv run --project server --with playwright python web/e2e/board_render_check.py
+Primary views: desktop landscape (1366x768) and phone portrait (390x844).
+The resized screenshots are additional checks, not the primary evidence.
 No providers, production endpoints, microphone or camera hardware are used.
 """
 import asyncio
@@ -375,6 +377,7 @@ def run_browser(csp: str) -> None:
                     && r.left >= pane.left - 1 && r.right <= pane.right + 1;
                 }""")
                 check(f"{label}: pending fits the visible surface", pending_fits)
+                check(f"{label}: pending has no outer headline", not page.locator('article[data-board-id] h2').count())
                 fox = page.evaluate("""() => {
                   const img = document.querySelector('.ot-avatar-img');
                   if (!img) return { src: null, visible: false };
@@ -426,6 +429,7 @@ def run_browser(csp: str) -> None:
                 except Exception:
                     clicked, typed = False, None
                 check(f"{label}: board stays interactive after scaling", clicked is True and typed == "42")
+                page.screenshot(path=str(OUT / f"board-{label}.png"))
 
                 # Resize / orientation after the finished board: the same
                 # commissioned pixels must still fit the new visible pane.
@@ -453,7 +457,7 @@ def run_browser(csp: str) -> None:
                 except Exception:
                     clicked2 = False
                 check(f"{label}: resized board stays interactive", clicked2 is True)
-                page.screenshot(path=str(OUT / f"board-{label}.png"))
+                page.screenshot(path=str(OUT / f"board-{label}-resized.png"))
                 ctx.close()
             browser.close()
     finally:
