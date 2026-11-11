@@ -26,6 +26,43 @@ export type Phase = 'profiles' | 'connecting' | 'live' | 'ending' | 'ended';
 export type ConnBanner = 'reconnecting' | 'disconnected' | null;
 
 const MOUNT_TIMEOUT_MS = 4500;
+// Board pane size reporting: the board model needs the real pane size
+// (window minus avatar panel etc.), not the window size. Clamped server-side too.
+const BOARD_MIN = 320;
+const BOARD_MAX = 3840;
+const BOARD_RESIZE_DEBOUNCE_MS = 400;
+
+function boardDevice(): string {
+  try {
+    return window.matchMedia('(max-width: 600px), (max-width: 950px) and (max-height: 500px) and (pointer: coarse)').matches
+      ? 'mobile'
+      : 'desktop';
+  } catch {
+    return 'desktop';
+  }
+}
+
+function clampBoard(n: number, fallback: number): number {
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(BOARD_MIN, Math.min(Math.round(n), BOARD_MAX));
+}
+
+/** Measure the real board pane; fall back to the window when it is not mounted yet. */
+export function readBoardSize(): { w: number; h: number; device: string } {
+  const device = boardDevice();
+  try {
+    const pane = document.querySelector('.ot-board');
+    if (pane) {
+      const r = pane.getBoundingClientRect();
+      if (r.width >= 1 && r.height >= 1) {
+        return { w: clampBoard(r.width, window.innerWidth), h: clampBoard(r.height, window.innerHeight), device };
+      }
+    }
+  } catch {
+    /* fall through to window size */
+  }
+  return { w: clampBoard(window.innerWidth, 1920), h: clampBoard(window.innerHeight, 1080), device };
+}
 // The tutor saves a note and says goodbye before it closes the room (which disconnects us);
 // this is only the fallback if that never happens. 8 s cut goodbyes off mid-sentence.
 const END_WAIT_MS = 25000;
@@ -130,6 +167,8 @@ export function useSession(mobile = false) {
   const toastTimer = useRef<number>(0);
   const sentTimer = useRef<number>(0);
   const captionTimer = useRef<number>(0);
+  const boardWatchStopRef = useRef<(() => void) | null>(null);
+  const boardLastSentRef = useRef<string>('');
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -176,6 +215,15 @@ export function useSession(mobile = false) {
   }, []);
 
   const cleanupRoom = useCallback(() => {
+    const stop = boardWatchStopRef.current;
+    boardWatchStopRef.current = null;
+    if (stop) {
+      try {
+        stop();
+      } catch {
+        /* ignore */
+      }
+    }
     const room = roomRef.current;
     roomRef.current = null;
     preparedRoomRef.current = null;
@@ -258,13 +306,13 @@ export function useSession(mobile = false) {
       let session: SessionResponse;
       try {
         const request = () => {
-          const mobile = window.matchMedia('(max-width: 600px), (max-width: 950px) and (max-height: 500px) and (pointer: coarse)').matches;
+          const board = readBoardSize();
+          boardLastSentRef.current = `${board.w}x${board.h}:${board.device}`;
           return fetch('/api/session', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'x-tutor-code': familyCode() },
             body: JSON.stringify({ learner: { name: p.name, grade: p.grade, notes },
-              board: { w: window.innerWidth, h: window.innerHeight,
-                device: mobile ? 'mobile' : 'desktop' } }),
+              board }),
           });
         };
         let res = await request();
@@ -458,6 +506,65 @@ export function useSession(mobile = false) {
         return;
       }
       readParticipantStates(room);
+      // The session request only knew the window size (the board pane is not
+      // mounted until we go live). Watch the real pane and report resizes,
+      // rotation and layout changes over the existing session-event channel;
+      // the tutor uses the latest size when commissioning a board.
+      // Sends only on change, debounced.
+      {
+        const sendBoardSize = () => {
+          const cur = roomRef.current;
+          if (!cur) return;
+          const b = readBoardSize();
+          const key = `${b.w}x${b.h}:${b.device}`;
+          if (key === boardLastSentRef.current) return;
+          boardLastSentRef.current = key;
+          void cur.localParticipant
+            .sendText(JSON.stringify({ type: 'board-size', ...b }), { topic: TOPIC_SESSION_EVENT })
+            .catch(() => undefined);
+        };
+        let debounce = 0;
+        const scheduleSend = () => {
+          window.clearTimeout(debounce);
+          debounce = window.setTimeout(sendBoardSize, BOARD_RESIZE_DEBOUNCE_MS);
+        };
+        const onWindowChange = () => scheduleSend();
+        window.addEventListener('resize', onWindowChange);
+        window.addEventListener('orientationchange', onWindowChange);
+        let ro: ResizeObserver | null = null;
+        let observed: Element | null = null;
+        const attachPane = () => {
+          const pane = document.querySelector('.ot-board');
+          if (pane && pane !== observed) {
+            if (!ro && typeof ResizeObserver !== 'undefined') {
+              ro = new ResizeObserver(() => scheduleSend());
+            }
+            observed = pane;
+            if (ro) ro.observe(pane);
+            scheduleSend();
+          }
+        };
+        attachPane();
+        // The pane mounts when we go live; retry until it is there.
+        const retry1 = window.setTimeout(attachPane, 500);
+        const retry2 = window.setTimeout(attachPane, 2000);
+        const mo = new MutationObserver(attachPane);
+        try {
+          mo.observe(document.body, { childList: true, subtree: true });
+        } catch {
+          /* observer unavailable: window events still report resizes */
+        }
+        sendBoardSize();
+        boardWatchStopRef.current = () => {
+          window.clearTimeout(debounce);
+          window.clearTimeout(retry1);
+          window.clearTimeout(retry2);
+          window.removeEventListener('resize', onWindowChange);
+          window.removeEventListener('orientationchange', onWindowChange);
+          mo.disconnect();
+          if (ro) ro.disconnect();
+        };
+      }
       try {
         await room.startAudio();
       } catch {

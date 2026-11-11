@@ -52,6 +52,26 @@ log = logging.getLogger("open-tutor")
 BOARD_RPC_TIMEOUT = 6.0
 HOMEWORK_SETTLE = 1.2  # seconds to wait for more PDF pages before responding
 
+# Board size limits (CSS px). The client measures the real board pane and
+# reports it; these are only the fallback when it reports nothing usable.
+BOARD_MIN = 320
+BOARD_MAX = 3840
+DEFAULT_BOARD_W = 1920
+DEFAULT_BOARD_H = 1080
+
+
+def clamp_board_size(w: Any, h: Any) -> tuple[int, int]:
+    """Clamp a client-reported board size to the sane pixel range."""
+    try:
+        cw = int(w)
+    except (TypeError, ValueError):
+        cw = DEFAULT_BOARD_W
+    try:
+        ch = int(h)
+    except (TypeError, ValueError):
+        ch = DEFAULT_BOARD_H
+    return max(BOARD_MIN, min(cw, BOARD_MAX)), max(BOARD_MIN, min(ch, BOARD_MAX))
+
 
 def build_stt() -> soniox.STT:
     return soniox.STT(
@@ -93,8 +113,8 @@ class Tutor(Agent):
         super().__init__(instructions=prompt.instructions(learner))
         self.learner = learner
         board = board or {}
-        self.board_w = max(320, min(int(board.get("w", 1920)), 3840))
-        self.board_h = max(320, min(int(board.get("h", 1080)), 3840))
+        self.board_w, self.board_h = clamp_board_size(board.get("w", DEFAULT_BOARD_W),
+                                                     board.get("h", DEFAULT_BOARD_H))
         self.board_device = str(board.get("device", "desktop"))[:20]
         self.room = room
         self.ids = Ids()
@@ -104,6 +124,14 @@ class Tutor(Agent):
         self._http: aiohttp.ClientSession | None = None
 
     # ---- board -----------------------------------------------------------------
+
+    def update_board_size(self, w: Any, h: Any, device: Any = None) -> None:
+        """Store the latest client-measured board pane size (mid-session resizes)."""
+        self.board_w, self.board_h = clamp_board_size(w, h)
+        if device is not None:
+            self.board_device = str(device)[:20] or self.board_device
+        record_active("board_size", {"w": self.board_w, "h": self.board_h,
+                                       "device": self.board_device})
 
     async def _rpc(self, method: str, payload: dict[str, Any]) -> bool:
         if not self.child_identity:
@@ -594,6 +622,11 @@ async def entrypoint(ctx: JobContext) -> None:
         debug.record("browser_event", {"type": str(event.get("type", "?"))[:40]})
         if event.get("type") == "end":
             ending.set()
+        elif event.get("type") == "board-size":
+            # The browser measures the real board pane (ResizeObserver) and
+            # reports resizes/rotation mid-session; commission_board picks
+            # the latest size up at render time.
+            tutor.update_board_size(event.get("w"), event.get("h"), event.get("device"))
         elif event.get("type") == "resource-closed":
             await tutor.set_mode("talking")
             debug.record("prompt", {"kind": "resource_closed"})

@@ -217,3 +217,44 @@ async def test_a_failed_announcement_leaves_no_placeholder_behind():
     result = await tutor(room).announce_drawing(None, title="Kretslopp")
     assert "not visible" in result and "pending_id" not in result
     assert [c[1] for c in room.local_participant.calls] == ["board.show"]
+
+
+def test_board_size_defaults_when_the_client_reports_nothing():
+    t = Tutor({"name": "Leo"}, FakeRoom())
+    assert (t.board_w, t.board_h, t.board_device) == (1920, 1080, "desktop")
+
+
+def test_board_size_updates_are_clamped_to_the_sane_range():
+    from open_tutor.agent import clamp_board_size
+    assert clamp_board_size(5000, 10) == (3840, 320)
+    assert clamp_board_size("junk", None) == (1920, 1080)
+    t = tutor(FakeRoom())
+    t.update_board_size(5000, 10, "desktop")
+    assert (t.board_w, t.board_h) == (3840, 320)
+    t.update_board_size(800, 600, "tablet-with-a-very-long-name-here")
+    assert (t.board_w, t.board_h) == (800, 600)
+    assert len(t.board_device) <= 20
+    before = t.board_device
+    t.update_board_size(800, 600, None)  # no device in the payload keeps the old one
+    assert t.board_device == before
+
+
+async def test_mid_session_board_resize_reaches_the_render_call(monkeypatch):
+    # Client flow: session metadata gives the window size, then a board-size
+    # session event reports the real pane (e.g. rotation to portrait).
+    room = FakeRoom()
+    t = Tutor({"name": "Leo"}, room, board={"w": 1920, "h": 1080, "device": "desktop"})
+    sizes = {}
+
+    async def fake_render(need, background, learner_name="", **kw):
+        sizes.update(kw)
+        return {"html": "<!doctype html><html></html>", "note": "n", "png": None}
+
+    async def noseen(*a, **k):
+        pass
+
+    monkeypatch.setattr(board_model, "render_board", fake_render)
+    monkeypatch.setattr(t, "add_board_seen", noseen)
+    t.update_board_size(390, 844, "mobile")
+    await t.commission_board(None, need="x", background="y")
+    assert sizes == {"board_w": 390, "board_h": 844, "device": "mobile"}
