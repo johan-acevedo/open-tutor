@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="sv">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="data:," />
+    <title>Open Tutor · webbläsarägd skärm (proof)</title>
+    <script type="module" crossorigin src="/assets/index-BJejIqKs.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-8NDx9Eok.css">
+  </head>
+  <body>
+    <main id="root">
+      <section id="gate" class="card">
+        <h1>Open Tutor · webbläsarägd skärm</h1>
+        <p class="muted">
+          Isolerat proof: Pi Durable-sessionen bor i webbläsaren (IndexedDB),
+          modellen nås via en lokal proxy. Skriv sidans kod för att öppna.
+        </p>
+        <label>Kod <input id="token" type="password" autocomplete="off" /></label>
+        <button id="open">Öppna skärmen</button>
+        <p id="gate-error" class="error"></p>
+      </section>
+
+      <section id="app" class="card" hidden>
+        <header class="row">
+          <div>
+            <h1>Övningstavlan</h1>
+            <p class="muted"><span id="conv">samtal …</span> · <span id="owner">…</span></p>
+          </div>
+          <div id="status" class="status" role="status"></div>
+        </header>
+
+        <canvas id="board" width="900" height="640"></canvas>
+
+        <div class="row pager">
+          <button id="prev">← Föregående</button>
+          <span id="page-label">Ingen sida</span>
+          <button id="next">Nästa →</button>
+        </div>
+
+        <div class="row">
+          <label>Ämne <input id="topic" value="bråk" /></label>
+          <label
+            >Nivå
+            <select id="level">
+              <option value="åk 1–3">åk 1–3</option>
+              <option value="åk 4–6" selected>åk 4–6</option>
+            </select>
+          </label>
+          <button id="prepare">Förbered sida (live modell)</button>
+        </div>
+
+        <label class="block">Ditt svar
+          <textarea id="answer" rows="2" placeholder="Skriv ditt svar här…"></textarea>
+        </label>
+
+        <div class="row">
+          <label>Rävkommando (simulerat) <input id="fox-cmd" value="visa svaret" /></label>
+          <button id="fox-go">Skicka till räven</button>
+          <button id="observe">🦊 Titta på tavlan (live modell)</button>
+        </div>
+
+        <p id="fox-bubble" class="bubble">🦊 Räven: …</p>
+        <p id="observed" class="bubble dim">
+          Modellens synbeskrivning visas här (live vision, neutral fråga — inte produktionens räv).
+        </p>
+      </section>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,23 @@
+[Unit]
+Description=Open Tutor browser-screen proof (app + model proxy)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Worktree-local proof service. Secrets come from the EnvironmentFile, which
+# lives outside the repo at ~/.config/open-tutor-proof/env and contains:
+#   PROOF_TOKEN=<operator-chosen page code>
+# The provider key is read by the server from ~/.pi/agent/auth.json.
+EnvironmentFile=%h/.config/open-tutor-proof/env
+Environment=PROOF_PORT=9773
+Environment=PROOF_PUBLIC_DIR=%h/.t3/worktrees/open-tutor/t3-231ad4af-2bb85d6e156e6ec5/experiments/browser-screen/public
+WorkingDirectory=%h/.t3/worktrees/open-tutor/t3-231ad4af-2bb85d6e156e6ec5/experiments/browser-screen/proxy
+ExecStart=%h/.local/bin/node server.mjs
+Restart=on-failure
+RestartSec=3
+StandardOutput=append:%h/.local/share/open-tutor-proof/proxy.log
+StandardError=append:%h/.local/share/open-tutor-proof/proxy.log
+
+[Install]
+WantedBy=default.target
