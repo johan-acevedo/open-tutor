@@ -44,6 +44,7 @@ await screen.captureObservation(req: ScreenObservationRequest): ScreenObservatio
 await screen.setAnswerDraft(pageId: string, revision: string, text: string): Promise<void>
 await screen.submitAnswer(pageId: string, revision: string): Promise<void>
 screen.goTo(index: number): Promise<void>
+await screen.addHomeworkPage(input: AddHomeworkPageInput): ScreenDeckSnapshot
 await screen.startNewLesson(lessonId: string): ScreenDeckSnapshot
 screen.getSnapshot(): ScreenDeckSnapshot
 screen.attachCanvas(canvas: HTMLCanvasElement | null): void
@@ -61,6 +62,22 @@ or assets):
 - A duplicate `intentId` replays the stored outcome (event re-emitted, never
   executed twice). A duplicate `reveal` on an already-revealed page returns
   the already-ready outcome without another deck mutation.
+
+`addHomeworkPage({ title, text?, images? })` is the lead-owned child homework
+intake (MAIN controller only — never a subagent/worker path). The child's
+explicit upload authorises immediate visibility: image bytes are stored as
+artifact blobs (`ScreenBlobStore.put` + `verifyBlobBytes` + `validateAssetRef`
+/ `isAssetRefUsable` lesson scoping), then durable `homework` page(s) commit
+directly to the visible deck — one page per image, or a single text-only page
+when `images` is empty. The latest page becomes current; the deck persists
+(`store.saveDeck`), publishes (`onDeckChange`) and re-renders. Homework pages
+are ordinary visible pages (`id` / `revision` / `lessonId` / provenance, kind
+`"homework"`, subject `"Läxa"`, empty `solution`), never model candidates, and
+never emit a fox `ready` or `answer-submitted` event. Validation errors throw
+(`homework-title-required`, `homework-needs-content`, `blob-too-large`,
+`mime-mismatch`, `homework-asset-invalid`, …) with the deck unchanged. New
+lessons archive homework titles via `startNewLesson`; reopening the same lesson
+resumes them via `shouldResumeDeck`.
 
 `setAnswerDraft` throws `unknown-page-revision` for stale targets.
 `submitAnswer` throws `stale-page` unless the target is the current visible
@@ -116,6 +133,11 @@ import { renderScreenPage, resolveScreenAssets } from "./screen/index.ts";
 const assets = await resolveScreenAssets(page, blobStore, draftText, "Sida 1 av 2");
 renderScreenPage(canvas, page, assets);
 ```
+
+Homework pages (`kind: "homework"`) show the uploaded image contain-fit with
+`Bild: <attribution>` and expanded body text, never a permanent loading
+placeholder; the exercise answer box and hidden facit are omitted and the freed
+space is content. Other page kinds are unchanged.
 
 One page at a time, Swedish labels, dark-UI friendly. Draws subject chip,
 title, wrapped body lines, one visual (researched image contain-fit, rasterised
@@ -175,7 +197,8 @@ are exported for tests.
 ## Types
 
 `ScreenIntent`, `ScreenIntentAck`, `ScreenOutboundEvent`,
-`ScreenPage` / `CandidatePage`, `ScreenArtifact`, `ScreenAssetRef`,
+`ScreenPage` / `CandidatePage` (`ScreenPageKind` now includes `"homework"`),
+`AddHomeworkPageInput` / `HomeworkImageInput`, `ScreenArtifact`, `ScreenAssetRef`,
 `ScreenDeckSnapshot`, `LessonSummary`, `ScreenObservationRequest` /
 `ScreenObservationContext` / `ScreenObservationResult`, plus worker
 (`MainToScreenWorker`, `ScreenWorkerToMain`, `ScreenWorkerPort`) and store

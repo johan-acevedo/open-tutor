@@ -101,7 +101,9 @@ export {
 export { postScreenChat, SCREEN_CHAT_PATH, SCREEN_MODEL_ID } from "./modelClient";
 export { createPiScreenWorker, type ScreenWorkerPort } from "./worker-protocol";
 export type {
+  AddHomeworkPageInput,
   CandidatePage,
+  HomeworkImageInput,
   LessonSummary,
   PriorNote,
   ScreenArtifact,

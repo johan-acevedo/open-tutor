@@ -56,7 +56,23 @@ export interface ScreenOutboundEvent {
 }
 
 /** Visible page kinds rendered by the first-slice canvas renderer. */
-export type ScreenPageKind = "exercise" | "geography";
+export type ScreenPageKind = "exercise" | "geography" | "homework";
+
+/** One uploaded homework image (child upload or PDF-rendered page). */
+export interface HomeworkImageInput {
+  bytes: Uint8Array;
+  mimeType: string;
+  provenance: string;
+  label?: string;
+  attribution?: string;
+}
+
+/** Lead-owned child homework intake. Title required; text and/or images carry the content. */
+export interface AddHomeworkPageInput {
+  title: string;
+  text?: string;
+  images?: HomeworkImageInput[];
+}
 
 /**
  * Reference to a binary asset. Durable docs and page records carry only this

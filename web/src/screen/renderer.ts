@@ -102,7 +102,7 @@ export function drawScreenPage(
   const innerW = cardW - 56;
 
   // Subject chip + page label.
-  const chip = page.subject || (page.kind === "geography" ? "Geografi" : "Matte");
+  const chip = page.subject || (page.kind === "geography" ? "Geografi" : page.kind === "homework" ? "Läxa" : "Matte");
   ctx.font = `700 15px ${FONT}`;
   const chipW = ctx.measureText(chip).width + 28;
   roundRect(ctx, innerX, y - 20, chipW, 30, 15);
@@ -130,6 +130,72 @@ export function drawScreenPage(
     ctx.fillText(line, innerX, y);
   }
   y += 14;
+
+  // Homework pages: child-uploaded content. Image contain-fit with
+  // attribution (never a permanent loading placeholder), expanded body text,
+  // and no exercise answer box or hidden facit — the freed space is content.
+  if (page.kind === "homework") {
+    const hwBoxW = innerW;
+    const hwBoxX = innerX;
+    const hwFooterH = 44;
+    ctx.font = `400 ${clamp(w * 0.02, 17, 24)}px ${FONT}`;
+    ctx.fillStyle = "#dce6f7";
+    const hwImage = page.asset?.id ? assets.images?.get(page.asset.id) : undefined;
+    const hwSvg = !hwImage && page.svgAsset ? assets.svgImage : undefined;
+    const hwHasDrawable = Boolean(hwImage || hwSvg);
+    const hwHasVisual = Boolean(page.asset?.id || page.svgAsset);
+    const hwVisualH = hwHasDrawable ? clamp(h * 0.38, 160, 360) : 0;
+    const hwBodyLimit = cardY + cardH - hwFooterH - (hwHasDrawable ? hwVisualH + 52 : 30);
+    for (const paragraph of page.body.slice(0, 15)) {
+      for (const line of wrapText(ctx, paragraph, innerW)) {
+        y += lineHeight(ctx) * 0.96;
+        if (y > hwBodyLimit) break;
+        ctx.fillText(line, innerX, y);
+      }
+      y += 8;
+      if (y > hwBodyLimit) break;
+    }
+    if (hwHasDrawable) {
+      const hwBoxY = Math.max(y + 6, cardY + cardH - hwFooterH - hwVisualH - 16);
+      roundRect(ctx, hwBoxX, hwBoxY, hwBoxW, hwVisualH, 12);
+      ctx.fillStyle = "#0a1122";
+      ctx.fill();
+      ctx.strokeStyle = CARD_BORDER;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.save();
+      roundRect(ctx, hwBoxX, hwBoxY, hwBoxW, hwVisualH, 12);
+      ctx.clip();
+      drawContain(ctx, (hwImage ?? hwSvg) as CanvasImageSource, hwBoxX, hwBoxY, hwBoxW, hwVisualH);
+      ctx.restore();
+      const hwAttribution = page.asset?.attribution ?? page.asset?.provenance ?? (page.svgAsset ? "Genererad bild" : null);
+      if (hwAttribution) {
+        ctx.fillStyle = MUTED;
+        ctx.font = `400 12px ${FONT}`;
+        ctx.fillText(truncate(ctx, `Bild: ${hwAttribution}`, hwBoxW - 16), hwBoxX + 8, hwBoxY + hwVisualH - 10);
+      }
+      y = hwBoxY + hwVisualH + 14;
+    } else if (hwHasVisual) {
+      const hwAttribution = page.asset?.attribution ?? page.asset?.provenance ?? null;
+      if (hwAttribution) {
+        ctx.fillStyle = MUTED;
+        ctx.font = `400 12px ${FONT}`;
+        if (y + 20 <= cardY + cardH - hwFooterH - 8) {
+          ctx.fillText(truncate(ctx, `Bild: ${hwAttribution}`, hwBoxW - 16), hwBoxX + 8, y + 18);
+          y += 24;
+        }
+      }
+    }
+    ctx.fillStyle = MUTED;
+    ctx.font = `400 12.5px ${FONT}`;
+    const hwSources = page.sources.slice(0, 2).join(" · ");
+    if (hwSources) ctx.fillText(truncate(ctx, `Källor: ${hwSources}`, hwBoxW * 0.62), hwBoxX, cardY + cardH - 14);
+    const hwMeta = `${page.id} ${page.revision}`;
+    ctx.textAlign = "right";
+    ctx.fillText(hwMeta, hwBoxX + hwBoxW, cardY + cardH - 14);
+    ctx.textAlign = "left";
+    return;
+  }
 
   // Body / question lines.
   ctx.font = `400 ${clamp(w * 0.02, 17, 24)}px ${FONT}`;

@@ -40,8 +40,10 @@ import {
 import {
   createBlobStore,
   isAssetRefUsable,
+  MAX_BLOB_BYTES,
   sniffMimeType,
   validateAssetRef,
+  verifyBlobBytes,
   type ScreenBlobStore,
 } from "./assets";
 import type { ResearchBundle, ResearchRunner } from "./childTasks";
@@ -54,9 +56,11 @@ import {
 import { downloadAssetBytes } from "./research";
 import { renderScreenPage, resolveScreenAssets, sanitizeSvg } from "./renderer";
 import type {
+  AddHomeworkPageInput,
   CandidatePage,
   LessonSummary,
   PriorNote,
+  ScreenAssetRef,
   ScreenDeckSnapshot,
   ScreenEventType,
   ScreenIntent,
@@ -123,6 +127,17 @@ export interface ScreenController {
   setAnswerDraft(pageId: string, revision: string, text: string): Promise<void>;
   submitAnswer(pageId: string, revision: string): Promise<void>;
   goTo(index: number): Promise<void>;
+  /**
+   * Child homework intake (lead-owned, MAIN controller only).
+   *
+   * The child's explicit upload authorises immediate visibility: stores
+   * image bytes as artifact blobs, creates durable `homework` page(s)
+   * (one per image, or a single text-only page), appends them to the
+   * visible deck, selects the latest, persists/publishes and renders.
+   * Ordinary visible pages — never model candidates, never a fox `ready`
+   * or `answer-submitted` event.
+   */
+  addHomeworkPage(input: AddHomeworkPageInput): Promise<ScreenDeckSnapshot>;
   startNewLesson(lessonId: string): Promise<ScreenDeckSnapshot>;
   getSnapshot(): ScreenDeckSnapshot;
   attachCanvas(canvas: HTMLCanvasElement | null): void;
@@ -822,7 +837,144 @@ export function createScreenController(options: ScreenControllerOptions): Screen
     refreshPixels();
   }
 
+  const MAX_HOMEWORK_IMAGES = 10;
+  const MAX_HOMEWORK_TITLE_CHARS = 140;
+  const MAX_HOMEWORK_TEXT_CHARS = 8000;
+
+  function splitHomeworkBody(text: string | undefined): string[] {
+    if (typeof text !== "string") return [];
+    const trimmed = text.trim();
+    if (!trimmed) return [];
+    return trimmed
+      .slice(0, MAX_HOMEWORK_TEXT_CHARS)
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => line.slice(0, 1000))
+      .slice(0, 30);
+  }
+
+  /**
+   * Lead-owned child homework intake. MAIN controller only — never a
+   * subagent/worker path. The explicit upload authorises immediate
+   * visibility, so pages commit directly to the visible deck (no
+   * candidate store, no fox ready/answer event).
+   */
+  async function addHomeworkPage(input: AddHomeworkPageInput): Promise<ScreenDeckSnapshot> {
+    if (closed) throw new Error("closed");
+    const title = typeof input?.title === "string" ? input.title.trim().slice(0, MAX_HOMEWORK_TITLE_CHARS) : "";
+    if (!title) throw new Error("homework-title-required");
+    const bodyLines = splitHomeworkBody(input.text);
+    const images = input.images ?? [];
+    if (!Array.isArray(images)) throw new Error("homework-bad-images");
+    if (images.length > MAX_HOMEWORK_IMAGES) throw new Error("homework-too-many-images");
+    if (images.length === 0 && bodyLines.length === 0) throw new Error("homework-needs-content");
+    for (const image of images) {
+      if (!(image?.bytes instanceof Uint8Array)) throw new Error("homework-bad-image-bytes");
+      if (image.bytes.byteLength === 0) throw new Error("homework-empty-image");
+      if (image.bytes.byteLength > MAX_BLOB_BYTES) throw new Error("blob-too-large");
+      if (typeof image.mimeType !== "string" || !image.mimeType) throw new Error("mime-not-allowed");
+      if (typeof image.provenance !== "string" || !image.provenance.trim()) {
+        throw new Error("homework-provenance-required");
+      }
+      if (image.provenance.length > 300) throw new Error("homework-provenance-too-long");
+      const sniffed = sniffMimeType(image.bytes);
+      if (sniffed && sniffed !== image.mimeType) {
+        throw new Error("mime-mismatch:" + image.mimeType + "/" + sniffed);
+      }
+    }
+    const storedIds: string[] = [];
+    try {
+      const refs: ScreenAssetRef[] = [];
+      for (const image of images) {
+        const provenance = image.provenance.trim().slice(0, 300);
+        const assetId = newId("b");
+        await blobStore.put(assetId, image.bytes, {
+          mimeType: image.mimeType,
+          provenance,
+          lessonId,
+          ...(image.label ? { label: image.label.slice(0, 120) } : {}),
+        });
+        storedIds.push(assetId);
+        const record = await blobStore.get(assetId);
+        if (!record) throw new Error("homework-blob-missing");
+        const verified = await verifyBlobBytes(image.bytes, { hash: record.hash, mimeType: image.mimeType });
+        if (!verified.ok) throw new Error(verified.reason);
+        const ref: ScreenAssetRef = {
+          id: assetId,
+          hash: record.hash.toLowerCase(),
+          mimeType: image.mimeType,
+          provenance,
+          lessonId,
+          status: "ready",
+          ...(image.label ? { label: image.label.slice(0, 120) } : {}),
+          attribution: (image.attribution ?? provenance).slice(0, 300),
+        };
+        const issues = validateAssetRef(ref);
+        if (issues.length > 0 || !isAssetRefUsable(ref, lessonId)) {
+          throw new Error("homework-asset-invalid:" + (issues.join(",") || "unusable"));
+        }
+        refs.push(ref);
+      }
+      const stamped = now();
+      const created: ScreenPage[] = [];
+      if (refs.length > 0) {
+        for (const ref of refs) {
+          created.push({
+            id: newId("p"),
+            revision: newId("r"),
+            lessonId,
+            kind: "homework",
+            subject: "Läxa",
+            title,
+            body: [...bodyLines],
+            asset: ref,
+            svgAsset: null,
+            answerLabel: "",
+            solution: "",
+            sources: [ref.provenance],
+            revealed: false,
+            createdAt: stamped,
+          });
+        }
+      } else {
+        created.push({
+          id: newId("p"),
+          revision: newId("r"),
+          lessonId,
+          kind: "homework",
+          subject: "Läxa",
+          title,
+          body: [...bodyLines],
+          asset: null,
+          svgAsset: null,
+          answerLabel: "",
+          solution: "",
+          sources: [],
+          revealed: false,
+          createdAt: stamped,
+        });
+      }
+      const pages = [...deck.pages, ...created];
+      deck = { ...deck, pages, current: pages.length - 1, updatedAt: now() };
+      await persist();
+      publish();
+      refreshPixels();
+      return deck;
+    } catch (err) {
+      for (const id of storedIds) {
+        try {
+          if (!deck.pages.some((p) => p.asset?.id === id)) await blobStore.remove(id);
+        } catch {
+          // best-effort cleanup
+        }
+      }
+      throw err;
+    }
+  }
+
   async function startNewLesson(nextLessonId: string): Promise<ScreenDeckSnapshot> {
+
     if (closed) throw new Error("closed");
     const { deck: next, archived } = startNewLessonDeck(deck, nextLessonId, options.learnerName, now());
     if (archived) {
@@ -901,6 +1053,7 @@ export function createScreenController(options: ScreenControllerOptions): Screen
     setAnswerDraft,
     submitAnswer,
     goTo,
+    addHomeworkPage,
     startNewLesson,
     getSnapshot,
     attachCanvas,
