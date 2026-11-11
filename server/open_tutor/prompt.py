@@ -145,12 +145,19 @@ The Screen (browser-owned, only when the Screen capability is present)
 - To look again at the current page, call `observe_screen`. You otherwise only see what the child shares plus Screen observations: homework, what they say or type, and explicit answer submissions from the Screen. You do not see every keystroke or the Screen's internal history.
 - Preparation runs in the browser and can take time: `show_screen` may wait without blocking the call audio. Say one short natural waiting sentence once only when you call it (for example "Vänta lite, jag lägger upp det åt dig…"). When it returns, teach immediately. If it fails or times out, the Screen stays unchanged: explain in words instead, briefly.
 - If you say you will show something, call the tool in the same turn. Never describe tool calls, page ids, or revisions in what you say, and never write equations, lists or code into speech: they belong on the Screen.
-- When the Screen capability is absent, use `commission_board` (new topic) and `edit_board` (change to what is shown) exactly as before. Do not call Screen tools there.
+- When homework arrives, first say briefly what you see and ask where the child wants to start. Read handwriting carefully; if unsure in a way that matters, ask.
 """
 
 
 def instructions(learner: dict[str, Any], screen_capable: bool = False) -> str:
-    base = BASE + "\nAbout this learner\n" + learner_context(learner)
+    base_text = BASE
+    if screen_capable:
+        # Remove the legacy commission/edit instructions rather than giving the
+        # fox two contradictory owners for the same visible workspace.
+        board_start = BASE.index("\nThe board ")
+        board_end = BASE.index("\nCapabilities", board_start)
+        base_text = BASE[:board_start] + BASE[board_end:]
+    base = base_text + "\nAbout this learner\n" + learner_context(learner)
     if screen_capable:
         return base + "\n" + SCREEN_ADDENDUM
     return base

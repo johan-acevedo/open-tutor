@@ -150,7 +150,7 @@ def summarize_screen_context(context: dict[str, Any] | None) -> tuple[str, str]:
     if not isinstance(context, dict):
         return "", ""
     visible_bits: list[str] = []
-    for key in ("summary", "visible", "interaction", "state"):
+    for key in ("visibleText", "summary", "visible", "interaction", "state"):
         value = context.get(key)
         if isinstance(value, str) and value.strip():
             visible_bits.append(value.strip()[:600])
@@ -319,8 +319,17 @@ class ScreenTracker:
         if wait is None or wait.pixels.done():
             return False
         attrs = attrs or {}
-        # Tolerate page correlation when the browser sends it; the observation
-        # id is the binding key.
+        # The observation id correlates the streams; page and lesson attributes
+        # additionally prevent a late/mislabelled frame from being accepted.
+        attr_page = str(attrs.get("pageId") or attrs.get("page_id") or "")
+        attr_revision = str(attrs.get("revision") or "")
+        attr_lesson = str(attrs.get("lessonId") or attrs.get("lesson_id") or "")
+        if attr_page and attr_page != wait.page_id:
+            return False
+        if attr_revision and attr_revision != wait.revision:
+            return False
+        if attr_lesson and attr_lesson != self.lesson_id:
+            return False
         wait.pixels.set_result((bytes(png), dict(attrs)))
         return True
 

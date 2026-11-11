@@ -103,6 +103,33 @@ function uid(): string {
   return `id-${Date.now()}-${Math.floor(Math.random() * 1e9)}`;
 }
 
+const LESSON_KEY_PREFIX = 'open-tutor-active-lesson:';
+
+function lessonStorageKey(profileId: string): string {
+  return `${LESSON_KEY_PREFIX}${profileId}`;
+}
+
+/** Resume an unfinished local lesson; Avsluta marks it ended for the next visit. */
+function lessonForStart(profileId: string): string {
+  try {
+    const saved = JSON.parse(localStorage.getItem(lessonStorageKey(profileId)) ?? 'null');
+    if (saved?.status === 'active' && typeof saved.lessonId === 'string' && saved.lessonId.length >= 8) {
+      return saved.lessonId;
+    }
+  } catch {
+    /* storage blocked or malformed: start a fresh local lesson */
+  }
+  return `lesson-${uid()}`;
+}
+
+function saveLessonState(profileId: string, lessonId: string, status: 'active' | 'ended'): void {
+  try {
+    localStorage.setItem(lessonStorageKey(profileId), JSON.stringify({ lessonId, status }));
+  } catch {
+    /* Durable Screen state still lives in IndexedDB; this is only its resume pointer. */
+  }
+}
+
 function extOf(name: string): string {
   const i = name.lastIndexOf('.');
   return i >= 0 ? name.slice(i + 1).toLowerCase() : '';
@@ -188,6 +215,7 @@ export function useSession(mobile = false) {
   const roomRef = useRef<Room | null>(null);
   const preparedRoomRef = useRef<Room | null>(null);
   const profileRef = useRef<Profile | null>(null);
+  const lessonIdRef = useRef('');
   const intentionalEndRef = useRef(false);
   const mountResolvers = useRef(new Map<string, Array<() => void>>());
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -332,6 +360,8 @@ export function useSession(mobile = false) {
       setPhase('connecting');
 
       const notes = p.notes.slice(-5).reverse(); // newest first
+      const lessonId = lessonForStart(p.id);
+      lessonIdRef.current = lessonId;
       let session: SessionResponse;
       try {
         const request = () => {
@@ -341,7 +371,7 @@ export function useSession(mobile = false) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'x-tutor-code': familyCode() },
             body: JSON.stringify({ learner: { name: p.name, grade: p.grade, notes },
-              board, screen: { version: 1 } }),
+              board, screen: { version: 1, lessonId } }),
           });
         };
         let res = await request();
@@ -359,6 +389,7 @@ export function useSession(mobile = false) {
         }
         if (!res.ok) throw new Error(`session ${res.status}`);
         session = (await res.json()) as SessionResponse;
+        saveLessonState(p.id, lessonId, 'active');
       } catch {
         showToast('Kunde inte starta sessionen. Kontrollera anslutningen och försök igen.');
         setPhase('profiles');
@@ -728,6 +759,9 @@ export function useSession(mobile = false) {
     const room = roomRef.current;
     if (!room || phase !== 'live') return;
     intentionalEndRef.current = true;
+    if (profileRef.current && lessonIdRef.current) {
+      saveLessonState(profileRef.current.id, lessonIdRef.current, 'ended');
+    }
     setPhase('ending');
     setConnBanner(null);
     const disconnected = new Promise<void>((resolve) => {

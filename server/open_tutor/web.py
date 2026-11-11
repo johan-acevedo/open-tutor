@@ -49,6 +49,7 @@ class Learner(BaseModel):
 
 class ScreenCapability(BaseModel):
     version: int = Field(ge=1, le=1)
+    lessonId: str = Field(min_length=8, max_length=80)
 
 
 class SessionRequest(BaseModel):

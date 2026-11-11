@@ -59,7 +59,7 @@ export type SessionRequest = {
   learner: SessionLearner;
   board: { w: number; h: number; device: string };
   /** Browser-owned Pi Durable Screen protocol capability. */
-  screen?: { version: 1 };
+  screen?: { version: 1; lessonId: string };
 };
 
 export type ScreenViewport = { w: number; h: number; device: string };

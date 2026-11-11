@@ -23,11 +23,12 @@ def test_session_token_carries_learner_and_agent_dispatch():
 
 def test_session_token_carries_screen_capability_when_present():
     client = TestClient(create_app(ENV))
-    response = client.post("/api/session", json={**LEARNER, "screen": {"version": 1}})
+    response = client.post("/api/session", json={**LEARNER, "screen": {"version": 1, "lessonId": "lesson-123456"}})
     assert response.status_code == 200
     claims = jwt.decode(response.json()["token"], ENV["LIVEKIT_API_SECRET"], algorithms=["HS256"])
-    assert json.loads(claims["metadata"])["screen"] == {"version": 1}
-    assert client.post("/api/session", json={**LEARNER, "screen": {"version": 2}}).status_code == 422
+    assert json.loads(claims["metadata"])["screen"] == {"version": 1, "lessonId": "lesson-123456"}
+    assert client.post("/api/session", json={**LEARNER, "screen": {"version": 2, "lessonId": "lesson-123456"}}).status_code == 422
+    assert client.post("/api/session", json={**LEARNER, "screen": {"version": 1}}).status_code == 422
 
 
 def test_rejects_bad_learner_and_missing_config():

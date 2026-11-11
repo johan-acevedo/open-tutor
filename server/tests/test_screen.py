@@ -91,6 +91,7 @@ def test_prompt_mentions_screen_only_when_capable():
     assert "show_screen" not in legacy
     capable = instructions({"name": "Leo"}, screen_capable=True)
     assert "show_screen" in capable and "reveal_screen" in capable and "observe_screen" in capable
+    assert "commission_board" not in capable and "edit_board" not in capable
     assert "private" in capable.lower() and "explain in words instead" in capable.lower()
 
 
@@ -207,6 +208,9 @@ async def test_pixels_and_context_correlation():
     assert tracker.feed_pixels("oX", b"x") is False
     tracker.track_observation("o2", "p1", "r1")
     assert tracker.feed_context("o2", {"observationId": "o2", "lessonId": "WRONG"}) is False
+    assert tracker.feed_pixels("o2", b"wrong", {"pageId": "p2", "revision": "r1"}) is False
+    assert tracker.feed_pixels("o2", b"wrong", {"pageId": "p1", "revision": "r2"}) is False
+    assert tracker.feed_pixels("o2", b"right", {"pageId": "p1", "revision": "r1", "lessonId": "L1"}) is True
 
 
 async def test_missing_context_still_teaches_from_pixels():
@@ -305,7 +309,7 @@ async def test_superseded_show_notes_newer_intent():
 
 def test_context_summary_keeps_private_model_only():
     visible, private = summarize_screen_context({
-        "summary": "a clock", "privateTeaching": "hidden solution 3",
+        "visibleText": "a clock", "privateTeaching": "hidden solution 3",
         "sources": ["wikimedia"], "page": {"id": "p1", "revision": "r1"}})
     assert "clock" in visible and private == "hidden solution 3"
     assert summarize_screen_context(None) == ("", "")
