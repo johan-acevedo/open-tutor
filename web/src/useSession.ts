@@ -47,15 +47,32 @@ function clampBoard(n: number, fallback: number): number {
   return Math.max(BOARD_MIN, Math.min(Math.round(n), BOARD_MAX));
 }
 
-/** Measure the real board pane; fall back to the window when it is not mounted yet. */
+/** Measure the real board surface: the visible .ot-board-scroll content box
+ *  where the frame sits. The outer .ot-board also holds the phone nav and the
+ *  follow button, and its width includes the scroller padding, so measuring
+ *  it overstates the space the board model can use. Falls back to the window
+ *  when the surface is not mounted yet (profiles/connecting). */
 export function readBoardSize(): { w: number; h: number; device: string } {
   const device = boardDevice();
   try {
-    const pane = document.querySelector('.ot-board');
-    if (pane) {
-      const r = pane.getBoundingClientRect();
+    const scroller = document.querySelector('.ot-board-scroll');
+    if (scroller) {
+      const el = scroller as HTMLElement;
+      const style = window.getComputedStyle(el);
+      const padX = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
+      const padY = (parseFloat(style.paddingTop) || 0) + (parseFloat(style.paddingBottom) || 0);
+      const w = el.clientWidth - padX;
+      const h = el.clientHeight - padY;
+      if (w >= 1 && h >= 1) {
+        return { w: clampBoard(w, window.innerWidth), h: clampBoard(h, window.innerHeight), device };
+      }
+      const r = el.getBoundingClientRect();
       if (r.width >= 1 && r.height >= 1) {
-        return { w: clampBoard(r.width, window.innerWidth), h: clampBoard(r.height, window.innerHeight), device };
+        return {
+          w: clampBoard(r.width - padX, window.innerWidth),
+          h: clampBoard(r.height - padY, window.innerHeight),
+          device,
+        };
       }
     }
   } catch {
@@ -534,7 +551,9 @@ export function useSession(mobile = false) {
         let ro: ResizeObserver | null = null;
         let observed: Element | null = null;
         const attachPane = () => {
-          const pane = document.querySelector('.ot-board');
+          // Observe the scroll surface itself: nav/follow-button layout
+          // changes alter its size, which is what the board is commissioned for.
+          const pane = document.querySelector('.ot-board-scroll');
           if (pane && pane !== observed) {
             if (!ro && typeof ResizeObserver !== 'undefined') {
               ro = new ResizeObserver(() => scheduleSend());

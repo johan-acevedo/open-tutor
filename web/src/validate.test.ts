@@ -69,6 +69,12 @@ describe('validateBoardItem', () => {
     expect(validateBoardItem({ id: 'p1', kind: 'pending', title: 'Ritar…', height: 'tall' }).ok).toBe(false);
     expect(validateBoardItem({ id: 'h1', kind: 'html', html: '<b>x</b>', height: 'tall' }).ok).toBe(false);
     expect(validateBoardItem({ id: 'h1', kind: 'html', html: '<b>x</b>', height: 420 }).ok).toBe(true);
+    expect(validateBoardItem({ id: 'h1', kind: 'html', html: '<b>x</b>', width: 'wide' }).ok).toBe(false);
+    const sizedHtml = validateBoardItem({ id: 'h1', kind: 'html', html: '<b>x</b>', height: 420, width: 640 });
+    expect(sizedHtml.ok).toBe(true);
+    if (sizedHtml.ok) expect(sizedHtml.item).toEqual({ id: 'h1', kind: 'html', html: '<b>x</b>', height: 420, width: 640 });
+    // Legacy boards without width still validate (fluid-width fit).
+    expect(validateBoardItem({ id: 'h1', kind: 'html', html: '<b>x</b>' }).ok).toBe(true);
   });
 });
 

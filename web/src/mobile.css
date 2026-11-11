@@ -24,7 +24,8 @@
   max-width: 100%;
 }
 .ot-pose-thinking .ot-avatar-img,
-.ot-pose-waiting .ot-avatar-img {
+.ot-pose-waiting .ot-avatar-img,
+.ot-pose-working .ot-avatar-img {
   transform: scaleX(-1);
 }
 .ot-card-slot {
@@ -309,7 +310,10 @@
 .ot-phone .ot-op {
   font-size: 14px;
 }
-.ot-phone .ot-html-frame,
+.ot-phone .ot-bcard.ot-bcard-html,
+.ot-phone .ot-bcard.ot-bcard-pending {
+  padding: 0;
+}
 .ot-phone .ot-resource-frame {
   max-height: calc(var(--ot-view-height, 100dvh) * 0.45);
 }

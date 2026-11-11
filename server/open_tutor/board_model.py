@@ -27,6 +27,16 @@ BOARD_TIMEOUT_S = float(os.environ.get("BOARD_TIMEOUT_S", "150"))
 BOARD_W = int(os.environ.get("BOARD_W", "1920"))
 BOARD_H = int(os.environ.get("BOARD_H", "1080"))
 
+# Served-board iframe policy. Must match HTML_CSP in web/src/components/Cards.tsx:
+# the tutor's screenshot shares the child's effective policy, so what the tutor
+# sees is what the child gets (KaTeX/fetchable assets either load for both or
+# for neither). server/tests/test_board_render.py asserts they are identical.
+# Allows the documented renderer libraries: jsdelivr scripts + styles + fonts;
+# images (incl. Leaflet map tiles) over https. Everything else stays blocked.
+HTML_CSP = ("default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net; "
+             "style-src 'unsafe-inline' https://cdn.jsdelivr.net; "
+             "font-src https://cdn.jsdelivr.net; img-src data: https:")
+
 SYSTEM_PROMPT = """You are the board renderer for Räven, a live voice tutor for school children.
 
 Right now a child is in a voice call with the tutor. The tutor has just decided to show something on the shared board, and the child is waiting for it to appear. As soon as your board is on screen, the tutor will talk about it with the child. You receive everything the tutor knows up to this moment: who the child is and what is needed.
@@ -142,6 +152,23 @@ async def call_board_model(system: str, user_message: str) -> str:
     return reply
 
 
+def apply_csp(html: str) -> str:
+    """Wrap board html with the served-board CSP meta tag.
+
+    The tutor's screenshot then shares the child's effective policy instead of
+    rendering with no policy (where blocked assets would misleadingly load).
+    """
+    meta = f'<meta http-equiv="Content-Security-Policy" content="{HTML_CSP}">'
+    low = html.lower()
+    for tag in ("<head", "<html"):
+        i = low.find(tag)
+        if i >= 0:
+            j = html.find(">", i)
+            if j >= 0:
+                return html[: j + 1] + meta + html[j + 1 :]
+    return meta + html
+
+
 async def screenshot_board(html: str, width: int, height: int) -> bytes | None:
     """Render the settled board to PNG. None when Chromium is unavailable."""
     try:
@@ -153,7 +180,7 @@ async def screenshot_board(html: str, width: int, height: int) -> bytes | None:
         async with async_playwright() as p:
             browser = await p.chromium.launch()
             page = await browser.new_page(viewport={"width": width, "height": height})
-            await page.set_content(html, wait_until="load", timeout=30000)
+            await page.set_content(apply_csp(html), wait_until="load", timeout=30000)
             await page.wait_for_timeout(500)
             try:
                 await page.evaluate("() => { for (const a of document.getAnimations()) { try { a.finish(); } catch {} } }")

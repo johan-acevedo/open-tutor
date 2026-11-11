@@ -29,12 +29,36 @@ describe('mapAvatarState', () => {
     expect(s.pill.animateBars).toBe(false);
   });
 
-  it('maps thinking to Tänker… and pending to Ritar…', () => {
+  it('maps thinking to Tänker… and pending to the working pose with Ritar…', () => {
     const t = mapAvatarState({ ...base, agentState: 'thinking' });
     expect(t.pill.label).toBe('Tänker…');
     expect(t.pill.animateBars).toBe(false);
     const p = mapAvatarState({ ...base, agentState: 'listening', hasPending: true });
+    expect(p.pose).toBe('working');
     expect(p.pill.label).toBe('Ritar…');
+    expect(p.pill.animateBars).toBe(false);
+  });
+
+  it('keeps speaking, quiet and resource ahead of pending', () => {
+    // The tutor may say one short sentence while quiet work starts: spoken
+    // words still show as speaking even with a board drawing in flight.
+    expect(mapAvatarState({ ...base, agentState: 'speaking', hasPending: true }).pill.label).toBe('Pratar');
+    expect(mapAvatarState({ ...base, agentState: 'speaking', hasPending: true }).pose).toBe('speaking');
+    const quiet = mapAvatarState({ ...base, tutorMode: 'quiet', hasPending: true });
+    expect(quiet.pose).toBe('waiting');
+    expect(quiet.pill.label).toBe('Jag väntar');
+    const resource = mapAvatarState({ ...base, tutorMode: 'resource', hasPending: true });
+    expect(resource.pose).toBe('waiting');
+    expect(resource.pill.label).toBe('Väntar medan du tittar');
+  });
+
+  it('leaves the working pose once the pending board is finished', () => {
+    const drawing = mapAvatarState({ ...base, agentState: 'listening', hasPending: true });
+    expect(drawing.pose).toBe('working');
+    // board.update replaces the pending item in place: hasPending clears.
+    const finished = mapAvatarState({ ...base, agentState: 'listening', hasPending: false });
+    expect(finished.pose).toBe('listening');
+    expect(finished.pill.label).toBe('Lyssnar');
   });
 
   it('maps quiet and resource modes to waiting poses', () => {

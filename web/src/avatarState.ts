@@ -5,7 +5,7 @@
 
 import type { AgentState, TutorMode } from './protocol';
 
-export type Pose = 'greeting' | 'listening' | 'speaking' | 'thinking' | 'waiting' | 'pointing';
+export type Pose = 'greeting' | 'listening' | 'speaking' | 'thinking' | 'waiting' | 'pointing' | 'working';
 
 export type PillTone = 'cyan' | 'violet' | 'grey';
 
@@ -59,7 +59,7 @@ export function mapAvatarState(input: AvatarInput): AvatarOutput {
   }
   if (hasPending) {
     return {
-      pose: 'thinking',
+      pose: 'working',
       pill: { label: 'Ritar…', icon: 'pencil', tone: 'violet', animateBars: false },
     };
   }

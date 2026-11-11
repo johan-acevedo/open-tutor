@@ -15,7 +15,7 @@ The browser and the tutor worker share one LiveKit room per session. Audio goes 
 | Text stream | `lk.chat` | What the child typed. The agent treats it like speech. |
 | Byte stream | `homework` | One image (PNG/JPEG/WebP) per stream. Attributes: `kind` = `photo` \| `screenshot` \| `pdf-page`, `source` = original file name, `page` = page number (PDF only), `pages` = total pages, `itemId` = the board id the browser already gave it. |
 | Text stream | `homework-text` | Pasted text. Attributes: `itemId`. |
-| Text stream | `session-event` | JSON `{ "type": "end" }` when Avsluta is pressed, `{ "type": "resource-closed", "id" }`, `{ "type": "board-size", "w", "h", "device" }` (real board-pane size, ResizeObserver; debounced, on change), `{ "type": "quiet", "on": true }` (reserved). |
+| Text stream | `session-event` | JSON `{ "type": "end" }` when Avsluta is pressed, `{ "type": "resource-closed", "id" }`, `{ "type": "board-size", "w", "h", "device" }` (visible `.ot-board-scroll` content-box size, ResizeObserver; debounced, on change), `{ "type": "quiet", "on": true }` (reserved). |
 
 The browser shows homework on the board itself as soon as the child adds it (kind `homework`), then sends it. The tutor never re-sends homework images.
 
@@ -40,7 +40,7 @@ type BoardItem =
   | { id: string; kind: "steps"; title?: string; steps: Step[] }             // worked equation or process
   | { id: string; kind: "mindmap"; title?: string; center: string; ideas: string[] }
   | { id: string; kind: "svg"; title?: string; svg: string }                 // sanitised, no scripts
-  | { id: string; kind: "html"; title?: string; html: string; height?: number } // sandboxed iframe, scripts allowed, no same-origin
+  | { id: string; kind: "html"; title?: string; html: string; height?: number; width?: number } // sandboxed iframe, scripts allowed, no same-origin; width+height = commissioned design box, scaled to fit the current pane
   | { id: string; kind: "image"; title?: string; url: string; alt: string }
   | { id: string; kind: "pending"; title: string; height?: number }       // "Ritar…" placeholder
   | { id: string; kind: "resource"; title: string; url: string; embedUrl?: string; source?: string; prompt?: string }
@@ -51,6 +51,8 @@ type Note = { at: string; topic: string; clicked?: string; tricky?: string; next
 ```
 
 Generated HTML runs in `<iframe sandbox="allow-scripts">` with a strict CSP and no access to the page, learner storage or credentials. Links in resources open in a new tab.
+
+The frame preserves its commissioned `width` and `height`. It scales down proportionally when the visible `.ot-board-scroll` content box becomes smaller. Controls remain interactive after scaling. HTML items without `width` keep their fluid width.
 
 ## Slow drawings
 
