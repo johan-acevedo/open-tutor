@@ -1,6 +1,6 @@
 {
  "round": "r6b",
- "generated_at": "2026-11-11T08:35:31+00:00",
+ "generated_at": "2026-11-11T08:58:29+00:00",
  "notes": "Exact repeat of r6 (Haiku, r5 framing, thinking medium, review on every board) to measure run-to-run spread; also run on the hidden panel.",
  "targets": {
   "median_wall_s": 20.0,

@@ -1,6 +1,6 @@
 {
  "round": "r15",
- "generated_at": "2026-11-11T08:35:31+00:00",
+ "generated_at": "2026-11-11T08:58:29+00:00",
  "notes": "Broad optional toolkit (Johan): r14 + Leaflet (maps/geography) + Three.js (3D bodies) with copy-exact snippets; map tiles allowlisted in the renderer. Tests whether a curriculum-wide, use-when-it-helps toolkit lifts quality. Watch adoption + JS errors.",
  "targets": {
   "median_wall_s": 20.0,

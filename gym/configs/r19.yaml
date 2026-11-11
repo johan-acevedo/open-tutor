@@ -1,0 +1,10 @@
+round: r19
+notes: "DeepSeek v4.1-flash (ultrafast access) on the latest prompt (r12: philosophy rewrite + API docs + interactive). Thinking off for speed. Same judge (argon) for comparability."
+prompt: prompts/r12
+thinking: "off"
+fix_pass: true
+toolkit: null
+board: {w: 1920, h: 1080, device: desktop, lang: Swedish}
+members:
+  - deepseek-v4.1-flash
+panels: [tune]

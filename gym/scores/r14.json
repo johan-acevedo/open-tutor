@@ -1,6 +1,6 @@
 {
  "round": "r14",
- "generated_at": "2026-11-11T08:35:31+00:00",
+ "generated_at": "2026-11-11T08:58:29+00:00",
  "notes": "Haiku r13 + component toolkit appendix (KaTeX, JSXGraph, Chart.js pinned snippets, use-only-if-better + no-guessing rules). One new variable: the toolkit.",
  "targets": {
   "median_wall_s": 20.0,

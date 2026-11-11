@@ -1,0 +1,23 @@
+{
+ "round": "r17",
+ "generated_at": "2026-11-11T08:58:29+00:00",
+ "notes": "Johan-philosophy rewrite (prompts/r11): situation + inventory only, no method. No Swedish examples, no toolkit rules, open internet, dynamic board/device/lang placeholders. Heads-up vs r13.",
+ "targets": {
+  "median_wall_s": 20.0,
+  "pct_correct": 90.0,
+  "mean_clarity": 4.5
+ },
+ "members": {
+  "claude-haiku-5-5": {
+   "tune": {
+    "n": 14,
+    "judged": 14,
+    "fail": 0,
+    "pct_correct": 64.3,
+    "mean_clarity": 3.93,
+    "median_wall": 15.56,
+    "p90_wall": 25.44
+   }
+  }
+ }
+}
