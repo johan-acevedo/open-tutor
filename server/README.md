@@ -124,7 +124,14 @@ Default off, so open-source adopters get no behaviour or file change.
   order, each using the latest successful source. Boards live only in the session.
   Input values changed inside the sandbox are not currently saved with that source.
 - Board engine defaults: `BOARD_MODEL=opencode-go/deepseek-v4.1-flash`,
-  `BOARD_THINKING=off` (env overrides stay). The renderer prompt is adapted from the
+  `BOARD_THINKING=low` (env overrides stay; the installed Pi maps `off` to `low`
+  for this model, so the default names `low` explicitly). `BOARD_MAX_TOKENS=16384`
+  caps the provider's output-token limit for board requests only: `board_model.py`
+  loads `open_tutor/board_budget.js` explicitly (`--extension` still applies with
+  `--no-extensions`), and the extension clamps an existing `max_tokens` /
+  `max_completion_tokens` down to the cap while keeping a lower configured limit.
+  Length-truncated replies are rejected, and timed-out or cancelled processes are
+  killed and reaped. The renderer prompt is adapted from the
   `gym/prompts/r13/system.md` on the `gym/board-renderer` branch, used by the r21
   configuration. Production requests a short tutor note and has no automatic review pass.
 - Dimension handshake: `board.show`/`board.update` acks return

@@ -112,6 +112,7 @@ def make_board_html(w: int, h: int) -> str:
     return f"""<!doctype html><html><head>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsxgraph@1.11.0/distrib/jsxgraphcore.js"></script>
 <style>html,body{{margin:0;padding:0}}body{{margin:0;background:#181B22;color:#fff;font:20px sans-serif;position:relative;height:{h}px;overflow:hidden}}</style>
 </head><body>
 <h1 style="margin:0 0 8px;">Linj&auml;r ekvation</h1>
@@ -124,12 +125,17 @@ def make_board_html(w: int, h: int) -> str:
 <img id="tile" src="https://tile.openstreetmap.org/0/0/0.png" width="64" height="64" alt="karta">
 <div style="height:{head}px"></div>
 <div id="bottom-marker">SLUT</div>
+<div id="graph-probe" style="position:absolute;left:96px;top:180px;width:180px;height:110px"></div>
 <div id="corner-marker" style="position:absolute;right:8px;bottom:8px;background:#22d3ee;color:#062a31;padding:4px 10px;border-radius:8px;font-size:16px;">H&Ouml;RN</div>
 <script>
 // Default KaTeX output (htmlAndMathml), as the reported board contained: the
 // model does not always pass output:'html', so the frame must hide the
 // MathML annotation via the stylesheet in either case.
 katex.render("y=kx+m",document.getElementById("eq"),{{throwOnError:false}});
+var graphProbe = JXG.JSXGraph.initBoard('graph-probe', {{boundingbox: [-2, 6, 4, -2], axis:false, grid:false, showNavigation:false, showCopyright:false}});
+var probeCurve = graphProbe.create('functiongraph', [function(x){{ return 2*x+1; }}], {{strokeColor:'#22d3ee', strokeWidth:3}});
+var probeLabel = graphProbe.create('text', [0, 1, 'label'], {{fontSize:18}});
+graphProbe.update();
 document.getElementById("tryck").addEventListener("click", function() {{
   document.getElementById("click-result").textContent = "klickad";
   parent.postMessage({{type:"board-interaction", clicked:true}}, "*");
@@ -150,6 +156,9 @@ function report() {{
   try {{ document.fonts.forEach(function(f) {{ faces.push(f.family + ":" + f.status); }}); }} catch (e) {{}}
   parent.postMessage({{type:"board-metrics",
     documentMode: document.compatMode,
+    graphCurveWidth: probeCurve.rendNode.getBBox().width,
+    graphCurveHeight: probeCurve.rendNode.getBBox().height,
+    graphLabel: probeLabel.rendNode.textContent,
     scrollW: document.documentElement.scrollWidth, clientW: document.documentElement.clientWidth,
     scrollH: document.documentElement.scrollHeight, clientH: document.documentElement.clientHeight,
     innerW: window.innerWidth, innerH: window.innerHeight,
@@ -486,6 +495,8 @@ def run_browser(csp: str) -> None:
                     m["mathmlBoxW"] <= 2 and m["glyphsBoxW"] > 50,
                 )
                 check(f"{label}: KaTeX font loaded", m["katexFont"])
+                check(f"{label}: JSXGraph function curve is actually drawn", m["graphCurveWidth"] > 10 and m["graphCurveHeight"] > 10)
+                check(f"{label}: JSXGraph documented text signature renders", m["graphLabel"] == "label")
                 check(f"{label}: map tile loaded (img-src allowance)", m["tileW"] > 0)
                 # Interactivity survives the fit scaling: drive the real frame.
                 try:

@@ -70,7 +70,7 @@ describe('HtmlCard generated-board surface', () => {
     expect(srcDoc).toContain("style-src 'unsafe-inline' https://cdn.jsdelivr.net");
     expect(srcDoc).toContain('font-src https://cdn.jsdelivr.net');
     expect(srcDoc).toContain('img-src data: https:');
-    expect(frame?.getAttribute('sandbox')).toContain('allow-scripts');
+    expect(frame?.getAttribute('sandbox')).toBe('allow-scripts');
   });
 
   it('shows a drawing status without an outer headline while pending', () => {
