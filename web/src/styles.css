@@ -257,6 +257,126 @@ a:focus-visible {
   padding-right: 4px;
 }
 
+/* Browser-owned Screen: one visible canvas, never a scrolling card feed. */
+.ot-screen-board {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ot-screen-canvas {
+  display: block;
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  min-height: 280px;
+  border-radius: 16px;
+  background: #0b1220;
+}
+
+.ot-screen-canvas[hidden] {
+  display: none;
+}
+
+.ot-screen-controls {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: auto minmax(180px, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+}
+
+.ot-screen-pager {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ot-text-dim);
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.ot-screen-pager button,
+.ot-screen-submit {
+  min-height: 40px;
+  border: 1px solid var(--ot-border);
+  border-radius: 10px;
+  background: var(--ot-elevated);
+  color: var(--ot-text);
+  padding: 7px 12px;
+  cursor: pointer;
+}
+
+.ot-screen-pager button:disabled,
+.ot-screen-submit:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.ot-screen-answer {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--ot-text-dim);
+  font-size: 13px;
+}
+
+.ot-screen-answer textarea {
+  width: 100%;
+  resize: none;
+  border: 1px solid var(--ot-border);
+  border-radius: 10px;
+  background: var(--ot-elevated);
+  color: var(--ot-text);
+  padding: 8px 12px;
+  font: 16px/1.35 var(--ot-font);
+}
+
+.ot-screen-submit {
+  border-color: var(--ot-cyan);
+  color: var(--ot-cyan);
+  font-weight: 600;
+}
+
+.ot-screen-working {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  border: 1px solid var(--ot-border);
+  border-radius: 999px;
+  background: var(--ot-bottombar);
+  color: var(--ot-text-dim);
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+@media (max-width: 900px) {
+  .ot-screen-controls {
+    grid-template-columns: 1fr auto;
+  }
+
+  .ot-screen-pager {
+    grid-column: 1 / -1;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 600px) {
+  .ot-screen-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .ot-screen-submit {
+    width: 100%;
+  }
+
+  .ot-screen-canvas {
+    min-height: 240px;
+  }
+}
+
 /* ---------- Profiles ---------- */
 
 .ot-profiles {
