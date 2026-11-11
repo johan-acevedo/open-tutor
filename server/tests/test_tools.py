@@ -54,8 +54,8 @@ async def test_commissioned_board_reaches_the_board_and_feeds_back(monkeypatch):
     t = tutor(room)
     result, seen = await commission(t, monkeypatch, room)
     assert "on screen now" in result
-    identity, method, payload = room.local_participant.calls[0]
-    assert (identity, method, payload["id"], payload["kind"]) == ("learner-1", "board.show", "b1", "html")
+    identity, method, payload = room.local_participant.calls[1]
+    assert (identity, method, payload["id"], payload["kind"]) == ("learner-1", "board.update", "b1", "html")
     assert seen["png"] == b"PNG" and "hälsning" in seen["note"].lower()
     assert "Leo behöver se" in seen["need"]
     assert "Do not repeat the waiting sentence" in result
@@ -83,10 +83,10 @@ async def test_client_board_size_reaches_the_board_model(monkeypatch):
 async def test_a_board_that_does_not_acknowledge_is_reported_to_the_model(monkeypatch):
     t = tutor(FakeRoom(error=TimeoutError("no reply")))
     result, _ = await commission(t, monkeypatch, None)
-    assert "could not show" in result
+    assert "placeholder was removed" in result and "Explain in words" in result
     t = tutor(FakeRoom(reply='{"ok":false}'))
     result, _ = await commission(t, monkeypatch, None)
-    assert "could not show" in result
+    assert "placeholder was removed" in result and "Explain in words" in result
 
 
 async def test_a_board_model_failure_is_reported_to_the_model(monkeypatch):
@@ -103,7 +103,7 @@ async def test_a_board_model_failure_is_reported_to_the_model(monkeypatch):
     monkeypatch.setattr(t, "add_board_seen", noseen)
     result = await t.commission_board(None, need="x", background="y")
     assert "could not be made" in result and "Explain in words" in result
-    assert room.local_participant.calls == []
+    assert [c[1] for c in room.local_participant.calls] == ["board.show", "board.remove"]
 
 
 async def test_a_new_session_starts_clean(monkeypatch):
@@ -115,9 +115,9 @@ async def test_a_new_session_starts_clean(monkeypatch):
     second = tutor(second_room, "learner-b", {"name": "Leo", "grade": 7, "notes": notes})
     await commission(second, monkeypatch, second_room)
     # Ids restart, RPCs go only to the new learner, and nothing reaches the old room.
-    assert [c[2]["id"] for c in second_room.local_participant.calls] == ["b1"]
+    assert [c[2]["id"] for c in second_room.local_participant.calls] == ["b1", "b1"]
     assert {c[0] for c in second_room.local_participant.calls} == {"learner-b"}
-    assert len(first_room.local_participant.calls) == 2
+    assert len(first_room.local_participant.calls) == 4
     assert second.mode == "talking" and second.notes_saved == 0
     # The only thing carried over is the saved note, as context in the instructions.
     assert "Ekvationer" in second.instructions and "Ekvationer" not in first.instructions
@@ -129,10 +129,10 @@ def test_prompt_forbids_narrating_tool_calls():
     assert "call the tool in the same turn" in text and "Never describe or narrate a tool call" in text
 
 
-def test_prompt_announces_slow_drawings_before_writing_them():
+def test_prompt_commissions_boards_in_one_call():
     text = instructions({"name": "Leo"})
-    assert "announce_drawing" in text and "pending_id" in text
-    assert "Vänta lite, jag ritar det åt dig" in text
+    assert "commission_board" in text and "announce_drawing" not in text
+    assert "Vänta lite, jag ritar det åt dig" in text and "once only" in text
 
 
 class FlakyParticipant(FakeParticipant):
@@ -156,40 +156,23 @@ def flaky_room(*failures):
     return room
 
 
-async def test_announce_drawing_shows_a_pending_placeholder():
-    room = FakeRoom()
-    result = await tutor(room).announce_drawing(None, title="Vattnets kretslopp")
-    assert 'pending_id="b1"' in result and "Ritar" in result
-    identity, method, payload = room.local_participant.calls[0]
-    assert (identity, method) == ("learner-1", "board.show")
-    assert payload == {"id": "b1", "kind": "pending", "title": "Vattnets kretslopp", "height": 360}
-
-
-async def test_announced_board_replaces_the_placeholder_in_place(monkeypatch):
+async def test_commission_shows_a_placeholder_first_then_replaces_it(monkeypatch):
     room = FakeRoom()
     t = tutor(room)
-    announced = await t.announce_drawing(None, title="Kretslopp")
-    assert 'pending_id="b1"' in announced
-    result, seen = await commission(t, monkeypatch, room, pending_id="b1")
+    result, seen = await commission(t, monkeypatch, room)
     assert "on screen now" in result
     assert [c[1] for c in room.local_participant.calls] == ["board.show", "board.update"]
+    _, _, shown = room.local_participant.calls[0]
+    assert shown["kind"] == "pending" and shown["id"] == "b1"
     _, _, payload = room.local_participant.calls[1]
     assert payload["id"] == "b1" and payload["kind"] == "html"
     assert seen["label"] == "board b1"
 
 
-async def test_unannounced_board_still_shows_directly(monkeypatch):
-    room = FakeRoom()
-    result, _ = await commission(tutor(room), monkeypatch, room)
-    assert "on screen now" in result
-    assert [c[1] for c in room.local_participant.calls] == ["board.show"]
-
-
 async def test_a_failed_final_board_removes_its_placeholder(monkeypatch):
-    room = flaky_room(None, TimeoutError("no reply"))  # announce works, the update times out
+    room = flaky_room(None, TimeoutError("no reply"))  # placeholder shows, the update times out
     t = tutor(room)
-    await t.announce_drawing(None, title="Kretslopp")
-    result, _ = await commission(t, monkeypatch, room, pending_id="b1")
+    result, _ = await commission(t, monkeypatch, room)
     assert "placeholder was removed" in result and "Explain in words" in result
     assert [c[1] for c in room.local_participant.calls] == ["board.show", "board.update", "board.remove"]
     assert room.local_participant.calls[2][2] == {"id": "b1"}
@@ -198,7 +181,6 @@ async def test_a_failed_final_board_removes_its_placeholder(monkeypatch):
 async def test_rejected_board_removes_its_placeholder(monkeypatch):
     room = FakeRoom()
     t = tutor(room)
-    await t.announce_drawing(None, title="Kretslopp")
 
     async def empty(*a, **k):
         return {"html": "<p>no doctype</p>", "note": "", "png": None}
@@ -208,16 +190,17 @@ async def test_rejected_board_removes_its_placeholder(monkeypatch):
 
     monkeypatch.setattr(board_model, "render_board", empty)
     monkeypatch.setattr(t, "add_board_seen", noseen)
-    result = await t.commission_board(None, need="x", background="y", pending_id="b1")
+    result = await t.commission_board(None, need="x", background="y")
     assert "Invalid board" in result and "placeholder was removed" in result
     assert [c[1] for c in room.local_participant.calls] == ["board.show", "board.remove"]
 
 
-async def test_a_failed_announcement_leaves_no_placeholder_behind():
-    room = flaky_room(TimeoutError("no reply"))
-    result = await tutor(room).announce_drawing(None, title="Kretslopp")
-    assert "not visible" in result and "pending_id" not in result
-    assert [c[1] for c in room.local_participant.calls] == ["board.show"]
+async def test_a_failed_placeholder_show_still_delivers_the_board(monkeypatch):
+    room = flaky_room(TimeoutError("no reply"))  # placeholder show fails, render works
+    t = tutor(room)
+    result, _ = await commission(t, monkeypatch, room)
+    assert "on screen now" in result
+    assert [c[1] for c in room.local_participant.calls] == ["board.show", "board.update"]
 
 
 def test_board_size_defaults_when_the_client_reports_nothing():
