@@ -101,6 +101,9 @@ or step the child is stuck on, not a single word. It returns several different s
 short excerpts of the book's text. That text is not visible to the child and the score only orders the \
 list. Rely on one only when its excerpt really supports their question; when none does, say so briefly \
 and keep teaching without the book.
+- When one excerpt really helps, call `show_material` with that exact `section_id`: the original \
+English page appears scrollable beside the fox (the child sees only its top) and you keep teaching \
+actively in Swedish. Never invent an ID or URL; teach from the quoted visible words that come back.
 
 Memory
 - At natural milestones, and always when the session ends, call `save_note` with the topic, what \

@@ -109,6 +109,68 @@ def normalize_section_id(value: str) -> str:
     return candidate
 
 
+# -- process-lazy store for the voice tool ------------------------------------
+#
+# The HTTP routes use a store built once in ``web.create_app``; the tutor tool
+# needs the same resolution without HTTP. This singleton honours the same
+# environment overrides (``TUTOR_MATERIALS_DIR`` / ``TUTOR_MATERIALS_BOOKS`` /
+# ``TUTOR_MATERIAL_CACHE``), builds nothing until the first section is shown,
+# and keys the cached store on those overrides so a changed configuration
+# loads its own store. Blocking work (resolver enumeration, EPUB packaging)
+# stays in a worker thread via the caller (the agent wraps it in
+# ``asyncio.to_thread``); nothing here touches the event loop.
+
+_SHOW_STATE_LOCK = threading.Lock()
+_show_store: "SectionPackageStore | None" = None
+_show_key: tuple[str, str, str] | None = None
+
+
+def _show_env_key(env: dict[str, str]) -> tuple[str, str, str]:
+    return (
+        env.get("TUTOR_MATERIALS_DIR", ""),
+        env.get("TUTOR_MATERIALS_BOOKS", ""),
+        env.get("TUTOR_MATERIAL_CACHE", ""),
+    )
+
+
+def material_store_for_process(env: dict[str, str] | None = None) -> "SectionPackageStore":
+    """The process-wide package store for the voice tool, honouring serving env."""
+    source = dict(os.environ) if env is None else dict(env)
+    key = _show_env_key(source)
+    global _show_store, _show_key
+    with _SHOW_STATE_LOCK:
+        if _show_store is not None and _show_key == key:
+            return _show_store
+        store = SectionPackageStore.from_env(source)
+        _show_store, _show_key = store, key
+        return store
+
+
+def reset_material_store() -> None:
+    """Forget the process store: tests, or an operator switching the corpus."""
+    global _show_store, _show_key
+    with _SHOW_STATE_LOCK:
+        _show_store, _show_key = None, None
+
+
+def load_material_display(
+    section_id: str, env: dict[str, str] | None = None
+) -> dict[str, Any]:
+    """Resolve one exact section ID to curated display metadata. Blocking.
+
+    Reuses the reviewed package build and ``section_metadata`` contract:
+    ``visible_text`` of the whole rendered scope (audited hidden
+    teacher/solution subtrees excluded), never ``owned_text`` or passage
+    spans. Raises :class:`UnknownSection` for malformed/unknown IDs,
+    :class:`CorpusUnavailable` when the pinned EPUBs are absent, and
+    :class:`PackageUnavailable` when the section cannot be packaged.
+    """
+    key = normalize_section_id(section_id)
+    store = material_store_for_process(env)
+    package = store.package(key)
+    return section_metadata(package, f"/materials/sections/{key}/index.html")
+
+
 def _inline_style_hashes(index_html: str) -> list[str]:
     """SHA-256 hashes of the package page's inline style blocks, for CSP."""
     hashes: list[str] = []
