@@ -9,8 +9,12 @@
  *
  * Parent -> frame (postMessage):  {ot:'patch', html}  {ot:'point', id|null}
  *                                  {ot:'reveal', id}   {ot:'restore', state}
+ *                                  {ot:'hello'}         (the frame posts its ready message again:
+ *                                    at once when it is already ready, otherwise when it becomes ready)
  * Frame -> parent:                 {ot:'ready', fontPx, issues, w, h}
- *                                  {ot:'patched', issues}
+ *                                  {ot:'patched', issues}   (only issues new since the previous
+ *                                    ready/patched report; also posted at once when point/reveal
+ *                                    name an id that does not exist)
  *                                  {ot:'answer', id, value}   (child pressed Skicka / chose)
  *                                  {ot:'input', id, value}    (draft text, for keeping state)
  * The same calls exist as window.ot.patch / point / reveal / restore.
@@ -50,7 +54,21 @@
   function issue(kind, msg, el) {
     var item = { kind: kind, msg: msg };
     if (el) item.where = describe(el);
-    ot.issues.push(item);
+    // the same problem is only reported once, however often it re-triggers
+    var dup = ot.issues.some(function (i) { return i.kind === item.kind && i.msg === item.msg && i.where === item.where; });
+    if (!dup) ot.issues.push(item);
+    return item;
+  }
+  // Issues since the previous ready/patched report; posts them as {ot:'patched', issues}.
+  // force makes sure one issue is included even when it was already reported before.
+  var reported = 0;
+  function flushPatched(force) {
+    var fresh = ot.issues.slice(reported);
+    reported = ot.issues.length;
+    if (force && !fresh.length) fresh = [force];
+    var msg = { ot: 'patched', issues: fresh };
+    post(msg);
+    return fresh;
   }
   function post(msg) {
     try { if (window.parent && window.parent !== window) window.parent.postMessage(msg, '*'); } catch (e) { /* detached */ }
@@ -658,6 +676,9 @@
     // ---- ot-graph: coordinate system with JSXGraph
     define('ot-graph', class extends Visual {
       draw(w, h, f) { drawGraph(this, w, h, f); }
+      disconnectedCallback() {
+        if (this._board) { try { JXG.JSXGraph.freeBoard(this._board); } catch (e) { /* gone */ } this._board = null; }
+      }
       pointAt(child) { return graphPoint(this, child); }
       flashChild(child) { return graphFlash(this, child); }
     });
@@ -665,6 +686,9 @@
     // ---- ot-chart: Chart.js from a plain <table>
     define('ot-chart', class extends Visual {
       draw(w, h, f) { drawChart(this, w, h, f); }
+      disconnectedCallback() {
+        if (this._chart) { try { this._chart.destroy(); } catch (e) { /* gone */ } this._chart = null; }
+      }
     });
 
     // ---- ot-map: vector map (d3-geo + Natural Earth / historical-basemaps)
@@ -1265,8 +1289,7 @@
     var d = document.createElement('div');
     d.style.cssText = 'position:absolute;left:' + (p.x - 1.4 * f) + 'px;top:' + (p.y - 1.4 * f) + 'px;width:' + 2.8 * f + 'px;height:' + 2.8 * f + 'px;border-radius:50%;background:rgba(167,139,250,.35);pointer-events:none';
     host.layer().appendChild(d);
-    var a = d.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 1600, easing: 'ease-out' });
-    a.onfinish = function () { d.remove(); };
+    animEnd(d.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 1600, easing: 'ease-out' }), 1600, function () { d.remove(); });
   }
 
   // ---------------------------------------------------------------- chart
@@ -1863,6 +1886,14 @@
     return { left: x0, top: y0, width: x1 - x0, height: y1 - y0 };
   }
   // A soft violet glow over what changed, fading out. Never a redraw of the page.
+  // Web Animations never finish in a hidden pane (or a throttled background tab):
+  // the timer makes sure the end state is always reached.
+  function animEnd(anim, ms, fn) {
+    var done = false;
+    function fin() { if (done) return; done = true; try { fn(); } catch (e) { /* ignore */ } }
+    if (anim) { try { anim.onfinish = fin; } catch (e) { /* no WAAPI */ } }
+    setTimeout(fin, (ms || 500) + 800);
+  }
   function flash(el) {
     if (!el) return;
     var target = el._view || el;
@@ -1879,8 +1910,8 @@
     d.style.cssText = 'position:fixed;pointer-events:none;border-radius:' + 0.45 * f + 'px;background:rgba(167,139,250,0.15);box-shadow:0 0 0 ' + 0.2 * f + 'px rgba(167,139,250,0.3);z-index:10;' +
       'left:' + (r.left - 0.25 * f) + 'px;top:' + (r.top - 0.15 * f) + 'px;width:' + (r.width + 0.5 * f) + 'px;height:' + (r.height + 0.3 * f) + 'px';
     document.body.appendChild(d);
-    var anim = d.animate([{ opacity: 1 }, { opacity: 1, offset: 0.25 }, { opacity: 0 }], { duration: reducedMotion() ? 1400 : 2000, easing: 'ease-out' });
-    anim.onfinish = function () { d.remove(); };
+    var dur = reducedMotion() ? 1400 : 2000;
+    animEnd(d.animate([{ opacity: 1 }, { opacity: 1, offset: 0.25 }, { opacity: 0 }], { duration: dur, easing: 'ease-out' }), dur, function () { d.remove(); });
   }
   function fadeIn(el, from) {
     if (reducedMotion() || !el.animate) return;
@@ -1911,7 +1942,7 @@
     if (unpoint) { unpoint(); unpoint = null; }
     if (!id) return true;
     var el = document.getElementById(id);
-    if (!el) { issue('point', 'nothing has id "' + id + '"'); return false; }
+    if (!el) { flushPatched(issue('point', 'nothing has id "' + id + '"')); return false; }
     var host = el.parentElement && el.parentElement.closest('ot-graph, ot-map, ot-numberline, ot-image');
     if (host && host.pointAt && getComputedStyle(el).display === 'none') { unpoint = host.pointAt(el); return true; }
     var target = el._view || el;
@@ -1922,7 +1953,7 @@
 
   ot.reveal = function (id) {
     var el = document.getElementById(id);
-    if (!el) { issue('reveal', 'nothing has id "' + id + '"'); return false; }
+    if (!el) { flushPatched(issue('reveal', 'nothing has id "' + id + '"')); return false; }
     var shown = el;
     if (el.hasAttribute('later')) { el.removeAttribute('later'); fadeIn(el, 0); }
     else if (el.reveal) { shown = el.reveal() || el; fadeIn(shown, 0); }
@@ -1932,72 +1963,90 @@
     return true;
   };
 
-  ot.patch = function (html) {
-    var before = ot.issues.length;
-    var tpl = document.createElement('template');
-    tpl.innerHTML = String(html || '');
-    var ops = $$('ot-patch', tpl.content).filter(function (p) { return !p.parentElement || !p.parentElement.closest('ot-patch'); });
-    if (!ops.length) issue('patch', 'no <ot-patch> found');
-    var changed = [], replaced = [], removed = [], reveals = [];
-    ops.forEach(function (op) {
-      var id = op.getAttribute('target');
-      var action = (op.getAttribute('do') || 'replace').toLowerCase();
-      var target = id && document.getElementById(id);
-      if (!target) { issue('patch', 'no element with id "' + id + '"'); return; }
-      var nodes = Array.prototype.slice.call(op.childNodes);
-      var els = nodes.filter(function (n) { return n.nodeType === 1; });
-      if (action === 'reveal') { reveals.push(id); return; }
-      if (action === 'remove') { removed.push(target); return; }
-      if (action === 'replace') {
-        if (els.length === 1 && !els[0].id) els[0].id = id;
-        if (!els.length) {
-          // text-only replacement keeps the element and swaps its content
-          target.textContent = '';
-          nodes.forEach(function (n) { target.appendChild(n); });
-          replaced.push(target);
-        } else {
-          target.replaceWith.apply(target, nodes);
-          replaced = replaced.concat(els);
-        }
-      } else if (action === 'append' || action === 'prepend' || action === 'before' || action === 'after') {
-        target[action].apply(target, nodes);
-        changed = changed.concat(els.length ? els : [target]);
-      } else if (action === 'text') {
-        target.textContent = op.textContent; replaced.push(target);
-      } else issue('patch', 'unknown do="' + action + '"');
-    });
-    var touched = changed.concat(replaced);
-    // maths in new content, except inside components that read their own raw text
-    var own = MATH_SKIP.filter(function (t) { return t.indexOf('ot-') === 0; }).join(',');
-    touched.forEach(function (el) { if (el.isConnected && !el.closest(own)) renderMath(el); });
-    // components whose data children changed rebuild their view
-    touched.forEach(function (el) {
-      var host = el.parentElement && el.parentElement.closest('ot-steps, ot-timeline');
-      if (host && host.refresh) host.refresh();
-    });
-    lint();
-    settle(true);
-    touched.forEach(function (el) {
-      if (!el.isConnected) return;
-      fadeIn(el, replaced.indexOf(el) >= 0 ? 0.35 : 0);
-      flash(el);
-    });
-    reveals.forEach(function (id) { ot.reveal(id); });
-    removed.forEach(function (el) {
-      if (reducedMotion() || !el.animate) { el.remove(); settle(true); return; }
-      var a = el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 350, easing: 'ease-in', fill: 'forwards' });
-      a.onfinish = function () { el.remove(); settle(true); };
-    });
-    var fresh = ot.issues.slice(before);
-    post({ ot: 'patched', issues: fresh });
-    return fresh;
+  ot.patch = async function (html) {
+    try {
+      var tpl = document.createElement('template');
+      tpl.innerHTML = String(html || '');
+      var ops = $$('ot-patch', tpl.content).filter(function (p) { return !p.parentElement || !p.parentElement.closest('ot-patch'); });
+      if (!ops.length) issue('patch', 'no <ot-patch> found');
+      var changed = [], replaced = [], removed = [], reveals = [];
+      ops.forEach(function (op) {
+        var id = op.getAttribute('target');
+        var action = (op.getAttribute('do') || 'replace').toLowerCase();
+        var target = id && document.getElementById(id);
+        if (!target) { issue('patch', 'no element with id "' + id + '"'); return; }
+        var nodes = Array.prototype.slice.call(op.childNodes);
+        var els = nodes.filter(function (n) { return n.nodeType === 1; });
+        if (action === 'reveal') { reveals.push(id); return; }
+        if (action === 'remove') { removed.push(target); return; }
+        if (action === 'replace') {
+          // the replacement keeps the target's id, whatever id it arrived with,
+          // so later patches, points and reveals still find the element
+          if (els.length === 1) els[0].id = id;
+          if (!els.length) {
+            // text-only replacement keeps the element and swaps its content
+            target.textContent = '';
+            nodes.forEach(function (n) { target.appendChild(n); });
+            replaced.push(target);
+          } else {
+            target.replaceWith.apply(target, nodes);
+            replaced = replaced.concat(els);
+          }
+        } else if (action === 'append' || action === 'prepend' || action === 'before' || action === 'after') {
+          target[action].apply(target, nodes);
+          changed = changed.concat(els.length ? els : [target]);
+        } else if (action === 'text') {
+          target.textContent = op.textContent; replaced.push(target);
+        } else issue('patch', 'unknown do="' + action + '"');
+      });
+      // typed answers survive a patch that replaced their element:
+      // drafts go back onto every input that still exists by id
+      Object.keys(drafts).forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el && el._restore) { try { el._restore(drafts[id]); } catch (e) { /* keep the text in drafts */ } }
+      });
+      // a map added by this patch draws from its own data before anything is reported or shown
+      var freshMaps = $$('ot-map', page).filter(function (m) { return m._data && !m._countries; });
+      if (freshMaps.length) {
+        await withTimeout(Promise.all(freshMaps.map(function (m) { return m._data; })), 10000);
+        freshMaps.forEach(function (m) { if (m.isConnected) m.redraw(); });
+      }
+      var touched = changed.concat(replaced);
+      // maths in new content, except inside components that read their own raw text
+      var own = MATH_SKIP.filter(function (t) { return t.indexOf('ot-') === 0; }).join(',');
+      touched.forEach(function (el) { if (el.isConnected && !el.closest(own)) renderMath(el); });
+      // components whose data children changed rebuild their view
+      touched.forEach(function (el) {
+        var host = el.parentElement && el.parentElement.closest('ot-steps, ot-timeline');
+        if (host && host.refresh) host.refresh();
+      });
+      lint();
+      settle(true);
+      touched.forEach(function (el) {
+        if (!el.isConnected) return;
+        fadeIn(el, replaced.indexOf(el) >= 0 ? 0.35 : 0);
+        flash(el);
+      });
+      reveals.forEach(function (id) { ot.reveal(id); });
+      removed.forEach(function (el) {
+        if (reducedMotion() || !el.animate) { el.remove(); settle(true); return; }
+        animEnd(el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 350, easing: 'ease-in', fill: 'forwards' }), 350, function () { el.remove(); settle(true); });
+      });
+      return flushPatched();
+    } catch (e) {
+      issue('patch', 'patch failed: ' + (e && e.message || String(e)));
+      return flushPatched();
+    }
   };
 
   // ---------------------------------------------------------------- boot
+  var readyInfo = null; // the last ready message, re-sent on {ot:'hello'}
+  function sendReady() { if (readyInfo) post(readyInfo); }
   function onMessage(e) {
     if (e.source !== window.parent) return;
     var m = e.data;
     if (!m || typeof m !== 'object' || typeof m.ot !== 'string') return;
+    if (m.ot === 'hello') { ot.ready.then(sendReady); return; }
     ot.ready.then(function () {
       if (m.ot === 'patch') ot.patch(m.html);
       else if (m.ot === 'point') ot.point(m.id || null);
@@ -2007,29 +2056,42 @@
   }
   window.addEventListener('message', onMessage);
 
+  var BOOT_BUDGET = 10000; // one overall deadline: the page is always shown after 10 s
   async function boot() {
     page = document.getElementById('page') || document.body;
     var started = performance.now();
-    await withTimeout(Promise.all(needs(page).map(lib)), 12000);
+    var slow = [];
+    // Wait for a stage only while budget is left; past the deadline the page is
+    // shown with whatever arrived, and the issue names what was still loading.
+    async function stage(label, p) {
+      var left = BOOT_BUDGET - (performance.now() - started);
+      if (left <= 0) { slow.push(label); return; }
+      var WAITING = {};
+      var r = await Promise.race([p, timeout(left).then(function () { return WAITING; })]);
+      if (r === WAITING) slow.push(label);
+    }
+    await stage('libraries', Promise.all(needs(page).map(lib)));
     defineAll();
     renderMath(page);
     var waits = [];
     $$('ot-map', page).forEach(function (m) { if (m._data) waits.push(m._data); });
     if (document.fonts && document.fonts.ready) waits.push(document.fonts.ready);
-    await withTimeout(Promise.all(waits), 10000);
+    await stage('map data and fonts', Promise.all(waits));
     lint();
     settle(false);
     var imgs = $$('ot-image', page).map(function (i) { return i._loaded; }).concat($$('img', page).filter(function (i) { return !i.closest('ot-image') && !i.complete; }).map(function (i) {
       return new Promise(function (r) { i.onload = i.onerror = r; });
     }));
-    await withTimeout(Promise.all(imgs), 8000);
+    await stage('images', Promise.all(imgs));
     drawVisuals();
+    if (slow.length) issue('slow', 'still loading after 10 s: ' + slow.join(', '));
     booted = true;
     document.documentElement.classList.remove('ot-boot');
     document.documentElement.setAttribute('data-ot-ready', '1');
-    var info = { ot: 'ready', fontPx: ot.fontPx, issues: ot.issues.slice(), w: innerWidth, h: innerHeight, ms: Math.round(performance.now() - started) };
-    post(info);
-    return info;
+    readyInfo = { ot: 'ready', fontPx: ot.fontPx, issues: ot.issues.slice(), w: innerWidth, h: innerHeight, ms: Math.round(performance.now() - started) };
+    reported = ot.issues.length;
+    post(readyInfo);
+    return readyInfo;
   }
   var resizeTimer = null;
   window.addEventListener('resize', function () {
@@ -2039,7 +2101,20 @@
   });
 
   ot.ready = new Promise(function (resolve) {
-    function go() { boot().then(resolve, function (e) { issue('boot', String(e && e.stack || e)); document.documentElement.classList.remove('ot-boot'); resolve({ ot: 'ready', issues: ot.issues }); }); }
+    function go() {
+      boot().then(resolve, function (e) {
+        // a failed boot still shows the page and still reports ready, with the failure as an issue
+        issue('boot', String(e && e.stack || e));
+        try { if (page) settle(false); } catch (e2) { /* show what we have */ }
+        try { drawVisuals(); } catch (e3) { /* show what we have */ }
+        document.documentElement.classList.remove('ot-boot');
+        document.documentElement.setAttribute('data-ot-ready', '1');
+        readyInfo = { ot: 'ready', fontPx: ot.fontPx, issues: ot.issues.slice(), w: innerWidth, h: innerHeight, ms: -1 };
+        reported = ot.issues.length;
+        post(readyInfo);
+        resolve(readyInfo);
+      });
+    }
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', go); else go();
   });
 })();
