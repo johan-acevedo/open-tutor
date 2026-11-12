@@ -142,3 +142,21 @@ What the outputs show:
   the view (Reykjavik, before `norden` included Iceland). The lint list catches these, so the Screen agent can fix or
   split the page before it is shown.
 - Timings vary between runs by a few seconds; one run each, so treat them as indicative.
+
+## Frame protocol notes (2026-11-12 shell fixes)
+
+Full reference at the top of `shell/shell.js`. What the parent can rely on:
+- `{ot:'hello'}` (parent → frame) makes the shell post its `ready` message again: at once when it is
+already ready, otherwise as soon as it becomes ready. For a parent that attached its listener late.
+- A failed boot still shows the page and still posts `ready`, with a `boot` issue describing the failure.
+- One overall boot deadline of 10 s: past it the page is shown with whatever arrived, and a `slow` issue
+names what was still loading (`libraries`, `map data and fonts` and/or `images`).
+- `patched.issues` holds only issues new since the previous `ready`/`patched` report: each distinct problem
+(kind + message + element) is reported once, however often later patches re-trigger it.
+- `point`/`reveal` to an id that does not exist posts `{ot:'patched', issues:[…]}` at once, with a
+"no element with id" issue, instead of sending nothing.
+- A patch that itself throws still posts `patched`, with the error as its issue.
+- A patch keeps typed answers: drafts go back onto every input that still exists by id. A `replace` keeps
+the target's id whatever id the replacement arrived with. Replaced graphs and charts free their
+JSXGraph board / Chart.js instance, and a map added by a patch draws from its own data before anything
+is reported or shown.
