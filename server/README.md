@@ -33,7 +33,17 @@ Go serves Muse Spark 1.3 Contributor only on its OpenAI Responses endpoint, `htt
 
 The Screen development fox uses Muse Spark 1.3 Contributor through OpenCode Go: `TUTOR_LLM=go` and `TUTOR_LLM_MODEL=muse-spark-1.3-contributor`. It uses the Responses API with the existing `OPENCODE_GO_API_KEY` and default `minimal` reasoning. The legacy `gemini-dev` override was removed from the running development configuration on 2026-11-12.
 
-The Screen development instance uses Deepgram Flux TTS with the following settings:
+The Screen development instance uses ZONOS3-Mini on pc2014 with the Swedish embedding voice:
+
+```sh
+TUTOR_TTS=zonos
+TUTOR_TTS_BASE_URL=https://pc2014.tail2e1c4e.ts.net:8448
+TUTOR_TTS_VOICE=default_6c74e01948232c55
+```
+
+`open_tutor/zonos_tts.py` posts complete sentences to `/v2/generate` with explicit embedding mode and decodes the returned WAV into 44.1 kHz mono PCM. LiveKit's standard sentence adapter connects it to streamed LLM text and handles playback cancellation. Each sentence waits for HTTP synthesis before playback; this endpoint does not stream generated audio. It requires no paid-provider API key. The direct provider probe and a real browser fox session both produced audio on 2026-11-12.
+
+Deepgram Flux remains selectable with these settings:
 
 ```sh
 TUTOR_TTS=deepgram
@@ -71,7 +81,7 @@ The Screen development worker enables this setting. Set it to `0` and restart th
 
 ## Local speech for pre-rendering
 
-VoxCPM2 is available over the tailnet at <https://johan-4070.tail2e1c4e.ts.net:8447>. It provides an unmetered HTTP synthesis endpoint. The app does not call it automatically; Deepgram remains the development fox's live voice path. A LiveKit adapter is still needed to use VoxCPM2 for live sessions.
+VoxCPM2 is available over the tailnet at <https://johan-4070.tail2e1c4e.ts.net:8447>. It provides an unmetered HTTP synthesis endpoint. The app does not call it automatically; ZONOS3 on pc2014 is the development fox's live voice path. A LiveKit adapter is still needed to use VoxCPM2 for live sessions.
 
 Use `warm-voice-v2` explicitly for Räven. Its anchor supports Swedish and English. `warm-voice-v1` is English, and `warm-voice-v3` is a clone anchor. The health response currently reports `warm-voice-v1` as the default.
 
@@ -111,7 +121,7 @@ ZONOS3-Mini has two interchangeable CPU endpoints:
 | johan-4070 | <https://johan-4070.tail2e1c4e.ts.net:8448> |
 | pc2014 | <https://pc2014.tail2e1c4e.ts.net:8448> |
 
-Both expose the same API and speaker ids. Change only the base URL to use the other host. The johan-4070 instance proxies port 1919. Deepgram remains the live fox voice. ZONOS3-Mini is available for pre-rendered lines or future fallback integration; the application does not invoke it automatically.
+Both expose the same API and speaker ids. Change only `TUTOR_TTS_BASE_URL` to use the other host. The johan-4070 instance proxies port 1919. The development fox selects pc2014 through the ZONOS3 LiveKit adapter. Automatic provider failover is not implemented.
 
 `GET /v2/speakers` was checked on both endpoints from dell5500 on 2026-11-12 and returned these embedding voices:
 
@@ -145,7 +155,8 @@ Service: `zonos3-tts.service`, enabled at boot. Source/build: `~/zonos3` on joha
 |---|---|
 | `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | LiveKit Cloud project (required) |
 | `SONIOX_API_KEY` | Speech recognition, Swedish hint |
-| `TUTOR_TTS` | `elevenlabs` (default), `cartesia`, or `deepgram` |
+| `TUTOR_TTS` | `elevenlabs` (default), `cartesia`, `deepgram`, or `zonos` |
+| `TUTOR_TTS_BASE_URL` | ZONOS3 base URL, default `https://pc2014.tail2e1c4e.ts.net:8448` |
 | `TUTOR_TTS_EXPRESSIVITY` | Deepgram expressive range, integer `-2` to `2`, default `1` |
 | `TUTOR_TTS_VOICE`, `TUTOR_TTS_MODEL` | Voice id and model for that provider. ElevenLabs default: `eleven_v4_turbo` with Bella (`hpp4J3VqNfWAUOO0d1Us`), see [the voice route](#the-voice-route). `eleven_v3*`/`eleven_v4*` models use the text-to-dialogue adapter; earlier models such as `eleven_flash_v2_5` use LiveKit's plugin |
 | `ELEVENLABS_API_KEY` / `CARTESIA_API_KEY` / `DEEPGRAM_API_KEY` | Selected voice provider key |

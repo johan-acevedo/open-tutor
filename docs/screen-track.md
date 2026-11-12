@@ -1,6 +1,6 @@
 # Browser-owned Screen track
 
-Status: Screen fixes reviewed; Deepgram Swedish speech verified in the development app, 2026-11-12.
+Status: Screen fixes reviewed; Muse fox with local pc2014 ZONOS3 speech verified in development, 2026-11-12.
 Lead: this thread. Workers receive focused briefs; the lead owns integration and decisions.
 
 ## Source of truth
@@ -260,3 +260,5 @@ Johan also supplied ZONOS3-Mini on johan-4070 port 8448 as a second local speech
 On 2026-11-12, Johan authorized enabling LiveKit adaptive interruption handling in development. `TUTOR_ADAPTIVE_INTERRUPTION=1` now selects the hosted classifier on `open-tutor-screen-dev-agent.service`; the application default remains VAD-only. Soniox, Muse, Deepgram, and the endpointing delays are unchanged. A fictional learner joined through the served development API and sent prerecorded Swedish speech over the fox's greeting. The session recorded 12 classifier requests and an adaptive interruption decision, received voiced tutor audio, and logged no fallback to VAD. This confirms live integration, not Swedish child or backchannel accuracy. Temporary diagnostic logging was restored to its previous settings. All 190 server tests pass. The SDK falls back to VAD if inference fails or the monthly allowance runs out. Production is unchanged.
 
 A third local endpoint is available on pc2014 port 8448, running ZONOS3-Mini on CPU with the same API and speaker ids. A read-only discovery request confirmed both expected embedding voices. It can replace the johan-4070 ZONOS3 base URL without changing the payload. Its experimental Vulkan build remains pending; no synthesis or backend changes were performed for this check.
+
+Johan subsequently authorized using pc2014 ZONOS3 as the fox's active speech provider. A batch LiveKit adapter now posts each sentence with the explicit Swedish voice and embedding mode, validates PCM16 mono 44.1 kHz WAV, and sends decoded PCM to LiveKit. The framework's sentence adapter bridges streamed LLM text and cancellation. A real endpoint request, the configured LiveKit provider probe, and non-silent browser playback with captions all passed. Runtime logs confirm Muse Spark 1.3 Contributor through Go plus ZONOS3 speech. The full server suite passes 218 tests, including 28 focused ZONOS3 checks. Deepgram remains selectable; automatic provider failover is not implemented. Production is unchanged.

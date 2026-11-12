@@ -62,6 +62,7 @@ from .deepgram_tts import DeepgramFluxTTS, parse_expressivity
 from .debug_log import DebugLog, clear_active, record_active, set_active
 from .dialogue_tts import DialogueTTS, is_dialogue_model
 from .tutor_llm import build_llm, warm_up
+from .zonos_tts import ZonosTTS
 from .speech import speakable_stream, unspoken_stream
 
 log = logging.getLogger("open-tutor")
@@ -106,6 +107,11 @@ def build_stt() -> soniox.STT:
 
 def build_tts():
     provider = os.environ.get("TUTOR_TTS", "elevenlabs")
+    if provider == "zonos":
+        return ZonosTTS(
+            base_url=os.environ.get("TUTOR_TTS_BASE_URL", "https://pc2014.tail2e1c4e.ts.net:8448"),
+            voice=os.environ.get("TUTOR_TTS_VOICE", "default_6c74e01948232c55"),
+        )
     if provider == "cartesia":
         return cartesia.TTS(
             model=os.environ.get("TUTOR_TTS_MODEL", "sonic-3"),
