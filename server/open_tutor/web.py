@@ -21,6 +21,7 @@ from livekit import api
 from pydantic import BaseModel, Field
 
 from .config import AGENT_NAME
+from .screen_gateway import register_screen_routes
 
 WEB_DIST = Path(os.environ.get("TUTOR_WEB_DIST", Path(__file__).resolve().parents[2] / "web" / "dist"))
 TOKEN_TTL = timedelta(hours=3)
@@ -46,9 +47,15 @@ class Learner(BaseModel):
     notes: list[NoteIn] = Field(default_factory=list, max_length=5)
 
 
+class ScreenCapability(BaseModel):
+    version: int = Field(ge=1, le=1)
+    lessonId: str = Field(min_length=8, max_length=80)
+
+
 class SessionRequest(BaseModel):
     learner: Learner
     board: BoardInfo = BoardInfo()
+    screen: ScreenCapability | None = None
 
 
 class SessionLimiter:
@@ -92,6 +99,8 @@ def create_app(environ: dict[str, str] | None = None) -> FastAPI:
     async def health() -> dict[str, Any]:
         return {"ok": True, "livekit": bool(env.get("LIVEKIT_URL"))}
 
+    register_screen_routes(app, env)
+
     @app.post("/api/session")
     async def create_session(body: SessionRequest, request: Request) -> dict[str, str]:
         if access_code and not secrets.compare_digest(request.headers.get("x-tutor-code", ""), access_code):
@@ -104,7 +113,8 @@ def create_app(environ: dict[str, str] | None = None) -> FastAPI:
         room = "tutor-" + secrets.token_urlsafe(9)
         identity = "learner-" + secrets.token_hex(4)
         metadata = json.dumps({"learner": body.learner.model_dump(exclude_none=True),
-                               "board": body.board.model_dump()}, ensure_ascii=False)
+                               "board": body.board.model_dump(),
+                               **({"screen": body.screen.model_dump()} if body.screen else {})}, ensure_ascii=False)
         token = (
             api.AccessToken(env["LIVEKIT_API_KEY"], env["LIVEKIT_API_SECRET"])
             .with_identity(identity)

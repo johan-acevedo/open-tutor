@@ -416,6 +416,9 @@
 .ot-phone.ot-keyboard .ot-homework-tray {
   top: 0;
 }
+.ot-phone .ot-main-screen {
+  --companion-h: 112px;
+}
 @media (orientation: landscape) {
   .ot-phone .ot-main {
     --companion-w: min(31vw, 260px);

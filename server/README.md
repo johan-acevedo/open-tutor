@@ -31,6 +31,30 @@ Go serves Muse Spark 1.3 Contributor only on its OpenAI Responses endpoint, `htt
 
 ## The voice route
 
+The Screen development fox uses Muse Spark 1.3 Contributor through OpenCode Go: `TUTOR_LLM=go` and `TUTOR_LLM_MODEL=muse-spark-1.3-contributor`. It uses the Responses API with the existing `OPENCODE_GO_API_KEY` and default `minimal` reasoning. The legacy `gemini-dev` override was removed from the running development configuration on 2026-11-12.
+
+ZONOS3-Mini remains selectable on pc2014 with the Swedish embedding voice:
+
+```sh
+TUTOR_TTS=zonos
+TUTOR_TTS_BASE_URL=https://pc2014.tail2e1c4e.ts.net:8448
+TUTOR_TTS_VOICE=default_6c74e01948232c55
+```
+
+`open_tutor/zonos_tts.py` posts complete sentences to `/v2/generate` with explicit embedding mode and decodes the returned WAV into 44.1 kHz mono PCM. LiveKit's standard sentence adapter connects it to streamed LLM text and handles playback cancellation. Each sentence waits for HTTP synthesis before playback; this endpoint does not stream generated audio. It requires no paid-provider API key. The direct provider probe and a real browser fox session both produced audio on 2026-11-12.
+
+The Screen development instance uses Deepgram Flux for live speech with these settings:
+
+```sh
+TUTOR_TTS=deepgram
+TUTOR_TTS_MODEL=flux-ludvig-sv
+TUTOR_TTS_EXPRESSIVITY=1
+```
+
+`DEEPGRAM_API_KEY` comes from the existing Infisical `homelab` project. The key stays on the server. The route streams linear16 PCM through LiveKit's `TTSv2` at `/v2/speak`. A small adapter adds `expressivity` to the streaming and batch query parameters because plugin 1.8.10 does not expose that control. See the [Deepgram voice catalog](https://developers.deepgram.com/docs/flux-tts/voices) and [voice control reference](https://developers.deepgram.com/reference/speak/v-2/audio/generate).
+
+The default provider remains selectable as before:
+
 ElevenLabs **Eleven v4 Turbo** (`eleven_v4_turbo`, released September 2026), voice **Bella - Professional, Bright, Warm** (`hpp4J3VqNfWAUOO0d1Us`, an ElevenLabs premade voice), Swedish (`language_code=sv`). ElevenLabs recommends v4 Turbo for real-time conversation and `eleven_v4` for produced narration.
 
 v4 is served only through text-to-dialogue. `open_tutor/dialogue_tts.py` speaks the documented single-context socket `wss://api.elevenlabs.io/v1/text-to-dialogue/stream-input`: one registered voice, one socket per reply, each sentence sent and flushed, `keep_alive` while the reply waits for text, `close_socket` at the end. Output is `pcm_24000` with `sync_alignment=true`, so captions follow the audio word by word. An interruption cancels the stream and closes its socket, so an interrupted reply stops at once.
@@ -47,15 +71,99 @@ Checked against the real API on 2026-11-04 with fictional Swedish text:
 
 The worker logs the route at the start of each session (`tutor TTS route elevenlabs /text-to-dialogue/stream-input model eleven_v4_turbo voice … lang sv`). It also logs the time to first audio of each reply, never the text.
 
+## Adaptive interruption handling
+
+Set `TUTOR_ADAPTIVE_INTERRUPTION=1` to let LiveKit classify overlapping speech before stopping the tutor. The default remains VAD-based interruption detection. This setting keeps the existing STT, LLM, TTS, and endpointing delays.
+
+The classifier uses LiveKit Inference with the project's existing `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET`. Self-hosted workers receive a monthly development allowance. If the allowance runs out or inference fails, the SDK falls back to VAD-based interruption detection. See [LiveKit's allowance and fallback rules](https://docs.livekit.io/deploy/admin/quotas-and-limits/#adaptive-interruption-handling).
+
+The Screen development worker enables this setting. Set it to `0` and restart the worker to return to VAD-only handling.
+
+## Local speech for pre-rendering
+
+VoxCPM2 is available over the tailnet at <https://johan-4070.tail2e1c4e.ts.net:8447>. It provides an unmetered HTTP synthesis endpoint. The app does not call it automatically; Deepgram is the development fox's live voice path. A LiveKit adapter is still needed to use VoxCPM2 for live sessions.
+
+Use `warm-voice-v2` explicitly for Räven. Its anchor supports Swedish and English. `warm-voice-v1` is English, and `warm-voice-v3` is a clone anchor. The health response currently reports `warm-voice-v1` as the default.
+
+| Request | Response |
+|---|---|
+| `GET /health` | Model, device, available voices, sample rate, and `busy` |
+| `POST /tts` with JSON `{ "text": "…", "voice": "warm-voice-v2" }` | Raw signed 16-bit little-endian PCM, 48 kHz mono. `Content-Type: audio/pcm`; sample rate in `X-Sample-Rate` |
+
+The operator's interface contract limits text to 2000 characters. Only one synthesis can run at a time. A concurrent request receives HTTP 409 and must wait before retrying.
+
+To generate and convert a short sample:
+
+```sh
+curl --fail-with-body --silent --show-error \
+  -H 'Content-Type: application/json' \
+  --data '{"text":"Hej! Jag heter Räven.","voice":"warm-voice-v2"}' \
+  https://johan-4070.tail2e1c4e.ts.net:8447/tts -o raven.pcm
+ffmpeg -f s16le -ar 48000 -ac 1 -i raven.pcm raven.wav
+```
+
+Check the HTTP status before treating the response as audio. The PCM response has no WAV header.
+
+The operator reports about 8.9 GB of GPU memory held on johan-4070. Check `nvidia-smi` before heavy GPU work, and do not run heavy ComfyUI renders alongside this service. To release the GPU:
+
+```sh
+ssh johan-4070 'systemctl --user stop voxcpm-tts'
+```
+
+Operator handoff: 2026-11-12, `scripts/serve_voxcpm.py` and `voxcpm-tts.service`. Boot startup and persistent Tailscale serving were confirmed by the operator. A read-only check from dell5500 on the same date returned `status: ok`, model `VoxCPM2`, device `cuda:0`, all three voices, 48000 Hz, and `busy: false`. No synthesis or GPU workload was started for that check. Recheck Swedish years and numbers by ear before using generated clips.
+
+### ZONOS3-Mini alternative
+
+ZONOS3-Mini has two endpoints with the same API and voices:
+
+| Host | Base URL |
+|---|---|
+| johan-4070 | <https://johan-4070.tail2e1c4e.ts.net:8448> |
+| pc2014 | <https://pc2014.tail2e1c4e.ts.net:8448> |
+
+Both expose the same API and speaker ids. Change only `TUTOR_TTS_BASE_URL` to use the other host. The johan-4070 instance proxies port 1919. The ZONOS3 LiveKit adapter can select either host; the development fox currently uses Deepgram. Automatic provider failover is not implemented.
+
+`GET /v2/speakers` was checked on both endpoints from dell5500 on 2026-11-12 and returned these embedding voices:
+
+| Label | Speaker id | Operator-described anchor |
+|---|---|---|
+| `raeven sv` | `default_6c74e01948232c55` | Swedish and English |
+| `warm en` | `default_138a887d96716b8a` | English |
+
+Always supply a voice and `speaker_mode: "embedding"`. The operator reports that omitting the voice produces silence. Omitting embedding mode selects reference mode and returns HTTP 400 because the reference encoder weights are not installed. The examples use the canonical id returned by speaker discovery; the operator also reports the shortcut `raeven-sv`.
+
+Native request:
+
+```sh
+curl --fail-with-body --silent --show-error \
+  -H 'Content-Type: application/json' \
+  --data '{"text":"Hej! Jag heter Räven.","speaker_embedding_id":"default_6c74e01948232c55","speaker_mode":"embedding","stream":false,"format":"wav"}' \
+  https://johan-4070.tail2e1c4e.ts.net:8448/v2/generate -o raven-zonos.wav
+```
+
+The OpenAI-compatible `/v1/audio/speech` endpoint accepts `model: "zonos3"`, `input`, `voice` set to the same speaker id, `speaker_mode: "embedding"`, and `response_format: "wav"`. Both return 16-bit WAV at 44.1 kHz according to the operator's contract. This differs from VoxCPM2's headerless 48 kHz PCM.
+
+On johan-4070, keep the managed ZONOS3 service on its CPU backend, batch 8. The operator verified correct Swedish output there and broken audio with this ggml CUDA build on the 4070 Ti SUPER. CPU operation adds no VRAM use and can coexist with VoxCPM2. The existing restriction on heavy ComfyUI renders still applies because VoxCPM2 remains GPU-resident.
+
+The pc2014 endpoint now runs Vulkan on the RX 6500 XT, according to Johan's latest 2026-11-12 handoff. It keeps the same tailnet URL and voice IDs. The earlier CPU-only constraint was superseded after `voice-demo-asr`, `voice-demo-llm`, `voice-demo`, and `ageofbot` were stopped and disabled with Johan's approval; `t3-call` was untouched. The operator reports a GPU baseline of about 17 MB, ZONOS3 residency of 1.35 GB, and about 2.6 GB headroom. Logs: `ssh pc2014 'journalctl --user -u zonos3-tts'`.
+
+Operator measurements: a solo request generated about 3.7 seconds of audio in 1.3 seconds (2.9× realtime). Eight simultaneous requests all returned HTTP 200 in 6–12 seconds each, with aggregate throughput about 2.75× realtime and stable VRAM. Whisper confirmed Swedish output from the served endpoint. These are operator results, not measurements repeated by this thread.
+
+The operator recommends this box for unmetered bulk synthesis, pre-rendering, and fallback because latency under concurrency is unsuitable for live conversation. Johan selected Deepgram for the development fox's live speech. ZONOS3 remains available through its batch adapter when explicitly selected. VoxCPM2 on johan-4070 remains available but has no application adapter. The previous CPU service and Vulkan capacity verdict are historical; do not infer the active backend from those earlier notes.
+
+Service: `zonos3-tts.service`, enabled at boot. Source/build: `~/zonos3` on johan-4070; voice embeddings: `~/zonos3/voices`. Logs: `ssh johan-4070 'journalctl --user -u zonos3-tts'`. The same endpoint serves the Studio UI. The operator reports optional delivery steering through `steer.gguf` and `/v2/controls`. No backend rebuild, synthesis, or listening check was performed when recording this handoff.
+
 ## Configuration
 
 | Variable | Purpose |
 |---|---|
 | `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | LiveKit Cloud project (required) |
 | `SONIOX_API_KEY` | Speech recognition, Swedish hint |
-| `TUTOR_TTS` | `elevenlabs` (default) or `cartesia` |
+| `TUTOR_TTS` | `elevenlabs` (default), `cartesia`, `deepgram`, or `zonos` |
+| `TUTOR_TTS_BASE_URL` | ZONOS3 base URL, default `https://pc2014.tail2e1c4e.ts.net:8448` |
+| `TUTOR_TTS_EXPRESSIVITY` | Deepgram expressive range, integer `-2` to `2`, default `1` |
 | `TUTOR_TTS_VOICE`, `TUTOR_TTS_MODEL` | Voice id and model for that provider. ElevenLabs default: `eleven_v4_turbo` with Bella (`hpp4J3VqNfWAUOO0d1Us`), see [the voice route](#the-voice-route). `eleven_v3*`/`eleven_v4*` models use the text-to-dialogue adapter; earlier models such as `eleven_flash_v2_5` use LiveKit's plugin |
-| `ELEVENLABS_API_KEY` / `CARTESIA_API_KEY` | Voice provider key |
+| `ELEVENLABS_API_KEY` / `CARTESIA_API_KEY` / `DEEPGRAM_API_KEY` | Selected voice provider key |
 | `TUTOR_LLM` | `go` (default): Muse Spark 1.3 Contributor (`muse-spark-1.3-contributor`) on OpenCode Go, Responses API over HTTP streaming, `OPENCODE_GO_API_KEY`. `gemini-dev` only reproduces the board/voice bug of the earlier development route (`GEMINI_API_KEY`); do not deploy it. There is no silent fallback. |
 | `OPENCODE_GO_API_KEY` | OpenCode Go API key (from the OpenCode console). Backend only |
 | `TUTOR_LLM_MODEL`, `TUTOR_LLM_BASE_URL`, `TUTOR_LLM_REASONING` | Override the route's model, endpoint or reasoning effort (Go default `minimal`) |
@@ -83,6 +191,12 @@ ThinkCentre's tailnet address, with public requests arriving through the Mini's
 Cloudflare tunnel. Health checks are exempt to preserve local monitoring.
 
 ## Family-testing debug trail
+
+The development worker on dell5500 enables this trail for experience iteration.
+Its private environment sets `TUTOR_DEBUG_LOG=1` and
+`TUTOR_DEBUG_LOG_DIR=/home/johan/.local/state/open-tutor-screen-dev/sessions`.
+This persists across development worker restarts. Cloud audio recording stays off;
+the application default and production configuration are unchanged.
 
 During authorised family testing, `TUTOR_DEBUG_LOG=1` in the worker environment
 writes one private directory per session (`TUTOR_DEBUG_LOG_DIR`, default

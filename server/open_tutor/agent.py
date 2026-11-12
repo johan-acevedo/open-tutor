@@ -33,6 +33,18 @@ from livekit.plugins import cartesia, elevenlabs, silero, soniox
 from pydantic import ValidationError
 
 from . import prompt
+from .screen_protocol import (
+    SCREEN_CONTEXT_GRACE,
+    SCREEN_INTENT_TIMEOUT,
+    SCREEN_OBSERVE_TIMEOUT,
+    SCREEN_RPC_TIMEOUT,
+    ScreenTracker,
+    build_intent_payload,
+    build_observe_payload,
+    parse_screen_meta,
+    summarize_screen_context,
+    validate_screen_event,
+)
 from .board import (
     HtmlItem,
     Ids,
@@ -42,15 +54,24 @@ from .board import (
     youtube_embed,
 )
 from .config import AGENT_NAME, DEFAULT_TTS_MODEL, DEFAULT_TTS_VOICE, env_float
+from .deepgram_tts import (
+    DEFAULT_EXPRESSIVITY as DEEPGRAM_DEFAULT_EXPRESSIVITY,
+)
+from .deepgram_tts import DEFAULT_MODEL as DEEPGRAM_DEFAULT_MODEL
+from .deepgram_tts import DeepgramFluxTTS, parse_expressivity
 from .debug_log import DebugLog, clear_active, record_active, set_active
 from .dialogue_tts import DialogueTTS, is_dialogue_model
 from .tutor_llm import build_llm, warm_up
+from .zonos_tts import ZonosTTS
 from .speech import speakable_stream, unspoken_stream
 
 log = logging.getLogger("open-tutor")
 
 BOARD_RPC_TIMEOUT = 6.0
 HOMEWORK_SETTLE = 1.2  # seconds to wait for more PDF pages before responding
+
+# Screen protocol v1 (browser-owned workspace). RPCs ack immediately; the fox
+# awaits async ready/observation events internally with longer budgets.
 
 # Board size limits (CSS px). The client measures the real board pane and
 # reports it; these are only the fallback when it reports nothing usable.
@@ -86,11 +107,27 @@ def build_stt() -> soniox.STT:
 
 def build_tts():
     provider = os.environ.get("TUTOR_TTS", "elevenlabs")
+    if provider == "zonos":
+        return ZonosTTS(
+            base_url=os.environ.get("TUTOR_TTS_BASE_URL", "https://pc2014.tail2e1c4e.ts.net:8448"),
+            voice=os.environ.get("TUTOR_TTS_VOICE", "default_6c74e01948232c55"),
+        )
     if provider == "cartesia":
         return cartesia.TTS(
             model=os.environ.get("TUTOR_TTS_MODEL", "sonic-3"),
             voice=os.environ["TUTOR_TTS_VOICE"],
             language="sv",
+        )
+    if provider == "deepgram":
+        # Deepgram Flux TTS (/v2/speak) over streaming linear16 PCM, Swedish voice
+        # flux-ludvig-sv with expressivity=1 (see deepgram_tts.py). No silent
+        # fallback: a missing key or bad expressivity raises here, before the session.
+        return DeepgramFluxTTS(
+            model=os.environ.get("TUTOR_TTS_MODEL", DEEPGRAM_DEFAULT_MODEL),
+            expressivity=parse_expressivity(
+                os.environ.get("TUTOR_TTS_EXPRESSIVITY", str(DEEPGRAM_DEFAULT_EXPRESSIVITY))
+            ),
+            api_key=os.environ.get("DEEPGRAM_API_KEY") or None,
         )
     model = os.environ.get("TUTOR_TTS_MODEL", DEFAULT_TTS_MODEL)
     voice = os.environ.get("TUTOR_TTS_VOICE") or DEFAULT_TTS_VOICE
@@ -109,8 +146,19 @@ def tts_route(engine) -> str:
 
 
 class Tutor(Agent):
-    def __init__(self, learner: dict[str, Any], room: rtc.Room, board: dict[str, Any] | None = None) -> None:
-        super().__init__(instructions=prompt.instructions(learner))
+    def __init__(self, learner: dict[str, Any], room: rtc.Room, board: dict[str, Any] | None = None,
+                 screen: dict[str, Any] | None = None, lesson_id: str = "") -> None:
+        # `screen` is the bare screen dict from participant metadata
+        # ({"version": 1, "lessonId": ...}); also accept the whole metadata
+        # dict for convenience. Anything else means a legacy browser.
+        if isinstance(screen, dict) and isinstance(screen.get("screen"), dict):
+            screen_meta = parse_screen_meta(screen)
+        else:
+            screen_meta = parse_screen_meta({"screen": screen} if screen is not None else {})
+        self.screen_capable = bool(screen_meta.get("capable"))
+        self.screen_version = screen_meta.get("version")
+        self.screen_lesson_id = (screen_meta.get("lesson_id") or lesson_id or "")[:80]
+        super().__init__(instructions=prompt.instructions(learner, screen_capable=self.screen_capable))
         self.learner = learner
         board = board or {}
         self.board_w, self.board_h = clamp_board_size(board.get("w", DEFAULT_BOARD_W),
@@ -125,6 +173,17 @@ class Tutor(Agent):
         self.mode = "talking"
         self.notes_saved = 0
         self._http: aiohttp.ClientSession | None = None
+        # Screen protocol v1 state. Timeouts are generous for browser model
+        # work, short for the RPC ack itself; tests override per-instance.
+        self.screen_intent_timeout = env_float("TUTOR_SCREEN_INTENT_TIMEOUT", SCREEN_INTENT_TIMEOUT)
+        self.screen_observe_timeout = env_float("TUTOR_SCREEN_OBSERVE_TIMEOUT", SCREEN_OBSERVE_TIMEOUT)
+        self.screen_context_grace = env_float("TUTOR_SCREEN_CONTEXT_GRACE", SCREEN_CONTEXT_GRACE)
+        self.screen_tracker = ScreenTracker(
+            lesson_id=self.screen_lesson_id or "lesson-unknown",
+            intent_timeout=self.screen_intent_timeout,
+            observe_timeout=self.screen_observe_timeout,
+            context_grace=self.screen_context_grace,
+        )
 
     # ---- board -----------------------------------------------------------------
 
@@ -233,6 +292,9 @@ class Tutor(Agent):
                 e.g. "Klockan". Shown briefly on the placeholder.
         """
         from .board_model import render_board
+        if self.screen_capable:
+            return ("Legacy board writes are disabled in this Screen session. "
+                    "Use show_screen with the current need; no board was changed.")
         learner = (self.learner or {}).get("name", "") or ""
         pid = self.ids.next()
         # Placeholder reserves the initial height so the child sees something
@@ -303,6 +365,9 @@ class Tutor(Agent):
             board_id: Which saved board to edit, e.g. "b1". Omit to edit the
                 most recent board.
         """
+        if self.screen_capable:
+            return ("Legacy board edits are disabled in this Screen session. "
+                    "Use show_screen for a revised page; no board was changed.")
         target = (board_id or "").strip() or (self.current_board_id or "")
         if not target or target not in self.boards:
             if not self.boards:
@@ -366,6 +431,338 @@ class Tutor(Agent):
                 f"Its board id is still {target}. "
                 f"[Board note: {result.get('note', '')[:500]}]")
 
+    # ---- screen (protocol v1, browser-owned workspace) ----------------------------
+
+    def screen_viewport(self) -> dict[str, Any]:
+        return {"w": self.board_w, "h": self.board_h, "device": self.board_device}
+
+    def _screen_fallback(self) -> str:
+        return ("This browser does not support the Screen (no screen v1 capability). "
+                "Use commission_board for a new topic or edit_board to revise what is shown. "
+                "No Screen was changed.")
+
+    async def _screen_rpc(self, method: str, payload: dict[str, Any]) -> dict[str, Any] | None:
+        """One Screen RPC with a short ack timeout. Returns the parsed reply or None."""
+        if not self.child_identity:
+            return None
+        try:
+            reply = await self.room.local_participant.perform_rpc(
+                destination_identity=self.child_identity,
+                method=method,
+                payload=json.dumps(payload, ensure_ascii=False),
+                response_timeout=SCREEN_RPC_TIMEOUT,
+            )
+            try:
+                data = json.loads(reply or "{}")
+            except json.JSONDecodeError:
+                data = {}
+        except Exception as error:  # timeout, child left, validation failure
+            log.warning("screen rpc %s failed: %s", method, error)
+            record_active("screen_rpc", {"method": method, "ok": False,
+                                           "error": f"{type(error).__name__}: {error}"[:200]})
+            return None
+        record_active("screen_rpc", {"method": method,
+                                       "intent": payload.get("intentId") or payload.get("observationId"),
+                                       "accepted": bool(data.get("accepted"))})
+        return data if isinstance(data, dict) else {}
+
+    async def add_screen_seen(self, png: bytes | None, context: dict[str, Any] | None,
+                              label: str) -> None:
+        """Feed an observed Screen page back to the tutor: pixels + concise context."""
+        visible, private = summarize_screen_context(context)
+        parts: list[Any] = []
+        if png:
+            parts.append(llm.ImageContent(
+                image=f"data:image/png;base64,{base64.b64encode(png).decode()}",
+                inference_detail="high"))
+        text = (f"[Screen now visible ({label})."
+                f"{(' Visible: ' + visible[:800]) if visible else ''}"
+                f"{(' Private teaching (use to guide, never read aloud or show): ' + private[:800]) if private else ''} "
+                "Look at the screenshot and teach from what it actually shows.]"
+        )
+        record_active("screen_seen", {"label": label, "visible": visible[:300],
+                                       "has_private": bool(private), "image": bool(png)})
+        ctx = self.chat_ctx.copy()
+        ctx.add_message(role="user", content=[text, *parts])
+        await self.update_chat_ctx(ctx)
+
+    async def add_screen_answer(self, answer: str, page: dict[str, Any] | None = None) -> None:
+        """Notify the tutor of an explicit child answer from the Screen."""
+        where = ""
+        if isinstance(page, dict) and page.get("id"):
+            where = f" (page {page.get('id')} rev {page.get('revision', '?')})"
+        text = (f"[Child submitted an answer on the Screen{where}: "
+                f"{(answer or '')[:2000]!r}. Respond briefly to what they wrote.]"
+        )
+        record_active("screen_answer", {"answer": (answer or "")[:300], "page": page or {}})
+        ctx = self.chat_ctx.copy()
+        ctx.add_message(role="user", content=[text])
+        await self.update_chat_ctx(ctx)
+
+    async def handle_screen_event(self, event: dict[str, Any]) -> str:
+        """Route one screen-event object. Returns disposition for the caller."""
+        if not self.screen_capable:
+            return "ignored"
+        ok, _ = validate_screen_event(event)
+        if not ok:
+            return "ignored"
+        if str(event.get("lessonId") or "") != self.screen_tracker.lesson_id:
+            return "ignored"
+        kind = event.get("type")
+        if kind == "answer-submitted":
+            await self.add_screen_answer(str(event.get("answer") or ""),
+                                         event.get("page") if isinstance(event.get("page"), dict) else None)
+            return "answer"
+        return self.screen_tracker.resolve_event(event)
+
+    def handle_screen_pixels(self, observation_id: str, png: bytes,
+                             attrs: dict[str, Any] | None = None) -> bool:
+        if not self.screen_capable:
+            return False
+        if not png or len(png) > 8_000_000:
+            log.warning("screen pixels %s dropped (size %s)", observation_id, len(png) if png else 0)
+            return False
+        return self.screen_tracker.feed_pixels(observation_id, png, attrs or {})
+
+    def handle_screen_context(self, observation_id: str, context: dict[str, Any]) -> bool:
+        if not self.screen_capable:
+            return False
+        if not isinstance(context, dict):
+            return False
+        return self.screen_tracker.feed_context(observation_id, context)
+
+    def close_screen(self) -> None:
+        try:
+            self.screen_tracker.close()
+        except Exception:
+            pass
+
+    async def _observe_screen_page(self, page: dict[str, Any], label: str) -> str:
+        """Observe an already-committed page and feed it to the chat. Returns tool text."""
+        page_id = str((page or {}).get("id") or "")[:80]
+        revision = str((page or {}).get("revision") or "")[:80]
+        if not page_id:
+            return ("The Screen reported ready without a page id. "
+                    "No observation was made. Explain in words instead, briefly.")
+        observation_id = self.screen_tracker.new_observation_id()
+        self.screen_tracker.track_observation(observation_id, page_id, revision)
+        payload = build_observe_payload(observation_id, self.screen_tracker.lesson_id,
+                                        page_id, revision)
+        rpc = await self._screen_rpc("screen.observe", payload)
+        if rpc is None:
+            self.screen_tracker.abandon_observation(observation_id)
+            return (f"Page {page_id} rev {revision} is ready but the observation request failed. "
+                    "Explain in words instead, briefly.")
+        if not rpc.get("accepted"):
+            self.screen_tracker.abandon_observation(observation_id)
+            reason = str(rpc.get("reason") or "not accepted")[:200]
+            return (f"Page {page_id} rev {revision} is ready but observation was {reason}. "
+                    "Explain in words instead, briefly.")
+        try:
+            png, context = await self.screen_tracker.wait_observation(observation_id)
+        except TimeoutError:
+            return (f"Page {page_id} rev {revision} is ready but no pixels arrived in time. "
+                    "Explain in words instead, briefly.")
+        except asyncio.CancelledError:
+            return (f"Page {page_id} rev {revision} observation was cancelled (session ending). "
+                    "Explain in words instead, briefly.")
+        visible, private = summarize_screen_context(context)
+        await self.add_screen_seen(png, context, f"{label} {page_id} rev {revision}")
+        private_hint = (f" Private solution for you only (never read aloud): {private[:500]}"
+                        if private else "")
+        visible_hint = f" Visible context: {visible[:500]}" if visible else ""
+        return (f"The Screen page {page_id} rev {revision} is visible and you can see its screenshot above."
+                f"{visible_hint}{private_hint} "
+                "Teach from the pixels now, as its author. "
+                f"Its page id is {page_id} rev {revision}: use reveal_screen to reveal its answer, "
+                "observe_screen to look again.")
+
+    @function_tool()
+    async def show_screen(self, context: RunContext, need: str, background: str) -> str:
+        """Ask the browser Screen to show this moment's visual. One call does it all.
+
+        You commission with intent and background, never with content: describe what the
+        child needs (who they are, what was just said, what should land), not what the
+        page should look like. The browser Screen agent decides the medium and preparation.
+        Say one short natural sentence while it prepares (for example \"Vänta lite, jag
+        lägger upp det åt dig…\") - once only. When this call returns, the page is on
+        screen with a screenshot: look at it, then teach from what it actually shows,
+        using the private teaching without revealing it.
+
+        Args:
+            need: What this moment needs, e.g. \"Henning, grade 1, wants to see how a
+                clock shows whole hours after asking to see the clock\".
+            background: 2-3 sentences a stranger would need: who the child is (level,
+                language), what was just said, and what should land next.
+        """
+        if not self.screen_capable:
+            return self._screen_fallback()
+        if not (need or "").strip() or not (background or "").strip():
+            return ("show_screen needs both need and background "
+                    "(who the child is, what was said, what should land). No Screen was changed.")
+        intent_id = self.screen_tracker.new_intent_id()
+        self.screen_tracker.track_intent(intent_id)
+        payload = build_intent_payload(intent_id, self.screen_tracker.lesson_id, "show",
+                                        need=need, background=background,
+                                        viewport=self.screen_viewport())
+        rpc = await self._screen_rpc("screen.intent", payload)
+        if rpc is None:
+            self.screen_tracker.abandon_intent(intent_id)
+            return ("The Screen request failed (no acknowledgement). "
+                    "The Screen is unchanged. Explain in words instead, briefly.")
+        if not rpc.get("accepted"):
+            self.screen_tracker.abandon_intent(intent_id)
+            reason = str(rpc.get("reason") or "not accepted")[:200]
+            return (f"The Screen did not accept the show request ({reason}). "
+                    "The Screen is unchanged. Explain in words instead, briefly.")
+        try:
+            event = await self.screen_tracker.wait_intent(intent_id)
+        except TimeoutError:
+            return ("No Screen page was ready in time. Preparation may still finish and the page may appear. "
+                    "Continue in words for now; if a page appears, observe_screen can read the current page, "
+                    "or call show_screen for a newer need.")
+        except asyncio.CancelledError:
+            return ("The Screen request was cancelled (session ending). "
+                    "Explain in words instead, briefly.")
+        kind = event.get("type")
+        if kind == "rejected":
+            reason = str(event.get("reason") or "rejected")[:200]
+            return (f"The Screen rejected the show request ({reason}). "
+                    "The Screen is unchanged. Explain in words instead, briefly.")
+        if kind == "failed":
+            reason = str(event.get("reason") or "failed")[:200]
+            return (f"The Screen could not prepare the page ({reason}). "
+                    "The Screen is unchanged. Explain in words instead, briefly.")
+        if kind != "ready":
+            return ("The Screen returned an unexpected outcome. "
+                    "The Screen is unchanged. Explain in words instead, briefly.")
+        page = event.get("page") if isinstance(event.get("page"), dict) else {}
+        superseded = ""
+        if intent_id != self.screen_tracker.latest_intent_id:
+            superseded = (" (A newer Screen intent has since been sent; "
+                          "this page may already be superseded.)")
+        observed = await self._observe_screen_page(page, "screen")
+        return observed + superseded
+
+    @function_tool()
+    async def prepare_screen(self, context: RunContext, need: str, background: str) -> str:
+        """Ask the browser Screen to prepare material in the background (no visible change).
+
+        Fire-and-forget: returns as soon as the Screen accepts. The Screen may promote
+        the candidate when a later show_screen asks for it. Use it when you expect to
+        need a visual shortly (for example a map for the next question).
+
+        Args:
+            need: What the coming moment needs.
+            background: 2-3 sentences a stranger would need.
+        """
+        if not self.screen_capable:
+            return self._screen_fallback()
+        if not (need or "").strip() or not (background or "").strip():
+            return ("prepare_screen needs both need and background. No Screen was changed.")
+        intent_id = self.screen_tracker.new_intent_id()
+        payload = build_intent_payload(intent_id, self.screen_tracker.lesson_id, "prepare",
+                                        need=need, background=background,
+                                        viewport=self.screen_viewport())
+        rpc = await self._screen_rpc("screen.intent", payload)
+        if rpc is None:
+            return ("The Screen preparation request failed (no acknowledgement). "
+                    "Nothing was prepared. Continue without it.")
+        if not rpc.get("accepted"):
+            reason = str(rpc.get("reason") or "not accepted")[:200]
+            return (f"The Screen did not accept preparation ({reason}). Nothing was prepared.")
+        self.screen_tracker.note_intent_sent(intent_id)
+        return (f"Preparation accepted (intent {intent_id}). Nothing is visible yet; "
+                "the Screen prepares in the background. Call show_screen when seeing would help.")
+
+    @function_tool()
+    async def reveal_screen(self, context: RunContext, page_id: str, revision: str) -> str:
+        """Reveal a prepared Screen answer on an already-known page/revision.
+
+        Deterministic page operation (no new model turn): binds the exact page id
+        and revision the Screen mentioned. A stale id is rejected without changing
+        anything; a duplicate returns the already-visible page without re-applying.
+        On success the revealed page is observed, so teach from its pixels.
+
+        Args:
+            page_id: The Screen page id to reveal, e.g. \"p3\".
+            revision: The revision the Screen announced, e.g. \"r2\".
+        """
+        if not self.screen_capable:
+            return self._screen_fallback()
+        page_id = (page_id or "").strip()[:80]
+        revision = (revision or "").strip()[:80]
+        if not page_id or not revision:
+            return ("reveal_screen needs both page_id and revision exactly as the Screen announced them. "
+                    "No Screen was changed.")
+        intent_id = self.screen_tracker.new_intent_id()
+        self.screen_tracker.track_intent(intent_id, "reveal")
+        payload = build_intent_payload(intent_id, self.screen_tracker.lesson_id, "reveal",
+                                        target={"pageId": page_id, "revision": revision},
+                                        viewport=self.screen_viewport())
+        rpc = await self._screen_rpc("screen.intent", payload)
+        if rpc is None:
+            self.screen_tracker.abandon_intent(intent_id)
+            return ("The Screen reveal failed (no acknowledgement). "
+                    "The Screen is unchanged. Explain in words instead, briefly.")
+        if not rpc.get("accepted"):
+            self.screen_tracker.abandon_intent(intent_id)
+            reason = str(rpc.get("reason") or "not accepted")[:200]
+            return (f"The Screen did not accept the reveal ({reason}). "
+                    "The Screen is unchanged. Explain in words instead, briefly.")
+        try:
+            event = await self.screen_tracker.wait_intent(intent_id)
+        except TimeoutError:
+            return ("The Screen reveal is still pending (no outcome after waiting). "
+                    "The Screen is unchanged. Explain in words instead, briefly.")
+        except asyncio.CancelledError:
+            return ("The Screen reveal was cancelled (session ending). "
+                    "Explain in words instead, briefly.")
+        kind = event.get("type")
+        if kind == "rejected":
+            reason = str(event.get("reason") or "rejected")[:300]
+            return (f"That page/revision is stale ({reason}): another page is current. "
+                    "Do not retry the same id. Explain in words instead, briefly, "
+                    "or call show_screen for the current need.")
+        if kind == "failed":
+            reason = str(event.get("reason") or "failed")[:200]
+            return (f"The Screen could not reveal {page_id} rev {revision} ({reason}). "
+                    "The Screen is unchanged. Explain in words instead, briefly.")
+        if kind != "ready":
+            return ("The Screen reveal returned an unexpected outcome. "
+                    "The Screen is unchanged. Explain in words instead, briefly.")
+        page = event.get("page") if isinstance(event.get("page"), dict) else {}
+        duplicate = ""
+        if str(event.get("reason") or "").lower().startswith("duplicate"):
+            duplicate = " (Already visible: no change was applied.)"
+        observed = await self._observe_screen_page(page or {"id": page_id, "revision": revision},
+                                                   "screen reveal")
+        return observed + duplicate
+
+    @function_tool()
+    async def observe_screen(self, context: RunContext, page_id: str = "", revision: str = "") -> str:
+        """Look again at the current Screen page (actual pixels + private context).
+
+        Use it to re-check what is visible before teaching. Omit ids to observe the
+        current page; pass an explicit id/revision only to re-observe a known page.
+
+        Args:
+            page_id: Screen page id, e.g. \"p3\". Omit for the current page.
+            revision: Page revision, e.g. \"r2\". Omit for the current page.
+        """
+        if not self.screen_capable:
+            return self._screen_fallback()
+        page_id = (page_id or "").strip()[:80]
+        revision = (revision or "").strip()[:80]
+        if not page_id:
+            current = self.screen_tracker.current_page or {}
+            page_id = str(current.get("id") or "")
+            revision = str(current.get("revision") or "")
+        if not page_id:
+            return ("There is no Screen page yet. Use show_screen for the current need. "
+                    "No observation was made.")
+        return await self._observe_screen_page({"id": page_id, "revision": revision}, "screen observe")
+
     # ---- resources ---------------------------------------------------------------
 
     @function_tool()
@@ -419,6 +816,9 @@ class Tutor(Agent):
             url: The resource URL from find_resources.
             think_about: One short thing to think about while watching, in Swedish.
         """
+        if self.screen_capable:
+            return ("Legacy resource cards are disabled in this Screen session. "
+                    "No resource was placed on the board; continue without embedding it for now.")
         from urllib.parse import urlparse
 
         if urlparse(url).scheme != "https":
@@ -592,11 +992,19 @@ async def entrypoint(ctx: JobContext) -> None:
         meta = json.loads(child.metadata or "{}")
         learner = meta.get("learner", {})
         board = meta.get("board", {}) or {}
+        screen = meta.get("screen", {}) or {}
     except json.JSONDecodeError:
         learner = {}
         board = {}
+        screen = {}
 
-    tutor = Tutor(learner, ctx.room, board=board)
+    tutor = Tutor(learner, ctx.room, board=board, screen=screen,
+                  lesson_id=ctx.room.name or "")
+    if tutor.screen_capable and not tutor.screen_tracker.lesson_id:
+        tutor.screen_tracker.lesson_id = ctx.room.name or "lesson-unknown"
+        tutor.screen_lesson_id = tutor.screen_tracker.lesson_id
+    elif tutor.screen_capable and not tutor.screen_lesson_id:
+        tutor.screen_lesson_id = tutor.screen_tracker.lesson_id
     tutor.child_identity = child.identity
 
     debug = DebugLog.create(ctx.room.name, learner, getattr(getattr(ctx, "job", None), "id", "?"))
@@ -612,7 +1020,11 @@ async def entrypoint(ctx: JobContext) -> None:
         turn_handling=TurnHandlingOptions(
             turn_detection="stt",
             endpointing={"min_delay": env_float("TUTOR_MIN_ENDPOINT", 0.6), "max_delay": 4.0},
-            interruption={"enabled": True, "mode": "vad", "min_duration": 0.4},
+            interruption={
+                "enabled": True,
+                "mode": "adaptive" if os.environ.get("TUTOR_ADAPTIVE_INTERRUPTION") == "1" else "vad",
+                "min_duration": 0.4,
+            },
         ),
         max_tool_steps=6,
     )
@@ -711,12 +1123,80 @@ async def entrypoint(ctx: JobContext) -> None:
 
     def spawn(coro_fn):
         def handler(reader, identity):
-            asyncio.create_task(coro_fn(reader, identity))
+            async def run() -> None:
+                try:
+                    await coro_fn(reader, identity)
+                finally:
+                    # LiveKit stream readers own FFI subscriptions. Close on
+                    # success, rejection, oversized payloads and early returns.
+                    close = getattr(reader, "aclose", None)
+                    if callable(close):
+                        try:
+                            await close()
+                        except Exception:
+                            pass
+            asyncio.create_task(run())
         return handler
+
+    async def on_screen_event(reader: rtc.TextStreamReader, identity: str) -> None:
+        try:
+            event = json.loads(await reader.read_all())
+        except json.JSONDecodeError:
+            return
+        if not tutor.screen_capable:
+            return
+        debug.record("screen_event", {"type": str(event.get("type", "?"))[:40],
+                                         "intent": str(event.get("intentId", ""))[:20]})
+        try:
+            action = await tutor.handle_screen_event(event)
+        except Exception as error:
+            log.warning("screen event handling failed: %s", error)
+            return
+        if action == "answer":
+            await tutor.set_mode("talking")
+            safe_interrupt(session, "screen-answer")
+            debug.record("prompt", {"kind": "screen_answer"})
+            prompt_event(session, "The child submitted an answer on the Screen "
+                         "(see the latest submitted answer). Respond briefly to what they wrote.")
+
+    async def on_screen_pixels(reader: rtc.ByteStreamReader, identity: str) -> None:
+        if not tutor.screen_capable:
+            return
+        info = reader.info
+        attrs = dict(info.attributes or {})
+        observation_id = str(attrs.get("observationId") or attrs.get("observation_id") or "")
+        if not observation_id:
+            return
+        data = bytearray()
+        async for chunk in reader:
+            data.extend(chunk)
+            if len(data) > 8_000_000:
+                log.warning("screen pixels too large, dropped")
+                return
+        debug.record("screen_pixels", {"observation": observation_id[:20],
+                                           "bytes": len(data)})
+        tutor.handle_screen_pixels(observation_id, bytes(data), attrs)
+
+    async def on_screen_context(reader: rtc.TextStreamReader, identity: str) -> None:
+        if not tutor.screen_capable:
+            return
+        try:
+            payload = json.loads(await reader.read_all())
+        except json.JSONDecodeError:
+            return
+        observation_id = str(payload.get("observationId") or payload.get("observation_id") or "")
+        if not observation_id:
+            return
+        debug.record("screen_context", {"observation": observation_id[:20],
+                                            "has_private": bool(payload.get("privateTeaching"))})
+        tutor.handle_screen_context(observation_id, payload)
 
     ctx.room.register_byte_stream_handler("homework", spawn(on_homework_image))
     ctx.room.register_text_stream_handler("homework-text", spawn(on_homework_text))
     ctx.room.register_text_stream_handler("session-event", spawn(on_session_event))
+    ctx.room.register_text_stream_handler("screen-event", spawn(on_screen_event))
+    ctx.room.register_byte_stream_handler("screen-pixels", spawn(on_screen_pixels))
+    ctx.room.register_text_stream_handler("screen-context", spawn(on_screen_context))
 
     outcome = "unknown"
     try:
@@ -792,6 +1272,7 @@ async def _run_until_done(
     elif left.is_set():
         outcome = "child_left"
         debug.record("child_left", {})
+    tutor.close_screen()
     if tutor._http:
         await tutor._http.close()
     await session.aclose()

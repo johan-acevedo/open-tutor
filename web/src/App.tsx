@@ -6,6 +6,7 @@ import { useSession } from './useSession';
 import ProfilePicker from './components/ProfilePicker';
 import Avatar from './components/Avatar';
 import Board from './components/Board';
+import ScreenBoard from './components/ScreenBoard';
 import BottomBar from './components/BottomBar';
 import TopMenu from './components/TopMenu';
 import EndCard from './components/EndCard';
@@ -29,11 +30,11 @@ export default function App() {
 
   const inSession = phase === 'live' || phase === 'ending' || phase === 'connecting';
   const showBottomBar = phase === 'live' || phase === 'ending';
-  const mode = layoutMode(session.items.length);
+  const mode = layoutMode(session.screenDeck?.pages.length ?? session.items.length);
   const avatar = mapAvatarState({
     agentState: session.agentState,
     tutorMode: session.tutorMode,
-    hasPending: session.items.some((i) => i.kind === 'pending'),
+    hasPending: session.screenBusy || session.items.some((i) => i.kind === 'pending'),
     hasSpokenFirst: session.hasSpokenFirst,
     isTeaching: mode === 'teaching',
     micBlocked: session.micBlocked,
@@ -82,18 +83,30 @@ export default function App() {
       )}
 
       {(phase === 'live' || phase === 'ending') && profile && (
-        <main className={`ot-main ot-main-${mode}`}>
+        <main className={`ot-main ot-main-${mode}${session.screenDeck?.pages.length ? ' ot-main-screen' : ''}`}>
           <section className="ot-board" aria-label="Whiteboard">
-            <Board
-              learnerName={profile.name}
-              items={session.items}
-              focused={session.focused}
-              onItemMounted={session.onItemMounted}
-              onResourceClosed={(id) => void session.resourceClosed(id)}
-              mobile={mobile}
-              activeItemId={session.activeItemId}
-              onEnd={() => void session.endSession()}
-            />
+            {session.screenDeck ? (
+              <ScreenBoard
+                learnerName={profile.name}
+                snapshot={session.screenDeck}
+                busy={session.screenBusy}
+                onAttachCanvas={session.attachScreenCanvas}
+                onDraft={session.setScreenAnswerDraft}
+                onSubmit={session.submitScreenAnswer}
+                onGoTo={session.goToScreenPage}
+              />
+            ) : (
+              <Board
+                learnerName={profile.name}
+                items={session.items}
+                focused={session.focused}
+                onItemMounted={session.onItemMounted}
+                onResourceClosed={(id) => void session.resourceClosed(id)}
+                mobile={mobile}
+                activeItemId={session.activeItemId}
+                onEnd={() => void session.endSession()}
+              />
+            )}
             {session.homeworkDraft && (
               <HomeworkTray
                 draft={session.homeworkDraft}

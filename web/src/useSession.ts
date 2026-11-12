@@ -1,7 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ConnectionState, Room, RoomEvent, RpcError, Track } from 'livekit-client';
 import type { RpcInvocationData } from 'livekit-client';
-import type { BoardFocusPayload, BoardItem, HomeworkAttributes, Note, SessionResponse } from './protocol';
+import type {
+  BoardFocusPayload,
+  BoardItem,
+  HomeworkAttributes,
+  Note,
+  ScreenContext,
+  ScreenEvent,
+  SessionResponse,
+} from './protocol';
 import {
   ATTR_AGENT_STATE,
   ATTR_TUTOR_MODE,
@@ -9,18 +17,31 @@ import {
   BOARD_RPC_REMOVE,
   BOARD_RPC_SHOW,
   BOARD_RPC_UPDATE,
+  SCREEN_RPC_INTENT,
+  SCREEN_RPC_OBSERVE,
   TOPIC_CHAT,
   TOPIC_HOMEWORK,
   TOPIC_HOMEWORK_TEXT,
   TOPIC_NOTE,
   TOPIC_SESSION_EVENT,
   TOPIC_TRANSCRIPTION,
+  TOPIC_SCREEN_CONTEXT,
+  TOPIC_SCREEN_EVENT,
+  TOPIC_SCREEN_PIXELS,
 } from './protocol';
 import { appendNote } from './db';
 import type { Profile } from './db';
-import { isNoteLike, validateBoardFocus, validateBoardItem } from './validate';
+import {
+  isNoteLike,
+  validateBoardFocus,
+  validateBoardItem,
+  validateScreenIntent,
+  validateScreenObservation,
+} from './validate';
 import { dataUrlToBytes, downscaleImage } from './image';
 import type { HomeworkDraft } from './components/HomeworkTray';
+import { createScreenController } from './screen';
+import type { ScreenController, ScreenDeckSnapshot } from './screen';
 
 export type Phase = 'profiles' | 'connecting' | 'live' | 'ending' | 'ended';
 export type ConnBanner = 'reconnecting' | 'disconnected' | null;
@@ -67,7 +88,7 @@ async function waitForBoardLayout(): Promise<void> {
 export function readBoardSize(): { w: number; h: number; device: string } {
   const device = boardDevice();
   try {
-    const scroller = document.querySelector('.ot-board-scroll');
+    const scroller = document.querySelector('.ot-screen-canvas, .ot-board-scroll');
     if (scroller) {
       const el = scroller as HTMLElement;
       const style = window.getComputedStyle(el);
@@ -103,9 +124,43 @@ function uid(): string {
   return `id-${Date.now()}-${Math.floor(Math.random() * 1e9)}`;
 }
 
+const LESSON_KEY_PREFIX = 'open-tutor-active-lesson:';
+
+function lessonStorageKey(profileId: string): string {
+  return `${LESSON_KEY_PREFIX}${profileId}`;
+}
+
+/** Resume an unfinished local lesson; Avsluta marks it ended for the next visit. */
+function lessonForStart(profileId: string): string {
+  try {
+    const saved = JSON.parse(localStorage.getItem(lessonStorageKey(profileId)) ?? 'null');
+    if (saved?.status === 'active' && typeof saved.lessonId === 'string' && saved.lessonId.length >= 8) {
+      return saved.lessonId;
+    }
+  } catch {
+    /* storage blocked or malformed: start a fresh local lesson */
+  }
+  return `lesson-${uid()}`;
+}
+
+function saveLessonState(profileId: string, lessonId: string, status: 'active' | 'ended'): void {
+  try {
+    localStorage.setItem(lessonStorageKey(profileId), JSON.stringify({ lessonId, status }));
+  } catch {
+    /* Durable Screen state still lives in IndexedDB; this is only its resume pointer. */
+  }
+}
+
 function extOf(name: string): string {
   const i = name.lastIndexOf('.');
   return i >= 0 ? name.slice(i + 1).toLowerCase() : '';
+}
+
+function bytesFromBase64(base64: string): Uint8Array {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return bytes;
 }
 
 async function sendHomeworkBytes(room: Room, bytes: Uint8Array, attrs: HomeworkAttributes): Promise<void> {
@@ -180,6 +235,8 @@ export function useSession(mobile = false) {
   const [dragOver, setDragOver] = useState(false);
   const [sending, setSending] = useState(false);
   const [activeItemId, setActiveItemId] = useState<string | null>(null);
+  const [screenDeck, setScreenDeck] = useState<ScreenDeckSnapshot | null>(null);
+  const [screenBusy, setScreenBusy] = useState(false);
   const [homeworkDraft, setHomeworkDraft] = useState<HomeworkDraft | null>(null);
   const [homeworkSending, setHomeworkSending] = useState(false);
   const [audioBlocked, setAudioBlocked] = useState(false);
@@ -188,6 +245,9 @@ export function useSession(mobile = false) {
   const roomRef = useRef<Room | null>(null);
   const preparedRoomRef = useRef<Room | null>(null);
   const profileRef = useRef<Profile | null>(null);
+  const lessonIdRef = useRef('');
+  const screenRef = useRef<ScreenController | null>(null);
+  const screenEventQueueRef = useRef<ScreenEvent[]>([]);
   const intentionalEndRef = useRef(false);
   const mountResolvers = useRef(new Map<string, Array<() => void>>());
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -244,6 +304,12 @@ export function useSession(mobile = false) {
   }, []);
 
   const cleanupRoom = useCallback(() => {
+    const screen = screenRef.current;
+    screenRef.current = null;
+    screenEventQueueRef.current = [];
+    setScreenDeck(null);
+    setScreenBusy(false);
+    if (screen) void screen.close().catch(() => undefined);
     const stop = boardWatchStopRef.current;
     boardWatchStopRef.current = null;
     if (stop) {
@@ -260,7 +326,7 @@ export function useSession(mobile = false) {
     audioContextRef.current = null;
     if (context) void context.close().catch(() => undefined);
     if (!room) return;
-    for (const m of [BOARD_RPC_SHOW, BOARD_RPC_UPDATE, BOARD_RPC_FOCUS, BOARD_RPC_REMOVE])
+    for (const m of [BOARD_RPC_SHOW, BOARD_RPC_UPDATE, BOARD_RPC_FOCUS, BOARD_RPC_REMOVE, SCREEN_RPC_INTENT, SCREEN_RPC_OBSERVE])
       unregisterRpc(room, m);
     try {
       room.unregisterTextStreamHandler(TOPIC_TRANSCRIPTION);
@@ -332,6 +398,8 @@ export function useSession(mobile = false) {
       setPhase('connecting');
 
       const notes = p.notes.slice(-5).reverse(); // newest first
+      const lessonId = lessonForStart(p.id);
+      lessonIdRef.current = lessonId;
       let session: SessionResponse;
       try {
         const request = () => {
@@ -341,7 +409,7 @@ export function useSession(mobile = false) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'x-tutor-code': familyCode() },
             body: JSON.stringify({ learner: { name: p.name, grade: p.grade, notes },
-              board }),
+              board, screen: { version: 1, lessonId } }),
           });
         };
         let res = await request();
@@ -359,12 +427,131 @@ export function useSession(mobile = false) {
         }
         if (!res.ok) throw new Error(`session ${res.status}`);
         session = (await res.json()) as SessionResponse;
+        saveLessonState(p.id, lessonId, 'active');
       } catch {
         showToast('Kunde inte starta sessionen. Kontrollera anslutningen och försök igen.');
         setPhase('profiles');
         cleanupRoom();
         return;
       }
+
+      // Connecting to the room can finish before the dispatched fox has
+      // installed its stream handlers. Keep restored-page events until its
+      // session advertises an active state.
+      const screenRecipientReady = () => room.state === ConnectionState.Connected &&
+        [...room.remoteParticipants.values()].some((participant) =>
+          ['listening', 'thinking', 'speaking'].includes(participant.attributes[ATTR_AGENT_STATE] ?? ''));
+
+      const deliverScreenEvent = (event: ScreenEvent) => {
+        if (roomRef.current !== room) return;
+        if (!screenRecipientReady()) {
+          if (screenEventQueueRef.current.length < 64) screenEventQueueRef.current.push(event);
+          return;
+        }
+        void room.localParticipant.sendText(JSON.stringify(event), { topic: TOPIC_SCREEN_EVENT }).catch(() => undefined);
+      };
+
+      const flushScreenEvents = () => {
+        if (roomRef.current !== room || !screenRecipientReady()) return;
+        for (const event of screenEventQueueRef.current.splice(0)) deliverScreenEvent(event);
+      };
+
+      const controller = createScreenController({
+        profileId: p.id,
+        learnerName: p.name,
+        grade: `åk ${p.grade}`,
+        priorNotes: p.notes.map((note) => ({
+          text: [note.topic, note.clicked, note.tricky, note.next].filter(Boolean).join(' — '),
+        })),
+        room: session.room,
+        accessCode: familyCode(),
+        lessonId,
+        viewport: readBoardSize(),
+        onDeckChange: setScreenDeck,
+        onScreenEvent: (event) => {
+          if (event.type !== 'answer-submitted') setScreenBusy(false);
+          deliverScreenEvent(event);
+        },
+      });
+      screenRef.current = controller;
+      try {
+        await controller.init();
+      } catch {
+        showToast('Kunde inte öppna den lokala arbetsytan. Försök igen.');
+        cleanupRoom();
+        setPhase('profiles');
+        return;
+      }
+
+      registerRpc(room, SCREEN_RPC_INTENT, async (data) => {
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(data.payload);
+        } catch {
+          throw new RpcError(1500, 'screen.intent payload is not JSON');
+        }
+        const validated = validateScreenIntent(parsed);
+        if (!validated.ok) throw new RpcError(1500, validated.error);
+        if (validated.value.op === 'show' || validated.value.op === 'prepare') setScreenBusy(true);
+        const ack = await controller.handleIntent(validated.value);
+        if (!ack.accepted) setScreenBusy(false);
+        return JSON.stringify(ack);
+      });
+
+      registerRpc(room, SCREEN_RPC_OBSERVE, async (data) => {
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(data.payload);
+        } catch {
+          throw new RpcError(1500, 'screen.observe payload is not JSON');
+        }
+        const validated = validateScreenObservation(parsed);
+        if (!validated.ok) throw new RpcError(1500, validated.error);
+        const request = validated.value;
+        try {
+          const observation = await controller.captureObservation(request);
+          const bytes = bytesFromBase64(observation.pngBase64);
+          if (bytes.length === 0 || bytes.length > 8_000_000) {
+            return JSON.stringify({ accepted: false, observationId: request.observationId, reason: 'invalid-pixels' });
+          }
+          const core = observation.context;
+          const context: ScreenContext = {
+            observationId: request.observationId,
+            lessonId,
+            page: core.page,
+            visibleText: 'visibleText' in core ? String(core.visibleText) : '',
+            privateTeaching: core.privateTeaching,
+            viewport: { w: core.viewport.w, h: core.viewport.h, device: boardDevice() },
+            sources: core.sources.map((sourceUrl) => ({ sourceUrl })),
+            widgets: {
+              hasDraft: core.answerState.hasDraft,
+              draftLength: core.answerState.draftLength,
+              revealed: core.answerState.revealed,
+            },
+          };
+          void (async () => {
+            await room.localParticipant.sendBytes(bytes, {
+              topic: TOPIC_SCREEN_PIXELS,
+              mimeType: 'image/png',
+              name: `${request.observationId}.png`,
+              attributes: {
+                observationId: request.observationId,
+                lessonId,
+                pageId: request.pageId,
+                revision: request.revision,
+              },
+            });
+            await room.localParticipant.sendText(JSON.stringify(context), { topic: TOPIC_SCREEN_CONTEXT });
+          })().catch(() => undefined);
+          return JSON.stringify({ accepted: true, observationId: request.observationId });
+        } catch (error) {
+          return JSON.stringify({
+            accepted: false,
+            observationId: request.observationId,
+            reason: error instanceof Error ? error.message : 'observation-failed',
+          });
+        }
+      });
 
       room.on(RoomEvent.TrackSubscribed, (track, _pub, participant) => {
         if (track.kind === Track.Kind.Audio && participant.identity !== room.localParticipant.identity) {
@@ -390,13 +577,20 @@ export function useSession(mobile = false) {
           if (st === 'speaking') setHasSpokenFirst(true);
         }
         if (typeof mode === 'string' && mode) setTutorMode(mode);
+        flushScreenEvents();
       });
-      room.on(RoomEvent.ParticipantConnected, () => readParticipantStates(room));
+      room.on(RoomEvent.ParticipantConnected, () => {
+        readParticipantStates(room);
+        flushScreenEvents();
+      });
       room.on(RoomEvent.Reconnecting, () => {
         if (!intentionalEndRef.current) setConnBanner('reconnecting');
       });
       room.on(RoomEvent.ConnectionStateChanged, (state: ConnectionState) => {
-        if (state === ConnectionState.Connected) setConnBanner(null);
+        if (state === ConnectionState.Connected) {
+          setConnBanner(null);
+          flushScreenEvents();
+        }
         else if (state === ConnectionState.Reconnecting && !intentionalEndRef.current) {
           setConnBanner('reconnecting');
         }
@@ -540,6 +734,7 @@ export function useSession(mobile = false) {
         return;
       }
       readParticipantStates(room);
+      flushScreenEvents();
       // The session request only knew the window size (the board pane is not
       // mounted until we go live). Watch the real pane and report resizes,
       // rotation and layout changes over the existing session-event channel;
@@ -570,7 +765,7 @@ export function useSession(mobile = false) {
         const attachPane = () => {
           // Observe the scroll surface itself: nav/follow-button layout
           // changes alter its size, which is what the board is commissioned for.
-          const pane = document.querySelector('.ot-board-scroll');
+          const pane = document.querySelector('.ot-screen-canvas, .ot-board-scroll');
           if (pane && pane !== observed) {
             if (!ro && typeof ResizeObserver !== 'undefined') {
               ro = new ResizeObserver(() => scheduleSend());
@@ -728,6 +923,9 @@ export function useSession(mobile = false) {
     const room = roomRef.current;
     if (!room || phase !== 'live') return;
     intentionalEndRef.current = true;
+    if (profileRef.current && lessonIdRef.current) {
+      saveLessonState(profileRef.current.id, lessonIdRef.current, 'ended');
+    }
     setPhase('ending');
     setConnBanner(null);
     const disconnected = new Promise<void>((resolve) => {
@@ -765,6 +963,10 @@ export function useSession(mobile = false) {
       try {
         const down = await downscaleImage(file);
         const title = file.name || 'Bild';
+        await screenRef.current?.addHomeworkPage({
+          title,
+          images: [{ bytes: down.bytes, mimeType: 'image/jpeg', provenance: title }],
+        });
         setItems((prev) => [...prev, { id: itemId, kind: 'homework', title, images: [down.dataUrl] }]);
         setActiveItemId(itemId);
         if (room) {
@@ -792,6 +994,14 @@ export function useSession(mobile = false) {
           return false;
         }
         const images = pages.map((pg) => pg.dataUrl);
+        await screenRef.current?.addHomeworkPage({
+          title: file.name || 'PDF',
+          images: pages.map((pg, index) => ({
+            bytes: dataUrlToBytes(pg.dataUrl),
+            mimeType: 'image/png',
+            provenance: `${file.name || 'PDF'} · sida ${index + 1}`,
+          })),
+        });
         setItems((prev) => [...prev, { id: itemId, kind: 'homework', title: file.name || 'PDF', images }]);
         setActiveItemId(itemId);
         if (room) {
@@ -822,6 +1032,7 @@ export function useSession(mobile = false) {
       const trimmed = text.trim();
       if (!trimmed) return;
       const itemId = uid();
+      await screenRef.current?.addHomeworkPage({ title: 'Inklistrad text', text: trimmed });
       setItems((prev) => [...prev, { id: itemId, kind: 'homework', title: 'Inklistrad text', text: trimmed }]);
       setActiveItemId(itemId);
       if (room) {
@@ -967,10 +1178,44 @@ export function useSession(mobile = false) {
     };
   }, [phase, mobile, addFiles, addText, queueFiles]);
 
+  const attachScreenCanvas = useCallback((canvas: HTMLCanvasElement | null) => {
+    screenRef.current?.attachCanvas(canvas);
+  }, []);
+
+  const setScreenAnswerDraft = useCallback(async (pageId: string, revision: string, text: string) => {
+    try {
+      await screenRef.current?.setAnswerDraft(pageId, revision, text);
+    } catch {
+      showToast('Svaret kunde inte sparas på den här sidan. Försök igen.');
+    }
+  }, [showToast]);
+
+  const submitScreenAnswer = useCallback(async (pageId: string, revision: string) => {
+    try {
+      await screenRef.current?.submitAnswer(pageId, revision);
+    } catch {
+      showToast('Svaret kunde inte skickas. Kontrollera att sidan fortfarande visas.');
+    }
+  }, [showToast]);
+
+  const goToScreenPage = useCallback(async (index: number) => {
+    try {
+      await screenRef.current?.goTo(index);
+    } catch {
+      showToast('Kunde inte byta sida.');
+    }
+  }, [showToast]);
+
   return {
     phase,
     profile,
     items,
+    screenDeck,
+    screenBusy,
+    attachScreenCanvas,
+    setScreenAnswerDraft,
+    submitScreenAnswer,
+    goToScreenPage,
     activeItemId,
     homeworkDraft,
     homeworkSending,
