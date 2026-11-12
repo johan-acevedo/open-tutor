@@ -155,6 +155,15 @@ Service: `zonos3-tts.service`, enabled at boot. Source/build: `~/zonos3` on joha
 
 ## Configuration
 
+During a session, open **Meny → Sessionsinfo** to inspect the running worker's
+LLM, reasoning level, STT, TTS, API endpoints, host, installed SDK versions,
+interruption settings and debug flags. The worker publishes an allowlisted
+snapshot from its instantiated providers over LiveKit's `tutor.runtime`
+participant attribute. Credentials and URL authentication/query details are omitted.
+The browser adds its own Screen model, reasoning level, SDK versions and web host
+from the same configuration used by the Screen worker. Information waits for the
+current agent and clears when the session ends or reconnects.
+
 | Variable | Purpose |
 |---|---|
 | `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | LiveKit Cloud project (required) |

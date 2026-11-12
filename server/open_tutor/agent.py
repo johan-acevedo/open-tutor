@@ -848,7 +848,10 @@ class Tutor(Agent):
         self.mode = mode
         record_active("mode", {"old": old, "mode": mode})
         try:
-            await self.room.local_participant.set_attributes({"tutor.mode": mode})
+            # Merge: attribute updates must keep tutor.runtime published at startup.
+            attrs = dict(self.room.local_participant.attributes or {})
+            attrs["tutor.mode"] = mode
+            await self.room.local_participant.set_attributes(attrs)
         except Exception as error:
             log.warning("could not set mode: %s", error)
 
@@ -1012,17 +1015,32 @@ async def entrypoint(ctx: JobContext) -> None:
 
     voice = build_tts()
     log.info("tutor TTS route %s", tts_route(voice))
+    stt_engine = build_stt()
+    llm_engine = build_llm(ctx.room.name)
+    adaptive = os.environ.get("TUTOR_ADAPTIVE_INTERRUPTION") == "1"
+    endpointing = {"min_delay": env_float("TUTOR_MIN_ENDPOINT", 0.6), "max_delay": 4.0}
+    from . import runtime_info as _runtime_info
+    await _runtime_info.publish_runtime_info(
+        ctx.room,
+        llm=llm_engine,
+        stt=stt_engine,
+        tts=voice,
+        agent_name=AGENT_NAME,
+        adaptive=adaptive,
+        min_endpoint_delay=endpointing["min_delay"],
+        max_endpoint_delay=endpointing["max_delay"],
+    )
     session = AgentSession(
-        stt=build_stt(),
-        llm=build_llm(ctx.room.name),
+        stt=stt_engine,
+        llm=llm_engine,
         tts=voice,
         vad=ctx.proc.userdata["vad"],
         turn_handling=TurnHandlingOptions(
             turn_detection="stt",
-            endpointing={"min_delay": env_float("TUTOR_MIN_ENDPOINT", 0.6), "max_delay": 4.0},
+            endpointing=endpointing,
             interruption={
                 "enabled": True,
-                "mode": "adaptive" if os.environ.get("TUTOR_ADAPTIVE_INTERRUPTION") == "1" else "vad",
+                "mode": "adaptive" if adaptive else "vad",
                 "min_duration": 0.4,
             },
         ),
@@ -1217,7 +1235,10 @@ async def entrypoint(ctx: JobContext) -> None:
         )
         debug.record("worker_session_started", {
             "cloud_recording": os.environ.get("TUTOR_CLOUD_RECORDING") == "1"})
-        await ctx.room.local_participant.set_attributes({"tutor.mode": "talking"})
+        # Merge, same as set_mode: keep the tutor.runtime published at startup.
+        talking_attrs = dict(ctx.room.local_participant.attributes or {})
+        talking_attrs["tutor.mode"] = "talking"
+        await ctx.room.local_participant.set_attributes(talking_attrs)
         debug.record("prompt", {"kind": "greeting"})
         prompt_event(session, prompt.greeting_instruction(learner))
 

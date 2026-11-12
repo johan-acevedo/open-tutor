@@ -8,7 +8,9 @@
  * from controller options; it is never written to storage, and responses use
  * `cache: "no-store"` so no lesson record persists anywhere.
  */
-export const SCREEN_MODEL_ID = "deepseek-v4.1-flash";
+import { SCREEN_MODEL_ID } from "./screenConfig";
+
+export { SCREEN_MODEL_ID } from "./screenConfig";
 export const SCREEN_CHAT_PATH = (room: string): string =>
   `/api/screen/openai/${encodeURIComponent(room)}/chat/completions`;
 

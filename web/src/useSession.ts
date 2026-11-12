@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ConnectionState, Room, RoomEvent, RpcError, Track } from 'livekit-client';
-import type { RpcInvocationData } from 'livekit-client';
+import { ConnectionState, ParticipantKind, Room, RoomEvent, RpcError, Track } from 'livekit-client';
+import type { RemoteParticipant, RpcInvocationData } from 'livekit-client';
 import type {
   BoardFocusPayload,
   BoardItem,
@@ -13,6 +13,7 @@ import type {
 import {
   ATTR_AGENT_STATE,
   ATTR_TUTOR_MODE,
+  ATTR_TUTOR_RUNTIME,
   BOARD_RPC_FOCUS,
   BOARD_RPC_REMOVE,
   BOARD_RPC_SHOW,
@@ -31,6 +32,8 @@ import {
 } from './protocol';
 import { appendNote } from './db';
 import type { Profile } from './db';
+import { parseRuntimeInfo } from './runtimeInfo';
+import type { RuntimeInfo } from './runtimeInfo';
 import {
   isNoteLike,
   validateBoardFocus,
@@ -226,6 +229,7 @@ export function useSession(mobile = false) {
   const [captionFading, setCaptionFading] = useState(false);
   const [agentState, setAgentState] = useState<string | null>(null);
   const [tutorMode, setTutorMode] = useState<string | null>(null);
+  const [runtimeInfo, setRuntimeInfo] = useState<RuntimeInfo | null>(null);
   const [hasSpokenFirst, setHasSpokenFirst] = useState(false);
   const [micEnabled, setMicEnabled] = useState(false);
   const [micBlocked, setMicBlocked] = useState(false);
@@ -295,12 +299,18 @@ export function useSession(mobile = false) {
   }, []);
 
   const readParticipantStates = useCallback((room: Room) => {
+    let runtime: RuntimeInfo | null = null;
     for (const p of room.remoteParticipants.values()) {
       const st = p.attributes?.[ATTR_AGENT_STATE];
       const mode = p.attributes?.[ATTR_TUTOR_MODE];
       if (typeof st === 'string' && st) setAgentState(st);
       if (typeof mode === 'string' && mode) setTutorMode(mode);
+      const agentRuntime = readAgentRuntime(p);
+      if (agentRuntime) runtime = agentRuntime;
     }
+    // Null until the worker publishes (or after a reconnect/replacement):
+    // the menu shows its pending message instead of stale data.
+    setRuntimeInfo(runtime);
   }, []);
 
   const cleanupRoom = useCallback(() => {
@@ -309,6 +319,7 @@ export function useSession(mobile = false) {
     screenEventQueueRef.current = [];
     setScreenDeck(null);
     setScreenBusy(false);
+    setRuntimeInfo(null);
     if (screen) void screen.close().catch(() => undefined);
     const stop = boardWatchStopRef.current;
     boardWatchStopRef.current = null;
@@ -389,6 +400,7 @@ export function useSession(mobile = false) {
       setCaptionFading(false);
       setAgentState(null);
       setTutorMode(null);
+      setRuntimeInfo(null);
       setHasSpokenFirst(false);
       setMicEnabled(false);
       setMicBlocked(false);
@@ -569,25 +581,34 @@ export function useSession(mobile = false) {
           /* ignore */
         }
       });
-      room.on(RoomEvent.ParticipantAttributesChanged, (changed) => {
-        const st = (changed as Record<string, string>)[ATTR_AGENT_STATE];
-        const mode = (changed as Record<string, string>)[ATTR_TUTOR_MODE];
+      room.on(RoomEvent.ParticipantAttributesChanged, (changed, participant) => {
+        const st = changed[ATTR_AGENT_STATE];
+        const mode = changed[ATTR_TUTOR_MODE];
         if (typeof st === 'string' && st) {
           setAgentState(st);
           if (st === 'speaking') setHasSpokenFirst(true);
         }
         if (typeof mode === 'string' && mode) setTutorMode(mode);
+        // Only the agent participant may supply runtime metadata.
+        if (participant.kind === ParticipantKind.AGENT) {
+          setRuntimeInfo(readAgentRuntime(participant));
+        }
         flushScreenEvents();
       });
       room.on(RoomEvent.ParticipantConnected, () => {
         readParticipantStates(room);
         flushScreenEvents();
       });
+      room.on(RoomEvent.ParticipantDisconnected, () => {
+        readParticipantStates(room);
+      });
       room.on(RoomEvent.Reconnecting, () => {
+        setRuntimeInfo(null);
         if (!intentionalEndRef.current) setConnBanner('reconnecting');
       });
       room.on(RoomEvent.ConnectionStateChanged, (state: ConnectionState) => {
         if (state === ConnectionState.Connected) {
+          readParticipantStates(room);
           setConnBanner(null);
           flushScreenEvents();
         }
@@ -1232,6 +1253,7 @@ export function useSession(mobile = false) {
     captionFading,
     agentState,
     tutorMode,
+    runtimeInfo,
     hasSpokenFirst,
     micEnabled,
     micBlocked,
@@ -1270,6 +1292,18 @@ export function captionTail(text: string, max = 140): string {
   }
   out = out.trim();
   return out.length > max ? '…' + out.slice(out.length - max + 1) : out;
+}
+
+/** Read worker runtime metadata, but only from the agent participant. */
+function readAgentRuntime(participant: Pick<RemoteParticipant, 'kind' | 'attributes'>): RuntimeInfo | null {
+  if (participant.kind !== ParticipantKind.AGENT) return null;
+  const raw = participant.attributes[ATTR_TUTOR_RUNTIME];
+  if (typeof raw !== 'string' || !raw) return null;
+  try {
+    return parseRuntimeInfo(JSON.parse(raw));
+  } catch {
+    return null;
+  }
 }
 
 const CODE_KEY = 'open-tutor-code';

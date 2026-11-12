@@ -60,6 +60,7 @@ export default function App() {
             <TopMenu
               items={session.items}
               dragOver={session.dragOver}
+              runtime={session.runtimeInfo}
               onCamera={() => cameraRef.current?.click()}
               onFiles={() => fileRef.current?.click()}
             />

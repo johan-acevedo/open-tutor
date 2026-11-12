@@ -155,3 +155,4 @@ export const TOPIC_SCREEN_CONTEXT = 'screen-context';
 
 export const ATTR_AGENT_STATE = 'lk.agent.state';
 export const ATTR_TUTOR_MODE = 'tutor.mode';
+export const ATTR_TUTOR_RUNTIME = 'tutor.runtime';

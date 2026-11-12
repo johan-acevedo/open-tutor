@@ -62,7 +62,7 @@ describe('Board greeting lives in the empty state', () => {
 });
 
 describe('Header menu inbox', () => {
-  const menuProps = { dragOver: false, onCamera: noop, onFiles: noop };
+  const menuProps = { dragOver: false, runtime: null, onCamera: noop, onFiles: noop };
 
   it('opens from the hamburger and shows a live empty inbox', () => {
     render(<TopMenu items={[]} {...menuProps} />);
@@ -85,7 +85,7 @@ describe('Header menu inbox', () => {
   it('wires the add buttons to the real handlers', () => {
     const onCamera = vi.fn();
     const onFiles = vi.fn();
-    render(<TopMenu items={[]} dragOver={false} onCamera={onCamera} onFiles={onFiles} />);
+    render(<TopMenu items={[]} dragOver={false} runtime={null} onCamera={onCamera} onFiles={onFiles} />);
     fireEvent.click(screen.getByRole('button', { name: 'Meny' }));
 
     fireEvent.click(screen.getByRole('button', { name: 'Fota läxan' }));

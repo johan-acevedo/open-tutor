@@ -62,6 +62,7 @@ The browser shows homework on the board itself as soon as the child adds it (kin
 | Text stream | `lk.transcription` | Built-in agent captions, streamed in step with the audio. The browser shows the sentence being spoken. |
 | Participant attribute | `lk.agent.state` | Built-in: `initializing`, `listening`, `thinking`, `speaking`. |
 | Participant attribute | `tutor.mode` | `talking` \| `quiet` \| `resource` \| `ending`. Quiet means the child is working; the avatar waits. |
+| Participant attribute | `tutor.runtime` | Worker-reported session settings: JSON `{version: 1, sections: [{title, fields: [{label, value}]}]}`. Contains model/provider names, reasoning, API endpoints, worker host, installed SDK versions and debug flags. Credentials, URL userinfo, query strings and fragments are excluded. The browser accepts this only from an agent participant. |
 
 ## Board items
 

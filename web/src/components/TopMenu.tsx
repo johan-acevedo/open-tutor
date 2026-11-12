@@ -1,16 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
 import type { BoardItem } from '../protocol';
+import { buildScreenSection } from '../runtimeInfo';
+import type { RuntimeInfo } from '../runtimeInfo';
 
 type Props = {
   items: BoardItem[];
   dragOver: boolean;
+  runtime: RuntimeInfo | null;
   onCamera: () => void;
   onFiles: () => void;
 };
 
-/** Hamburger dropdown in the topbar: live homework inbox + about note. */
-export default function TopMenu({ items, dragOver, onCamera, onFiles }: Props) {
+/** Hamburger dropdown in the topbar: live homework inbox + sessionsinfo + about note. */
+export default function TopMenu({ items, dragOver, runtime, onCamera, onFiles }: Props) {
   const [open, setOpen] = useState(false);
+  const [info, setInfo] = useState(false);
   const [about, setAbout] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const count = items.filter((item) => item.kind === 'homework').length;
@@ -40,6 +44,7 @@ export default function TopMenu({ items, dragOver, onCamera, onFiles }: Props) {
         aria-expanded={open}
         onClick={() => {
           setOpen((value) => !value);
+          setInfo(false);
           setAbout(false);
         }}
       >
@@ -71,6 +76,35 @@ export default function TopMenu({ items, dragOver, onCamera, onFiles }: Props) {
               Välj bild
             </button>
           </div>
+          <button
+            type="button"
+            className="ot-menu-about-row"
+            aria-expanded={info}
+            onClick={() => setInfo((value) => !value)}
+          >
+            Sessionsinfo
+          </button>
+          {info && (
+            <div className="ot-session-info" role="region" aria-label="Sessionsinfo">
+              {runtime === null ? (
+                <p className="ot-session-pending">Väntar på sessionsinfo från tutorn…</p>
+              ) : (
+                [...runtime.sections, buildScreenSection()].map((section, index) => (
+                  <section key={`${section.title}-${index}`} aria-label={section.title}>
+                    <h3 className="ot-session-title">{section.title}</h3>
+                    <dl className="ot-session-list">
+                      {section.fields.map((field, fieldIndex) => (
+                        <div key={`${field.label}-${fieldIndex}`} className="ot-session-row">
+                          <dt>{field.label}</dt>
+                          <dd>{field.value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </section>
+                ))
+              )}
+            </div>
+          )}
           <button
             type="button"
             className="ot-menu-about-row"

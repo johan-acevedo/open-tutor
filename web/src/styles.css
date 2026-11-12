@@ -130,6 +130,8 @@ a:focus-visible {
   gap: 10px;
   min-width: 280px;
   max-width: min(360px, calc(100vw - 32px));
+  max-height: min(70dvh, 560px);
+  overflow-y: auto;
 }
 
 .ot-menu-panel .ot-inbox {
@@ -192,6 +194,62 @@ a:focus-visible {
   padding: 6px 14px;
   font-size: 15px;
   cursor: pointer;
+}
+
+/* ---------- Sessionsinfo: worker runtime + browser Screen facts ---------- */
+
+.ot-session-info {
+  border-top: 1px solid var(--ot-border);
+  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ot-session-pending {
+  margin: 0;
+  font-size: 15px;
+  color: var(--ot-text-dim);
+}
+
+.ot-session-title {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ot-text-dim);
+}
+
+.ot-session-list {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ot-session-row {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  margin: 0;
+}
+
+.ot-session-row dt {
+  flex: 0 0 auto;
+  max-width: 45%;
+  font-size: 14px;
+  color: var(--ot-text-dim);
+}
+
+.ot-session-row dd {
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 14px;
+  color: var(--ot-text);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .ot-wordmark {

@@ -38,7 +38,7 @@ import type {
 } from "./types";
 import type { MainToScreenWorker, ScreenWorkerToMain } from "./worker-protocol";
 
-const MODEL_ID = "deepseek-v4.1-flash";
+import { SCREEN_MODEL_ID, SCREEN_THINKING_LEVEL } from "./screenConfig";
 
 type CandidatesDoc = { json: string };
 type ArtifactsDoc = { json: string };
@@ -572,8 +572,8 @@ const requestResearchTool = defineTool({
       {
         ownership: { kind: "ownerless" },
         agent: {
-          model: { provider: "screen-proxy", modelId: MODEL_ID },
-          thinkingLevel: "low",
+          model: { provider: "screen-proxy", modelId: SCREEN_MODEL_ID },
+          thinkingLevel: SCREEN_THINKING_LEVEL,
           instructions:
             "You are a geography research subagent for a Swedish primary-school tutor. " +
             "Use fetch_geography exactly once, then propose_geography exactly once with a short Swedish " +
@@ -700,8 +700,8 @@ async function boot(init: {
   }
   const safeProfile = init.profileId.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 64) || "default";
 
-  const base = OPENCODE_GO_MODELS[MODEL_ID as keyof typeof OPENCODE_GO_MODELS];
-  if (!base) throw new Error(`${MODEL_ID} missing from published opencode-go catalog`);
+  const base = OPENCODE_GO_MODELS[SCREEN_MODEL_ID as keyof typeof OPENCODE_GO_MODELS];
+  if (!base) throw new Error(`${SCREEN_MODEL_ID} missing from published opencode-go catalog`);
   const baseUrl = new URL(
     `/api/screen/openai/${encodeURIComponent(room)}`,
     (self as unknown as { location: { origin: string } }).location.origin,
@@ -733,8 +733,8 @@ async function boot(init: {
   harness = await Harness.open(storage, { models: models as never, registry: registry as never }, ctx);
   rootHandle = await harness.root(ctx, {
     agent: {
-      model: { provider: "screen-proxy", modelId: MODEL_ID },
-      thinkingLevel: "low",
+      model: { provider: "screen-proxy", modelId: SCREEN_MODEL_ID },
+      thinkingLevel: SCREEN_THINKING_LEVEL,
       instructions:
         `You are the Screen for ${learnerName}${init.grade ? ` (${init.grade})` : ""}. ` +
         "Swedish, short, primary-school level. Prior notes: " +
