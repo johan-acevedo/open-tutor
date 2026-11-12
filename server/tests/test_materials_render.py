@@ -1,0 +1,278 @@
+"""Behavioural tests for original-section rendering (step 3a).
+
+Synthetic-EPUB tests pin the display rules (descendant inclusion, peer
+exclusion, sanitizer, allowlist, determinism). Live-corpus tests prove the
+two contracted sections against the real pinned books and skip when the
+corpus is absent.
+"""
+
+import hashlib
+import json
+from pathlib import Path
+import zipfile
+
+import pytest
+
+from open_tutor.materials.render import (
+    SectionResolver,
+    export_package,
+    render_section,
+    sanitize_slice,
+    validate_package,
+)
+
+CORPUS = Path.home() / ".local" / "share" / "open-tutor" / "materials" / "siyavula"
+BOOKS_JSON = Path(__file__).resolve().parents[2] / "tools" / "siyavula" / "books.json"
+
+GRADE6_CIRCUIT_ID = "sec-ecd16baf9e4fee44"  # A simple circuit
+MATHS10_SUBSTITUTION_ID = "sec-6a9c825e9c3f2cd2"  # Solving by substitution
+
+needs_corpus = pytest.mark.skipif(
+    not (CORPUS / "Gr6_NaturalSciences_Learner_Eng_CC-BY.epub").exists()
+    or not (CORPUS / "Gr10_Mathematics_Learner_Eng_CC-BY.epub").exists()
+    or not BOOKS_JSON.exists(),
+    reason="downloaded Siyavula corpus is not present",
+)
+
+PNG = (
+    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+    b"\x08\x02\x00\x00\x00\x90wS\xde"
+)
+
+
+def _write_epub(path: Path, nav_items: str, docs: dict[str, str], assets: dict[str, bytes]) -> None:
+    manifest = "".join(
+        f'<item id="d{i}" href="text/{name}" media-type="application/xhtml+xml"/>'
+        for i, name in enumerate(docs)
+    )
+    manifest += "".join(
+        f'<item id="a{i}" href="text/{name}" media-type="application/octet-stream"/>'
+        for i, name in enumerate(assets)
+    )
+    opf = (
+        '<?xml version="1.0"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0">'
+        '<metadata xmlns:dc="http://purl.org/dc/elements/1.1/">'
+        "<dc:title>t</dc:title></metadata>"
+        f'<manifest><item id="nav" href="text/nav.xhtml" '
+        'media-type="application/xhtml+xml" properties="nav"/>'
+        f"{manifest}</manifest>"
+        '<spine><itemref idref="d0"/></spine></package>'
+    )
+    nav = (
+        '<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml" '
+        'xmlns:epub="http://www.idpf.org/2007/ops"><head><title>n</title></head>'
+        f'<body><nav epub:type="toc" id="toc"><ol>{nav_items}</ol></nav></body></html>'
+    )
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("mimetype", "application/epub+zip")
+        archive.writestr(
+            "META-INF/container.xml",
+            '<?xml version="1.0"?><container xmlns="urn:oasis:names:tc:opendocument:xmlns:container">'
+            '<rootfiles><rootfile full-path="pkg.opf"/></rootfiles></container>',
+        )
+        archive.writestr("pkg.opf", opf)
+        archive.writestr("text/nav.xhtml", nav)
+        for name, body in docs.items():
+            archive.writestr(f"text/{name}", body)
+        for name, data in assets.items():
+            archive.writestr(f"text/{name}", data)
+
+
+def _resolver(tmp_path: Path, nav_items: str, docs: dict, assets: dict | None = None) -> SectionResolver:
+    corpus = tmp_path / "corpus"
+    corpus.mkdir()
+    _write_epub(corpus / "tiny.epub", nav_items, docs, assets or {})
+    books = {
+        "catalogue_url": "https://www.siyavula.com/read",
+        "catalogue_license_url": "https://creativecommons.org/licenses/by/3.0/",
+        "attribution": "Tiny test book.",
+        "books": [
+            {
+                "id": "tiny-book",
+                "title": "Tiny",
+                "grade": 6,
+                "language": "en",
+                "license": "CC-BY",
+                "url": "https://www.siyavula.com/read",
+                "filename": "tiny.epub",
+            }
+        ],
+    }
+    books_path = tmp_path / "books.json"
+    books_path.write_text(json.dumps(books), encoding="utf-8")
+    return SectionResolver(data_dir=corpus, books_path=books_path)
+
+
+NESTED_NAV = (
+    '<li><a href="ch.xhtml#top">Top</a><ol>'
+    '<li><a href="ch.xhtml#sub">Sub</a></li></ol></li>'
+    '<li><a href="ch.xhtml#peer">Peer</a></li>'
+)
+NESTED_DOC = (
+    '<html xmlns="http://www.w3.org/1999/xhtml"><head><title>c</title>'
+    '<link rel="stylesheet" type="text/css" href="b.css"/>'
+    '<link rel="stylesheet" type="text/css" href="a.css"/></head><body>'
+    '<div class="section"><h1 id="top">Top</h1><p>Parent intro.</p>'
+    '<div class="section"><h2 id="sub">Sub</h2><p>Child body.</p>'
+    '<img class="math-inline" src="equation/e1.png" alt=""/>'
+    '<img src="../evil.png"/><img src="https://example.com/x.png"/><img src="missing.png"/>'
+    "</div><p>Parent tail.</p></div>"
+    '<div class="section"><h2 id="peer">Peer</h2><p>Peer body.</p></div>'
+    "</body></html>"
+)
+NESTED_ASSETS = {"b.css": b"h1{}", "a.css": b"h2{}", "equation/e1.png": PNG}
+
+
+def _ids(resolver: SectionResolver) -> dict[str, str]:
+    return {section.title: section.id for section in resolver.sections.values()}
+
+
+def test_parent_slice_includes_child_and_excludes_peer(tmp_path):
+    resolver = _resolver(tmp_path, NESTED_NAV, {"ch.xhtml": NESTED_DOC}, NESTED_ASSETS)
+    ids = _ids(resolver)
+    parent = render_section(resolver, ids["Top"])
+    assert "Parent intro." in parent.slice_html and "Parent tail." in parent.slice_html
+    assert "Child body." in parent.slice_html  # descendants render with the parent
+    assert "Peer body." not in parent.slice_html
+    assert [child.title for child in parent.descendants] == ["Sub"]
+    child = render_section(resolver, ids["Sub"])
+    assert "Child body." in child.slice_html
+    assert "Parent intro." not in child.slice_html and "Peer body." not in child.slice_html
+    assert child.descendants == []
+    peer = render_section(resolver, ids["Peer"])
+    assert "Peer body." in peer.slice_html and "Child body." not in peer.slice_html
+    # Slices are balanced: each parses as well-formed XML on its own.
+    from open_tutor.materials.passages import parse_document as parse
+
+    for rendered in (parent, child, peer):
+        parse(f'<root xmlns="http://www.w3.org/1999/xhtml">{rendered.slice_html}</root>'.encode())
+
+
+def test_stylesheet_order_preserved_and_active_content_stripped(tmp_path):
+    doc = (
+        '<html xmlns="http://www.w3.org/1999/xhtml"><head><title>c</title>'
+        '<link rel="stylesheet" href="b.css"/><link rel="stylesheet" href="a.css"/>'
+        '<script type="text/javascript" src="mathjax/MathJax.js"> </script></head><body>'
+        '<div class="section"><h1 id="top">Top</h1>'
+        '<p onclick="steal()">Hi <a href="javascript:alert(1)">x</a></p>'
+        '<script>alert("inline")</script></div></body></html>'
+    )
+    resolver = _resolver(
+        tmp_path, '<li><a href="ch.xhtml#top">Top</a></li>', {"ch.xhtml": doc},
+        {"b.css": b"h1{}", "a.css": b"h2{}"},
+    )
+    out = tmp_path / "pkg"
+    metadata = export_package(resolver, _ids(resolver)["Top"], out)
+    index = (out / "index.html").read_text(encoding="utf-8")
+    assert index.index('href="b.css"') < index.index('href="a.css"')
+    assert "<script" not in index.lower() and "onclick" not in index
+    assert "javascript:" not in index and "#blocked" in index
+    assert "MathJax" not in index
+    assert metadata["sanitize_notes"]
+    assert (out / "b.css").exists() and (out / "a.css").exists()
+    assert validate_package(out, metadata) == []
+
+
+def test_stale_nav_target_renders_at_corrected_heading(tmp_path):
+    doc = (
+        '<html xmlns="http://www.w3.org/1999/xhtml"><head><title>c</title></head><body>'
+        '<div class="section"><h1 id="chapter">Chapter 6: Functions</h1>'
+        '<h3 id="variables">Variables</h3><p>Var body.</p></div></body></html>'
+    )
+    resolver = _resolver(
+        tmp_path,
+        '<li><span>Chapter 6: Functions</span><ol>'
+        '<li><a href="ch.xhtml#chapter">Variables</a></li></ol></li>',
+        {"ch.xhtml": doc},
+    )
+    section = next(iter(resolver.sections.values()))
+    assert section.fragment == "variables"  # catalogue corrected the stale target
+    assert section.source_href == "ch.xhtml#chapter"
+    rendered = render_section(resolver, section.id)
+    assert "Var body." in rendered.slice_html
+
+
+def test_unknown_id_and_unsafe_refs(tmp_path):
+    resolver = _resolver(tmp_path, NESTED_NAV, {"ch.xhtml": NESTED_DOC}, NESTED_ASSETS)
+    with pytest.raises(KeyError):
+        render_section(resolver, "sec-nope")
+    ids = _ids(resolver)
+    out = tmp_path / "pkg"
+    metadata = export_package(resolver, ids["Sub"], out)
+    by_src = {image["src"]: image for image in metadata["images"]}
+    assert by_src["equation/e1.png"]["resolved"]
+    assert not by_src["../evil.png"]["resolved"]
+    assert not by_src["https://example.com/x.png"]["resolved"]
+    assert not by_src["missing.png"]["resolved"]
+    assert metadata["warnings"]
+    # Nothing escapes the package: no file outside out, no evil payload inside.
+    assert not (tmp_path / "evil.png").exists()
+    assert (out / "equation" / "e1.png").read_bytes() == PNG
+    assert validate_package(out, metadata) == []
+
+
+def test_export_is_deterministic(tmp_path):
+    resolver = _resolver(tmp_path, NESTED_NAV, {"ch.xhtml": NESTED_DOC}, NESTED_ASSETS)
+    first = export_package(resolver, _ids(resolver)["Top"], tmp_path / "a")
+    second = export_package(resolver, _ids(resolver)["Top"], tmp_path / "b")
+    assert first == second
+    for entry in first["files"]:
+        left = (tmp_path / "a" / Path(*Path(entry["path"]).parts)).read_bytes()
+        right = (tmp_path / "b" / Path(*Path(entry["path"]).parts)).read_bytes()
+        assert left == right
+    assert (tmp_path / "a" / "metadata.json").read_bytes() == (
+        tmp_path / "b" / "metadata.json"
+    ).read_bytes()
+
+
+def test_sanitize_slice_notes():
+    cleaned, notes = sanitize_slice('<p onclick="x()">a</p><script>b</script>')
+    assert "<script" not in cleaned and "onclick" not in cleaned
+    assert len(notes) == 2
+
+
+@needs_corpus
+def test_grade6_simple_circuit_keeps_illustration_excludes_peer(tmp_path):
+    resolver = SectionResolver()
+    rendered = render_section(resolver, GRADE6_CIRCUIT_ID)
+    assert rendered.section.title == "A simple circuit"
+    assert rendered.section.breadcrumbs == ["Electric circuits"]
+    assert "Many misconceptions develop" in rendered.owned_text
+    assert "Many misconceptions develop" in rendered.slice_html
+    assert "Circuit components" in rendered.slice_html  # intentional descendant
+    assert "Circuit diagrams" not in rendered.slice_html  # next peer excluded
+    assert "toc-id-3" not in rendered.slice_html
+    assert [child.title for child in rendered.descendants] == ["Circuit components"]
+    assert rendered.section.license_evidence  # embedded license links surfaced
+    out = tmp_path / "circuit"
+    metadata = export_package(resolver, GRADE6_CIRCUIT_ID, out)
+    index = (out / "index.html").read_text(encoding="utf-8")
+    circuit_images = [image for image in metadata["images"] if "ec-gd-" in image["src"]]
+    assert len(circuit_images) >= 10 and all(image["resolved"] for image in metadata["images"] if not image["src"].startswith("http"))
+    for image in circuit_images:
+        assert image["src"] in index and (out / Path(*Path(image["package_path"]).parts)).is_file()
+    assert metadata["stylesheets"][0]["href"].endswith("custom.css")
+    assert 'href="./custom.css"' in index or 'href="custom.css"' in index
+    assert validate_package(out, metadata) == []
+
+
+@needs_corpus
+def test_grade10_substitution_keeps_worked_example_and_equations(tmp_path):
+    resolver = SectionResolver()
+    rendered = render_section(resolver, MATHS10_SUBSTITUTION_ID)
+    assert rendered.section.title == "Solving by substitution"
+    assert "Worked example 6" in rendered.slice_html  # worked example preserved
+    assert "Solving by elimination" not in rendered.slice_html  # next peer excluded
+    assert "toc-id-1" not in rendered.slice_html
+    equations = [image for image in rendered.images if "equation/" in image.ref]
+    assert len(equations) == 29
+    assert all(image.kind.startswith("math") for image in equations)
+    out = tmp_path / "substitution"
+    metadata = export_package(resolver, MATHS10_SUBSTITUTION_ID, out)
+    assert all(image["resolved"] for image in metadata["images"])
+    assert all(image["kind"].startswith("math") for image in metadata["images"])
+    assert "Worked example 6" in (out / "index.html").read_text(encoding="utf-8")
+    assert validate_package(out, metadata) == []
+    assert rendered.section.license_evidence
+    assert "Worked example 6" in rendered.owned_text
+    assert not rendered.text_complete  # math lives in images, not text
