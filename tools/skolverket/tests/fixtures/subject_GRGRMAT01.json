@@ -1,0 +1,50 @@
+{
+ "apiPublisher": "Skolverket",
+ "apiName": "Syllabus API",
+ "apiVersion": "1.16.2-SNAPSHOT",
+ "apiReleased": "2026-05-08",
+ "apiStatus": "active",
+ "apiDocumentation": "https://www.skolverket.se/om-oss/oppna-data/api-for-laroplaner-kurs--och-amnesplaner-syllabus",
+ "dataOrigin": "Syllabus API - Skolverket - 1.16.2-SNAPSHOT",
+ "calledMethod": "ReadSubject",
+ "totalElements": 1,
+ "processingTime": "CACHED 60 min, until 2026-11-12T18:15:40.492985449",
+ "startedCaching": "2026-11-12T17:15:40.492985449",
+ "codeParam": "GRGRMAT01",
+ "dateParam": "2026-11-12",
+ "subject": {
+  "centralCntHeading": "<h3>Centralt innehåll</h3>",
+  "centralContents": [
+   {
+    "text": "<h3>I årskurs 1–3</h3><h4>Taluppfattning och tals användning</h4> <ul> <li>Naturliga tal och deras egenskaper samt hur talen delas upp och an­vän­ds för att ange antal och ordning.</li> <li>Positionssystemet och hur det används för att beskriva naturliga tal.</li> <li>Symboler för tal och symbolernas utveckling i några olika kulturer genom historien.</li> <li>Tal i bråkform som del av helhet och del av antal samt hur delarna benämns och uttrycks som enkla bråk. Hur enkla bråk förhåller sig till naturliga tal.</li> <li>Hur naturliga tal och enkla tal i bråkform används i elevnära situa­tio­ner.</li> <li>De fyra räknesättens egenskaper och samband samt användning i olika situationer.</li> <li>Metoder för beräkningar med naturliga tal, vid huvudräkning, över­slags­räkning och skriftlig beräkning. Användning av digitala verktyg vid be­räk­ningar.</li> <li>Rimlighetsbedömning vid uppskattningar och beräkningar.</li> </ul> <h4>Algebra</h4> <ul> <li>Matematiska likheter och likhetstecknets betydelse.</li> <li>Obekanta tal och hur de kan betecknas med en symbol.</li> <li>Enkla mönster i talföljder och enkla geometriska mönster samt hur de konstrueras, beskrivs och uttrycks.</li> <li>Entydiga stegvisa instruktioner och hur de konstrueras, beskrivs och följs som grund för programmering. Hur symboler används vid stegvisa in­struk­tioner.</li> </ul> <h4>Geometri</h4> <ul> <li>Vanliga lägesord för att beskriva föremåls och objekts läge i rummet.</li> <li>Grundläggande geometriska tvådimensionella objekt samt objekten klot, kon, cylinder och rätblock. Egenskaper hos dessa objekt och deras inbördes relationer. Konstruktion av geometriska objekt.</li> <li>Jämförelser och uppskattningar av storheter. Mätning av längd, massa, volym och tid med vanliga nutida och äldre måttenheter.</li> <li>Skala vid enkel förminskning och förstoring.</li> <li>Symmetri i vardagen och hur symmetri kan konstrueras.</li> </ul> <h4>Sannolikhet och statistik</h4> <ul> <li>Slumpmässiga händelser i konkreta situationer.</li> <li>Enkla tabeller och diagram och hur de används för att sortera data och beskriva resultat från undersökningar, såväl med som utan digitala verktyg.</li> </ul> <h4>Samband och förändring</h4> <ul> <li>Proportionella samband, däribland dubbelt och hälften.</li> </ul> <h4>Problemlösning</h4> <ul> <li>Strategier för att lösa matematiska problem i elevnära situationer.</li> <li>Formulering av matematiska frågeställningar utifrån vardagliga situationer.</li> </ul>",
+    "year": "1-3"
+   }
+  ],
+  "code": "GRGRMAT01",
+  "description": "<p>Matematiken har en flertusenårig historia med bidrag från många kulturer. Den utvecklas såväl ur praktiska behov som ur människans nyfikenhet och lust att utforska matematiken som sådan. Matematisk verksamhet är till sin art en kreativ, reflekterande och problemlösande aktivitet som är nära kopplad till den samhälleliga, sociala, naturvetenskapliga, tekniska och digitala ut­veck­lingen. Kunskaper i matematik ger människor förutsättningar att fatta väl­grun­dade beslut i vardagslivets många valsituationer och ökar möjligheterna att del­ta i samhällets beslutsprocesser.</p>",
+  "designation": "MA",
+  "gradeScale": "A-F",
+  "knowledgeReqsHeading": "<h2>KRITERIER FÖR BEDÖMNING AV KUNSKAPER OCH BETYGSKRITERIER I ÄMNET MATEMATIK</h2>",
+  "knowledgeRequirements": [
+   {
+    "text": "<h3>Kriterier för bedömning av godtagbara kunskaper i slutet av årskurs 3</h3><p>Eleven visar grundläggande kunskaper om matematiska begrepp och använder dem med tillfredsställande säkerhet. Eleven ger även exempel på hur några begrepp relaterar till varandra. Eleven visar grundläggande kunskaper om naturliga tal och beskriver tals inbördes relation samt delar upp tal. Eleven visar grundläggande kunskaper om tal i bråkform och delar upp helheter i delar samt jämför och namnger delarna som enkla bråk. Eleven använder och beskriver geometriska mönster och mönster i talföljder. Dessutom använder eleven grundläggande geometriska begrepp och vanliga lägesord för att beskriva geometriska objekts egenskaper, läge och inbördes relationer. Eleven använder och ger exempel på enkla proportionella samband.</p> <p>Eleven väljer och använder i huvudsak fungerande matematiska metoder för att göra enkla beräkningar med naturliga tal och lösa enkla rutinuppgifter med tillfredsställande säkerhet. Eleven använder huvudräkning för att genomföra beräkningar med de fyra räknesätten. Vid addition och subtraktion väljer och använder eleven skriftliga räknemetoder med tillfredsställande säkerhet. Eleven hanterar enkla matematiska likheter och använder då likhetstecknet på ett fungerande sätt. Eleven avbildar och, utifrån instruktioner, konstruerar enkla geometriska objekt. Eleven gör enkla mätningar, jämförelser och uppskattningar av längder, massor, volymer och tider och använder vanliga måttenheter. Vid olika undersökningar avläser och skapar eleven enkla tabeller och diagram för att sortera och redovisa resultat.</p> <p>Eleven löser enkla problem genom att välja och använda någon strategi med viss anpassning till problemets karaktär. Eleven beskriver tillvägagångssätt och ger enkla omdömen om resultatens rimlighet.</p> <p>Eleven för och följer matematiska resonemang genom att ställa och besvara frågor som i huvudsak hör till ämnet.</p> <p>Eleven beskriver och samtalar om tillvägagångssätt på ett i huvudsak fungerande sätt och använder då konkret material, bilder, symboler och andra matematiska uttrycksformer.</p>",
+    "year": "3"
+   }
+  ],
+  "modifiedDate": "2024-02-09",
+  "name": "Matematik",
+  "nameHeading": "<h2>Matematik</h2>",
+  "purpose": "<p>Undervisningen i ämnet matematik ska syfta till att eleverna utvecklar kun­ska­per om matematik och matematikens användning i vardagen och inom oli­ka ämnesområden. Undervisningen ska bidra till att eleverna utvecklar in­tresse för matematik och tilltro till sin förmåga att använda matematik i olika sam­manhang. Den ska också ge eleverna möjlighet att uppleva estetiska vär­den i möten med matematiska mönster, former och samband.</p> <p>Genom undervisningen ska eleverna ges förutsättningar att utveckla för­tro­gen­het med grundläggande matematiska begrepp och metoder och deras an­vänd­barhet. Vidare ska eleverna genom undervisningen ges möjligheter att ut­veckla kunskaper i att använda digitala verktyg och programmering för att kunna undersöka problemställningar och matematiska begrepp, göra beräk­ningar samt för att presentera och tolka data.</p> <p>Undervisningen ska bidra till att eleverna utvecklar kunskaper för att kunna for­mu­lera och lösa problem samt reflektera över och värdera valda strategier, mo­deller och resultat. Eleverna ska även ges förutsättningar att utveckla kun­ska­per för att kunna tolka vardagliga och matematiska situationer samt för att kunna beskriva och formulera dessa med hjälp av matematikens uttrycks­former.</p> <p>Undervisningen ska bidra till att eleverna utvecklar förmågan att argu­mentera logiskt och föra matematiska resonemang. Eleverna ska genom under­visningen också ges möjlighet att utveckla en förtrogenhet med mate­mati­kens uttrycksformer och hur dessa kan användas för att kommunicera om mate­matik i vardagliga och matematiska sammanhang.</p> <p>Undervisningen ska ge eleverna förutsättningar att utveckla kunskaper om histo­riska sammanhang där viktiga begrepp och metoder i matematiken har ut­vecklats. Genom undervisningen ska eleverna även ges möjligheter att re­flek­tera över matematikens betydelse, användning och begränsning i var­dags­livet, i andra skolämnen och under historiska skeenden och därigenom kunna se matematikens sammanhang och relevans.</p> <p>Undervisningen i ämnet matematik ska ge eleverna förutsättningar att ut­veckla</p> <ul> <li>förmåga att använda och beskriva matematiska begrepp och samband mellan begrepp,</li> <li>förmåga att välja och använda lämpliga matematiska metoder för att göra beräkningar och lösa rutinuppgifter,</li> <li>förmåga att formulera och lösa problem med hjälp av matematik och värdera valda strategier,</li> <li>förmåga att föra och följa matematiska resonemang, och</li> <li>förmåga att använda matematikens uttrycksformer för att samtala om och redogöra för frågeställningar, beräkningar och slutsatser.</li> </ul>",
+  "purposeHeading": "<h3>Syfte</h3>",
+  "schoolTypes": [
+   "GR",
+   "SAM"
+  ],
+  "skolfsAndring": "2022:8",
+  "skolfsGrund": "2010:37",
+  "startDate": "2022-07-01",
+  "typeOfSyllabus": "COURSE_SYLLABUS",
+  "version": 14,
+  "versionInfo": "Redigering av rubrik för betygskriterier"
+ }
+}

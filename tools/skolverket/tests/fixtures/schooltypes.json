@@ -1,0 +1,43 @@
+{
+ "schoolTypes": [
+  {
+   "code": "GR",
+   "curriculumCode": "GR2011",
+   "displaySortOrder": 50,
+   "maxGrade": 9,
+   "minGrade": 1,
+   "name": "Grundskola"
+  },
+  {
+   "code": "GY",
+   "curriculumCode": "GY2011",
+   "displaySortOrder": 90,
+   "name": "Gymnasieskola"
+  },
+  {
+   "code": "SAM",
+   "curriculumCode": "SAM2011",
+   "displaySortOrder": 80,
+   "maxGrade": 6,
+   "minGrade": 1,
+   "name": "Sameskola"
+  },
+  {
+   "code": "VUXGY",
+   "curriculumCode": "VU2013",
+   "displaySortOrder": 120,
+   "name": "Kommunal vuxenutbildning på gymnasial nivå"
+  }
+ ],
+ "processingTime": "CACHED 60 min, until 2026-11-12T18:22:31.589483111",
+ "apiDocumentation": "https://www.skolverket.se/om-oss/oppna-data/api-for-laroplaner-kurs--och-amnesplaner-syllabus",
+ "apiName": "Syllabus API",
+ "apiPublisher": "Skolverket",
+ "apiReleased": "2026-05-08",
+ "apiStatus": "active",
+ "apiVersion": "1.16.2-SNAPSHOT",
+ "calledMethod": "ListSchoolTypes",
+ "dataOrigin": "Syllabus API - Skolverket - 1.16.2-SNAPSHOT",
+ "startedCaching": "2026-11-12T17:22:31.589483111",
+ "totalElements": 4
+}
