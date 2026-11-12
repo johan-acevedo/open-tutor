@@ -182,3 +182,5 @@ uv run pytest -q
 `scripts/two_session_probe.py` runs two consecutive typed sessions for one fictional learner against a running worker. The first session's saved note goes into the second, as in the browser. It checks that board items arrive and are acknowledged in both, and that no tool name, arguments or JSON reach the captions (the text the voice speaks).
 
 `scripts/live_probe.py` runs a real session against a running worker with a scripted fictional learner: recorded Swedish clips, a generated worksheet, an interruption, 30 s of quiet work, mumbling, and the end of the session. It writes a JSON timeline and the tutor's audio. It uses live providers and costs a little; it is not part of CI.
+
+Run this prototype material server with `uvicorn open_tutor.web:app --workers 1`. Material packages are built lazily; concurrent publishers adopt a valid existing package rather than replacing it.

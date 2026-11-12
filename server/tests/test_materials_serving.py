@@ -388,3 +388,24 @@ def test_real_parent_section_feedback_is_image_complete(tmp_path):
     assert body["visible_image_count"] > 100
     assert body["completeness"]["text_complete"] is False
     assert client.get(body["display_url"]).status_code == 200
+
+
+def test_publish_collision_adopts_complete_winner(tmp_path, monkeypatch):
+    import shutil
+    store = _store(tmp_path)
+    section_id = _id(store, "Top")
+    original_rename = Path.rename
+    winner_inodes = []
+
+    def publish_winner_first(staging, target):
+        if staging.name.startswith('.build-'):
+            shutil.copytree(staging, target)
+            winner_inodes.append((target / 'index.html').stat().st_ino)
+            raise FileExistsError('concurrent publisher won')
+        return original_rename(staging, target)
+
+    monkeypatch.setattr(Path, 'rename', publish_winner_first)
+    package = store.package(section_id)
+    assert winner_inodes == [(package.root / 'index.html').stat().st_ino]
+    assert (package.root / '.complete').is_file()
+    assert not list(package.root.parent.glob('.build-*'))

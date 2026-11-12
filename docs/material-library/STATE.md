@@ -66,3 +66,7 @@ DeepSeek reproduced all original images and identified three integration blocker
 ## Step 3b HTTP serving, awaiting review
 
 DeepSeek delivered 391ffd4 + 05a1fdc. Read-only section metadata, original HTML and allowlisted assets are wired into FastAPI; process-lazy resolver and versioned atomic disk package cache live outside Git. Worker verified actual HTTP and Chromium sandbox image loading on elitebook. Cross-Origin-Resource-Policy same-origin broke opaque sandbox resource requests, so public CC-BY material responses deliberately use cross-origin while page framing remains self-only. Wrapper style uses a CSP hash; source inline style attributes currently remain blocked. Full worker suite: 219 passed, 1 skipped. Muse owns independent review of cache/revision, CSP, asset boundaries, browser load evidence and tutor metadata before persistent serving or frontend wiring. No UI or voice integration yet.
+
+## Step 3b review correction / next step 3c
+
+Muse reproduced real HTTP, opaque-sandbox images and metadata with 219 passing tests. One proven multi-process collision deleted a complete package while another process served it. Parent changed publication to adopt the verified winner (also re-check before stale-target removal), added a collision regression check, and documented single-worker prototype deployment. No other blockers. Next step 3c: minimal material board item + sandboxed original-section component and load acknowledgement, preserving the fox and ongoing generated-board feature. Voice tool and real model search integration follow separately.

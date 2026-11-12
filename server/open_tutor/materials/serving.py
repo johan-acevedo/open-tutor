@@ -254,6 +254,9 @@ class SectionPackageStore:
     def _export(self, resolver: SectionResolver, section_id: str, target: Path) -> SectionPackage:
         # Stale or partial leftovers for this version must not survive a rebuild.
         if target.exists():
+            published = self._load_published(target, section_id)
+            if published is not None:
+                return published
             shutil.rmtree(target, ignore_errors=True)
         staging = Path(tempfile.mkdtemp(prefix=f".build-{section_id}-", dir=str(target.parent)))
         try:
@@ -270,7 +273,10 @@ class SectionPackageStore:
             try:
                 staging.rename(target)
             except OSError:
-                # Another process published first, or a leftover appeared.
+                # Adopt a complete winner rather than deleting a live package.
+                published = self._load_published(target, section_id)
+                if published is not None:
+                    return published
                 if target.exists():
                     shutil.rmtree(target, ignore_errors=True)
                     staging.rename(target)
