@@ -44,6 +44,7 @@ from .board import (
 from .config import AGENT_NAME, DEFAULT_TTS_MODEL, DEFAULT_TTS_VOICE, env_float
 from .debug_log import DebugLog, clear_active, record_active, set_active
 from .dialogue_tts import DialogueTTS, is_dialogue_model
+from .deepgram_tts import DeepgramFluxTTS, DEFAULT_MODEL as DEEPGRAM_DEFAULT_MODEL, parse_expressivity
 from .tutor_llm import build_llm, warm_up
 from .speech import speakable_stream, unspoken_stream
 
@@ -91,6 +92,17 @@ def build_tts():
             model=os.environ.get("TUTOR_TTS_MODEL", "sonic-3"),
             voice=os.environ["TUTOR_TTS_VOICE"],
             language="sv",
+        )
+    if provider == "deepgram":
+        # Deepgram Flux TTS (/v2/speak) over streaming linear16 PCM, Swedish voice
+        # flux-ludvig-sv with expressivity=1 (see deepgram_tts.py). No silent
+        # fallback: a missing key or bad expressivity raises here, before the session.
+        return DeepgramFluxTTS(
+            model=os.environ.get("TUTOR_TTS_MODEL", DEEPGRAM_DEFAULT_MODEL),
+            expressivity=parse_expressivity(
+                os.environ.get("TUTOR_TTS_EXPRESSIVITY", "1")
+            ),
+            api_key=os.environ.get("DEEPGRAM_API_KEY") or None,
         )
     model = os.environ.get("TUTOR_TTS_MODEL", DEFAULT_TTS_MODEL)
     voice = os.environ.get("TUTOR_TTS_VOICE") or DEFAULT_TTS_VOICE

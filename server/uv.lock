@@ -878,6 +878,20 @@ wheels = [
 ]
 
 [[package]]
+name = "livekit-plugins-deepgram"
+version = "1.8.10"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "livekit-agents", extra = ["codecs"] },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/3d/ce/8e5bc73f0beb994f447eaf699e9e8d13d57a704c5d502fa54321396c6157/livekit_plugins_deepgram-1.8.10.tar.gz", hash = "sha256:753e6d3980ce9a9febab0c2ee4a40bc00aa5667638bba42dcbb04ca5ba93d93c", size = 28478, upload-time = "2026-10-28T17:17:41.789Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a0/28/87cb3f2cd8d6a7d84ae09f58cd3eaa0a2fde12f135b281080c282cc6b4f8/livekit_plugins_deepgram-1.8.10-py3-none-any.whl", hash = "sha256:f182ec4c2df08f88dd1351aa094f4048601cdf2a06390c70d47e7b13c59450fb", size = 35398, upload-time = "2026-10-28T17:17:40.579Z" },
+]
+
+[[package]]
 name = "livekit-plugins-elevenlabs"
 version = "1.8.10"
 source = { registry = "https://pypi.org/simple" }
@@ -1181,6 +1195,7 @@ dependencies = [
     { name = "livekit-agents" },
     { name = "livekit-api" },
     { name = "livekit-plugins-cartesia" },
+    { name = "livekit-plugins-deepgram" },
     { name = "livekit-plugins-elevenlabs" },
     { name = "livekit-plugins-openai" },
     { name = "livekit-plugins-silero" },
@@ -1203,6 +1218,7 @@ requires-dist = [
     { name = "livekit-agents", specifier = "~=1.8.10" },
     { name = "livekit-api", specifier = ">=1.2,<2" },
     { name = "livekit-plugins-cartesia", specifier = "~=1.8.10" },
+    { name = "livekit-plugins-deepgram", specifier = "~=1.8.10" },
     { name = "livekit-plugins-elevenlabs", specifier = "~=1.8.10" },
     { name = "livekit-plugins-openai", specifier = "~=1.8.10" },
     { name = "livekit-plugins-silero", specifier = "~=1.8.10" },
