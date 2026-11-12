@@ -110,3 +110,35 @@ The frame stays `sandbox="allow-scripts"` without same-origin. Answers and draft
 - Only Chromium was used to render. The shell avoids newer CSS (`:has`, nesting, container queries, `@starting-style`)
   and uses custom elements, flexbox, grid and Web Animations, all widely available, but iPhone Safari has not been tried
   on a real device.
+
+## Small-model test (2026-11-12)
+
+Five requests the examples do not cover (`smalltest/requests.json`), one page and one patch each, sequential calls on
+the OpenCode Go subscription. Muse Spark 1.3 Contributor: Responses API, reasoning minimal. DeepSeek V4.1 Flash:
+Chat Completions, reasoning low. Static prompt about 4 300 tokens; Muse reported it cached from the second call on.
+Text size is the root font the shell chose (laptop 1366×768 / phone 390×844); larger is better, 18.5 px is the phone cap.
+Run 1 used the reference without the density rule (its text sizes were rendered with a slightly older shell).
+
+| Model | Request | Page: first text / done | Patch: done | Text size laptop / phone | Run 1 (before the density rule): done, text size |
+|---|---|---|---|---|---|
+| muse | tiotal | 3.11 / 5.17 s | 4.03 s | 33.25 / 18.5 px | 4.16 s, 33.25 / 18.5 px |
+| muse | norden | 3.07 / 5.5 s | 3.93 s | 33.25 / 18.5 px | 5.45 s, 31.5 / 18.5 px |
+| muse | verb | 5.65 / 8.15 s | 6.35 s | 33.25 / 18.5 px | 3.88 s, 31.75 / 18.5 px |
+| muse | andragrad | 4.51 / 7.34 s | 7.43 s | 17 / 13.75 px | 6.45 s, 18.25 / 13.25 px |
+| muse | vikingar | 6.8 / 9.71 s | 5.65 s | 29.5 / 18.5 px | 6.07 s, 28.25 / 16 px |
+| deepseek | tiotal | 5.15 / 6.72 s | 3.59 s | 33.25 / 18.5 px | 8.6 s, 31.75 / 18.5 px |
+| deepseek | norden | 2.56 / 5.98 s | 1.37 s | 30 / 18.5 px | 8.52 s, 19.5 / 14.25 px |
+| deepseek | verb | 2.22 / 4.76 s | 1.34 s | 33.25 / 18.5 px | 5.26 s, 31 / 18.5 px |
+| deepseek | andragrad | 4.61 / 8.41 s | 2.77 s | 18.75 / 15.5 px | 12.21 s, 14.75 / 11.25 px |
+| deepseek | vikingar | 1.67 / 5.37 s | 1.47 s | 29.5 / 18 px | 10.81 s, 24.25 / 13.5 px |
+
+What the outputs show:
+- Both models imitate the examples closely: right tags, right attributes, ids where the tutor will act, `ot-hidden` /
+  `ot-answer` where the child should work, Swedish notation. No unknown tags, no KaTeX errors, no scripts.
+- All ten patches are valid and minimal (append a mark, recolour one country, reveal one gap, replace one point, add
+  one timeline event).
+- Weak spots: pages get dense when the request is big (andragrad: graph plus a six-step pq solution is too much for
+  one phone screen); labels sometimes crowd on maps (the shell now moves them apart); one model put a place outside
+  the view (Reykjavik, before `norden` included Iceland). The lint list catches these, so the Screen agent can fix or
+  split the page before it is shown.
+- Timings vary between runs by a few seconds; one run each, so treat them as indicative.

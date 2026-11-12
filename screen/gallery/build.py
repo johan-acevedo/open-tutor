@@ -51,6 +51,8 @@ def collect():
 
 def find_timing(results, model, case):
     try:
+        if "models" in results:
+            return results["models"][model]["cases"].get(case)
         m = results.get(model) if isinstance(results, dict) else None
         if isinstance(m, dict):
             return m.get(case)

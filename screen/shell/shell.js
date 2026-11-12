@@ -128,13 +128,13 @@
     loaded[name] = Promise.all([chain].concat(styles)).catch(function (e) { issue('load', e.message); });
     return loaded[name];
   }
-  var dataCache = {};
+  var dataCache = {}, dataValue = {};
   function fetchJson(url) {
     if (!dataCache[url]) {
       dataCache[url] = fetch(url).then(function (r) {
         if (!r.ok) throw new Error('HTTP ' + r.status);
         return r.json();
-      }).catch(function (e) { issue('load', 'could not load ' + url + ': ' + e.message); return null; });
+      }).then(function (v) { dataValue[url] = v; return v; }).catch(function (e) { issue('load', 'could not load ' + url + ': ' + e.message); return null; });
     }
     return dataCache[url];
   }
@@ -1380,10 +1380,19 @@
   }
   function historyUrl(y) { return DATA.history + 'world_' + (y < 0 ? 'bc' + (-y) : y) + '.geojson'; }
   function mapData(el) {
-    var tasks = [fetchJson(DATA.countries)];
+    var urls = [DATA.countries];
     var year = el.getAttribute('year');
-    if (year) tasks.push(fetchJson(historyUrl(nearestHistory(num(year)))));
-    return Promise.all(tasks).then(function (r) { el._countries = r[0]; el._history = r[1] || null; });
+    if (year) urls.push(historyUrl(nearestHistory(num(year))));
+    // data already loaded for an earlier map (a patch replacing a map): attach it now, so the
+    // new map draws in the same task as the patch
+    if (urls.every(function (u) { return u in dataValue; })) {
+      el._countries = dataValue[urls[0]]; el._history = urls[1] ? dataValue[urls[1]] : null;
+      return Promise.resolve();
+    }
+    return Promise.all(urls.map(fetchJson)).then(function (r) {
+      el._countries = r[0]; el._history = r[1] || null;
+      if (booted && el.isConnected) el.redraw();
+    });
   }
   function rewind(feature) {
     // d3 wants clockwise rings; GeoJSON files are often the other way round.
