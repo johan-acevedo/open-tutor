@@ -31,6 +31,8 @@ Go serves Muse Spark 1.3 Contributor only on its OpenAI Responses endpoint, `htt
 
 ## The voice route
 
+The Screen development fox uses Muse Spark 1.3 Contributor through OpenCode Go: `TUTOR_LLM=go` and `TUTOR_LLM_MODEL=muse-spark-1.3-contributor`. It uses the Responses API with the existing `OPENCODE_GO_API_KEY` and default `minimal` reasoning. The legacy `gemini-dev` override was removed from the running development configuration on 2026-11-12.
+
 The Screen development instance uses Deepgram Flux TTS with the following settings:
 
 ```sh
