@@ -96,9 +96,16 @@ Operator handoff: 2026-11-12, `scripts/serve_voxcpm.py` and `voxcpm-tts.service`
 
 ### ZONOS3-Mini alternative
 
-The second local endpoint is <https://johan-4070.tail2e1c4e.ts.net:8448>, proxying port 1919. Deepgram remains the live fox voice. ZONOS3-Mini is available for pre-rendered lines or future fallback integration; the application does not invoke it automatically.
+ZONOS3-Mini has two interchangeable CPU endpoints:
 
-`GET /v2/speakers` was checked from dell5500 on 2026-11-12 and returned these embedding voices:
+| Host | Base URL |
+|---|---|
+| johan-4070 | <https://johan-4070.tail2e1c4e.ts.net:8448> |
+| pc2014 | <https://pc2014.tail2e1c4e.ts.net:8448> |
+
+Both expose the same API and speaker ids. Change only the base URL to use the other host. The johan-4070 instance proxies port 1919. Deepgram remains the live fox voice. ZONOS3-Mini is available for pre-rendered lines or future fallback integration; the application does not invoke it automatically.
+
+`GET /v2/speakers` was checked on both endpoints from dell5500 on 2026-11-12 and returned these embedding voices:
 
 | Label | Speaker id | Operator-described anchor |
 |---|---|---|
@@ -118,7 +125,9 @@ curl --fail-with-body --silent --show-error \
 
 The OpenAI-compatible `/v1/audio/speech` endpoint accepts `model: "zonos3"`, `input`, `voice` set to the same speaker id, `speaker_mode: "embedding"`, and `response_format: "wav"`. Both return 16-bit WAV at 44.1 kHz according to the operator's contract. This differs from VoxCPM2's headerless 48 kHz PCM.
 
-Keep the managed ZONOS3 service on its CPU backend, batch 8. The operator verified correct Swedish output there and broken audio with this ggml CUDA build on the 4070 Ti SUPER. CPU operation adds no VRAM use and can coexist with VoxCPM2. The existing restriction on heavy ComfyUI renders still applies because VoxCPM2 remains GPU-resident.
+On johan-4070, keep the managed ZONOS3 service on its CPU backend, batch 8. The operator verified correct Swedish output there and broken audio with this ggml CUDA build on the 4070 Ti SUPER. CPU operation adds no VRAM use and can coexist with VoxCPM2. The existing restriction on heavy ComfyUI renders still applies because VoxCPM2 remains GPU-resident.
+
+The pc2014 instance also uses the CPU backend. The operator reports about 1.8 GB resident RAM, no VRAM use, and 1.2 GB of models on disk, with `zonos3-tts.service` enabled at boot and persistent Tailscale serving. Logs: `ssh pc2014 'journalctl --user -u zonos3-tts'`. A Vulkan build for its RX 6500 XT is in progress; GPU operation remains pending operator validation.
 
 Service: `zonos3-tts.service`, enabled at boot. Source/build: `~/zonos3` on johan-4070; voice embeddings: `~/zonos3/voices`. Logs: `ssh johan-4070 'journalctl --user -u zonos3-tts'`. The same endpoint serves the Studio UI. The operator reports optional delivery steering through `steer.gguf` and `/v2/controls`. No backend rebuild, synthesis, or listening check was performed when recording this handoff.
 
