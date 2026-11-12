@@ -31,6 +31,8 @@ Go serves Muse Spark 1.3 Contributor only on its OpenAI Responses endpoint, `htt
 
 ## The voice route
 
+Production uses Deepgram Swedish speech with `TUTOR_TTS=deepgram`, `TUTOR_TTS_MODEL=flux-ludvig-sv`, and `TUTOR_TTS_EXPRESSIVITY=1`. The backend loads `DEEPGRAM_API_KEY` from Infisical. A narrow adapter adds expressivity to LiveKit's TTSv2 requests. Cartesia remains selectable, but production no longer depends on its credits.
+
 ElevenLabs **Eleven v4 Turbo** (`eleven_v4_turbo`, released September 2026), voice **Bella - Professional, Bright, Warm** (`hpp4J3VqNfWAUOO0d1Us`, an ElevenLabs premade voice), Swedish (`language_code=sv`). ElevenLabs recommends v4 Turbo for real-time conversation and `eleven_v4` for produced narration.
 
 v4 is served only through text-to-dialogue. `open_tutor/dialogue_tts.py` speaks the documented single-context socket `wss://api.elevenlabs.io/v1/text-to-dialogue/stream-input`: one registered voice, one socket per reply, each sentence sent and flushed, `keep_alive` while the reply waits for text, `close_socket` at the end. Output is `pcm_24000` with `sync_alignment=true`, so captions follow the audio word by word. An interruption cancels the stream and closes its socket, so an interrupted reply stops at once.
