@@ -107,7 +107,7 @@ describe('Mobile board continuity', () => {
   const other: BoardItem = { id: 'b', kind: 'text', title: 'Other task', markdown: 'A different task' };
   const defaults = { learnerName: 'Leo', onResourceClosed: noop, mobile: true };
 
-  it('keeps the selected older item in focus and reveals future steps only in the full board', () => {
+  it('keeps the selected older item in focus and reveals future steps as you turn the page', () => {
     const { container } = render(
       <Board
         {...defaults}
@@ -119,9 +119,12 @@ describe('Mobile board continuity', () => {
     );
     expect(container.querySelector('[data-board-id="b"]')?.parentElement?.hidden).toBe(true);
     expect(container.querySelector('[data-step="1"]')?.closest('[hidden]')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /Hela tavlan/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Framåt/ }));
     expect(container.querySelector('[data-board-id="b"]')?.parentElement?.hidden).toBe(false);
-    expect(container.querySelector('[data-step="1"]')?.closest('[hidden]')).toBeNull();
+    expect(screen.getByText('2 / 2')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Tillbaka/ }));
+    expect(container.querySelector('[data-board-id="a"]')?.parentElement?.hidden).toBe(false);
+    expect(container.querySelector('[data-step="1"]')?.closest('[hidden]')).toBeTruthy();
   });
 
   it('confirms a same-id update after mounting the changed content', async () => {
@@ -135,7 +138,7 @@ describe('Mobile board continuity', () => {
     expect(screen.getByText('Updated task')).toBeTruthy();
   });
 
-  it('keeps the resource player mounted while switching board views', () => {
+  it('keeps the resource player mounted while turning pages', () => {
     const resource: BoardItem = {
       id: 'r',
       kind: 'resource',
@@ -147,9 +150,9 @@ describe('Mobile board continuity', () => {
       <Board {...defaults} items={[resource, other]} focused={null} activeItemId="b" onItemMounted={noop} />,
     );
     const player = container.querySelector('iframe');
-    fireEvent.click(screen.getByRole('button', { name: /Hela tavlan/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Tillbaka/ }));
     expect(container.querySelector('iframe')).toBe(player);
-    fireEvent.click(screen.getByRole('button', { name: /Hela tavlan/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Framåt/ }));
     expect(container.querySelector('iframe')).toBe(player);
   });
 });

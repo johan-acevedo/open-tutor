@@ -2,11 +2,15 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ConnectionState, Room, RoomEvent, RpcError, Track } from 'livekit-client';
 import type { RpcInvocationData } from 'livekit-client';
 import type { BoardFocusPayload, BoardItem, HomeworkAttributes, Note, SessionResponse } from './protocol';
+import type { PageShellMessage } from './components/PageCard';
 import {
   ATTR_AGENT_STATE,
   ATTR_TUTOR_MODE,
   BOARD_RPC_FOCUS,
+  BOARD_RPC_PATCH,
+  BOARD_RPC_POINT,
   BOARD_RPC_REMOVE,
+  BOARD_RPC_REVEAL,
   BOARD_RPC_SHOW,
   BOARD_RPC_UPDATE,
   TOPIC_CHAT,
@@ -18,7 +22,7 @@ import {
 } from './protocol';
 import { appendNote } from './db';
 import type { Profile } from './db';
-import { isNoteLike, validateBoardFocus, validateBoardItem } from './validate';
+import { isNoteLike, validateBoardFocus, validateBoardItem, validateBoardPageOp } from './validate';
 import { dataUrlToBytes, downscaleImage } from './image';
 import type { HomeworkDraft } from './components/HomeworkTray';
 
@@ -186,6 +190,7 @@ export function useSession(mobile = false) {
   const [resumeNeeded, setResumeNeeded] = useState(false);
 
   const roomRef = useRef<Room | null>(null);
+  const pageSendsRef = useRef(new Map<string, (msg: PageShellMessage) => void>());
   const preparedRoomRef = useRef<Room | null>(null);
   const profileRef = useRef<Profile | null>(null);
   const intentionalEndRef = useRef(false);
@@ -204,6 +209,32 @@ export function useSession(mobile = false) {
     window.clearTimeout(toastTimer.current);
     toastTimer.current = window.setTimeout(() => setToast(null), 4000);
   }, []);
+
+  // Page frames register their shell mailbox here; patch/reveal/point RPCs
+  // deliver through it. A frame that is mounted but not ready yet holds the
+  // message and passes it to the shell on ready (see PageCard).
+  const registerPageFrame = useCallback(
+    (id: string, send: ((msg: PageShellMessage) => void) | null) => {
+      if (send) pageSendsRef.current.set(id, send);
+      else pageSendsRef.current.delete(id);
+    },
+    [],
+  );
+
+  // A submitted answer from ot-answer, ot-choice or ot-gap reaches the tutor
+  // on the session-event text stream.
+  const sendPageAnswer = useCallback(
+    (answer: { page: string; part: string; value: string; kind: string }) => {
+      const room = roomRef.current;
+      if (!room) return;
+      void room.localParticipant
+        .sendText(JSON.stringify({ type: 'page-answer', ...answer }), {
+          topic: TOPIC_SESSION_EVENT,
+        })
+        .catch(() => undefined);
+    },
+    [],
+  );
 
   const resolveMounted = useCallback((id: string) => {
     const list = mountResolvers.current.get(id);
@@ -260,7 +291,15 @@ export function useSession(mobile = false) {
     audioContextRef.current = null;
     if (context) void context.close().catch(() => undefined);
     if (!room) return;
-    for (const m of [BOARD_RPC_SHOW, BOARD_RPC_UPDATE, BOARD_RPC_FOCUS, BOARD_RPC_REMOVE])
+    for (const m of [
+      BOARD_RPC_SHOW,
+      BOARD_RPC_UPDATE,
+      BOARD_RPC_FOCUS,
+      BOARD_RPC_REMOVE,
+      BOARD_RPC_PATCH,
+      BOARD_RPC_REVEAL,
+      BOARD_RPC_POINT,
+    ])
       unregisterRpc(room, m);
     try {
       room.unregisterTextStreamHandler(TOPIC_TRANSCRIPTION);
@@ -473,6 +512,26 @@ export function useSession(mobile = false) {
         setItems((prev) => prev.filter((b) => b.id !== id));
         return '{"ok":true}';
       });
+
+      const pageOp = (field: 'patch' | 'part', method: string) => async (data: RpcInvocationData) => {
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(data.payload);
+        } catch {
+          throw new RpcError(1500, `${method} payload is not JSON`);
+        }
+        const v = validateBoardPageOp(parsed, field);
+        if (!v.ok) throw new RpcError(1500, v.error);
+        const send = pageSendsRef.current.get(v.id);
+        if (!send) throw new RpcError(1501, `no page frame is mounted for id ${v.id}`);
+        if (field === 'patch') send({ ot: 'patch', html: v.arg });
+        else if (method === BOARD_RPC_REVEAL) send({ ot: 'reveal', id: v.arg });
+        else send({ ot: 'point', id: v.arg });
+        return '{"ok":true}';
+      };
+      registerRpc(room, BOARD_RPC_PATCH, pageOp('patch', BOARD_RPC_PATCH));
+      registerRpc(room, BOARD_RPC_REVEAL, pageOp('part', BOARD_RPC_REVEAL));
+      registerRpc(room, BOARD_RPC_POINT, pageOp('part', BOARD_RPC_POINT));
 
       registerRpc(room, BOARD_RPC_FOCUS, async (data) => {
         let parsed: unknown;
@@ -1006,6 +1065,8 @@ export function useSession(mobile = false) {
     addFiles,
     addText,
     onItemMounted: resolveMounted,
+    registerPageFrame,
+    sendPageAnswer,
   };
 }
 
