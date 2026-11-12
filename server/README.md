@@ -192,6 +192,12 @@ Cloudflare tunnel. Health checks are exempt to preserve local monitoring.
 
 ## Family-testing debug trail
 
+The development worker on dell5500 enables this trail for experience iteration.
+Its private environment sets `TUTOR_DEBUG_LOG=1` and
+`TUTOR_DEBUG_LOG_DIR=/home/johan/.local/state/open-tutor-screen-dev/sessions`.
+This persists across development worker restarts. Cloud audio recording stays off;
+the application default and production configuration are unchanged.
+
 During authorised family testing, `TUTOR_DEBUG_LOG=1` in the worker environment
 writes one private directory per session (`TUTOR_DEBUG_LOG_DIR`, default
 `~/.local/state/open-tutor/sessions`, directories 0700, files 0600, outside
