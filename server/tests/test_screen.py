@@ -419,3 +419,23 @@ def test_screen_records_the_lesson():
 def test_pages_land_under_the_session_folder(tmp_path):
     pages = session_pages_dir("room-1", tmp_path / "sessions" / "room-1")
     assert pages == tmp_path / "sessions" / "room-1" / "pages" and pages.is_dir()
+
+
+# ---- timing cheap wins -----------------------------------------------------
+
+
+def test_system_prompt_is_byte_identical_across_calls(tmp_path):
+    screen = make_screen(tmp_path)
+    first = screen.system_prompt()
+    second = screen.system_prompt()
+    assert first == second and len(first) > 4000
+    assert "Räven" in first
+
+
+def test_model_spec_defaults_to_minimal_reasoning(tmp_path, monkeypatch):
+    monkeypatch.delenv("SCREEN_MODEL", raising=False)
+    monkeypatch.delenv("SCREEN_REASONING", raising=False)
+    monkeypatch.delenv("SCREEN_API", raising=False)
+    screen = make_screen(tmp_path)
+    assert screen.model_spec() == {"model": "muse-spark-1.3-contributor",
+                                   "api": "responses", "reasoning": "minimal"}
