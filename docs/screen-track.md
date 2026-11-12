@@ -1,6 +1,6 @@
 # Browser-owned Screen track
 
-Status: Screen acceptance fixes reviewed; authorized Deepgram speech integration underway, 2026-11-12.
+Status: Screen fixes reviewed; Deepgram Swedish speech verified in the development app, 2026-11-12.
 Lead: this thread. Workers receive focused briefs; the lead owns integration and decisions.
 
 ## Source of truth
@@ -196,10 +196,8 @@ Focused tests run during implementation; the full server and web suites plus the
 
 ## Next
 
-1. Complete Deepgram integration and its focused review. The fresh Muse review of the Screen acceptance fixes found no blockers.
-2. Complete the authorized speech switch to Deepgram `flux-ludvig-sv` with `expressivity=1`, using the existing Infisical `homelab` key. Verify real streaming audio and the served fox session.
-3. Finish live supersession, post-fix navigation observation, and physical microphone checks. The browser sessions use typed input because microphone permission is unavailable.
-4. Keep PR #25 in draft until the remaining checks pass. Production stays unchanged.
+1. Finish live supersession and physical microphone checks. The browser sessions use typed input because microphone permission is unavailable.
+2. Keep PR #25 in draft until the remaining checks pass. Production stays unchanged.
 
 ## Development verification, 2026-11-11
 
@@ -246,3 +244,9 @@ Validation on the latest source: 146 web tests, 177 server tests, TypeScript, an
 Johan subsequently authorized Deepgram's `flux-ludvig-sv` voice with `expressivity=1` instead of Cartesia. The existing development environment receives `DEEPGRAM_API_KEY` from Infisical. Integration and live audio verification are in progress; production is unchanged.
 
 The final cross-family Screen review found no proven blockers. It reran the 90 Screen web checks, 60 Screen server checks, and TypeScript. It confirmed the rendering, observation, page notification, preparation failure, and concurrent-show fixes. This review excludes the later Deepgram integration.
+
+Deepgram integration is now complete in development. The Muse implementation was reviewed by the Sol lead against the installed plugin. Thirteen focused tests verify the chosen voice, expressivity on the wire, audio transport, and vendor error propagation. The full server suite passes 190 tests.
+
+A real configured streaming probe produced non-empty audio. In the served browser, the fox greeting had a live audio track, advancing playback, a non-silent incoming signal, and captions. Session metadata identifies `Deepgram` and `flux-ludvig-sv`. A subsequent live geography request completed through the Screen worker and fox pixel observation using the revised drawn-text record. The learner's unsubmitted maths draft survived navigation across all three pages. The child microphone remains unverified.
+
+After the child navigated back to maths, the real fox's default `observe_screen` selected the correct restored exercise and received its actual 894 by 501 canvas observation. Its `reveal_screen` then revealed that page's solution and received another pixel observation. Hidden and revealed public text matched the corresponding canvas state.

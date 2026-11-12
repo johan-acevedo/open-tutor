@@ -31,6 +31,18 @@ Go serves Muse Spark 1.3 Contributor only on its OpenAI Responses endpoint, `htt
 
 ## The voice route
 
+The Screen development instance uses Deepgram Flux TTS with the following settings:
+
+```sh
+TUTOR_TTS=deepgram
+TUTOR_TTS_MODEL=flux-ludvig-sv
+TUTOR_TTS_EXPRESSIVITY=1
+```
+
+`DEEPGRAM_API_KEY` comes from the existing Infisical `homelab` project. The key stays on the server. The route streams linear16 PCM through LiveKit's `TTSv2` at `/v2/speak`. A small adapter adds `expressivity` to the streaming and batch query parameters because plugin 1.8.10 does not expose that control. See the [Deepgram voice catalog](https://developers.deepgram.com/docs/flux-tts/voices) and [voice control reference](https://developers.deepgram.com/reference/speak/v-2/audio/generate).
+
+The default provider remains selectable as before:
+
 ElevenLabs **Eleven v4 Turbo** (`eleven_v4_turbo`, released September 2026), voice **Bella - Professional, Bright, Warm** (`hpp4J3VqNfWAUOO0d1Us`, an ElevenLabs premade voice), Swedish (`language_code=sv`). ElevenLabs recommends v4 Turbo for real-time conversation and `eleven_v4` for produced narration.
 
 v4 is served only through text-to-dialogue. `open_tutor/dialogue_tts.py` speaks the documented single-context socket `wss://api.elevenlabs.io/v1/text-to-dialogue/stream-input`: one registered voice, one socket per reply, each sentence sent and flushed, `keep_alive` while the reply waits for text, `close_socket` at the end. Output is `pcm_24000` with `sync_alignment=true`, so captions follow the audio word by word. An interruption cancels the stream and closes its socket, so an interrupted reply stops at once.
@@ -53,9 +65,10 @@ The worker logs the route at the start of each session (`tutor TTS route elevenl
 |---|---|
 | `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | LiveKit Cloud project (required) |
 | `SONIOX_API_KEY` | Speech recognition, Swedish hint |
-| `TUTOR_TTS` | `elevenlabs` (default) or `cartesia` |
+| `TUTOR_TTS` | `elevenlabs` (default), `cartesia`, or `deepgram` |
+| `TUTOR_TTS_EXPRESSIVITY` | Deepgram expressive range, integer `-2` to `2`, default `1` |
 | `TUTOR_TTS_VOICE`, `TUTOR_TTS_MODEL` | Voice id and model for that provider. ElevenLabs default: `eleven_v4_turbo` with Bella (`hpp4J3VqNfWAUOO0d1Us`), see [the voice route](#the-voice-route). `eleven_v3*`/`eleven_v4*` models use the text-to-dialogue adapter; earlier models such as `eleven_flash_v2_5` use LiveKit's plugin |
-| `ELEVENLABS_API_KEY` / `CARTESIA_API_KEY` | Voice provider key |
+| `ELEVENLABS_API_KEY` / `CARTESIA_API_KEY` / `DEEPGRAM_API_KEY` | Selected voice provider key |
 | `TUTOR_LLM` | `go` (default): Muse Spark 1.3 Contributor (`muse-spark-1.3-contributor`) on OpenCode Go, Responses API over HTTP streaming, `OPENCODE_GO_API_KEY`. `gemini-dev` only reproduces the board/voice bug of the earlier development route (`GEMINI_API_KEY`); do not deploy it. There is no silent fallback. |
 | `OPENCODE_GO_API_KEY` | OpenCode Go API key (from the OpenCode console). Backend only |
 | `TUTOR_LLM_MODEL`, `TUTOR_LLM_BASE_URL`, `TUTOR_LLM_REASONING` | Override the route's model, endpoint or reasoning effort (Go default `minimal`) |
