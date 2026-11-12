@@ -23,9 +23,9 @@ Each step gets a small brief and ends with executable evidence. Workers use isol
 
 ## Current state
 
-Step 1 is starting. Eight validated EPUBs are on elitebook at ~/.local/share/open-tutor/materials/siyavula, with books.json and validation evidence under tools/siyavula. The served corpus is https://elitebook.tail2e1c4e.ts.net/open-tutor-materials/.
+Steps 1 and 2a are implemented and cross-reviewed. Step 2b has a real-model proof awaiting Muse review. Eight validated EPUBs are on elitebook at ~/.local/share/open-tutor/materials/siyavula, with books.json and validation evidence under tools/siyavula. The served corpus is https://elitebook.tail2e1c4e.ts.net/open-tutor-materials/.
 
-Source baseline: origin/main 675f334. Existing material tools are independent of the tutor. No EmbeddingGemma model has yet been run against the corpus.
+Source baseline: origin/main 675f334. Existing material tools are independent of the tutor. EmbeddingGemma 2 has now run on a bounded 118-passage sample; this is not yet a full-corpus retrieval evaluation or integrated tutor feature.
 
 ## Step 1 review
 
@@ -36,3 +36,7 @@ Next bounded unit: step 2a extracts source passages from the corrected section r
 ## Step 2a review
 
 DeepSeek delivered 15c1b2b. Muse independently verified 7309 passages with no missing non-heading blocks or duplicated ownership. Parent added exact owned block ordinals and marked HTML spans as non-display content: spans may include intervening foreign content and unbalanced markup. Search consumes owned text and image references; display resolves catalogue sections, never passage HTML spans. The next unit is a standalone text retrieval proof with real EmbeddingGemma 2, before any endpoints or UI integration.
+
+## Step 2b proof, awaiting review
+
+DeepSeek delivered 6ffdf42: optional CPU ML dependencies, exact local cosine index, and prove/build/query CLI. Real google/embeddinggemma-2 text-only fp32 inference on elitebook returned matching relevant circuit/photosynthesis passages for English and Swedish smoke queries. Index and model weights remain outside Git. See step2b-embedding-proof.md for exact results and revision. No quality metric, off-topic abstention, latency claim, or full-corpus evidence yet. Muse owns independent review, including prompt configuration, revision handling, saved-index integrity, metadata ownership, and reproduction against real cached weights. Parent owns fixes and the subsequent lexical baseline/broader evaluation before HTTP or voice integration.
