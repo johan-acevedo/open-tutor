@@ -1088,6 +1088,8 @@ async def entrypoint(ctx: JobContext) -> None:
         description += f" (board id {attrs.get('itemId', '?')}, {attrs.get('kind', 'photo')})"
         debug.record("homework_shared", {"kind": "image", "description": description[:300],
                                            "bytes": len(data), "mime": mime})
+        debug.save_artifact("homework", bytes(data), mime=mime,
+                            metadata={"description": description[:300]})
         image = llm.ImageContent(image=f"data:{mime};base64,{base64.b64encode(bytes(data)).decode()}", inference_detail="high")
         pending.append(([image], description))
         schedule_reply()
@@ -1175,6 +1177,8 @@ async def entrypoint(ctx: JobContext) -> None:
                 return
         debug.record("screen_pixels", {"observation": observation_id[:20],
                                            "bytes": len(data)})
+        debug.save_artifact("screen", bytes(data), mime="image/png",
+                            metadata={"observation": observation_id})
         tutor.handle_screen_pixels(observation_id, bytes(data), attrs)
 
     async def on_screen_context(reader: rtc.TextStreamReader, identity: str) -> None:
@@ -1189,6 +1193,8 @@ async def entrypoint(ctx: JobContext) -> None:
             return
         debug.record("screen_context", {"observation": observation_id[:20],
                                             "has_private": bool(payload.get("privateTeaching"))})
+        debug.save_artifact("context", json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+                            mime="application/json", metadata={"observation": observation_id})
         tutor.handle_screen_context(observation_id, payload)
 
     ctx.room.register_byte_stream_handler("homework", spawn(on_homework_image))

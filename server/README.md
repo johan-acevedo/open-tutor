@@ -174,6 +174,7 @@ Service: `zonos3-tts.service`, enabled at boot. Source/build: `~/zonos3` on joha
 | `TUTOR_MAX_SESSIONS_PER_HOUR` | Owner spending cap across the instance (default 12) |
 | `TUTOR_CLOUD_RECORDING` | `1` uploads session audio and transcripts to LiveKit Cloud observability. Off by default |
 | `TUTOR_DEBUG_LOG` | `1` writes a per-session debug trail to a private local directory (see below). Off by default |
+| `TUTOR_DEBUG_ARTIFACTS` | With debug logging enabled, `1` also saves received Screen PNGs, context JSON and uploaded images. Off by default |
 | `TUTOR_DEBUG_LOG_DIR` | Override the debug trail directory (default `~/.local/state/open-tutor/sessions`) |
 | `TUTOR_STT_MAX_ENDPOINT_MS`, `TUTOR_MIN_ENDPOINT` | Turn-taking tuning for pauses while a child thinks |
 
@@ -195,6 +196,7 @@ Cloudflare tunnel. Health checks are exempt to preserve local monitoring.
 The development worker on dell5500 enables this trail for experience iteration.
 Its private environment sets `TUTOR_DEBUG_LOG=1` and
 `TUTOR_DEBUG_LOG_DIR=/home/johan/.local/state/open-tutor-screen-dev/sessions`.
+It also enables `TUTOR_DEBUG_ARTIFACTS=1` to retain visual evidence while iterating.
 This persists across development worker restarts. Cloud audio recording stays off;
 the application default and production configuration are unchanged.
 
@@ -215,6 +217,19 @@ metrics. Not captured: credentials, keys, tokens, the whole environment, or
 audio (LiveKit Cloud recording keeps that when `TUTOR_CLOUD_RECORDING=1`). The
 config snapshot is an explicit allowlist. The normal log stream stays free of
 session content either way.
+
+With both debug flags enabled, received Screen PNGs, their context JSON, and uploaded
+PNG/JPEG/WebP images are saved beside the timeline with generated filenames and
+mode 0600. Each `artifact_saved` event links the file to its observation or upload
+description. These are the exact bytes received by the fox: PDF pages or resized
+photos may already have been converted by the browser, so they are not necessarily
+the original uploaded file. Pasted text remains in the event log.
+
+Screen captures occur when the browser sends a Screen observation to the fox;
+they are not continuous recordings or screenshots of the surrounding avatar,
+controls, or browser window. Turn `TUTOR_DEBUG_ARTIFACTS` off and restart the worker
+to stop retaining images. Both debug flags default off and neither is enabled by
+the application's production defaults. Previously saved files remain until removed.
 
 Review the most recent sessions where the worker runs:
 

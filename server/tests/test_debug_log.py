@@ -274,3 +274,40 @@ async def test_learner_disconnect_finishes_session(tmp_path):
     room.emit("participant_disconnected", SimpleNamespace(identity=tutor.child_identity))
     assert await asyncio.wait_for(task, 1) == "child_left"
     assert cleaned == ["session", "room", "job"]
+
+
+def test_artifact_capture_requires_both_debug_flags(tmp_path):
+    for n, env in enumerate(({}, {'TUTOR_DEBUG_ARTIFACTS': '1'}, {'TUTOR_DEBUG_LOG': '1'})):
+        base = tmp_path / str(n)
+        debug = DebugLog.create('room', LEARNER, 'job', environ=env, base_dir=base)
+        assert debug.save_artifact('screen', b'pixels', mime='image/png') is None
+        assert not list(base.rglob('*.png'))
+        debug.close()
+
+
+def test_artifacts_preserve_bytes_and_link_to_private_timeline(tmp_path):
+    env, base = enabled_env(tmp_path, {'TUTOR_DEBUG_ARTIFACTS': '1'})
+    debug = DebugLog.create('room', LEARNER, 'job', environ=env, base_dir=base)
+    data = b'\x89PNG\r\n\x1a\nexact-received-bytes'
+    name = debug.save_artifact('screen', data, mime='image/png',
+                               metadata={'observation': '../../untrusted-id'})
+    other = debug.save_artifact('homework', data, mime='image/png',
+                                metadata={'description': '../../uploaded.png'})
+    assert name != other
+    for filename in (name, other):
+        path = base / 'room' / filename
+        assert path.read_bytes() == data
+        assert path.parent == debug.directory
+        assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    report = json.loads(debug.finalize('ended').read_text())
+    artifacts = [x for x in report['events'] if x['event'] == 'artifact_saved']
+    assert [x['file'] for x in artifacts] == [name, other]
+    assert artifacts[0]['observation'] == '../../untrusted-id'
+
+
+def test_artifact_write_failure_does_not_break_session(tmp_path):
+    env, base = enabled_env(tmp_path, {'TUTOR_DEBUG_ARTIFACTS': '1'})
+    debug = DebugLog.create('room', LEARNER, 'job', environ=env, base_dir=base)
+    debug.directory = tmp_path / 'missing'
+    assert debug.save_artifact('screen', b'pixels', mime='image/png') is None
+    debug.close()

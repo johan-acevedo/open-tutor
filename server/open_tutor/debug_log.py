@@ -13,10 +13,11 @@ writes ``report.json`` with the session header, a summary and the full event
 list. Filenames contain only sanitised generated IDs (room/job); the directory
 is private (0700) with private files (0600) outside the repository.
 
+With the additional development flag ``TUTOR_DEBUG_ARTIFACTS=1``, received Screen
+images, context JSON and uploaded images are saved beside the timeline.
+Otherwise only descriptions and sizes are retained (pasted text is kept).
 What is deliberately NOT captured: credentials, API keys, auth headers, signed
-tokens/URLs, the whole environment, homework image bytes (only a description
-and size; pasted text is kept, capped at the same 12 kB the worker forwards),
-and audio itself (LiveKit Cloud recording already keeps that when
+tokens/URLs, the whole environment, and audio itself (LiveKit Cloud recording keeps that when
 ``TUTOR_CLOUD_RECORDING=1``). The config snapshot is an explicit allowlist, not
 a filtered dump.
 """
@@ -53,6 +54,7 @@ SAFE_CONFIG_KEYS = (
     "TUTOR_AGENT_NAME",
     "TUTOR_CLOUD_RECORDING",
     "TUTOR_DEBUG_LOG",
+    "TUTOR_DEBUG_ARTIFACTS",
     "TUTOR_MAX_SESSIONS_PER_HOUR",
 )
 
@@ -114,6 +116,9 @@ class DebugLog:
         self.events: list[dict[str, Any]] = []
         self.started_at = time.time()
         self._file = None
+        self._capture_artifacts = False
+        self._artifact_prefix = ""
+        self._artifact_count = 0
 
     @classmethod
     def create(
@@ -145,6 +150,8 @@ class DebugLog:
             self._file = os.fdopen(fd, "a", buffering=1)
             self.directory = session_dir
             self.enabled = True
+            self._capture_artifacts = env.get("TUTOR_DEBUG_ARTIFACTS") == "1"
+            self._artifact_prefix = sanitize_id(job_id, 40)
         except Exception as error:
             log.warning("debug log disabled, could not open session file: %s", error)
             return cls()
@@ -185,6 +192,31 @@ class DebugLog:
             self._file.write(json.dumps(entry, ensure_ascii=False, default=str) + "\n")
         except Exception as error:
             log.warning("debug log write failed: %s", error)
+
+    def save_artifact(
+        self, kind: str, data: bytes, *, mime: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> str | None:
+        """Save received bytes only with both debug flags; never fail the session."""
+        if not self.enabled or not self._capture_artifacts or self.directory is None:
+            return None
+        extensions = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp",
+                      "application/json": "json"}
+        if kind not in {"screen", "homework", "context"} or mime not in extensions:
+            return None
+        self._artifact_count += 1
+        filename = f"{self._artifact_prefix}-{self._artifact_count:04d}-{kind}.{extensions[mime]}"
+        try:
+            fd = os.open(self.directory / filename, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(data)
+        except OSError as error:
+            log.warning("debug artifact write failed: %s", error)
+            self.record("artifact_failed", {"kind": kind, "error": type(error).__name__})
+            return None
+        self.record("artifact_saved", {**(metadata or {}), "kind": kind, "file": filename,
+                                       "mime": mime, "bytes": len(data)})
+        return filename
 
     def record_sdk(self, event: Any) -> None:
         """Record one LiveKit AgentSession event by its schema, not by assumption."""
