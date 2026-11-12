@@ -1,6 +1,6 @@
 # Browser-owned Screen track
 
-Status: integrated development build; live generation blocked by provider quota, 2026-11-11.
+Status: Screen acceptance fixes reviewed; authorized Deepgram speech integration underway, 2026-11-12.
 Lead: this thread. Workers receive focused briefs; the lead owns integration and decisions.
 
 ## Source of truth
@@ -119,7 +119,7 @@ Text stream `screen-event` carries correlated outcomes:
 
 ```ts
 {
-  type: "ready" | "rejected" | "failed" | "answer-submitted";
+  type: "ready" | "rejected" | "failed" | "answer-submitted" | "page-changed";
   intentId?: string;
   lessonId: string;
   page?: { id: string; revision: string };
@@ -196,10 +196,10 @@ Focused tests run during implementation; the full server and web suites plus the
 
 ## Next
 
-1. Wait for the OpenCode Go quota reset before another fresh maths or geography generation run. The model gateway returned upstream HTTP 429 during the latest live test. The requested Muse review also failed with `GoUsageLimitError`; no substitute provider was selected.
-2. Verify fresh maths preparation and the complete geography research, candidate, promotion, and pixel-observation path with live models.
-3. Finish the remaining acceptance checks, including supersession during research, a greeting based on prior work, and real microphone interaction. The latest browser session used typed input because microphone permission was unavailable.
-4. Obtain a fresh cross-family review before merge or production deployment. Earlier integration reviews do not cover the latest recovery and phone-layout fixes.
+1. Complete Deepgram integration and its focused review. The fresh Muse review of the Screen acceptance fixes found no blockers.
+2. Complete the authorized speech switch to Deepgram `flux-ludvig-sv` with `expressivity=1`, using the existing Infisical `homelab` key. Verify real streaming audio and the served fox session.
+3. Finish live supersession, post-fix navigation observation, and physical microphone checks. The browser sessions use typed input because microphone permission is unavailable.
+4. Keep PR #25 in draft until the remaining checks pass. Production stays unchanged.
 
 ## Development verification, 2026-11-11
 
@@ -227,4 +227,22 @@ cd ../server
 uv run --frozen pytest -q  # 175 passed
 ```
 
-The build retains its existing Pi `node:fs` browser-externalization and bundle-size warnings. Fresh generation, complete geography acceptance, and full voice acceptance remain unverified. The development gateway records upstream quota failures as HTTP 502 responses containing `upstream error 429`, which currently triggers SDK retries before the fox's request times out.
+The build retains its existing Pi `node:fs` browser-externalization and bundle-size warnings. The development gateway records upstream quota failures as HTTP 502 responses containing `upstream error 429`, which currently triggers SDK retries before the fox's request times out.
+
+## Development verification, 2026-11-12
+
+Johan enabled extra OpenCode Go credits. Fresh maths generation succeeded through the served app, real fox `show_screen`, browser model, candidate promotion, canvas rendering, and PNG observation. A draft answer survived navigation to the geography page and back without being submitted.
+
+Fresh geography also completed through a Durable child, the geography gateway, candidate promotion, and the real fox's PNG observation. The child chose a generated SVG map. Visual inspection caught a small-map layout and clipped body text, while the observation record incorrectly included the full body. The fix gives geography a dedicated responsive layout and derives public observation text from actual canvas draw calls. The revised desktop page was inspected on the served app. Complete post-fix fox observation remains pending the voice-service issue below.
+
+Direct research with a concise `France` query exposed unrelated photos being returned as map candidates. The gateway now searches for maps and accepts safe raster thumbnails of SVG maps. A real request returned a Wikimedia France map. The Screen now chooses a concise geographic search term rather than sending the entire teaching request as a search query.
+
+The first Muse review proved three bugs on `ce8e86b`: visuals could evict a short-canvas question, local preparation errors left shows waiting until timeout, and a shared candidate completed only the first matching show. Regression checks now cover each case. Internal auto-prepare outcomes remain off the external event stream, and one promotion can satisfy several matching shows.
+
+The quiet recovery notification is now an explicit `page-changed` event. It also covers child navigation and homework intake after rendering, so the fox does not retain an old page identity. A targeted fox test verifies that this event changes the default observation target without adding a chat turn.
+
+Validation on the latest source: 146 web tests, 177 server tests, TypeScript, and the Vite build pass. Full voice acceptance remains blocked by Cartesia, not OpenCode Go: one direct raw vendor response returned HTTP 402 with insufficient credits and no audio. An earlier timestamp explanation was incomplete; disabling timestamps did not restore audio, and that unrelated code change was removed. No credits were purchased and no speech provider was switched.
+
+Johan subsequently authorized Deepgram's `flux-ludvig-sv` voice with `expressivity=1` instead of Cartesia. The existing development environment receives `DEEPGRAM_API_KEY` from Infisical. Integration and live audio verification are in progress; production is unchanged.
+
+The final cross-family Screen review found no proven blockers. It reran the 90 Screen web checks, 60 Screen server checks, and TypeScript. It confirmed the rendering, observation, page notification, preparation failure, and concurrent-show fixes. This review excludes the later Deepgram integration.

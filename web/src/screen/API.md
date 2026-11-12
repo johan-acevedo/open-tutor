@@ -79,6 +79,12 @@ never emit a fox `ready` or `answer-submitted` event. Validation errors throw
 lessons archive homework titles via `startNewLesson`; reopening the same lesson
 resumes them via `shouldResumeDeck`.
 
+Every newly rendered visible page identity sends a quiet `page-changed`
+event, including restored pages, child navigation, and homework intake.
+This updates the fox's current page without inventing a fox intent or
+interrupting speech. Repeated renders of the same page and revision send
+no additional visibility event.
+
 `setAnswerDraft` throws `unknown-page-revision` for stale targets.
 `submitAnswer` throws `stale-page` unless the target is the current visible
 page, and is the **only** path that shares child input (as
@@ -100,7 +106,10 @@ observation) or `no-canvas`.
    held as an *outstanding request* **and starts preparation itself using
    that show intent** (synthetic `<showId>:auto-prepare` sharing the show's
    need): the hold never waits 60s for work that was never started. When the
-   matching candidate arrives it auto-promotes without a second request,
+   matching candidate arrives it auto-promotes once and completes every
+   matching outstanding show after rendering. Internal auto-prepare outcomes
+   never appear on the wire. A known preparation failure rejects matching
+   shows immediately. Otherwise,
    otherwise the hold lapses into `rejected` after
    `outstandingShowTimeoutMs`. The controller tracks op per intent: only
    `prepare` settles `ready` at invisible commit, while a `show` settles
@@ -118,11 +127,11 @@ observation) or `no-canvas`.
      `failed` (`render-failed` / `render-timeout`) — a `ready` is never
      fabricated. A real canvas without a 2d context throws (`no-2d-context`)
      instead of faking success.
-4. `captureObservation` reads the attached canvas (`toDataURL("image/png")`)
+4. `captureObservation` waits for the current render and reads the attached canvas (`toDataURL("image/png")`)
    or the injected `pixelReader`, and returns `{ pngBase64, context }`. The
    PNG is transient and never written to any store. The request carries
    `lessonId` (stale lessons rejected as `lesson-mismatch`); the context
-   carries `lessonId`, `visibleText` (solution only when revealed),
+   carries `lessonId`, `visibleText` from actual draw calls (solution only when revealed),
    `viewport { w, h, device }`, `sources` and `privateTeaching`.
 
 ## Canvas rendering
@@ -131,13 +140,17 @@ observation) or `no-canvas`.
 import { renderScreenPage, resolveScreenAssets } from "./screen/index.ts";
 
 const assets = await resolveScreenAssets(page, blobStore, draftText, "Sida 1 av 2");
-renderScreenPage(canvas, page, assets);
+const { visibleText } = renderScreenPage(canvas, page, assets);
 ```
 
 Homework pages (`kind: "homework"`) show the uploaded image contain-fit with
 `Bild: <attribution>` and expanded body text, never a permanent loading
 placeholder; the exercise answer box and hidden facit are omitted and the freed
-space is content. Other page kinds are unchanged.
+space is content. Geography uses text and map columns on desktop and stacks
+them on narrow canvases. Text that exceeds the available space gains an
+ellipsis. The returned `ScreenRenderResult.visibleText` excludes omitted
+paragraphs and image text. The controller uses this record alongside the
+pixels, with a separate private teaching field.
 
 One page at a time, Swedish labels, dark-UI friendly. Draws subject chip,
 title, wrapped body lines, one visual (researched image contain-fit, rasterised

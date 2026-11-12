@@ -9,6 +9,7 @@ from __future__ import annotations
 import base64
 import json
 import socket
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 from fastapi.testclient import TestClient
@@ -434,6 +435,23 @@ def test_geo_redirect_to_evil_is_blocked(monkeypatch):
 
 
 # ---- geography shaping (mocked fetchers) ----
+def test_commons_research_queries_maps_and_accepts_safe_raster_thumbnails():
+    url = screen_gateway._commons_url("France")
+    assert parse_qs(urlparse(url).query)["gsrsearch"] == ["France map"]
+    payload = {"query": {"pages": [{
+        "title": "File:France map.svg",
+        "imageinfo": [{
+            "mime": "image/svg+xml", "thumbmime": "image/png",
+            "url": "https://upload.wikimedia.org/wikipedia/commons/a/France.svg",
+            "thumburl": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/France.svg/320px-France.svg.png",
+        }],
+    }]}}
+    candidates = _shape_commons_candidates(payload)
+    assert len(candidates) == 1
+    assert candidates[0]["mime"] == "image/png"
+    assert candidates[0]["imageUrl"].endswith(".png")
+
+
 def test_shape_place_and_commons_filter():
     place = _shape_place({"lat": "59.3", "lon": "18.0", "display_name": "Stockholm",
                           "boundingbox": ["59.0", "59.6", "17.7", "18.5"],

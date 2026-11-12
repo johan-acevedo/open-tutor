@@ -4,9 +4,11 @@ import {
   decodeSvgDrawable,
   drawContain,
   drawScreenPage,
+  renderScreenPage,
   resolveScreenAssets,
   sanitizeSvg,
   wrapText,
+  type ScreenRenderResult,
 } from './renderer';
 import type { ScreenPage } from './types';
 
@@ -226,6 +228,182 @@ describe('resolveScreenAssets (SVG rasterisation)', () => {
     // 400x100 into 100x100 contain-fit => 100x25, fully visible
     expect(Math.round(dw!)).toBe(100);
     expect(Math.round(dh!)).toBe(25);
+  });
+
+describe('geography responsive layout', () => {
+    function mockGeoContext() {
+      const texts: { text: string; font: string; y: number }[] = [];
+      const draws: { x: number; y: number; dw: number; dh: number }[] = [];
+      let font = '400 16px sans-serif';
+      const ctx = new Proxy(
+        {},
+        {
+          get(_target, prop) {
+            if (prop === 'font') return font;
+            if (prop === 'measureText') return (text: string) => ({ width: text.length * 10 });
+            if (prop === 'createLinearGradient') return () => ({ addColorStop() {} });
+            if (prop === 'fillText') {
+              return (text: string, _x: number, y: number) => {
+                texts.push({ text, font, y });
+              };
+            }
+            if (prop === 'drawImage') {
+              return (_img: unknown, x: number, y: number, dw: number, dh: number) => {
+                draws.push({ x, y, dw, dh });
+              };
+            }
+            return (..._args: unknown[]) => undefined;
+          },
+          set(_target, prop, value) {
+            if (prop === 'font') font = value as string;
+            return true;
+          },
+        },
+      );
+      return { ctx: ctx as unknown as CanvasRenderingContext2D, texts, draws };
+    }
+
+    function geographyPage(overrides: Partial<ScreenPage> = {}): ScreenPage {
+      return exercisePage({
+        kind: 'geography',
+        subject: 'Geografi',
+        title: 'Sveriges landskap',
+        body: [
+          'Sverige ligger i Nordeuropa och gränsar till Norge och Finland.',
+          'Vilka tre största städer ligger vid kusten eller sjöar?',
+          'Peka ut Bergslagen på kartan och förklara varför järn fanns där.',
+        ],
+        svgAsset: '<svg xmlns="http://www.w3.org/2000/svg"><circle cx="5" cy="5" r="4"/></svg>',
+        solution: 'Stockholm, Göteborg och Malmö. Bergslagen har järnmalm.',
+        sources: ['SO-rummet'],
+        ...overrides,
+      });
+    }
+
+    it('draws body text with a prominent map on the 894x501 acceptance canvas', () => {
+      const { ctx, texts, draws } = mockGeoContext();
+      const fakeDrawable = { width: 400, height: 300 } as unknown as CanvasImageSource;
+      const result: ScreenRenderResult = drawScreenPage(
+        ctx,
+        { w: 894, h: 501 },
+        geographyPage(),
+        { svgImage: fakeDrawable },
+      );
+      const drawn = texts.map((t) => t.text).join('\n');
+      // Previously ALL body paragraphs were omitted on this canvas.
+      expect(drawn).toContain('Nordeuropa');
+      expect(drawn).toContain('Bergslagen');
+      // The map is the hero now: far larger than the old 110px strip.
+      expect(draws.length).toBeGreaterThan(0);
+      const biggest = draws.reduce((a, b) => (b.dh > a.dh ? b : a), draws[0]!);
+      expect(biggest.dh).toBeGreaterThan(130);
+      expect(biggest.dw).toBeGreaterThan(200);
+      expect(biggest.y).toBeGreaterThanOrEqual(0);
+      expect(biggest.y + biggest.dh).toBeLessThanOrEqual(501);
+      // Nothing is clipped outside the canvas.
+      expect(texts.every((t) => t.y > 0 && t.y < 501)).toBe(true);
+      // visibleText carries the drawn body, never the hidden solution.
+      expect(result.visibleText).toContain('Nordeuropa');
+      expect(result.visibleText).not.toContain('Malmö');
+    });
+
+    it('stacks a legible full-width map on a 390px phone canvas', () => {
+      const { ctx, texts, draws } = mockGeoContext();
+      const fakeDrawable = { width: 400, height: 300 } as unknown as CanvasImageSource;
+      const result: ScreenRenderResult = drawScreenPage(
+        ctx,
+        { w: 390, h: 700 },
+        geographyPage(),
+        { svgImage: fakeDrawable, draftText: 'mitt svar' },
+      );
+      const drawn = texts.map((t) => t.text).join('\n');
+      expect(drawn).toContain('Nordeuropa');
+      expect(drawn).toContain('Bergslagen');
+      expect(drawn).toContain('mitt svar');
+      expect(draws.length).toBeGreaterThan(0);
+      const biggest = draws.reduce((a, b) => (b.dh > a.dh ? b : a), draws[0]!);
+      expect(biggest.dw).toBeGreaterThanOrEqual(300);
+      expect(biggest.dh).toBeGreaterThanOrEqual(180);
+      expect(texts.every((t) => t.y > 0 && t.y < 700)).toBe(true);
+      expect(result.visibleText).toContain('mitt svar');
+      expect(result.visibleText).not.toContain('Malmö');
+    });
+
+    it('keeps the solution private until reveal, then returns it in visibleText', () => {
+      const hiddenCtx = mockGeoContext();
+      const hidden: ScreenRenderResult = drawScreenPage(
+        hiddenCtx.ctx,
+        { w: 894, h: 501 },
+        geographyPage({ revealed: false }),
+        { svgImage: { width: 400, height: 300 } as unknown as CanvasImageSource },
+      );
+      expect(hiddenCtx.texts.map((t) => t.text).join('\n')).toContain('Facit är dolt');
+      expect(hidden.visibleText).toContain('Facit är dolt');
+      expect(hidden.visibleText).not.toContain('Malmö');
+
+      const shownCtx = mockGeoContext();
+      const shown: ScreenRenderResult = drawScreenPage(
+        shownCtx.ctx,
+        { w: 894, h: 501 },
+        geographyPage({ revealed: true }),
+        { svgImage: { width: 400, height: 300 } as unknown as CanvasImageSource },
+      );
+      const shownDrawn = shownCtx.texts.map((t) => t.text).join('\n');
+      expect(shownDrawn).toContain('Malmö');
+      expect(shownDrawn).not.toContain('Facit är dolt');
+      expect(shown.visibleText).toContain('Malmö');
+    });
+
+    it('visibleText matches actual draw operations when long body text is clipped', () => {
+      const { ctx, texts } = mockGeoContext();
+      const filler =
+        'Paragraf om landskapet med älvar sjöar berg och dalar ' +
+        'fyller rad efter rad så att den lilla ytan tar slut';
+      const longBody = [...Array.from({ length: 5 }, () => filler),
+        `Sista paragrafen nämner det hemliga ordet SLUTORD-ZZZ flera gånger ` +
+        'så att ett läckage skulle synas direkt i texten'];
+      const result: ScreenRenderResult = drawScreenPage(
+        ctx,
+        { w: 390, h: 400 },
+        geographyPage({ body: longBody }),
+        { svgImage: { width: 400, height: 300 } as unknown as CanvasImageSource },
+      );
+      // Exactly what hit the pixels — no hidden tails.
+      expect(result.visibleText).toBe(texts.map((t) => t.text).join('\n'));
+      expect(result.visibleText).not.toContain('SLUTORD-ZZZ');
+      // Honest truncation, and nothing drawn outside the canvas.
+      expect(result.visibleText).toContain('…');
+      expect(texts.every((t) => t.y > 0 && t.y < 400)).toBe(true);
+    });
+
+    it('renderScreenPage returns the drawn text, including the homework branch', () => {
+      const { ctx } = mockGeoContext();
+      const canvas = {
+        clientWidth: 894,
+        clientHeight: 501,
+        width: 0,
+        height: 0,
+        getContext: () => ctx,
+      } as unknown as HTMLCanvasElement;
+      const exercise: ScreenRenderResult = renderScreenPage(canvas, exercisePage({ revealed: true }));
+      expect(exercise.visibleText).toContain('Hur mycket är 7 + 5?');
+      expect(exercise.visibleText).toContain('Svaret är 12');
+
+      const hwCtx = mockGeoContext();
+      const hwCanvas = {
+        clientWidth: 1280,
+        clientHeight: 800,
+        width: 0,
+        height: 0,
+        getContext: () => hwCtx.ctx,
+      } as unknown as HTMLCanvasElement;
+      const homework: ScreenRenderResult = renderScreenPage(
+        hwCanvas,
+        exercisePage({ kind: 'homework', subject: 'Läxa', title: 'Min läxa', body: ['Räkna 7 + 5.'], solution: '' }),
+      );
+      expect(homework.visibleText).toContain('Min läxa');
+      expect(homework.visibleText).not.toContain('Facit är dolt');
+    });
   });
 
   it('renderScreenPage throws on a real canvas without 2d context', async () => {

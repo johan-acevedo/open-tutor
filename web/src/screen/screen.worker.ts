@@ -647,9 +647,10 @@ async function handlePrepare(intent: ScreenIntent, seq: number): Promise<void> {
         content: geographyHint
           ? `Prepare a Swedish primary-school geography page for intent ${intent.intentId} (seq ${seq}, need "${intent.need ?? ""}"). ` +
             `Background: ${(intent.background ?? "").slice(0, 500) || "none"}. ` +
-            `Start background research with request_geography_research (query "${(intent.need ?? "").slice(0, 120)}", ` +
+            `Start background research with request_geography_research. Choose a short English place or historical region name ` +
+            `for query (for example "France"), not the learner's whole request or instructions. Pass ` +
             `requestId "${intent.intentId}-${seq}", lessonId "${intent.lessonId}", intentId "${intent.intentId}", ` +
-            `seq "${seq}", needKey ${JSON.stringify(need)}), then reply with one short Swedish status sentence.`
+            `seq "${seq}", needKey ${JSON.stringify(need)}. Then reply with one short Swedish status sentence.`
           : `Prepare a Swedish primary-school maths exercise for intent ${intent.intentId} (seq ${seq}) about ` +
             `"${(intent.need ?? "räkning").slice(0, 120)}". Background: ${(intent.background ?? "").slice(0, 500) || "none"}. ` +
             `Call prepare_exercise exactly once with intentId "${intent.intentId}", seq "${seq}", ` +

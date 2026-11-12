@@ -43,7 +43,7 @@ export type ScreenIntentAck =
   | { accepted: false; intentId: string; reason: string };
 
 /** Browser-to-fox stream `screen-event` payload. */
-export type ScreenEventType = "ready" | "rejected" | "failed" | "answer-submitted";
+export type ScreenEventType = "ready" | "rejected" | "failed" | "answer-submitted" | "page-changed";
 
 export interface ScreenOutboundEvent {
   type: ScreenEventType;

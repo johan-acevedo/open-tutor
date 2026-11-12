@@ -116,6 +116,27 @@ afterEach(() => {
 });
 
 describe('init and resume', () => {
+  it('announces child page navigation only after the selected page renders', async () => {
+    const store = createMemoryScreenStore();
+    await store.saveDeck({
+      profileId: 'profil', lessonId: 'lektion-1',
+      pages: [candidate(), candidate({ id: 'p-2' })], current: 1, drafts: {}, updatedAt: 1,
+    });
+    const h = setup({ store });
+    await h.controller.init();
+    h.controller.notifyRendered('p-2', 'r1');
+    h.events.length = 0;
+    await h.controller.goTo(0);
+    expect(h.events).toEqual([]);
+    h.controller.notifyRendered('p-1', 'r1');
+    expect(h.events).toEqual([{
+      type: 'page-changed', lessonId: 'lektion-1', page: { id: 'p-1', revision: 'r1' },
+    }]);
+    h.controller.notifyRendered('p-1', 'r1');
+    expect(h.events).toHaveLength(1);
+    await h.controller.close();
+  });
+
   it('announces a restored page once after rendering so a restarted fox can observe and reveal it', async () => {
     const store = createMemoryScreenStore();
     await store.saveDeck({
@@ -128,7 +149,7 @@ describe('init and resume', () => {
     h.controller.notifyRendered('p-1', 'r1');
     expect(h.events).toHaveLength(1);
     expect(h.events[0]).toMatchObject({
-      type: 'ready', lessonId: 'lektion-1', page: { id: 'p-1', revision: 'r1' },
+      type: 'page-changed', lessonId: 'lektion-1', page: { id: 'p-1', revision: 'r1' },
     });
     h.controller.notifyRendered('p-1', 'r1');
     expect(h.events).toHaveLength(1);
@@ -335,6 +356,56 @@ describe('drafts and submission', () => {
 });
 
 describe('observation', () => {
+  it('waits for the current render before capturing its pixels', async () => {
+    let finishRender: (() => void) | undefined;
+    let holdRender = false;
+    const h = setup({
+      renderPage: async () => {
+        if (holdRender) await new Promise<void>((resolve) => { finishRender = resolve; });
+        return { visibleText: 'Freshly drawn page' };
+      },
+    });
+    await h.controller.init();
+    await h.controller.handleIntent(intent({ intentId: 'prep-1', op: 'prepare' }));
+    await waitFor(() => eventsFor(h, 'prep-1').length === 1);
+    const canvas = document.createElement('canvas');
+    const capture = vi.fn(() => 'data:image/png;base64,QUJD');
+    canvas.toDataURL = capture;
+    h.controller.attachCanvas(canvas);
+    await h.controller.handleIntent(intent({ intentId: 'show-1', op: 'show' }));
+    await waitFor(() => eventsFor(h, 'show-1').length === 1);
+    holdRender = true;
+    const observation = h.controller.captureObservation({
+      observationId: 'rendering', lessonId: 'lektion-1', pageId: 'p-1', revision: 'r1',
+    });
+    await waitFor(() => finishRender !== undefined);
+    expect(capture).not.toHaveBeenCalled();
+    finishRender?.();
+    expect((await observation).context.visibleText).toBe('Freshly drawn page');
+    expect(capture).toHaveBeenCalledOnce();
+    await h.controller.close();
+  });
+
+  it('pairs pixels with the text actually drawn instead of clipped page content', async () => {
+    const h = setup({
+      renderPage: async () => ({ visibleText: 'Only the heading fits' }),
+    });
+    await h.controller.init();
+    await h.controller.handleIntent(intent({ intentId: 'prep-1', op: 'prepare' }));
+    await waitFor(() => eventsFor(h, 'prep-1').length === 1);
+    const canvas = document.createElement('canvas');
+    canvas.toDataURL = () => 'data:image/png;base64,QUJD';
+    h.controller.attachCanvas(canvas);
+    await h.controller.handleIntent(intent({ intentId: 'show-1', op: 'show' }));
+    await waitFor(() => eventsFor(h, 'show-1').length === 1);
+    const observed = await h.controller.captureObservation({
+      observationId: 'drawn', lessonId: 'lektion-1', pageId: 'p-1', revision: 'r1',
+    });
+    expect(observed.context.visibleText).toBe('Only the heading fits');
+    expect(observed.context.privateTeaching).toBe('Facit 2');
+    await h.controller.close();
+  });
+
   it('reads pixels without persisting them and rejects overlaps', async () => {
     let release!: (v: string) => void;
     const gate = new Promise<string>((resolve) => {
@@ -500,6 +571,47 @@ describe('worker candidates with researched images', () => {
 });
 
 describe('show starts preparation', () => {
+  it('rejects a show promptly when its local preparation fails', async () => {
+    const h = setup({
+      prepareHandler: async () => { throw new Error('authoring unavailable'); },
+      outstandingShowTimeoutMs: 5000,
+    });
+    await h.controller.init();
+    try {
+      await h.controller.handleIntent(intent({ intentId: 'show-failed', op: 'show' }));
+      await waitFor(() => eventsFor(h, 'show-failed').length === 1, 200);
+      expect(eventsFor(h, 'show-failed')[0]).toMatchObject({
+        type: 'rejected', reason: 'prepare-failed: authoring unavailable',
+      });
+      expect(h.events.some((e) => e.intentId?.endsWith(':auto-prepare'))).toBe(false);
+    } finally {
+      await h.controller.close();
+    }
+  });
+
+  it('completes concurrent matching shows from one visible page', async () => {
+    let deliver: (() => void) | undefined;
+    const h = setup({
+      prepareHandler: async (i, seq) => {
+        await new Promise<void>((resolve) => { deliver = resolve; });
+        return candidate({ id: 'shared', revision: 'r1', intentId: i.intentId, requestSeq: seq });
+      },
+    });
+    await h.controller.init();
+    try {
+      await h.controller.handleIntent(intent({ intentId: 'show-a', op: 'show' }));
+      await h.controller.handleIntent(intent({ intentId: 'show-b', op: 'show' }));
+      deliver?.();
+      await waitFor(() => h.controller.getSnapshot().pages.length === 1);
+      h.controller.notifyRendered('shared', 'r1');
+      expect(eventsFor(h, 'show-a')[0]).toMatchObject({ type: 'ready', page: { id: 'shared', revision: 'r1' } });
+      expect(eventsFor(h, 'show-b')[0]).toMatchObject({ type: 'ready', page: { id: 'shared', revision: 'r1' } });
+      expect(h.controller.getSnapshot().pages).toHaveLength(1);
+    } finally {
+      await h.controller.close();
+    }
+  });
+
   it('a show with no candidate starts prepare itself and auto-promotes the match', async () => {
     const seen: Array<{ intentId: string; seq: number }> = [];
     const h = setup({

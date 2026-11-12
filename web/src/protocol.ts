@@ -80,7 +80,7 @@ export type ScreenIntentAck =
   | { accepted: false; intentId: string; reason: string };
 
 export type ScreenEvent = {
-  type: 'ready' | 'rejected' | 'failed' | 'answer-submitted';
+  type: 'ready' | 'rejected' | 'failed' | 'answer-submitted' | 'page-changed';
   intentId?: string;
   lessonId: string;
   page?: { id: string; revision: string };

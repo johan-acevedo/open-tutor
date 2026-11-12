@@ -24,7 +24,7 @@ Frontend assumptions (browser Screen agent, owned by the lead):
   ``{accepted: bool, observationId, reason?}``.
 - Text stream ``screen-event`` carries
   ``{type, intentId?, lessonId, page?: {id, revision}, reason?, answer?}``
-  with ``type`` in ``ready|rejected|failed|answer-submitted``.
+  with ``type`` in ``ready|rejected|failed|answer-submitted|page-changed``.
   ``ready`` means the page is committed and rendered. A stale ``reveal``
   returns ``rejected``; a duplicate intent id returns the existing outcome
   without re-executing. ``answer-submitted`` carries the explicit child answer
@@ -62,7 +62,7 @@ MAX_PENDING = 32
 MAX_OUTCOMES = 64
 
 INTENT_OPS = ("prepare", "show", "reveal")
-EVENT_TYPES = ("ready", "rejected", "failed", "answer-submitted")
+EVENT_TYPES = ("ready", "rejected", "failed", "answer-submitted", "page-changed")
 
 
 def parse_screen_meta(meta: dict[str, Any] | None) -> dict[str, Any]:
@@ -139,6 +139,10 @@ def validate_screen_event(event: Any) -> tuple[bool, str]:
         return False, f"unknown type {event.get('type')!r}"
     if not str(event.get("lessonId") or ""):
         return False, "missing lessonId"
+    if event.get("type") == "page-changed":
+        page = event.get("page")
+        if not isinstance(page, dict) or not all(isinstance(page.get(k), str) and page[k] for k in ("id", "revision")):
+            return False, "missing page identity"
     return True, ""
 
 
@@ -250,7 +254,7 @@ class ScreenTracker:
             fut.cancel()
 
     def resolve_event(self, event: dict[str, Any]) -> str:
-        """Resolve a ready/rejected/failed event. Returns disposition."""
+        """Resolve an intent outcome or update the rendered visible page quietly."""
         ok, _ = validate_screen_event(event)
         if not ok:
             return "ignored"
@@ -258,6 +262,10 @@ class ScreenTracker:
             return "answer"
         if str(event.get("lessonId") or "") != self.lesson_id:
             return "ignored"
+        if event.get("type") == "page-changed":
+            page = event["page"]
+            self.current_page = {"id": page["id"][:80], "revision": page["revision"][:80]}
+            return "visible"
         intent_id = str(event.get("intentId") or "")
         if not intent_id:
             return "ignored"

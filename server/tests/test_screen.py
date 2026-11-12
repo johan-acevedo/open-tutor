@@ -324,6 +324,32 @@ async def test_wrong_lesson_events_are_ignored():
     assert tutor.screen_tracker.current_page is None
 
 
+async def test_rendered_page_change_quietly_updates_the_page_used_by_observe():
+    participant = FakeScreenParticipant()
+    tutor = make_tutor(participant)
+    original_chat = list(tutor.chat_ctx.items)
+    for event in (
+        {"type": "page-changed", "lessonId": "OTHER", "page": {"id": "wrong", "revision": "r1"}},
+        {"type": "page-changed", "lessonId": "L1", "page": {"id": "missing-revision"}},
+    ):
+        assert await tutor.handle_screen_event(event) == "ignored"
+    assert tutor.screen_tracker.current_page is None
+    event = {"type": "page-changed", "lessonId": "L1", "page": {"id": "p1", "revision": "r1"}}
+    assert await tutor.handle_screen_event(event) == "visible"
+    assert await tutor.handle_screen_event(event) == "visible"
+    assert list(tutor.chat_ctx.items) == original_chat
+    task = asyncio.create_task(tutor.observe_screen(None))
+    await wait_until(lambda: bool(participant.calls))
+    payload = participant.calls[0][2]
+    assert payload["pageId"] == "p1" and payload["revision"] == "r1"
+    tutor.handle_screen_pixels(payload["observationId"], b"PNG", {})
+    tutor.handle_screen_context(payload["observationId"], {
+        "observationId": payload["observationId"], "lessonId": "L1",
+        "page": event["page"], "visibleText": "Back on maths",
+    })
+    assert "Back on maths" in await task
+
+
 async def test_superseded_show_notes_newer_intent():
     participant = FakeScreenParticipant()
     tutor = make_tutor(participant)

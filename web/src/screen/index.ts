@@ -26,6 +26,7 @@ export {
   sanitizeSvg,
   wrapText,
   type ScreenRenderAssets,
+  type ScreenRenderResult,
   type ScreenRenderSize,
 } from "./renderer";
 export {

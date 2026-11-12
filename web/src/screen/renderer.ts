@@ -30,6 +30,16 @@ export interface ScreenRenderSize {
   h: number;
 }
 
+/**
+ * Result of one render pass. `visibleText` contains ONLY text actually
+ * passed to canvas drawing (fillText) — hidden solutions, clipped
+ * paragraphs and undrawn candidate text are never included. Embedded map
+ * image text stays pixels-only and is never transcribed here.
+ */
+export interface ScreenRenderResult {
+  visibleText: string;
+}
+
 const BG_TOP = "#0b1220";
 const BG_BOTTOM = "#0f1b33";
 const CARD = "#16223d";
@@ -53,7 +63,7 @@ export function renderScreenPage(
   canvas: HTMLCanvasElement,
   page: ScreenPage,
   assets: ScreenRenderAssets = {},
-): void {
+): ScreenRenderResult {
   const dpr = typeof window !== "undefined" && window.devicePixelRatio ? window.devicePixelRatio : 1;
   const cssW = canvas.clientWidth > 0 ? canvas.clientWidth : canvas.width || 1280;
   const cssH = canvas.clientHeight > 0 ? canvas.clientHeight : canvas.height || 800;
@@ -63,8 +73,9 @@ export function renderScreenPage(
   if (!ctx) throw new Error("no-2d-context");
   ctx.save();
   ctx.scale(dpr, dpr);
-  drawScreenPage(ctx, { w: cssW, h: cssH }, page, assets);
+  const result = drawScreenPage(ctx, { w: cssW, h: cssH }, page, assets);
   ctx.restore();
+  return result;
 }
 
 /** Testable core: draws into any 2d context at the given CSS size. */
@@ -73,9 +84,18 @@ export function drawScreenPage(
   size: ScreenRenderSize,
   page: ScreenPage,
   assets: ScreenRenderAssets = {},
-): void {
+): ScreenRenderResult {
   const { w, h } = size;
   const compact = w < 600 || h < 480;
+  // Every string actually passed to canvas drawing. The returned
+  // visibleText is built ONLY from this list: hidden solutions, clipped
+  // paragraphs and undrawn candidate text never enter it.
+  const drawn: string[] = [];
+  const put = (text: string, x: number, yPos: number): void => {
+    drawn.push(text);
+    ctx.fillText(text, x, yPos);
+  };
+  const finish = (): ScreenRenderResult => ({ visibleText: drawn.join("\n").slice(0, 4000) });
   // Background.
   const bg = ctx.createLinearGradient(0, 0, 0, h);
   bg.addColorStop(0, BG_TOP);
@@ -114,6 +134,21 @@ export function drawScreenPage(
   const answerY = cardY + cardH - footerH - answerH - solutionH - gap;
   const visualY = answerY - gap - visualH;
   const bodyBottom = (hasVisual ? visualY : answerY) - gap;
+  // Geography uses a compact one-page workspace so the researched map stays
+  // prominent: two columns on desktop, stacked with a large map on phones,
+  // and slim answer/solution strips instead of the exercise-sized boxes.
+  const geoTwoCol = page.kind === "geography" && !compact && w >= 700;
+  const geoAnswerH = compact ? 44 : 72;
+  ctx.font = `400 ${clamp(w * 0.019, 16, 22)}px ${FONT}`;
+  const geoSolFull = wrapText(ctx, page.solution, innerW - 28);
+  const geoSolMax = compact ? (h < 320 ? 1 : 3) : 2;
+  const geoSolLines = geoSolFull.slice(0, geoSolMax);
+  if (geoSolFull.length > geoSolMax && geoSolLines.length > 0) {
+    geoSolLines[geoSolLines.length - 1] = truncate(ctx, `${geoSolLines[geoSolLines.length - 1]} \u2026`, innerW - 28);
+  }
+  const geoCompactSolH = 44 + Math.max(0, geoSolLines.length - 1) * lineHeight(ctx) * 0.95;
+  const geoSolutionH = compact ? (page.revealed ? geoCompactSolH : 32) : page.revealed ? 78 : 34;
+  const geoAnswerY = cardY + cardH - footerH - geoAnswerH - geoSolutionH - gap;
 
   // Subject chip + page label.
   const chip = page.subject || (page.kind === "geography" ? "Geografi" : page.kind === "homework" ? "Läxa" : "Matte");
@@ -124,26 +159,40 @@ export function drawScreenPage(
   ctx.fill();
   ctx.fillStyle = ACCENT_INK;
   ctx.textBaseline = "middle";
-  ctx.fillText(chip, innerX + 14, y - 4);
+  put(chip, innerX + 14, y - 4);
   if (assets.pageLabel) {
     ctx.fillStyle = MUTED;
     ctx.font = `500 15px ${FONT}`;
     ctx.textAlign = "right";
-    ctx.fillText(assets.pageLabel, cardX + cardW - padding, y - 4);
+    put(assets.pageLabel, cardX + cardW - padding, y - 4);
     ctx.textAlign = "left";
   }
   y += compact ? 14 : 22;
 
-  // Title.
+  // Title. Geography caps the heading so the map keeps its share of the
+  // one-page workspace; overflow is honest (ellipsis), never clipped.
   ctx.fillStyle = INK;
   ctx.font = `700 ${compact ? 18 : clamp(w * 0.032, 24, 40)}px ${FONT}`;
   ctx.textBaseline = "alphabetic";
-  for (const line of wrapText(ctx, page.title, innerW)) {
-    const nextY = y + lineHeight(ctx);
-    const titleBottom = page.kind === "homework" ? cardY + cardH - 60 : bodyBottom;
-    if (nextY > titleBottom) break;
-    y = nextY;
-    ctx.fillText(line, innerX, y);
+  {
+    const fullTitle = wrapText(ctx, page.title, innerW);
+    const maxTitle = page.kind === "geography" ? (h < 320 ? 1 : 2) : fullTitle.length;
+    let titleLines = fullTitle.slice(0, maxTitle);
+    if (fullTitle.length > maxTitle && titleLines.length > 0) {
+      titleLines[titleLines.length - 1] = truncate(ctx, `${titleLines[titleLines.length - 1]} \u2026`, innerW);
+    }
+    const titleBottom =
+      page.kind === "homework" ? cardY + cardH - 60 : page.kind === "geography" ? geoAnswerY - gap : bodyBottom;
+    for (const line of titleLines) {
+      const nextY = y + lineHeight(ctx);
+      if (nextY > titleBottom) {
+        // No room even for an honest heading line: stop instead of
+        // clipping text outside the card.
+        break;
+      }
+      y = nextY;
+      put(line, innerX, y);
+    }
   }
   y += compact ? 6 : 14;
 
@@ -166,7 +215,7 @@ export function drawScreenPage(
       for (const line of wrapText(ctx, paragraph, innerW)) {
         y += lineHeight(ctx) * 0.96;
         if (y > hwBodyLimit) break;
-        ctx.fillText(line, innerX, y);
+        put(line, innerX, y);
       }
       y += 8;
       if (y > hwBodyLimit) break;
@@ -188,7 +237,7 @@ export function drawScreenPage(
       if (hwAttribution) {
         ctx.fillStyle = MUTED;
         ctx.font = `400 12px ${FONT}`;
-        ctx.fillText(truncate(ctx, `Bild: ${hwAttribution}`, hwBoxW - 16), hwBoxX + 8, hwBoxY + hwVisualH - 10);
+        put(truncate(ctx, `Bild: ${hwAttribution}`, hwBoxW - 16), hwBoxX + 8, hwBoxY + hwVisualH - 10);
       }
       y = hwBoxY + hwVisualH + 14;
     } else if (hwHasVisual) {
@@ -197,7 +246,7 @@ export function drawScreenPage(
         ctx.fillStyle = MUTED;
         ctx.font = `400 12px ${FONT}`;
         if (y + 20 <= cardY + cardH - hwFooterH - 8) {
-          ctx.fillText(truncate(ctx, `Bild: ${hwAttribution}`, hwBoxW - 16), hwBoxX + 8, y + 18);
+          put(truncate(ctx, `Bild: ${hwAttribution}`, hwBoxW - 16), hwBoxX + 8, y + 18);
           y += 24;
         }
       }
@@ -205,8 +254,164 @@ export function drawScreenPage(
     ctx.fillStyle = MUTED;
     ctx.font = `400 12.5px ${FONT}`;
     const hwSources = page.sources.slice(0, 2).join(" · ");
-    if (hwSources) ctx.fillText(truncate(ctx, `Källor: ${hwSources}`, hwBoxW * 0.62), hwBoxX, cardY + cardH - 14);
-    return;
+    if (hwSources) put(truncate(ctx, `Källor: ${hwSources}`, hwBoxW * 0.62), hwBoxX, cardY + cardH - 14);
+    return finish();
+  }
+
+  // Geography pages: the researched/generated map is the hero. Desktop
+  // uses two columns (short text left, large map right); phones stack a
+  // compact body over a large map. Slim answer/solution strips keep the
+  // one-page workspace with no scrolling. Truncation is honest (ellipsis),
+  // never clipped outside the canvas.
+  if (page.kind === "geography") {
+    const geoBoxW = innerW;
+    const geoBoxX = innerX;
+    const geoSolutionY = geoAnswerY + geoAnswerH + gap;
+    ctx.font = `400 ${compact ? 15 : clamp(w * 0.02, 17, 24)}px ${FONT}`;
+    ctx.fillStyle = "#dce6f7";
+    const geoLineH = lineHeight(ctx) * 0.96;
+    const geoContentTop = y;
+    const geoContentBottom = geoAnswerY - gap;
+    const geoContentH = geoContentBottom - geoContentTop;
+    const geoImage = page.asset?.id ? assets.images?.get(page.asset.id) : undefined;
+    const geoSvg = !geoImage && page.svgAsset ? assets.svgImage : undefined;
+    const geoHasDrawable = Boolean(geoImage || geoSvg);
+    const geoAttribution = page.asset?.attribution ?? (page.svgAsset ? "Genererad bild" : null);
+    const drawGeoMapBox = (bx: number, by: number, bw: number, bh: number): void => {
+      if (bw < 32 || bh < 32 || by + bh > cardY + cardH) return;
+      roundRect(ctx, bx, by, bw, bh, 12);
+      ctx.fillStyle = "#0a1122";
+      ctx.fill();
+      ctx.strokeStyle = CARD_BORDER;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      if (geoHasDrawable) {
+        ctx.save();
+        roundRect(ctx, bx, by, bw, bh, 12);
+        ctx.clip();
+        drawContain(ctx, (geoImage ?? geoSvg) as CanvasImageSource, bx, by, bw, bh);
+        ctx.restore();
+      } else {
+        drawMapPlaceholder(ctx, bx, by, bw, bh, page);
+        drawn.push("Karta laddas \u2026");
+      }
+      if (geoAttribution && bh >= 56) {
+        ctx.fillStyle = MUTED;
+        ctx.font = `400 12px ${FONT}`;
+        put(truncate(ctx, `Bild: ${geoAttribution}`, bw - 16), bx + 8, by + bh - 10);
+        ctx.font = `400 ${compact ? 15 : clamp(w * 0.02, 17, 24)}px ${FONT}`;
+        ctx.fillStyle = "#dce6f7";
+      }
+    };
+    // Draws wrapped body paragraphs within [top, bottom] with paragraph
+    // gaps. Returns the y after the last drawn line. Overflow is honest:
+    // the last visible line gains an ellipsis; nothing is drawn past bottom.
+    const drawGeoParagraphs = (maxWidth: number, x: number, top: number, bottom: number): number => {
+      const paras = page.body.slice(0, 6).map((p) => wrapText(ctx, p, maxWidth));
+      const total = paras.reduce((n, ls) => n + ls.length, 0);
+      let yy = top;
+      let fit = 0;
+      let stop = false;
+      for (const ls of paras) {
+        for (let i = 0; i < ls.length; i++) {
+          if (yy + geoLineH > bottom) {
+            stop = true;
+            break;
+          }
+          yy += geoLineH;
+          fit++;
+        }
+        if (stop) break;
+        yy += 8;
+      }
+      const truncated = fit < total;
+      yy = top;
+      let doneCount = 0;
+      for (const ls of paras) {
+        for (let i = 0; i < ls.length; i++) {
+          if (doneCount >= fit) break;
+          let text = ls[i] ?? "";
+          if (truncated && doneCount === fit - 1) {
+            text = truncate(ctx, `${text} \u2026`, maxWidth);
+          }
+          yy += geoLineH;
+          put(text, x, yy);
+          doneCount++;
+        }
+        if (doneCount >= fit) break;
+        yy += 8;
+      }
+      return yy;
+    };
+    if (geoTwoCol) {
+      const colGap = 16;
+      const leftW = Math.round(innerW * 0.44);
+      const rightW = innerW - leftW - colGap;
+      drawGeoParagraphs(leftW, innerX, geoContentTop, geoContentBottom);
+      if (hasVisual && geoContentH >= 48 && rightW >= 64) {
+        drawGeoMapBox(innerX + leftW + colGap, geoContentTop, rightW, geoContentH);
+      }
+    } else {
+      let mapH = 0;
+      if (hasVisual && geoContentH > 0) {
+        if (geoContentH < 120) {
+          mapH = Math.max(0, Math.floor((geoContentH - gap) / 2));
+        } else {
+          mapH = clamp(Math.round(geoContentH * 0.55), 120, 320);
+        }
+        mapH = Math.min(mapH, geoContentH);
+      }
+      const bodyH = geoContentH - mapH - (mapH > 0 ? gap : 0);
+      drawGeoParagraphs(innerW, innerX, geoContentTop, geoContentTop + bodyH);
+      if (mapH >= 48) {
+        drawGeoMapBox(innerX, geoContentTop + bodyH + gap, innerW, mapH);
+      }
+    }
+    // Designated child draft (slim) + fox-gated reveal stay coherent.
+    roundRect(ctx, geoBoxX, geoAnswerY, geoBoxW, geoAnswerH, 12);
+    ctx.fillStyle = ANSWER_BG;
+    ctx.fill();
+    ctx.strokeStyle = CARD_BORDER;
+    ctx.stroke();
+    ctx.fillStyle = MUTED;
+    ctx.font = `600 14px ${FONT}`;
+    put(page.answerLabel || "Ditt svar", geoBoxX + 14, geoAnswerY + (compact ? 16 : 22));
+    const geoDraft = (assets.draftText ?? "").trim();
+    ctx.font = `400 ${clamp(w * 0.019, 16, 22)}px ${FONT}`;
+    if (geoDraft) {
+      ctx.fillStyle = INK;
+      const geoDraftLines = wrapText(ctx, geoDraft, geoBoxW - 28).slice(0, compact ? 1 : 2);
+      geoDraftLines.forEach((line, i) => put(line, geoBoxX + 14, geoAnswerY + (compact ? 36 : 50) + i * lineHeight(ctx) * 0.95));
+    } else {
+      ctx.fillStyle = "#5c6c8d";
+      put("Skriv ditt svar h\u00e4r \u2026", geoBoxX + 14, geoAnswerY + (compact ? 36 : 54));
+    }
+    roundRect(ctx, geoBoxX, geoSolutionY, geoBoxW, geoSolutionH, 12);
+    if (page.revealed) {
+      ctx.fillStyle = SOLUTION_BG;
+      ctx.fill();
+      ctx.strokeStyle = SOLUTION_BORDER;
+      ctx.stroke();
+      ctx.fillStyle = "#7ee2a8";
+      ctx.font = `600 14px ${FONT}`;
+      put("Facit", geoBoxX + 14, geoSolutionY + (compact ? 16 : 22));
+      ctx.fillStyle = "#e8f7ee";
+      ctx.font = `400 ${clamp(w * 0.019, 16, 22)}px ${FONT}`;
+      geoSolLines.forEach((line, i) => put(line, geoBoxX + 14, geoSolutionY + (compact ? 36 : 50) + i * lineHeight(ctx) * 0.95));
+    } else {
+      ctx.fillStyle = HIDDEN_BG;
+      ctx.fill();
+      ctx.strokeStyle = CARD_BORDER;
+      ctx.stroke();
+      ctx.fillStyle = MUTED;
+      ctx.font = `600 16px ${FONT}`;
+      put("\uD83D\uDD12 Facit \u00e4r dolt", geoBoxX + 14, geoSolutionY + geoSolutionH / 2 + 6);
+    }
+    ctx.fillStyle = MUTED;
+    ctx.font = `400 12.5px ${FONT}`;
+    const geoSources = page.sources.slice(0, 2).join(" \u00b7 ");
+    if (geoSources) put(truncate(ctx, `K\u00e4llor: ${geoSources}`, geoBoxW * 0.62), geoBoxX, cardY + cardH - 14);
+    return finish();
   }
 
   // Body / question lines.
@@ -217,7 +422,7 @@ export function drawScreenPage(
       const nextY = y + lineHeight(ctx) * 0.96;
       if (nextY > bodyBottom) break;
       y = nextY;
-      ctx.fillText(line, innerX, y);
+      put(line, innerX, y);
     }
     y += 8;
   }
@@ -252,12 +457,13 @@ export function drawScreenPage(
         ctx.restore();
       } else {
         drawMapPlaceholder(ctx, boxX, y, boxW, visualH, page);
+        drawn.push("Bild laddas \u2026");
       }
       const attribution = page.asset?.attribution ?? (page.svgAsset ? "Genererad bild" : null);
       if (attribution) {
         ctx.fillStyle = MUTED;
         ctx.font = `400 12px ${FONT}`;
-        ctx.fillText(truncate(ctx, `Bild: ${attribution}`, boxW - 16), boxX + 8, y + visualH - 10);
+        put(truncate(ctx, `Bild: ${attribution}`, boxW - 16), boxX + 8, y + visualH - 10);
       }
       y += visualH + 14;
     }
@@ -272,16 +478,16 @@ export function drawScreenPage(
   ctx.stroke();
   ctx.fillStyle = MUTED;
   ctx.font = `600 14px ${FONT}`;
-  ctx.fillText(page.answerLabel || "Ditt svar", boxX + 14, answerBoxY + (compact ? 16 : 22));
+  put(page.answerLabel || "Ditt svar", boxX + 14, answerBoxY + (compact ? 16 : 22));
   const draft = (assets.draftText ?? "").trim();
   ctx.font = `400 ${clamp(w * 0.019, 16, 22)}px ${FONT}`;
   if (draft) {
     ctx.fillStyle = INK;
     const lines = wrapText(ctx, draft, boxW - 28).slice(0, compact ? 1 : 2);
-    lines.forEach((line, i) => ctx.fillText(line, boxX + 14, answerBoxY + (compact ? 36 : 50) + i * lineHeight(ctx) * 0.95));
+    lines.forEach((line, i) => put(line, boxX + 14, answerBoxY + (compact ? 36 : 50) + i * lineHeight(ctx) * 0.95));
   } else {
     ctx.fillStyle = "#5c6c8d";
-    ctx.fillText("Skriv ditt svar här …", boxX + 14, answerBoxY + (compact ? 36 : 54));
+    put("Skriv ditt svar här …", boxX + 14, answerBoxY + (compact ? 36 : 54));
   }
 
   // Solution area: hidden until the fox-gated reveal.
@@ -294,10 +500,10 @@ export function drawScreenPage(
     ctx.stroke();
     ctx.fillStyle = "#7ee2a8";
     ctx.font = `600 14px ${FONT}`;
-    ctx.fillText("Facit", boxX + 14, solutionY + (compact ? 16 : 22));
+    put("Facit", boxX + 14, solutionY + (compact ? 16 : 22));
     ctx.fillStyle = "#e8f7ee";
     ctx.font = `400 ${clamp(w * 0.019, 16, 22)}px ${FONT}`;
-    solutionLines.forEach((line, i) => ctx.fillText(line, boxX + 14, solutionY + (compact ? 36 : 50) + i * lineHeight(ctx) * 0.95));
+    solutionLines.forEach((line, i) => put(line, boxX + 14, solutionY + (compact ? 36 : 50) + i * lineHeight(ctx) * 0.95));
   } else {
     ctx.fillStyle = HIDDEN_BG;
     ctx.fill();
@@ -305,14 +511,15 @@ export function drawScreenPage(
     ctx.stroke();
     ctx.fillStyle = MUTED;
     ctx.font = `600 16px ${FONT}`;
-    ctx.fillText("🔒 Facit är dolt", boxX + 14, solutionY + solutionH / 2 + 6);
+    put("🔒 Facit är dolt", boxX + 14, solutionY + solutionH / 2 + 6);
   }
 
   // Source attribution stays on the teaching surface.
   ctx.fillStyle = MUTED;
   ctx.font = `400 12.5px ${FONT}`;
   const sources = page.sources.slice(0, 2).join(" · ");
-  if (sources) ctx.fillText(truncate(ctx, `Källor: ${sources}`, boxW * 0.62), boxX, cardY + cardH - 14);
+  if (sources) put(truncate(ctx, `Källor: ${sources}`, boxW * 0.62), boxX, cardY + cardH - 14);
+  return finish();
 }
 
 function lineHeight(ctx: CanvasRenderingContext2D): number {

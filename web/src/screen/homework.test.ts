@@ -78,7 +78,7 @@ const PNG = (extra = 0x99) =>
   new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, extra]);
 
 describe('addHomeworkPage: image homework', () => {
-  it('becomes immediately visible, persists, verifies blobs and fabricates no fox event', async () => {
+  it('becomes visible, persists verified blobs, and announces the rendered page without a fox intent', async () => {
     const h = setup();
     await h.controller.init();
     h.controller.attachCanvas({} as HTMLCanvasElement);
@@ -118,7 +118,9 @@ describe('addHomeworkPage: image homework', () => {
     expect(isAssetRefUsable(page.asset!, 'lektion-1')).toBe(true);
     expect(await verifyBlobBytes(PNG(), { hash: record!.hash, mimeType: 'image/png' })).toMatchObject({ ok: true });
     // No fox ready / answer-submitted event is fabricated.
-    expect(h.events.length).toBe(beforeEvents);
+    expect(h.events.slice(beforeEvents)).toEqual([{
+      type: 'page-changed', lessonId: 'lektion-1', page: { id: page.id, revision: page.revision },
+    }]);
     expect(h.events.filter((e) => e.type === 'ready')).toHaveLength(0);
     expect(h.events.filter((e) => e.type === 'answer-submitted')).toHaveLength(0);
     // Deck store actually persisted the visible page.

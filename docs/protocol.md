@@ -25,13 +25,15 @@ With Screen capability, prepared teaching visuals use a fixed one-page-at-a-time
 
 | Channel | Topic / method | Payload |
 |---|---|---|
-| Text stream | `screen-event` | `{ type: "ready" \| "rejected" \| "failed" \| "answer-submitted", intentId?, lessonId, page?: { id, revision }, reason?, answer? }`. `ready` is sent only after the visible canvas has rendered. Draft keystrokes are never sent. |
+| Text stream | `screen-event` | `{ type: "ready" \| "rejected" \| "failed" \| "answer-submitted" \| "page-changed", intentId?, lessonId, page?: { id, revision }, reason?, answer? }`. `page-changed` reports a rendered visible page without an intent id. Draft keystrokes are never sent. |
 | Byte stream | `screen-pixels` | One PNG of the actual visible canvas after an accepted observation. Attributes correlate `observationId`, `lessonId`, `pageId`, and `revision`. |
 | Text stream | `screen-context` | Bounded JSON with the same observation ids, visible interaction state, viewport, sources, and optional `privateTeaching` such as a hidden solution. Never the Screen transcript. |
 
 Duplicate intent ids return their existing outcome. Stale commands cannot mutate a newer page. A `show` intent authorises the main Screen to promote a matching prepared candidate when ready; subagents and anticipatory work remain invisible until then. The fox waits for `ready` and normally observes the page before teaching from it. RPC calls remain short; asynchronous preparation and observation happen through the correlated streams above.
 
-On interruption recovery, the browser sends one `ready` event with intent id `resume-<lessonId>` after the restored page renders. It holds Screen events until the fox advertises an active session state, so a fast browser cannot send recovery state before the fox installs its stream handlers. The resume event updates the fox's current page without interrupting its greeting or starting preparation.
+After interruption recovery, child navigation, or homework intake, the browser sends `page-changed` with the current page id and revision after rendering. Repeated renders of the same identity do not send another event. The fox updates its current page quietly, without interrupting speech or starting preparation. Events wait until the fox advertises an active session state, so a fast browser cannot send recovery state before the fox installs its stream handlers.
+
+The observation's `visibleText` comes from text actually drawn on the canvas. Clipped paragraphs and hidden solutions are excluded. Embedded map labels remain in the pixels. Observation waits for a completed render and reports the actual canvas dimensions.
 
 An intentional new lesson has a fresh visible deck and a new `lessonId`. Device-local prior summaries still orient both agents. Closing without ending leaves the current local lesson resumable.
 

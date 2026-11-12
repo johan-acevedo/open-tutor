@@ -303,7 +303,7 @@ def _commons_url(query: str) -> str:
         "format": "json",
         "formatversion": "2",
         "generator": "search",
-        "gsrsearch": query,
+        "gsrsearch": f"{query} map",
         "gsrnamespace": "6",
         "gsrlimit": "10",
         "prop": "imageinfo",
@@ -445,7 +445,7 @@ def _shape_commons_candidates(payload: Any) -> list[dict[str, Any]]:
         info = infos[0] if isinstance(infos, list) and infos and isinstance(infos[0], dict) else None
         if not info:
             continue
-        mime = str(info.get("mime", "")).split(";")[0].strip().lower()
+        mime = str(info.get("thumbmime") or info.get("mime", "")).split(";")[0].strip().lower()
         if mime not in ALLOWED_IMAGE_MIMES:
             continue
         image_url = info.get("thumburl") or info.get("url")

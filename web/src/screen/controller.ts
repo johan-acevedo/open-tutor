@@ -55,6 +55,7 @@ import {
 } from "./persistence";
 import { downloadAssetBytes } from "./research";
 import { renderScreenPage, resolveScreenAssets, sanitizeSvg } from "./renderer";
+import type { ScreenRenderResult } from "./renderer";
 import type {
   AddHomeworkPageInput,
   CandidatePage,
@@ -82,7 +83,7 @@ export type ScreenRenderPageFn = (
   canvas: HTMLCanvasElement,
   page: ScreenPage,
   opts: { draftText: string; pageLabel: string },
-) => Promise<void>;
+) => Promise<ScreenRenderResult | void>;
 
 export type PrepareHandler = (
   intent: ScreenIntent,
@@ -156,8 +157,6 @@ interface OutstandingShow {
   intentId: string;
   lessonId: string;
   need: string;
-  needText?: string;
-  backgroundText?: string;
   /** Synthetic prepare intent spawned by this show (show-starts-prepare). */
   prepIntentId?: string;
   timer: ReturnType<typeof setTimeout>;
@@ -193,7 +192,7 @@ export function createScreenController(options: ScreenControllerOptions): Screen
     options.renderPage ??
     (async (canvas, page, opts) => {
       const assets = await resolveScreenAssets(page, blobStore, opts.draftText, opts.pageLabel);
-      renderScreenPage(canvas, page, assets);
+      return renderScreenPage(canvas, page, assets);
     });
 
   let deck: ScreenDeckSnapshot = createEmptyDeck(options.profileId, options.lessonId, now());
@@ -202,12 +201,14 @@ export function createScreenController(options: ScreenControllerOptions): Screen
   const lastEventByIntent = new Map<string, ScreenOutboundEvent>();
   const needByIntent = new Map<string, string>();
   const opByIntent = new Map<string, ScreenIntent["op"]>();
+  const internalPrepares = new Set<string>();
   const candidates: CandidateStore = new Map();
   const gate: SupersessionGate = createSupersessionGate();
   const pendingRenders: PendingRender[] = [];
   const outstandingShows: OutstandingShow[] = [];
   let renderSeq = 0;
   let lastRendered: { pageId: string; revision: string } | null = null;
+  let renderedSnapshot: { deck: ScreenDeckSnapshot; text: string; viewport: ScreenViewport } | null = null;
   let canvas: HTMLCanvasElement | null = null;
   let worker: ScreenWorkerPort | null = null;
   let workerFailed = false;
@@ -216,16 +217,14 @@ export function createScreenController(options: ScreenControllerOptions): Screen
   let inFlightObservations = new Map<string, Promise<ScreenObservationResult>>();
   let closed = false;
   let initialized = false;
-  let resumePage: { id: string; revision: string } | null = null;
+  let announcedPage: { id: string; revision: string } | null = null;
 
-  function announceRestoredPage(pageId: string, revision: string): void {
+  function announceVisiblePage(pageId: string, revision: string): void {
     const visible = currentPage(deck);
     if (closed || visible?.id !== pageId || visible.revision !== revision ||
-        !resumePage || resumePage.id !== pageId || resumePage.revision !== revision) return;
-    resumePage = null;
-    // There is no waiting fox intent behind this event. The fox's tracker uses
-    // it to learn the current page/revision after a tutor restart.
-    emit({ type: "ready", intentId: `resume-${lessonId}`, lessonId, page: { id: pageId, revision } });
+        (announcedPage?.id === pageId && announcedPage.revision === revision)) return;
+    announcedPage = { id: pageId, revision };
+    emit({ type: "page-changed", lessonId, page: { id: pageId, revision } });
   }
 
   function emit(event: ScreenOutboundEvent): void {
@@ -255,6 +254,8 @@ export function createScreenController(options: ScreenControllerOptions): Screen
 
   function settle(intentId: string, lesson: string, outcome: IntentOutcome): void {
     settleIntent(registry, intentId, outcome);
+    if (outcome.status === "failed") rejectOutstandingShows(intentId, outcome.reason);
+    if (internalPrepares.has(intentId)) return;
     const type: ScreenEventType =
       outcome.status === "ready" ? "ready" : outcome.status === "rejected" ? "rejected" : "failed";
     if (outcome.status === "pending") return;
@@ -300,17 +301,29 @@ export function createScreenController(options: ScreenControllerOptions): Screen
    * `notifyRendered`. Silent refreshes (navigation, drafts) reuse the same
    * path but never settle intent outcomes.
    */
-  async function pumpRender(): Promise<void> {
-    if (!canvas) return; // external renderer path: wait for notifyRendered
-    const target = currentPage(deck);
-    if (!target) return;
+  async function pumpRender(): Promise<boolean> {
+    if (!canvas) return false; // external renderer path: wait for notifyRendered
+    const drawingCanvas = canvas;
+    const drawingDeck = deck;
+    const target = currentPage(drawingDeck);
+    if (!target) return false;
     const my = ++renderSeq;
     const relevant = pendingRenders.some((p) => p.pageId === target.id && p.revision === target.revision);
     try {
-      const draft = readDraft(deck, target.id, target.revision);
-      await renderPageFn(canvas, target, { draftText: draft, pageLabel: pageLabel() });
+      const draft = readDraft(drawingDeck, target.id, target.revision);
+      const result = await renderPageFn(drawingCanvas, target, { draftText: draft, pageLabel: pageLabel() });
+      if (my !== renderSeq || canvas !== drawingCanvas || closed) return false;
+      renderedSnapshot = result ? {
+        deck: drawingDeck,
+        text: result.visibleText,
+        viewport: {
+          ...viewport,
+          w: drawingCanvas.clientWidth || viewport.w,
+          h: drawingCanvas.clientHeight || viewport.h,
+        },
+      } : null;
     } catch {
-      if (my !== renderSeq || !relevant) return; // superseded, or silent path
+      if (my !== renderSeq || !relevant) return false; // superseded, or silent path
       const stuck = pendingRenders.filter((p) => p.pageId === target.id && p.revision === target.revision);
       for (const pending of stuck) {
         const index = pendingRenders.indexOf(pending);
@@ -318,15 +331,14 @@ export function createScreenController(options: ScreenControllerOptions): Screen
         if (pending.timer) clearTimeout(pending.timer);
         settle(pending.intentId, lessonId, { status: "failed", reason: "render-failed" });
       }
-      return;
+      return false;
     }
-    if (my !== renderSeq) return; // a newer render won; it completes the pendings
     lastRendered = { pageId: target.id, revision: target.revision };
-    announceRestoredPage(target.id, target.revision);
-    if (!relevant) return;
+    announceVisiblePage(target.id, target.revision);
     for (const pending of pendingRenders.filter((p) => p.pageId === target.id && p.revision === target.revision)) {
       completeRender(pending);
     }
+    return true;
   }
 
   /** Re-render the current page when pixels change without an intent event. */
@@ -336,13 +348,14 @@ export function createScreenController(options: ScreenControllerOptions): Screen
   }
 
   function attachCanvas(next: HTMLCanvasElement | null): void {
+    renderedSnapshot = null;
     canvas = next;
     if (canvas && deck.pages.length > 0) refreshPixels();
   }
 
   function notifyRendered(pageId: string, revision: string): void {
     lastRendered = { pageId, revision };
-    announceRestoredPage(pageId, revision);
+    announceVisiblePage(pageId, revision);
     for (const pending of pendingRenders.filter((p) => p.pageId === pageId && p.revision === revision)) {
       completeRender(pending);
     }
@@ -408,7 +421,6 @@ export function createScreenController(options: ScreenControllerOptions): Screen
     if (message.kind === "worker-failed") {
       if (message.intentId && getIntentOutcome(registry, message.intentId)?.status === "pending") {
         settle(message.intentId, lessonId, { status: "failed", reason: message.reason });
-        rejectOutstandingShows(message.intentId, message.reason);
       }
       return;
     }
@@ -561,48 +573,29 @@ export function createScreenController(options: ScreenControllerOptions): Screen
     // An outstanding show satisfied by this candidate promotes without a
     // second request. Matches the show itself, its auto-prepare child, or
     // any candidate with the same normalised need.
-    const showIndex = outstandingShows.findIndex(
+    const matches = outstandingShows.filter(
       (show) =>
         show.lessonId === lessonId &&
         (candidate.intentId === show.intentId ||
           (show.prepIntentId !== undefined && candidate.intentId === show.prepIntentId) ||
           (need !== undefined && need === show.need && show.need !== "\n")),
     );
-    if (showIndex !== -1) {
-      const [show] = outstandingShows.splice(showIndex, 1);
-      if (show) {
-        if (show.timer) clearTimeout(show.timer);
-        promoteForShow(show.intentId, show);
-      }
-    }
-  }
-
-  function promoteForShow(intentId: string, show: OutstandingShow): void {
-    const intent: ScreenIntent = {
-      intentId,
-      lessonId,
-      op: "show",
-      need: show.needText,
-      background: show.backgroundText,
-      viewport,
-    };
-    const match = findPromotionCandidate(candidates, intent, needByIntent);
-    if (!match) {
-      settle(intentId, lessonId, { status: "rejected", reason: "no-matching-candidate" });
-      return;
+    if (matches.length === 0) return;
+    for (const show of matches) {
+      outstandingShows.splice(outstandingShows.indexOf(show), 1);
+      clearTimeout(show.timer);
     }
     try {
-      deck = promoteCandidate(deck, match, now());
+      deck = promoteCandidate(deck, candidate, now());
     } catch (err) {
-      settle(intentId, lessonId, {
-        status: "failed",
-        reason: err instanceof Error ? err.message : String(err),
-      });
+      for (const show of matches) settle(show.intentId, lessonId, {
+          status: "failed", reason: err instanceof Error ? err.message : String(err),
+        });
       return;
     }
-    void persist();
+    await persist();
     publish();
-    scheduleRender(intentId, match.id, match.revision);
+    for (const show of matches) scheduleRender(show.intentId, candidate.id, candidate.revision);
   }
 
   async function runPrepare(intent: ScreenIntent, seq: number): Promise<void> {
@@ -758,6 +751,8 @@ export function createScreenController(options: ScreenControllerOptions): Screen
         }
       }, outstandingShowTimeoutMs);
       const prepIntentId = `${intent.intentId}:auto-prepare`;
+      internalPrepares.add(prepIntentId);
+      registerIntent(registry, prepIntentId);
       needByIntent.set(prepIntentId, want);
       opByIntent.set(prepIntentId, "prepare");
       const prepSeq = gate.next();
@@ -766,8 +761,6 @@ export function createScreenController(options: ScreenControllerOptions): Screen
         intentId: intent.intentId,
         lessonId,
         need: want,
-        needText: intent.need,
-        backgroundText: intent.background,
         prepIntentId,
         timer,
       });
@@ -800,6 +793,10 @@ export function createScreenController(options: ScreenControllerOptions): Screen
     const task = (async (): Promise<ScreenObservationResult> => {
       let dataUrl: string;
       if (canvas) {
+        if (!await pumpRender()) throw new Error("render-pending");
+        const current = validateObservationRequest(deck, request);
+        if (!current.ok) throw new Error(current.reason);
+        if (!canvas) throw new Error("no-canvas");
         dataUrl = canvas.toDataURL("image/png");
       } else if (options.pixelReader) {
         dataUrl = await options.pixelReader();
@@ -808,7 +805,10 @@ export function createScreenController(options: ScreenControllerOptions): Screen
       }
       const pngBase64 = dataUrl.includes(",") ? dataUrl.slice(dataUrl.indexOf(",") + 1) : dataUrl;
       if (!pngBase64) throw new Error("empty-observation");
-      const context: ScreenObservationContext = buildObservationContext(deck, request, viewport);
+      const context: ScreenObservationContext = buildObservationContext(
+        renderedSnapshot?.deck ?? deck, request, renderedSnapshot?.viewport ?? viewport,
+      );
+      if (renderedSnapshot) context.visibleText = renderedSnapshot.text;
       return { pngBase64, context };
     })();
     inFlightObservations.set(request.observationId, task);
@@ -1001,6 +1001,7 @@ export function createScreenController(options: ScreenControllerOptions): Screen
     lessonId = nextLessonId;
     deck = next;
     candidates.clear();
+    internalPrepares.clear();
     for (const show of outstandingShows) if (show.timer) clearTimeout(show.timer);
     outstandingShows.length = 0;
     queuedPrepares.length = 0;
@@ -1008,7 +1009,8 @@ export function createScreenController(options: ScreenControllerOptions): Screen
     for (const pending of pendingRenders) if (pending.timer) clearTimeout(pending.timer);
     pendingRenders.length = 0;
     lastRendered = null;
-    resumePage = null;
+    renderedSnapshot = null;
+    announcedPage = null;
     try {
       worker?.terminate();
     } catch {
@@ -1035,8 +1037,6 @@ export function createScreenController(options: ScreenControllerOptions): Screen
     }
     if (shouldResumeDeck(persisted, lessonId)) {
       deck = persisted;
-      const restored = currentPage(deck);
-      resumePage = restored ? { id: restored.id, revision: restored.revision } : null;
     } else {
       deck = createEmptyDeck(options.profileId, lessonId, now());
       await persist();
