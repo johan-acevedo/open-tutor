@@ -59,8 +59,8 @@ is always true for a served package: unresolved references fail the export.
 
 Every material response: `Content-Security-Policy`, `X-Content-Type-Options:
 nosniff`, `Referrer-Policy: no-referrer`, `Cross-Origin-Resource-Policy:
-cross-origin`, `Permissions-Policy: camera=(), microphone=(), geolocation=(),
-payment=(), usb=()`. The page:
+cross-origin`, `X-Frame-Options: SAMEORIGIN`, `Permissions-Policy: camera=(),
+microphone=(), geolocation=(), payment=(), usb=()`. The page:
 
 ```
 default-src 'none'; script-src 'none';
@@ -95,8 +95,10 @@ A same-origin harness page framed both real sections twice, `sandbox=""`
 - Chromium also matches `'self'` inside a sandboxed frame, but that is not
   relied on: the explicit `scheme://host` source keeps the page working if
   another engine treats the sandboxed origin as opaque for source matching.
-- `frame-ancestors 'self'` passes for a same-origin parent page only; a
-  cross-origin embed is refused, as intended.
+- `frame-ancestors 'self'` (with `X-Frame-Options: SAMEORIGIN` for clients that
+  ignore it) passes for a same-origin parent page only; a cross-origin embed is
+  refused, as intended. Re-run after adding the header: both frames still load
+  (20/20 and 29/29 images, no violations).
 
 Still open for the parent: the actual `<iframe sandbox="">` (no tokens) in the
 React app, the layout/heading-counter proof in a real browser, and whether

@@ -438,6 +438,8 @@ def material_headers(request: Request, *, style_hashes: list[str] | None = None)
         # NotSameOrigin). These responses exist to be embedded, and the material
         # is public CC-BY content, so they are deliberately embeddable.
         "Cross-Origin-Resource-Policy": "cross-origin",
+        # Same-origin framing only, for clients that ignore frame-ancestors.
+        "X-Frame-Options": "SAMEORIGIN",
         "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
     }
 

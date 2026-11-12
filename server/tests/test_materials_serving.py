@@ -203,6 +203,7 @@ def test_page_and_assets_served_with_strict_csp(tmp_path):
     # Embeddable by design: an opaque-origin sandboxed frame cannot load
     # CORP= same-origin assets from its own page.
     assert page.headers["cross-origin-resource-policy"] == "cross-origin"
+    assert page.headers["x-frame-options"] == "SAMEORIGIN"
     # Original page content, including the hidden teacher subtree in markup.
     assert "Visible intro." in page.text and "Child body." in page.text
     assert "Teacher secret." in page.text  # markup keeps source; feedback excludes it
