@@ -1,0 +1,42 @@
+{
+ "apiPublisher": "Skolverket",
+ "apiName": "Syllabus API",
+ "apiVersion": "1.16.2-SNAPSHOT",
+ "apiReleased": "2026-05-08",
+ "apiStatus": "active",
+ "apiDocumentation": "https://www.skolverket.se/om-oss/oppna-data/api-for-laroplaner-kurs--och-amnesplaner-syllabus",
+ "dataOrigin": "Syllabus API - Skolverket - 1.16.2-SNAPSHOT",
+ "calledMethod": "ReadCourse",
+ "totalElements": 1,
+ "processingTime": "CACHED 60 min, until 2026-11-12T19:02:13.227950696",
+ "startedCaching": "2026-11-12T18:02:13.227950696",
+ "codeParam": "MATE1A00X",
+ "dateParam": "2026-11-12",
+ "course": {
+  "centralCntHeading": "<h3>Centralt innehåll</h3>",
+  "centralContent": {
+   "text": "<p>Undervisningen i ämnet matematik på nivå 1a ska behandla följande centrala innehåll:</p> <p><em>Program- eller yrkesspecifikt innehåll</em></p> <ul> <li>Matematiska begrepp som är relevanta för arbetslivet, till exempel proportionalitet, skala, likformighet, vinklar, Pythagoras sats, procent och andelar, indexmått, vinstmarginal, jämvikt, felmarginaler, symmetrier, vektorer, trigonometriska funktioner och barns lärande inom matematik.</li> <li>Beräkningsmetoder som är relevanta för arbetslivet, till exempel uppskattningar, beräkningar på störningar eller mätfel, spill- och svinnberäkningar, överslagsräkning, avrundning, användning av kalkylprogram och metoder för kontrollberäkning.</li> <li>Hantering av formler som är relevanta för arbetslivet.</li> <li>Mätning och hantering av storhete"
+  },
+  "code": "MATE1A00X",
+  "codeHeading": "<h3>Nivåkod: MATE1A00X</h3>",
+  "description": "<p></p>",
+  "name": "Nivå 1a",
+  "nameHeading": "<h2>Nivå 1a, 100 poäng</h2>",
+  "points": "100",
+  "sortOrder": 1,
+  "subjectParent": {
+   "modifiedDate": "2025-12-19",
+   "schoolTypes": [
+    "GY",
+    "VUXGY"
+   ],
+   "skolfsGrund": "2023:130",
+   "startDate": "2025-07-01",
+   "subjectCode": "MATE",
+   "subjectName": "Matematik",
+   "subjectPurpose": "<p>Undervisningen i ämnet matematik ska syfta till att eleverna utvecklar förmåga att arbeta matematiskt. Det innefattar att utveckla förståelse av matematikens begrepp och metoder samt olika strategier för att kunna lösa problem och använda matematik i samhälls- och arbetslivet. I undervisningen ska eleverna ges möjlighet att fördjupa och bredda sina kunskaper i matematik samt utveckla sin nyfikenhet och kreativitet. Vidare ska undervisningen bidra till att eleverna utvecklar kunskaper om matematikens betydelse och användning inom andra ämnen samt i ett yrkesmässigt, samhälleligt och historiskt sammanhang.</p> <p>Genom undervisningen ska eleverna utveckla sin förmåga att föra och följa matematiska resonemang och att kommunicera med olika uttrycksformer. Vidare ska undervisningen utmana eleverna och ge dem erfarenheter av matematikens logik, generaliserbarhet, kreativa kvaliteter och mångfacetterade karaktär. Undervisningen ska stärka elevernas tilltro till sin förmåga att använda matematik i olika sammanhang och ge utrymme åt problemlösning som både mål och medel. I undervisningen ska eleverna dessutom ges möjlighet att utveckla sin förmåga att använda digitala verktyg för att lösa problem samt fördjupa sitt matematikkunnande och utvidga de områden där matematikkunnandet kan användas.</p> <p>Undervisningen ska innehålla varierade arbetsformer och arbetssätt, där undersökande aktiviteter utgör en del. När så är lämpligt ska undervisningen ske i relevant praxisnära miljö och med verktyg som används inom karaktärsämnena.</p> <h5><em>Undervisningen i ämnet matematik ska ge eleverna förutsättningar att utveckla följande:</em></h5> <ul> <li>Förmåga att använda och beskriva matematiska begrepp och samband mellan begrepp.</li> <li>Förmåga att hantera procedurer och utföra rutinuppgifter utan och med verktyg.</li> <li>Förmåga att analysera och lösa problem med hjälp av matematik.</li> <li>Förmåga att tillämpa, formulera och utvärdera matematiska modeller.</li> <li>Förmåga att föra och följa matematiska resonemang.</li> <li>Förmåga att kommunicera matematik muntligt, skriftligt och i handling.</li> </ul><h3>Nivåer i ämnet matematik</h3><ul><li>Nivå 1a, 100 poäng, som bygger på de kunskaper grundskolan ger eller motsvarande. Betyg i matematik som omfattar nivå 1a kan inte ingå i elevens examen tillsammans med betyg som omfattar nivå 1b eller 1c.</li> <li>Nivå 1b, 100 poäng, som bygger på de kunskaper grundskolan ger eller motsvarande. Betyg i matematik som omfattar nivå 1b kan inte ingå i elevens examen tillsammans med betyg som omfattar nivå 1a eller 1c.</li> <li>Nivå 1c, 100 poäng, som bygger på de kunskaper grundskolan ger eller motsvarande. Betyg i matematik som omfattar nivå 1c kan inte ingå i elevens examen tillsammans med betyg som omfattar nivå 1a eller 1b.</li> <li>Nivå 2a, 100 poäng, som bygger på nivå 1a, 1b eller 1c. Betyg i matematik som omfattar nivå 2a kan inte ingå i elevens examen tillsammans med betyg som omfattar nivå 2b eller 2c.</li> <li>Nivå 2b, 100 poäng, som bygger på nivå 1a, 1b eller 1c. Betyg i matematik som omfattar nivå 2b kan inte ingå i elevens examen tillsammans med betyg som omfattar nivå 2a eller 2c.</li> <li>Nivå 2c, 100 poäng, som bygger på nivå 1a, 1b eller 1c. Betyg i matematik som omfattar nivå 2c kan inte ingå i elevens examen tillsammans med betyg som omfattar nivå 2a eller 2b.</li></ul>",
+   "version": 1
+  },
+  "typeOfSyllabus": "LEVEL_IN_GRADE_SUBJECT_SYLLABUS"
+ }
+}

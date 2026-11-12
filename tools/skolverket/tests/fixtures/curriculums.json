@@ -1,0 +1,57 @@
+{
+ "apiPublisher": "Skolverket",
+ "apiName": "Syllabus API",
+ "apiVersion": "1.16.2-SNAPSHOT",
+ "apiReleased": "2026-05-08",
+ "apiStatus": "active",
+ "apiDocumentation": "https://www.skolverket.se/om-oss/oppna-data/api-for-laroplaner-kurs--och-amnesplaner-syllabus",
+ "dataOrigin": "Syllabus API - Skolverket - 1.16.2-SNAPSHOT",
+ "calledMethod": "ListCurriculums",
+ "totalElements": 3,
+ "processingTime": "12 ms",
+ "startedCaching": "2026-11-12T18:04:06.679474738",
+ "dateParam": "2026-11-12",
+ "timeSpanParam": "LATEST",
+ "curriculums": [
+  {
+   "code": "GY2011",
+   "modifiedDate": "2024-10-21",
+   "name": "Gymnasieskolan",
+   "schoolTypes": [
+    "GY"
+   ],
+   "skolfsAndring": "2024:594",
+   "startDate": "2024-07-01",
+   "version": 14,
+   "versionInfo": "Justerat text under rubrik 2.6 enligt SKOLFS"
+  },
+  {
+   "code": "LGR22",
+   "modifiedDate": "2025-06-24",
+   "name": "Läroplan för grundskolan samt för förskoleklassen och fritidshemmet",
+   "schoolTypes": [
+    "GR",
+    "FTH",
+    "FKLASS"
+   ],
+   "skolfsAndring": "2025:347",
+   "skolfsGrund": "2010:37",
+   "startDate": "2025-08-01",
+   "version": 5,
+   "versionInfo": "Ändringar gällande skolsäkerhet"
+  },
+  {
+   "code": "LGY2025",
+   "modifiedDate": "2025-06-18",
+   "name": "Läroplan för gymnasieskolan",
+   "schoolTypes": [
+    "GY"
+   ],
+   "skolfsAndring": "2025:351",
+   "skolfsGrund": "2011:144",
+   "startDate": "2025-08-01",
+   "version": 3,
+   "versionInfo": "Justering under rubriken \"Grundläggande värden\"."
+  }
+ ]
+}

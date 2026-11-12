@@ -1,0 +1,55 @@
+{
+ "apiDocumentation": "https://www.skolverket.se/om-oss/oppna-data/api-for-laroplaner-kurs--och-amnesplaner-syllabus",
+ "apiName": "Syllabus API",
+ "apiPublisher": "Skolverket",
+ "apiReleased": "2026-05-08",
+ "apiStatus": "active",
+ "apiVersion": "1.16.2-SNAPSHOT",
+ "calledMethod": "ListSubjects",
+ "dataOrigin": "Syllabus API - Skolverket - 1.16.2-SNAPSHOT",
+ "dateParam": "2026-11-12",
+ "processingTime": "CACHED 60 min, until 2026-11-12T19:01:59.154687784",
+ "schoolTypeParam": "GR",
+ "startedCaching": "2026-11-12T18:01:59.154687784",
+ "subjects": [
+  {
+   "code": "GRGRKEM01",
+   "modifiedDate": "2024-02-09",
+   "name": "Kemi",
+   "schoolTypes": [
+    "GR",
+    "SAM"
+   ],
+   "startDate": "2022-07-01",
+   "typeOfSyllabus": "COURSE_SYLLABUS",
+   "version": 14
+  },
+  {
+   "code": "GRGRMAT01",
+   "modifiedDate": "2024-02-09",
+   "name": "Matematik",
+   "schoolTypes": [
+    "GR",
+    "SAM"
+   ],
+   "startDate": "2022-07-01",
+   "typeOfSyllabus": "COURSE_SYLLABUS",
+   "version": 14
+  },
+  {
+   "code": "GRGRSAM01",
+   "modifiedDate": "2024-02-09",
+   "name": "Samhällskunskap",
+   "schoolTypes": [
+    "GR",
+    "SAM"
+   ],
+   "startDate": "2022-07-01",
+   "typeOfSyllabus": "COURSE_SYLLABUS",
+   "version": 14
+  }
+ ],
+ "timeSpanParam": "LATEST",
+ "totalElements": 3,
+ "typeOfSyllabusParam": "ALL"
+}
