@@ -4,8 +4,8 @@ Builds stable, deterministic section references from the original English
 Siyavula EPUBs. The EPUB navigation document (``properties="nav"``) is
 authoritative for section boundaries: every ``<a>`` in the nav becomes one
 section record, with breadcrumbs taken from the nav nesting. Headings inside
-the content documents are *not* used, because worked examples use nested
-headings that do not mark section boundaries, and not every heading has an ID.
+the content documents correct stale nav targets only when the nav title uniquely
+matches a heading. They never introduce extra sections. Original nav hrefs are kept.
 
 Each record keeps the original archive locations (document href, fragment,
 stylesheets) so later steps can serve the exact original section with its
@@ -67,7 +67,7 @@ def safe_member(base_dir: str, href: str) -> tuple[str, str]:
     path = posixpath.normpath(posixpath.join(base_dir, urllib.parse.unquote(parsed.path)))
     if path.startswith(("../", "/")) or path == "..":
         raise ValueError(f"EPUB resource outside archive: {href!r}")
-    return path, parsed.fragment
+    return path, urllib.parse.unquote(parsed.fragment)
 
 
 def _norm_text(text: str) -> str:
@@ -97,6 +97,8 @@ class SectionRef:
     book_sha256: str = ""
     # Whether the fragment target id was found in the content document.
     target_found: bool = False
+    heading: str = ""
+    heading_mismatch: bool = False
 
     def to_dict(self) -> dict:
         return {
@@ -116,6 +118,8 @@ class SectionRef:
             "license_evidence": list(self.license_evidence),
             "book_sha256": self.book_sha256,
             "target_found": self.target_found,
+            "heading": self.heading,
+            "heading_mismatch": self.heading_mismatch,
         }
 
 
@@ -191,7 +195,8 @@ def _walk_nav_list(
     for li in ol.findall(f"{x}li"):
         link = li.find(f"{x}a")
         nested = li.find(f"{x}ol")
-        title = _norm_text("".join(link.itertext())) if link is not None else ""
+        label_node = link if link is not None else li.find(f"{x}span")
+        title = _norm_text("".join(label_node.itertext())) if label_node is not None else ""
         href = link.attrib.get("href", "") if link is not None else ""
         if link is not None and href:
             out.append((href, list(trail), title))
@@ -221,7 +226,7 @@ def _document_stylesheets(html: str, doc_dir: str, names: set[str]) -> list[str]
             continue
         if member in names and member not in found:
             found.append(member)
-    return sorted(found)
+    return found
 
 
 def enumerate_book(
@@ -267,6 +272,7 @@ def enumerate_book(
         # Read each referenced content document once.
         doc_ids: dict[str, set[str]] = {}
         doc_styles: dict[str, list[str]] = {}
+        doc_headings: dict[str, dict[str, str]] = {}
         for href, _trail, _label in raw_links:
             member, _frag = safe_member(nav_prefix, href)
             if member not in names:
@@ -274,11 +280,23 @@ def enumerate_book(
             if member not in doc_ids:
                 html = archive.read(member).decode("utf-8-sig")
                 doc_ids[member] = _document_ids(html)
+                doc_headings[member] = {
+                    node.attrib["id"]: _norm_text("".join(node.itertext()))
+                    for node in ET.fromstring(html).iter()
+                    if node.tag.rsplit("}", 1)[-1] in {"h1", "h2", "h3", "h4", "h5", "h6"}
+                    and node.attrib.get("id")
+                }
                 doc_styles[member] = _document_stylesheets(html, posixpath.dirname(member), names)
 
         sections: list[SectionRef] = []
         for href, trail, label in raw_links:
             member, frag = safe_member(nav_prefix, href)
+            headings = doc_headings[member]
+            if frag and headings.get(frag, "").casefold() != label.casefold():
+                matches = [key for key, text in headings.items() if text.casefold() == label.casefold()]
+                if len(matches) == 1:
+                    frag = matches[0]
+            heading = headings.get(frag, "")
             sections.append(
                 SectionRef(
                     id=section_id(digest, member, frag),
@@ -297,6 +315,8 @@ def enumerate_book(
                     license_evidence=list(license_evidence or []),
                     book_sha256=digest,
                     target_found=(not frag) or (frag in doc_ids[member]),
+                    heading=heading,
+                    heading_mismatch=bool(heading and heading.casefold() != label.casefold()),
                 )
             )
 
@@ -317,7 +337,7 @@ def enumerate_book(
 
 
 def enumerate_catalogue(
-    data_dir: Path = None,  # type: ignore[assignment]
+    data_dir: Path | None = None,
     books_path: Path = DEFAULT_BOOKS_PATH,
     book_ids: list[str] | None = None,
 ) -> tuple[list[BookRecord], list[SectionRef], dict]:

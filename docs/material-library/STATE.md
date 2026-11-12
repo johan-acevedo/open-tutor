@@ -26,3 +26,9 @@ Each step gets a small brief and ends with executable evidence. Workers use isol
 Step 1 is starting. Eight validated EPUBs are on elitebook at ~/.local/share/open-tutor/materials/siyavula, with books.json and validation evidence under tools/siyavula. The served corpus is https://elitebook.tail2e1c4e.ts.net/open-tutor-materials/.
 
 Source baseline: origin/main 675f334. Existing material tools are independent of the tutor. No EmbeddingGemma model has yet been run against the corpus.
+
+## Step 1 review
+
+Muse delivered e6676e1. DeepSeek independently reproduced all 1194 references and found stale publisher nav targets and missing span-only chapter breadcrumbs. Parent corrected unique heading matches while preserving raw source_href, added actual heading/mismatch fields, retained stylesheet order, and decoded fragments before IDs are persisted. Remaining label differences stay explicit. Request handlers must load the catalogue once rather than re-enumerate EPUBs on every lookup.
+
+Next bounded unit: step 2a extracts source passages from the corrected section references. Embedding inference is a separate step 2b, followed by real retrieval evaluation. No UI work begins before source extraction and search have evidence.

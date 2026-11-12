@@ -214,3 +214,22 @@ def test_full_corpus_deterministic_and_unique():
     assert len(sections) > 1000
     index_sections(sections)  # raises on duplicate IDs
     assert all(s.target_found for s in sections)
+
+
+def test_stale_chapter_target_resolves_named_heading_and_keeps_source(tmp_path):
+    epub = tmp_path / "tiny.epub"
+    _write_epub(epub, '<li><span>Chapter 6: Functions</span><ol><li><a href="ch.xhtml#chapter">Variables</a></li></ol></li>', {
+        "ch.xhtml": '<html><head><link rel="stylesheet" href="z.css"/><link rel="stylesheet" href="a.css"/></head><body><h1 id="chapter">Chapter 6: Functions</h1><h3 id="variables">Variables</h3></body></html>',
+        "z.css": "h1{}", "a.css": "h3{}",
+    })
+    _, sections = enumerate_book(epub, _book())
+    section = sections[0]
+    assert section.source_href == "ch.xhtml#chapter"
+    assert section.fragment == "variables"
+    assert section.heading == "Variables" and not section.heading_mismatch
+    assert section.breadcrumbs == ["Chapter 6: Functions"]
+    assert section.stylesheets == ["text/z.css", "text/a.css"]
+
+
+def test_fragment_percent_encoding_is_decoded():
+    assert safe_member("text/", "ch.xhtml#toc%2Did") == ("text/ch.xhtml", "toc-id")

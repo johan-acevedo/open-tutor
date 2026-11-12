@@ -54,3 +54,9 @@ authority/unsafe paths, live-EPUB checks, full-corpus determinism).
   deployment, or DB (per step-1 scope).
 - Section display ranges are not sliced yet: a record points at the original
   document + fragment, and serving the exact section span is step 3's job.
+
+## Review corrections
+
+DeepSeek's review of e6676e1 found stale nav fragments pointing at chapter headings and missing span-only chapter labels. The catalogue now resolves a stale target only when the title has one exact same-document heading match. It retains source_href, exposes the actual heading and remaining mismatch flags, preserves stylesheet cascade order, and decodes fragments. This changes affected section IDs before downstream persistence. The original digest above describes the pre-review commit.
+
+Parent verification: `uv run pytest tests/test_materials_catalogue.py -q` passes 11 tests. A full-corpus enumeration still has 1194 unique, resolvable references. Maths 10 Dependent and independent variables now resolves to toc-id-7 with Chapter 6: Functions in its breadcrumbs.
