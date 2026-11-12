@@ -116,6 +116,25 @@ class SectionResolver:
         return self.by_document.get((section.book_id, section.document_href), [])
 
 
+def slice_starts_at_first_heading(document, heading) -> bool:
+    """Whether the slice keeps its document's heading-counter context.
+
+    The Siyavula books number chapter headings with document-scoped CSS
+    counters. A slice starting at (or containing from the top) the
+    document's first ``h1``/``h2`` title keeps the book's own numbers; a
+    slice starting lower restarts those counters at zero, printing a
+    ``"0.x"`` prefix the source book never shows.
+    """
+    if heading is None:
+        return True
+    for node in document.nodes:
+        if node.order >= heading.order:
+            break
+        if node.tag in ("h1", "h2") and "title" in node.attrs.get("class", "").split():
+            return False
+    return True
+
+
 def _scope_of(heading) -> object:
     """Innermost ``div.section`` scope of a nav heading, else the body."""
     node = heading
@@ -240,6 +259,11 @@ class RenderedSection:
     visible_image_count: int = 0
     owned_text: str = ""
     owned_image_kinds: list[str] = field(default_factory=list)
+    # The slice starts below the document's first counted heading, so
+    # document-scoped book CSS counters restart at zero and would print a
+    # "0.x" prefix the source book never shows. The wrapper then hides the
+    # generated heading numbers instead of inventing book numbering.
+    suppress_heading_numbers: bool = False
     sanitize_notes: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
@@ -398,6 +422,7 @@ def render_section(resolver: SectionResolver, section_id: str) -> RenderedSectio
         )
         return RenderedSection(
             section=section,
+            suppress_heading_numbers=not slice_starts_at_first_heading(document, heading),
             book=book,
             slice_html=cleaned,
             descendants=list(descendants),
@@ -441,6 +466,17 @@ def build_index_html(rendered: RenderedSection) -> str:
         for sheet in rendered.stylesheets
         if sheet.resolved
     )
+    # Mid-document slices restart the book's document-scoped heading counters
+    # at zero ("0.x"), which the source book never shows. Hide the generated
+    # heading numbers; book text labels (Activity:, Revision:, ...) match
+    # other selectors and are unaffected. Slices starting at the document's
+    # first heading keep the book's own numbers, so no override is emitted.
+    number_fix = (
+        "\n      div.section > h1.title:before, "
+        "div.section > h2.title:before { content: none; }"
+        if rendered.suppress_heading_numbers
+        else ""
+    )
     title = html_module.escape(section.heading or section.title, quote=True)
     return (
         "<!DOCTYPE html>\n"
@@ -453,7 +489,8 @@ def build_index_html(rendered: RenderedSection) -> str:
         "    <style>\n"
         "      /* Viewer wrapper (not original content): keep wide figures usable. */\n"
         "      body img { max-width: 100%; height: auto; }\n"
-        "      .material-provenance { font-family: system-ui, sans-serif; font-size: 0.9rem; }\n"
+        "      .material-provenance { font-family: system-ui, sans-serif; font-size: 0.9rem; }"
+        f"{number_fix}\n"
         "    </style>\n"
         "  </head>\n"
         "  <body>\n"

@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from open_tutor.board import Ids, StepsItem, board_item, youtube_embed
+from open_tutor.board import Ids, MaterialItem, StepsItem, board_item, youtube_embed
 from open_tutor.config import llm_route
 from open_tutor.prompt import instructions, learner_context
 
@@ -13,6 +13,38 @@ def test_board_items_round_trip_with_discriminator():
         board_item.validate_python({"id": "b2", "kind": "script", "src": "x"})
     with pytest.raises(ValidationError):
         StepsItem(id="b3", steps=[])
+
+
+def test_material_item_carries_a_catalogue_id_not_a_url():
+    item = board_item.validate_python(
+        {
+            "id": "b9",
+            "kind": "material",
+            "title": "A simple circuit",
+            "section_id": "sec-ecd16baf9e4fee44",
+        }
+    )
+    assert isinstance(item, MaterialItem)
+    assert item.section_id == "sec-ecd16baf9e4fee44"
+    assert not hasattr(item, "url")
+    # The agent can never invent a section ID or supply a material URL.
+    with pytest.raises(ValidationError):
+        board_item.validate_python(
+            {"id": "b9", "kind": "material", "title": "X", "section_id": "sec-xyz"}
+        )
+    with pytest.raises(ValidationError):
+        board_item.validate_python(
+            {
+                "id": "b9",
+                "kind": "material",
+                "title": "X",
+                "section_id": "https://evil.example/page.html",
+            }
+        )
+    with pytest.raises(ValidationError):
+        board_item.validate_python(
+            {"id": "b9", "kind": "material", "section_id": "sec-ecd16baf9e4fee44"}
+        )
 
 
 def test_ids_are_short_and_sequential():

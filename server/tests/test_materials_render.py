@@ -15,6 +15,7 @@ import pytest
 
 from open_tutor.materials.render import (
     SectionResolver,
+    build_index_html,
     export_package,
     render_section,
     sanitize_slice,
@@ -112,11 +113,11 @@ NESTED_DOC = (
     '<html xmlns="http://www.w3.org/1999/xhtml"><head><title>c</title>'
     '<link rel="stylesheet" type="text/css" href="b.css"/>'
     '<link rel="stylesheet" type="text/css" href="a.css"/></head><body>'
-    '<div class="section"><h1 id="top">Top</h1><p>Parent intro.</p>'
-    '<div class="section"><h2 id="sub">Sub</h2><p>Child body.</p>'
+    '<div class="section"><h1 class="title" id="top">Top</h1><p>Parent intro.</p>'
+    '<div class="section"><h2 class="title" id="sub">Sub</h2><p>Child body.</p>'
     '<img class="math-inline" src="equation/e1.png" alt=""/>'
     "</div><p>Parent tail.</p></div>"
-    '<div class="section"><h2 id="peer">Peer</h2><p>Peer body.</p></div>'
+    '<div class="section"><h2 class="title" id="peer">Peer</h2><p>Peer body.</p></div>'
     "</body></html>"
 )
 NESTED_ASSETS = {"b.css": b"h1{}", "a.css": b"h2{}", "equation/e1.png": PNG}
@@ -202,6 +203,34 @@ def test_unknown_id_and_unsafe_refs(tmp_path):
     with pytest.raises(ValueError, match="Unresolved"):
         export_package(resolver, _ids(resolver)["Sub"], out)
     assert not out.exists()
+
+
+def test_heading_number_suppression_follows_document_start(tmp_path):
+    resolver = _resolver(tmp_path, NESTED_NAV, {"ch.xhtml": NESTED_DOC}, NESTED_ASSETS)
+    ids = _ids(resolver)
+    top = render_section(resolver, ids["Top"])
+    assert top.suppress_heading_numbers is False
+    assert "content: none" not in build_index_html(top)
+    for title in ("Sub", "Peer"):
+        rendered = render_section(resolver, ids[title])
+        assert rendered.suppress_heading_numbers is True
+        page = build_index_html(rendered)
+        # Equal-specificity override, placed after the book links, that
+        # hides generated heading numbers without touching text labels.
+        assert "div.section > h1.title:before" in page
+        assert "div.section > h2.title:before" in page
+    assert top.slice_html  # suppression never rewrites original markup
+
+
+@needs_corpus
+def test_grade6_circuit_slice_hides_zero_number_not_book_number(tmp_path):
+    resolver = SectionResolver()
+    circuit = render_section(resolver, GRADE6_CIRCUIT_ID)
+    assert circuit.suppress_heading_numbers is True
+    assert "0.0" not in circuit.slice_html  # the artifact was never in the markup
+    assert "content: none" in build_index_html(circuit)
+    first = render_section(resolver, "sec-18d8044ce2b17e5a")  # Electric circuits
+    assert first.suppress_heading_numbers is False
 
 
 def test_export_is_deterministic(tmp_path):

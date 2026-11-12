@@ -55,7 +55,7 @@ from .render import PACKAGE_SCHEMA, SectionResolver, export_package, validate_pa
 
 # Bump when serving-visible renderer behaviour changes: cache directories carry
 # this version, so old packages are never reused after an upgrade.
-PACKAGE_VERSION = "1"
+PACKAGE_VERSION = "2"
 
 COMPLETE_MARKER = ".complete"
 
