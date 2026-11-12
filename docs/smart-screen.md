@@ -157,14 +157,83 @@ screenshots: http://dell5500.tail2e1c4e.ts.net:8790/ (user service `open-tutor-s
 - **Open from this package**: image search should move to the Screen agent on the server (no content filter on
   Commons results); the liggande stolen layout needs a teacher's check; not yet tried on a real iPhone or in WebKit.
 
+## Live slice: the contract (2026-11-12)
+
+Johan's call: no replay simulations; the interaction between tutor, child and screen is the
+critical part, so build it live on the dev setup (dell5500) and iterate there. What we have in
+production is weak, so speed matters more than hardening. Everything is behind
+`TUTOR_SCREEN=smart` on the worker; without it the worker behaves as on `main`.
+
+### Server: `server/open_tutor/screen.py`
+
+One `Screen` per session, owned by the worker next to the `Tutor`.
+
+- **It follows the lesson.** It records every conversation turn (child and tutor), shared
+  homework (images and text), the child's answers from pages, and what is on screen.
+- **`ask(text) -> job id` returns at once.** A background task then:
+  1. builds the request: static prefix from `screen/tools/prompt.py` (role, reference,
+     examples; identical every call so it stays cached), then the learner, the homework, the
+     conversation so far, the source of the visible page with its patches, and the tutor's ask;
+  2. calls the screen model (default Muse Spark 1.3 Contributor on the Responses API, minimal
+     reasoning; `SCREEN_MODEL` and `SCREEN_REASONING` override; DeepSeek uses Chat Completions);
+  3. reads the answer as either `<ot-patch>` elements (a change to the visible page) or a new
+     page body;
+  4. renders it with `screen/tools/screenkit.py` at the child's pane size and collects the
+     shell's issues and a screenshot;
+  5. for a new page, **looks once** (`SCREEN_LOOK=1`, default on): the model gets its own
+     screenshot and the issues and answers `OK` or a corrected body, which is rendered again;
+  6. saves source, screenshot, the ask and timings under the session's log folder (`pages/`);
+  7. hands the result to the tutor.
+- One job at a time; a second ask while one runs is queued (latest wins). 45 s limit per job.
+  A failure is told to the tutor quietly ("explain in words").
+
+### Tutor tools (replace `commission_board` and `edit_board` in smart mode)
+
+| Tool | Does | Speed |
+|---|---|---|
+| `ask_screen(ask)` | asks for a new page or a change to the visible one; returns at once | page 5–15 s, change 1–7 s |
+| `show_page(page_id)` | puts a finished page in front of the child | instant |
+| `reveal(part_id)` | uncovers a hidden answer or a `later` part on the visible page | instant |
+| `point(part_id)` | highlights one part of the visible page | instant |
+
+- **A new page stays invisible until the tutor calls `show_page`.** When it is ready the tutor's
+  chat context gets the screenshot, the page source (so it knows the ids) and a line saying the
+  page is ready but not visible. If the tutor is silent and the child is not speaking, the
+  worker prompts it once; if it is speaking, the prompt waits until it has finished.
+- **A change (patch) is applied as soon as it is ready**, since the tutor asked for it. The tutor
+  gets the patch source and a fresh screenshot in its context, without a prompt.
+- **A child's answer** from `ot-answer`, `ot-choice` or `ot-gap` reaches the tutor as a session
+  event with page id, part id and value, and prompts a reply. The Screen records it too.
+
+### Web app
+
+- A new board item kind **`page`**: `{kind: "page", id, title, body}`. The web app holds the
+  shell (`screen/shell/` bundled as text) and composes the frame itself; only the body travels,
+  because LiveKit RPC payloads are limited to about 15 kB.
+- **One item at a time on every device**, with back and forward. No scrolling feed. Homework,
+  resources and pages are all leaves of the same book. Frames of earlier pages stay mounted so
+  what the child typed survives.
+- RPC from worker to browser, all acknowledged with `{ok}`:
+  - `board.show` with a `page` item: add it and turn to it.
+  - `board.focus` `{id}`: turn to an existing item (already exists).
+  - `board.patch` `{id, patch}`: pass `patch` (the `<ot-patch>` HTML) to that page's shell.
+  - `board.reveal` `{id, part}` and `board.point` `{id, part}`: pass to the shell.
+- From browser to worker on the `session-event` text stream:
+  `{type: "page-answer", page, part, value, kind}` when the shell reports a submitted answer.
+- Frame policy: `sandbox="allow-scripts"` and the content security policy from
+  `screenkit.py` (`CSP`). Messages from a frame are accepted only when
+  `event.source === iframe.contentWindow`.
+
 ## Work packages
 
 1. **Example screens, shell and components.** Owner: a separate Opus 5.5 thread. Status: started
    2026-11-12. Draft delivered 2026-11-12 in PR #29 (`feat/screen-examples`); waits for review by the lead and
    Johan before anything else builds on it.
-2. **The Screen agent on the server.** Owner: lead. Status: waits for 1. Follows the lesson,
-   writes page bodies, checks its render, never blocks the tutor.
-3. **One-page view, reveal and answer box in the web app.** Owner: lead, with workers. Waits for 1.
+   Merged into `feat/smart-screen` 2026-11-12.
+2. **The Screen agent on the server.** Owner: lead, with a Muse worker. Status: started
+   2026-11-12 against the contract above.
+3. **One-page view, reveal and answer box in the web app.** Owner: lead, with a Muse worker.
+   Status: started 2026-11-12 against the contract above.
 4. **First session with a child.** The test that counts.
 
 ## Open
