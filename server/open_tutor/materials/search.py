@@ -205,7 +205,6 @@ def _entry(record: dict) -> dict:
         "document_href": record.get("document_href", ""),
         "fragment": record.get("fragment", ""),
         "ordinal": record.get("ordinal"),
-        "block_range": list(record.get("block_range") or []),
         "text_complete": bool(record.get("text_complete", not images)),
         "images": images,
         "characters": len(record.get("text") or ""),

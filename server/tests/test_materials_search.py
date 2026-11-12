@@ -190,7 +190,8 @@ def test_entries_keep_section_ids_images_and_incomplete_text_flag():
     assert first["title"] == "Electric circuits > A simple circuit"
     assert first["book_id"] == "natural-sciences-and-technology-6"
     assert first["source_url"].endswith("book.epub")
-    assert first["block_range"] == [13, 24]
+    assert "block_range" not in first
+    assert "html" not in first
     assert first["images"] == images
     assert first["text_complete"] is False  # honest: flattened text is not the content
     assert first["excerpt"].startswith("A diagram shows the circuit")

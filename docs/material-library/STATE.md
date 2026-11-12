@@ -40,3 +40,7 @@ DeepSeek delivered 15c1b2b. Muse independently verified 7309 passages with no mi
 ## Step 2b proof, awaiting review
 
 DeepSeek delivered 6ffdf42: optional CPU ML dependencies, exact local cosine index, and prove/build/query CLI. Real google/embeddinggemma-2 text-only fp32 inference on elitebook returned matching relevant circuit/photosynthesis passages for English and Swedish smoke queries. Index and model weights remain outside Git. See step2b-embedding-proof.md for exact results and revision. No quality metric, off-topic abstention, latency claim, or full-corpus evidence yet. Muse owns independent review, including prompt configuration, revision handling, saved-index integrity, metadata ownership, and reproduction against real cached weights. Parent owns fixes and the subsequent lexical baseline/broader evaluation before HTTP or voice integration.
+
+## Step 2b review
+
+Muse independently reproduced real model scores and returned IDs for both languages. Full default suite: 175 passed, 1 skipped; opt-in real-model tests also passed. No blockers. Parent removed enclosing block_range from search results so a later display consumer cannot confuse it with exact owned source content. Existing on-disk proof index predates this metadata correction and must be rebuilt before serving results. Next bounded unit: revision-pinned broader sample evaluation against a lexical baseline, with declared query relevance and off-topic examples; no HTTP or UI integration yet.
