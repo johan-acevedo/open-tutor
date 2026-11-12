@@ -160,7 +160,8 @@ screenshots: http://dell5500.tail2e1c4e.ts.net:8790/ (user service `open-tutor-s
 ## Work packages
 
 1. **Example screens, shell and components.** Owner: a separate Opus 5.5 thread. Status: started
-   2026-11-12. Output is reviewed by the lead and Johan before anything else builds on it.
+   2026-11-12. Draft delivered 2026-11-12 in PR #29 (`feat/screen-examples`); waits for review by the lead and
+   Johan before anything else builds on it.
 2. **The Screen agent on the server.** Owner: lead. Status: waits for 1. Follows the lesson,
    writes page bodies, checks its render, never blocks the tutor.
 3. **One-page view, reveal and answer box in the web app.** Owner: lead, with workers. Waits for 1.
