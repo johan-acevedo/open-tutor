@@ -94,6 +94,34 @@ ssh johan-4070 'systemctl --user stop voxcpm-tts'
 
 Operator handoff: 2026-11-12, `scripts/serve_voxcpm.py` and `voxcpm-tts.service`. Boot startup and persistent Tailscale serving were confirmed by the operator. A read-only check from dell5500 on the same date returned `status: ok`, model `VoxCPM2`, device `cuda:0`, all three voices, 48000 Hz, and `busy: false`. No synthesis or GPU workload was started for that check. Recheck Swedish years and numbers by ear before using generated clips.
 
+### ZONOS3-Mini alternative
+
+The second local endpoint is <https://johan-4070.tail2e1c4e.ts.net:8448>, proxying port 1919. Deepgram remains the live fox voice. ZONOS3-Mini is available for pre-rendered lines or future fallback integration; the application does not invoke it automatically.
+
+`GET /v2/speakers` was checked from dell5500 on 2026-11-12 and returned these embedding voices:
+
+| Label | Speaker id | Operator-described anchor |
+|---|---|---|
+| `raeven sv` | `default_6c74e01948232c55` | Swedish and English |
+| `warm en` | `default_138a887d96716b8a` | English |
+
+Always supply a voice and `speaker_mode: "embedding"`. The operator reports that omitting the voice produces silence. Omitting embedding mode selects reference mode and returns HTTP 400 because the reference encoder weights are not installed. The examples use the canonical id returned by speaker discovery; the operator also reports the shortcut `raeven-sv`.
+
+Native request:
+
+```sh
+curl --fail-with-body --silent --show-error \
+  -H 'Content-Type: application/json' \
+  --data '{"text":"Hej! Jag heter Räven.","speaker_embedding_id":"default_6c74e01948232c55","speaker_mode":"embedding","stream":false,"format":"wav"}' \
+  https://johan-4070.tail2e1c4e.ts.net:8448/v2/generate -o raven-zonos.wav
+```
+
+The OpenAI-compatible `/v1/audio/speech` endpoint accepts `model: "zonos3"`, `input`, `voice` set to the same speaker id, `speaker_mode: "embedding"`, and `response_format: "wav"`. Both return 16-bit WAV at 44.1 kHz according to the operator's contract. This differs from VoxCPM2's headerless 48 kHz PCM.
+
+Keep the managed ZONOS3 service on its CPU backend, batch 8. The operator verified correct Swedish output there and broken audio with this ggml CUDA build on the 4070 Ti SUPER. CPU operation adds no VRAM use and can coexist with VoxCPM2. The existing restriction on heavy ComfyUI renders still applies because VoxCPM2 remains GPU-resident.
+
+Service: `zonos3-tts.service`, enabled at boot. Source/build: `~/zonos3` on johan-4070; voice embeddings: `~/zonos3/voices`. Logs: `ssh johan-4070 'journalctl --user -u zonos3-tts'`. The same endpoint serves the Studio UI. The operator reports optional delivery steering through `steer.gguf` and `/v2/controls`. No backend rebuild, synthesis, or listening check was performed when recording this handoff.
+
 ## Configuration
 
 | Variable | Purpose |
