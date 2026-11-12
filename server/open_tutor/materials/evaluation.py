@@ -119,7 +119,10 @@ def load_dataset(path: Path | None = None) -> dict:
         if item.get("relevant_sections"):
             raise ValueError(f"Absent topic {item_id} must not declare relevant sections")
 
-    dataset["_path"] = str(source)
+    try:
+        dataset["_path"] = str(source.resolve().relative_to(Path(__file__).resolve().parents[3]))
+    except ValueError:
+        dataset["_path"] = source.name
     dataset["_sha256"] = dataset_digest(source)
     return dataset
 
