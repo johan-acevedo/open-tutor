@@ -1,6 +1,8 @@
 """Board tools execute as RPCs to the learner's browser and report what happened."""
 
+import asyncio
 import json
+from unittest.mock import AsyncMock
 
 import open_tutor.board_model as board_model
 from open_tutor.agent import Tutor
@@ -47,7 +49,7 @@ async def commission(t, monkeypatch, room, **kwargs):
     monkeypatch.setattr(t, "add_board_seen", fake_seen)
     params = {"need": "Leo behöver se en hälsning", "background": "Leo, 7, svenska."}
     params.update(kwargs)
-    result = await t.commission_board(None, **params)
+    result = await t.commission_board(AsyncMock(), **params)
     return result, seen
 async def test_commissioned_board_reaches_the_board_and_feeds_back(monkeypatch):
     room = FakeRoom()
@@ -76,7 +78,7 @@ async def test_client_board_size_reaches_the_board_model(monkeypatch):
 
     monkeypatch.setattr(board_model, "render_board", fake_render)
     monkeypatch.setattr(t, "add_board_seen", noseen)
-    await t.commission_board(None, need="x", background="y")
+    await t.commission_board(AsyncMock(), need="x", background="y")
     assert sizes == {"board_w": 390, "board_h": 844, "device": "mobile"}
 
 
@@ -101,7 +103,7 @@ async def test_a_board_model_failure_is_reported_to_the_model(monkeypatch):
 
     monkeypatch.setattr(board_model, "render_board", boom)
     monkeypatch.setattr(t, "add_board_seen", noseen)
-    result = await t.commission_board(None, need="x", background="y")
+    result = await t.commission_board(AsyncMock(), need="x", background="y")
     assert "could not be made" in result and "Explain in words" in result
     assert [c[1] for c in room.local_participant.calls] == ["board.show", "board.remove"]
 
@@ -132,7 +134,6 @@ def test_prompt_forbids_narrating_tool_calls():
 def test_prompt_commissions_boards_in_one_call():
     text = instructions({"name": "Leo"})
     assert "commission_board" in text and "announce_drawing" not in text
-    assert "Vänta lite, jag ritar det åt dig" in text and "once only" in text
 
 
 class FlakyParticipant(FakeParticipant):
@@ -190,7 +191,7 @@ async def test_rejected_board_removes_its_placeholder(monkeypatch):
 
     monkeypatch.setattr(board_model, "render_board", empty)
     monkeypatch.setattr(t, "add_board_seen", noseen)
-    result = await t.commission_board(None, need="x", background="y")
+    result = await t.commission_board(AsyncMock(), need="x", background="y")
     assert "Invalid board" in result and "placeholder was removed" in result
     assert [c[1] for c in room.local_participant.calls] == ["board.show", "board.remove"]
 
@@ -240,5 +241,27 @@ async def test_mid_session_board_resize_reaches_the_render_call(monkeypatch):
     monkeypatch.setattr(board_model, "render_board", fake_render)
     monkeypatch.setattr(t, "add_board_seen", noseen)
     t.update_board_size(390, 844, "mobile")
-    await t.commission_board(None, need="x", background="y")
+    await t.commission_board(AsyncMock(), need="x", background="y")
     assert sizes == {"board_w": 390, "board_h": 844, "device": "mobile"}
+
+
+async def test_board_releases_voice_before_render_finishes(monkeypatch):
+    t = tutor(FakeRoom())
+    started, finish = asyncio.Event(), asyncio.Event()
+    context = AsyncMock()
+
+    async def render(*args, **kwargs):
+        started.set()
+        await finish.wait()
+        return {"html": "<html><body>Done</body></html>", "note": "", "png": None}
+
+    monkeypatch.setattr(board_model, "render_board", render)
+    monkeypatch.setattr(t, "add_board_seen", AsyncMock())
+    task = asyncio.create_task(t.commission_board(context, need="fractions", background="Leo"))
+    try:
+        await asyncio.wait_for(started.wait(), 1)
+        assert not task.done()
+        context.update.assert_awaited_once()
+    finally:
+        finish.set()
+        await task

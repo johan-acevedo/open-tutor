@@ -52,6 +52,18 @@ log = logging.getLogger("open-tutor")
 
 BOARD_RPC_TIMEOUT = 6.0
 HOMEWORK_SETTLE = 1.2  # seconds to wait for more PDF pages before responding
+BOARD_IN_PROGRESS = (
+    "A drawing is already in progress. No additional drawing was started. "
+    "Continue teaching in words and respond to the child. "
+    "Wait for the finished board before requesting another drawing."
+)
+BOARD_STARTED = (
+    "The drawing has started in the background; the finished board is not visible yet. "
+    "Continue helping the child in words now: give a short useful explanation or "
+    "ask a relevant question while it draws. Do not just announce a wait or describe "
+    "the unseen board. Respond normally if the child speaks. "
+    "The finished board and screenshot will arrive automatically; do not request another drawing."
+)
 
 # Board size limits (CSS px). The client measures the real board pane and
 # reports it; these are only the fallback when it reports nothing usable.
@@ -131,7 +143,7 @@ class Tutor(Agent):
         self.room = room
         self.ids = Ids()
         self.boards: dict[str, HtmlItem] = {}
-        self._board_edit_locks: dict[str, asyncio.Lock] = {}
+        self._board_render_lock = asyncio.Lock()
         self.current_board_id: str | None = None
         self.child_identity: str | None = None
         self.mode = "talking"
@@ -230,9 +242,9 @@ class Tutor(Agent):
         board should look like. The board model decides the visualization, including
         whether anything interactive helps. This call first shows a placeholder so the
         child sees something is coming, then replaces it with the finished board.
-        Say one short natural sentence while it draws (for example "Vänta lite, jag
-        ritar det åt dig…") - once only. When this call returns, the board is on
-        screen with a short note and a screenshot: look at both, then teach from what
+        Drawing runs in the background: keep helping the child in words while it
+        draws. Do not describe the unseen board or request another drawing. The
+        finished result arrives with a note and screenshot: look at both, then teach from what
         the board actually shows, in your own words as its author ("jag skriver
         upp...", never the board as a character).
 
@@ -244,6 +256,13 @@ class Tutor(Agent):
             title: Short title of the board in the language you are speaking,
                 e.g. "Klockan". Shown briefly on the placeholder.
         """
+        if self._board_render_lock.locked():
+            return BOARD_IN_PROGRESS
+        async with self._board_render_lock:
+            await context.update(BOARD_STARTED)
+            return await self._commission_board(need, background, title)
+
+    async def _commission_board(self, need: str, background: str, title: str) -> str:
         from .board_model import render_board
         learner = (self.learner or {}).get("name", "") or ""
         pid = self.ids.next()
@@ -305,9 +324,9 @@ class Tutor(Agent):
         `commission_board` only when the topic itself changes. The call shows
         a brief placeholder at the same id, asks the board model to change
         only what was requested (previous HTML is sent, unrelated content and
-        controls are preserved), then replaces the same id in place. Say one
-        short waiting sentence once only, then teach from the screenshot when
-        this call returns, as its author.
+        controls are preserved), then replaces the same id in place. Keep helping
+        in words while it draws. Teach from the screenshot when the finished
+        result arrives, as its author.
 
         Args:
             changes: What should change, e.g. "Make the clock show half past
@@ -315,6 +334,12 @@ class Tutor(Agent):
             board_id: Which saved board to edit, e.g. "b1". Omit to edit the
                 most recent board.
         """
+        if self._board_render_lock.locked():
+            return BOARD_IN_PROGRESS
+        async with self._board_render_lock:
+            return await self._edit_board(context, changes, board_id)
+
+    async def _edit_board(self, context: RunContext, changes: str, board_id: str) -> str:
         target = (board_id or "").strip() or (self.current_board_id or "")
         if not target or target not in self.boards:
             if not self.boards:
@@ -327,9 +352,8 @@ class Tutor(Agent):
                         "No board was changed or rendered.")
             return (f"Unknown board id '{target}'. Available: {known}. Most recent is "
                     f"{recent}: omit board_id to edit it. No board was changed or rendered.")
-        # Parallel tool calls editing one board must each start from the latest revision.
-        async with self._board_edit_locks.setdefault(target, asyncio.Lock()):
-            return await self._edit_saved_board(self.boards[target], changes)
+        await context.update(BOARD_STARTED)
+        return await self._edit_saved_board(self.boards[target], changes)
 
     async def _failed_board_edit(self, saved: HtmlItem, reason: str) -> str:
         restored = await self._rpc("board.update", saved.model_dump(exclude_none=True))

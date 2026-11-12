@@ -7,6 +7,7 @@ cd "$repo"
 export PATH="$HOME/.local/bin:$PATH"  # uv and npm for non-interactive (ssh) shells
 if [[ -n ${1:-} ]]; then git fetch -q origin && git checkout -q "$1" && git pull -q --ff-only || true; fi
 (cd server && ~/.local/bin/uv sync -q --frozen --python 3.12)
+(cd server && ~/.local/bin/uv run --frozen playwright install chromium --only-shell)
 (cd web && npm ci --silent && npm run -s build)
 [[ -f ~/.config/open-tutor/env ]] || { echo "Missing ~/.config/open-tutor/env (see server/README.md)" >&2; exit 1; }
 mkdir -p ~/.config/systemd/user
