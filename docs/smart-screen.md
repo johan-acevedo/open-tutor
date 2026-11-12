@@ -224,6 +224,27 @@ One `Screen` per session, owned by the worker next to the `Tutor`.
   `screenkit.py` (`CSP`). Messages from a frame are accepted only when
   `event.source === iframe.contentWindow`.
 
+### Status of the live slice (2026-11-12, evening)
+
+Built and merged into `feat/smart-screen` (PRs #30 server, #31 web, #32 shell fixes from a
+DeepSeek review). Runs on dell5500 at https://dell5500.tail2e1c4e.ts.net:9444/ as the user
+services `open-tutor-smart-dev-agent` and `open-tutor-smart-dev-web`, environment file
+`~/.config/open-tutor-smart-dev/env`, session logs and saved pages under
+`~/.local/state/open-tutor-smart-dev/sessions/`. After server changes restart the agent service;
+after web or shell changes run `npm run build` in `web/`.
+
+`server/scripts/smart_screen_e2e.py` plays a fictional typed lesson through the real app in
+headless Chromium. It passed three times: ask, page ready, shown, reveal, patch, answer box,
+answer to tutor, point. Measured: new page 9–12 s (model 4–5 s, render 1 s, look 4–6 s), patch
+3–8 s. Not yet tried with a voice or a child.
+
+Known and open:
+- The look pass is about half of a page's time; decide after real sessions whether it earns it.
+- A page can still give the answer away in a picture (seen: the sum marked on a number line).
+- The tutor says "jag fixar en sida" before carrying on; acceptable or not is Johan's call.
+- Scripts written by the page model would run inside the sandboxed frame; not stripped yet.
+- Image search still runs in the page (unfiltered Commons result).
+
 ## Work packages
 
 1. **Example screens, shell and components.** Owner: a separate Opus 5.5 thread. Status: started
