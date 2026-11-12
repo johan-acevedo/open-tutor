@@ -510,9 +510,11 @@
         var c = { text: css('--text'), muted: css('--muted'), border: css('--border-2'), bg: css('--bg') };
         var maxJump = 0;
         jumps.forEach(function (j) { maxJump = Math.max(maxJump, Math.abs(x(num(j.getAttribute('to'))) - x(num(j.getAttribute('from'))))); });
-        var arcH = jumps.length ? Math.min(maxJump / 2, 2.6 * f) : 0;
-        var top = (marks.length ? 4.3 * f : 0.6 * f) + (jumps.length ? arcH + 1.6 * f : 0);
-        var y = Math.min(h - 2.4 * f, Math.max(top, h / 2));
+        var arcH = jumps.length ? Math.max(1.4 * f, Math.min(maxJump / 2, 2.6 * f)) : 0;
+        // with jumps above the line, mark labels go below the numbers
+        var marksBelow = jumps.length > 0;
+        var top = (marks.length && !marksBelow ? 4.3 * f : 0.6 * f) + (jumps.length ? arcH + 1.6 * f : 0);
+        var y = Math.min(h - (marks.length && marksBelow ? 5.2 * f : 2.4 * f), Math.max(top, h / 2));
         var s = line(pad - 0.6 * f, y, w - pad + 0.6 * f, y, c.text, Math.max(2, f * 0.12));
         // arrow head on the right
         s += '<path d="M' + (w - pad + 0.9 * f) + ' ' + y + ' l' + (-0.6 * f) + ' ' + (-0.35 * f) + ' v' + (0.7 * f) + ' z" fill="' + c.text + '"/>';
@@ -535,7 +537,7 @@
         jumps.forEach(function (j, k) {
           var a = x(num(j.getAttribute('from'))), b = x(num(j.getAttribute('to')));
           var col = color(j.getAttribute('color'), 'violet');
-          var mid = (a + b) / 2, yy = y - 0.5 * f, hh = Math.min(Math.abs(b - a) / 2, arcH);
+          var mid = (a + b) / 2, yy = y - 0.5 * f, hh = Math.min(arcH, Math.max(Math.abs(b - a) / 2, 1.3 * f));
           s += '<path d="M' + a + ' ' + yy + ' Q' + mid + ' ' + (yy - hh * 2) + ' ' + b + ' ' + yy + '" fill="none" stroke="' + col + '" stroke-width="' + Math.max(2, f * 0.12) + '"/>';
           var dir = b > a ? 1 : -1;
           s += '<path d="M' + b + ' ' + yy + ' l' + (-dir * 0.55 * f) + ' ' + (-0.5 * f) + ' l' + (dir * 0.05 * f) + ' ' + (0.62 * f) + ' z" fill="' + col + '"/>';
@@ -554,12 +556,16 @@
           var col = color(m.getAttribute('color'), 'cyan');
           s += '<circle cx="' + X + '" cy="' + y + '" r="' + (0.38 * f) + '" fill="' + col + '" stroke="' + c.bg + '" stroke-width="' + (0.12 * f) + '"/>';
           var t = m.textContent.trim();
-          if (t) html += '<div class="ot-lbl" style="left:' + X + 'px;top:' + (y - 1.45 * f - (m._level ? 2.1 * f : 0)) + 'px;color:' + col + ';font-weight:750">' + rich(t) + '</div>';
-          if (t && m._level) s += line(X, y - 0.5 * f, X, y - 2.6 * f, col, 1.5);
+          var ly = marksBelow ? y + 2.8 * f + (m._level ? 1.9 * f : 0) : y - 1.45 * f - (m._level ? 2.1 * f : 0);
+          if (t) html += '<div class="ot-lbl" style="left:' + X + 'px;top:' + ly + 'px;color:' + col + ';font-weight:750">' + rich(t) + '</div>';
+          if (t && m._level && !marksBelow) s += line(X, y - 0.5 * f, X, y - 2.6 * f, col, 1.5);
           m._px = { x: X, y: y };
         });
         lay.innerHTML = svg(w, h, s) + html;
         this._y = y;
+        // ask for more height when jumps or marks do not fit above and below the line
+        var need = top + (marks.length && marksBelow ? 5.2 * f : 2.4 * f);
+        if (need > h + 1) return { ok: false, needEm: need / f + 0.2, msg: 'numberline needs more room' };
       }
       pointAt(child) { return ringAt(this, child._px); }
     });
@@ -749,7 +755,7 @@
   function cells(spec) {
     // spec: array of {t, cls, w:'d'|'c'}; returns grid row html
     return spec.map(function (c) {
-      return '<span class="' + (c.w === 'c' ? 'ot-w-c' : 'ot-w-d') + (c.cls ? ' ' + c.cls : '') + '">' + (c.t == null ? '' : esc(c.t)) + '</span>';
+      return '<span class="' + (c.w === 'c' ? 'ot-w-c' : 'ot-w-d') + (c.cls ? ' ' + c.cls : '') + '">' + (c.t == null ? '' : esc(c.t)) + (c.comma ? '<span class="ot-w-comma">,</span>' : '') + '</span>';
     }).join('');
   }
   function written(el) {
@@ -856,13 +862,13 @@
       var out = [{ t: opts.sign || '', cls: 'ot-w-op' + (opts.lineCls ? ' ' + opts.lineCls : '') }];
       for (var k = 0; k < n; k++) {
         var t = d.arr[k];
-        if (d.comma === k + 1 && t != null) t = t + ',';
-        out.push({ t: t, cls: (opts.cls || '') + (opts.lineCls ? ' ' + opts.lineCls : '') });
+        var withComma = d.comma === k + 1 && t != null;
+        out.push({ t: t, comma: withComma, cls: (opts.cls || '') + (opts.lineCls ? ' ' + opts.lineCls : '') });
       }
       return cells(out);
     }
     // Commas sit after the digit; we render "d," in one cell, so widen nothing.
-    var html = row(digitsRight(carries.join('') && '', 0), {});
+    var html = '';
     html = cells([{ t: '' }].concat(carries.map(function (c2) { return { t: c2, cls: 'ot-w-carry' }; })));
     html += row(digitsRight(A, a.frac.length), {});
     html += row(digitsRight(B, b.frac.length), { sign: '×' });
@@ -872,7 +878,7 @@
     var resD = digitsRight(prod, decs);
     if (hide) resD.arr = resD.arr.map(function () { return null; });
     html += row(resD, { cls: 'ot-w-result', lineCls: 'ot-w-line' });
-    return '<div class="ot-w-grid ot-w-mul" style="grid-template-columns:' + colTemplate(n + 1, -1).replace(/0\.72em/g, '0.95em') + '">' + html + '</div>';
+    return '<div class="ot-w-grid ot-w-mul" style="grid-template-columns:' + colTemplate(n + 1, -1).replace(/0\.72em/g, '0.8em') + '">' + html + '</div>';
   }
   function writtenDivision(el, hide) {
     var a = parseDec(el.getAttribute('a')), b = parseDec(el.getAttribute('b'));
@@ -1358,7 +1364,7 @@
   var VIEWS = {
     world: [-168, -56, 180, 78], varlden: [-168, -56, 180, 78], 'världen': [-168, -56, 180, 78],
     europe: [-11, 35, 34, 70], europa: [-11, 35, 34, 70],
-    nordic: [4, 54.5, 32, 71], norden: [4, 54.5, 32, 71],
+    nordic: [-24, 54.5, 32, 71], norden: [-24, 54.5, 32, 71], scandinavia: [4, 54.5, 32, 71], skandinavien: [4, 54.5, 32, 71],
     sweden: [10.5, 55.2, 24.2, 69.1], sverige: [10.5, 55.2, 24.2, 69.1],
     mediterranean: [-9, 29, 37, 47], medelhavet: [-9, 29, 37, 47],
     africa: [-18, -35, 52, 37], afrika: [-18, -35, 52, 37],
@@ -1403,9 +1409,12 @@
     key = String(key || '').trim().toLowerCase();
     if (!key) return null;
     var fields = ['ISO_A2_EH', 'ISO_A2', 'ISO_A3_EH', 'ISO_A3', 'ADM0_A3', 'NAME', 'NAME_EN', 'NAME_SV', 'NAME_LONG', 'ADMIN', 'SOVEREIGNT'];
-    for (var i = 0; i < features.length; i++) {
-      var p = features[i].properties || {};
-      for (var k = 0; k < fields.length; k++) if (String(p[fields[k]] || '').toLowerCase() === key) return features[i];
+    // field by field, so "Denmark" finds Denmark before Greenland (whose sovereign is Denmark)
+    for (var k = 0; k < fields.length; k++) {
+      for (var i = 0; i < features.length; i++) {
+        var p = features[i].properties || {};
+        if (String(p[fields[k]] || '').toLowerCase() === key) return features[i];
+      }
     }
     return null;
   }
@@ -1513,7 +1522,39 @@
       html += '<div class="ot-place-label' + (left ? ' left' : '') + '" style="left:' + p[0] + 'px;top:' + p[1] + 'px;color:' + col + '">' + rich(ch.textContent.trim()) + '</div>';
     });
     var credit = hist ? 'Gränser: historical-basemaps · Natural Earth' : 'Natural Earth';
-    el.layer().innerHTML = svg(w, h, s) + html + '<div class="ot-map-credit">' + credit + '</div>';
+    var lay = el.layer();
+    lay.innerHTML = svg(w, h, s) + html + '<div class="ot-map-credit">' + credit + '</div>';
+    declutter(lay, f);
+  }
+
+  // Map labels: places keep their spot (a place label may flip to the other side of its dot);
+  // country and realm labels move up, down or sideways to a free spot, greedily.
+  function declutter(lay, f) {
+    var placed = [];
+    function box(e) { var r = e.getBoundingClientRect(); return { l: r.left - 2, t: r.top - 1, r: r.right + 2, b: r.bottom + 1 }; }
+    function hits(b) { return placed.some(function (p) { return b.l < p.r && b.r > p.l && b.t < p.b && b.b > p.t; }); }
+    $$('.ot-place-dot', lay).forEach(function (d) { placed.push(box(d)); });
+    $$('.ot-place-label', lay).forEach(function (l) {
+      var top0 = parseFloat(l.style.top);
+      var tries = [[false, 0], [true, 0], [false, -0.8], [true, -0.8], [false, 0.8], [true, 0.8]];
+      var flipped0 = l.classList.contains('left');
+      for (var i = 0; i < tries.length; i++) {
+        l.classList.toggle('left', tries[i][0] !== flipped0);
+        l.style.top = (top0 + tries[i][1] * f) + 'px';
+        if (!hits(box(l))) break;
+      }
+      placed.push(box(l));
+    });
+    $$('.ot-map-label', lay).forEach(function (l) {
+      var x0 = parseFloat(l.style.left), y0 = parseFloat(l.style.top);
+      var tries = [[0, 0], [0, -1.1], [0, 1.1], [-2.5, 0], [2.5, 0], [0, -2.2], [0, 2.2], [-2.5, -1.1], [2.5, 1.1]];
+      for (var i = 0; i < tries.length; i++) {
+        l.style.left = (x0 + tries[i][0] * f) + 'px'; l.style.top = (y0 + tries[i][1] * f) + 'px';
+        if (!hits(box(l))) break;
+        if (i === tries.length - 1) { l.style.left = x0 + 'px'; l.style.top = y0 + 'px'; }
+      }
+      placed.push(box(l));
+    });
   }
 
   // ---------------------------------------------------------------- images
@@ -1569,6 +1610,13 @@
     });
     lay.style.bottom = '1.4em';
     lay.innerHTML = svg(bw, bh, s) + html;
+    // a label that would leave the picture's box is pulled back to its edge
+    var lb = lay.getBoundingClientRect();
+    $$('.ot-pin-label', lay).forEach(function (l) {
+      var r = l.getBoundingClientRect();
+      if (r.right > lb.right) { l.style.left = ''; l.style.right = 0.2 * f + 'px'; }
+      if (r.left < lb.left) { l.style.right = ''; l.style.left = 0.2 * f + 'px'; }
+    });
     labels.forEach(function (lb) { if (lb.id) lb._view = lay.querySelector('#' + CSS.escape(lb.id + '-view')); });
   }
 
@@ -1582,8 +1630,8 @@
     var n = items.length;
     if (!n) return;
     // Narrow boxes (portrait) read better as a column than as a squeezed ring.
-    var column = w < 1.1 * h || w < 22 * f;
-    var maxW = column ? w - (kind === 'cycle' ? 3.2 * f : 3.4 * f) : Math.min(12 * f, w * 0.31);
+    var column = window.innerWidth < window.innerHeight;
+    var maxW = column ? w - (kind === 'cycle' ? 3.2 * f : 3.4 * f) : Math.min(12 * f, Math.max(7 * f, w * 0.31));
     var boxes = items.map(function (it) {
       var d = document.createElement('div');
       d.className = 'ot-node-box';

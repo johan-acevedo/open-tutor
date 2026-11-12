@@ -246,9 +246,9 @@ ot-hidden[data-revealed] > .ot-cover { display: none; }
 ot-step.ot-pointed, ot-event.ot-pointed { outline: none; box-shadow: none; }
 
 /* ---------- Worked steps ---------- */
-ot-steps { display: grid; grid-template-columns: auto auto auto 1fr; column-gap: 0.4em; row-gap: 0.15em; align-items: baseline; justify-content: start; font-size: 1.25em; }
+ot-steps { display: grid; grid-template-columns: auto auto auto 1fr; column-gap: 0; row-gap: 0.15em; align-items: baseline; justify-content: start; font-size: 1.25em; }
 ot-step { display: contents; }
-ot-step > .ot-s { padding: 0.2em 0; }
+ot-step > .ot-s { padding: 0.2em 0.2em; }
 ot-step > .ot-s-l { text-align: right; padding-left: 0.4em; }
 ot-step > .ot-s-r { text-align: left; }
 ot-step > .ot-s-full { grid-column: 1 / 4; padding-left: 0.4em; }
@@ -264,8 +264,8 @@ ot-step[result] .ot-s-r, ot-step[result] .ot-s-full { color: var(--green); }
 ot-written { display: inline-flex; flex-direction: column; align-self: center; font-size: 1.5em; font-variant-numeric: tabular-nums; }
 .ot-w-grid { display: grid; justify-content: start; line-height: 1.15; }
 .ot-w-grid > span { text-align: center; min-width: 0; }
-.ot-w-d { width: 0.72em; }
-.ot-w-c { width: 0.32em; }
+.ot-w-d { width: auto; }
+.ot-w-c { width: auto; }
 .ot-w-carry { font-size: 0.5em; color: var(--violet); align-self: end; font-weight: 700; }
 .ot-w-cross { text-decoration: line-through; text-decoration-color: var(--violet); text-decoration-thickness: 0.08em; color: var(--muted); }
 .ot-w-line { border-top: 0.07em solid var(--text); }
@@ -367,3 +367,8 @@ ot-map .ot-map-credit { position: absolute; right: 0.3em; bottom: 0.15em; font-s
 :where(div, section, article, figure, ot-hidden).ot-grows:not(.row) { display: flex; flex-direction: column; }
 ot-map > .ot-vis { overflow: hidden; border-radius: var(--radius); }
 ot-map > .ot-vis svg { overflow: hidden; }
+.ot-w-d { position: relative; }
+.ot-w-comma { position: absolute; right: -0.14em; bottom: 0; }
+.ot-node-box { overflow-wrap: normal; hyphens: manual; }
+/* worked steps never break a formula over two lines; the page shrinks instead */
+ot-step > .ot-s { white-space: nowrap; }
