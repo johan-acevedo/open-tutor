@@ -313,3 +313,15 @@ def test_catalogue_passages_are_deterministic_for_one_book():
     assert [p.to_dict() for p in first] == [p.to_dict() for p in second]
     section_ids = {p.section.id for p in first}
     assert len(section_ids) > 100
+
+
+def test_owned_ordinals_are_explicit_when_html_span_contains_child(tmp_path):
+    passages = passages_of(tmp_path, NESTED_NAV, {"ch.xhtml": NESTED_DOC})
+    parent = next(p for p in passages if p.section.title == "Top")
+    child = next(p for p in passages if p.section.title == "Sub")
+    record = parent.to_dict()
+    assert record["blocks"] == [b.ordinal for b in parent.blocks]
+    assert not set(record["blocks"]) & {b.ordinal for b in child.blocks}
+    assert "Child body text." not in record["text"]
+    assert "Child body text." in record["html"]
+    assert record["html_is_display_content"] is False

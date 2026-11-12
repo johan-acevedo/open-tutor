@@ -32,3 +32,7 @@ Source baseline: origin/main 675f334. Existing material tools are independent of
 Muse delivered e6676e1. DeepSeek independently reproduced all 1194 references and found stale publisher nav targets and missing span-only chapter breadcrumbs. Parent corrected unique heading matches while preserving raw source_href, added actual heading/mismatch fields, retained stylesheet order, and decoded fragments before IDs are persisted. Remaining label differences stay explicit. Request handlers must load the catalogue once rather than re-enumerate EPUBs on every lookup.
 
 Next bounded unit: step 2a extracts source passages from the corrected section references. Embedding inference is a separate step 2b, followed by real retrieval evaluation. No UI work begins before source extraction and search have evidence.
+
+## Step 2a review
+
+DeepSeek delivered 15c1b2b. Muse independently verified 7309 passages with no missing non-heading blocks or duplicated ownership. Parent added exact owned block ordinals and marked HTML spans as non-display content: spans may include intervening foreign content and unbalanced markup. Search consumes owned text and image references; display resolves catalogue sections, never passage HTML spans. The next unit is a standalone text retrieval proof with real EmbeddingGemma 2, before any endpoints or UI integration.

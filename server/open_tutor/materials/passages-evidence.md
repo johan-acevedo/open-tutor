@@ -111,3 +111,7 @@ bin/with-env uv run pytest tests/test_materials_passages.py -q
   and generated rewrites are out of scope.
 - Goldens are English as published. No translation, no curriculum mapping, no
   search evaluation or embedding quality claim yet (that is step 2b).
+
+## Cross-family review corrections
+
+Muse independently verified all counts, ownership, resource resolution, and verbatim slices. It found 368 passages with non-contiguous owned blocks: their HTML span can contain intervening content belonging to other sections. In addition, 5497 source slices are unbalanced. `text` and `images` contain only owned content; `html` is an archival byte-span superset, never standalone display content. Records now include exact owned `blocks` ordinals and `html_is_display_content: false`. Display must resolve the original section through its catalogue reference. The `heading` field now uses the in-document heading where available. These serialization changes supersede the digest above.
