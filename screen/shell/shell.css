@@ -1,0 +1,369 @@
+/* Open Tutor screen shell: theme, layout primitives and component styles.
+   Everything is sized in rem/em. The shell picks the root font size that makes
+   the page fill the pane without scrolling (see fit() in shell.js). */
+
+:root {
+  --bg: #181b22;
+  --surface: #222731;
+  --surface-2: #2a303c;
+  --border: #2e3543;
+  --border-2: #3d4657;
+  --text: #f3f5f8;
+  --muted: #a3abbb;
+  --cyan: #22d3ee;
+  --violet: #a78bfa;
+  --green: #34d399;
+  --amber: #f5b544;
+  --pink: #f472b6;
+  --red: #f87171;
+  --paper: #f6f4ee;
+  --ink: #181b22;
+  --cyan-soft: rgba(34, 211, 238, 0.14);
+  --violet-soft: rgba(167, 139, 250, 0.16);
+  --green-soft: rgba(52, 211, 153, 0.15);
+  --amber-soft: rgba(245, 181, 68, 0.16);
+  --pink-soft: rgba(244, 114, 182, 0.16);
+  --radius: 0.6em;
+  --gap: 1em;
+  --font: "Lexend Variable", "Lexend", "Segoe UI", Roboto, system-ui, sans-serif;
+  color-scheme: dark;
+  font-size: 20px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  line-height: 1.4;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* A page is never shown half-built. The shell removes this class when ready;
+   the animation is a fail-open guard in case the shell script never runs. */
+html.ot-boot body { visibility: hidden; animation: ot-failopen 0s 8s forwards; }
+@keyframes ot-failopen { to { visibility: visible; } }
+
+.ot-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  padding: 1.1em 1.3em 1.2em;
+  min-height: 0;
+  overflow-wrap: break-word;
+}
+/* While measuring, the page takes its natural height. Once settled it fills
+   the pane and growable visuals share the space left over. */
+html.ot-settled .ot-page { height: 100%; }
+html.ot-measure .ot-page { height: auto; }
+
+/* ---------- Text ---------- */
+h1, h2, h3, p, ul, ol, dl, figure { margin: 0; }
+h1 { font-size: 1.6em; font-weight: 750; line-height: 1.15; letter-spacing: -0.01em; text-wrap: balance; }
+h2 { font-size: 1.2em; font-weight: 700; line-height: 1.2; text-wrap: balance; }
+h3 { font-size: 1em; font-weight: 700; color: var(--muted); text-transform: none; }
+p, li { text-wrap: pretty; }
+ul, ol { padding-left: 1.3em; display: flex; flex-direction: column; gap: 0.3em; }
+li::marker { color: var(--muted); }
+strong, b { font-weight: 750; }
+em, i { font-style: italic; }
+mark { background: var(--cyan-soft); color: inherit; padding: 0 0.2em; border-radius: 0.2em; box-shadow: inset 0 -0.12em 0 var(--cyan); }
+small, .small { font-size: 0.85em; }
+.muted { color: var(--muted); }
+.lead { font-size: 1.1em; color: var(--text); }
+.big { font-size: 1.6em; line-height: 1.25; }
+.huge { font-size: 2.4em; line-height: 1.1; font-weight: 750; }
+.center { text-align: center; align-items: center; justify-content: center; }
+.cyan { color: var(--cyan); }
+.violet { color: var(--violet); }
+.green { color: var(--green); }
+.amber { color: var(--amber); }
+.pink { color: var(--pink); }
+[lang="en"] { font-style: normal; }
+
+/* ---------- Layout ---------- */
+.row { display: flex; gap: var(--gap); align-items: stretch; min-height: 0; }
+.row > * { flex: 1 1 0; min-width: 0; }
+.row > .wide { flex-grow: 2; }
+.row > .narrow { flex-grow: 0.6; }
+.row > .fit { flex: 0 0 auto; }
+.stack { display: flex; flex-direction: column; gap: 0.6em; min-height: 0; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(9em, 1fr)); gap: 0.8em; }
+.spread { display: flex; justify-content: space-between; align-items: center; gap: var(--gap); flex-wrap: wrap; }
+.wrap { display: flex; flex-wrap: wrap; gap: 0.5em; align-items: center; }
+/* Portrait panes stack rows. .row.keep stays side by side everywhere. */
+@media (max-aspect-ratio: 1/1) {
+  .row:not(.keep) { flex-direction: column; }
+  .row:not(.keep) > * { flex: 0 0 auto; }
+  .row:not(.keep) > .grow, .row:not(.keep) > .ot-grows,
+  .row:not(.keep) > :where(ot-graph, ot-map, ot-chart, ot-image, ot-clock, ot-balance, ot-cycle, ot-mindmap) { flex: 1 1 auto; }
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75em 0.95em;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45em;
+  min-width: 0;
+}
+.card > h2, .card > h3 { margin-bottom: 0.05em; }
+.card.cyan { border-color: rgba(34, 211, 238, 0.5); background: linear-gradient(var(--cyan-soft), var(--cyan-soft)), var(--surface); color: var(--text); }
+.card.violet { border-color: rgba(167, 139, 250, 0.5); background: linear-gradient(var(--violet-soft), var(--violet-soft)), var(--surface); color: var(--text); }
+.card.green { border-color: rgba(52, 211, 153, 0.5); background: linear-gradient(var(--green-soft), var(--green-soft)), var(--surface); color: var(--text); }
+.card.amber { border-color: rgba(245, 181, 68, 0.5); background: linear-gradient(var(--amber-soft), var(--amber-soft)), var(--surface); color: var(--text); }
+.paper {
+  background: var(--paper);
+  color: var(--ink);
+  border-radius: var(--radius);
+  padding: 0.8em 1em;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4em;
+}
+.paper .muted { color: #5b6170; }
+.tip {
+  border-left: 0.22em solid var(--violet);
+  padding: 0.25em 0 0.25em 0.75em;
+  color: var(--text);
+}
+.tag {
+  display: inline-block;
+  font-size: 0.8em;
+  font-weight: 650;
+  padding: 0.15em 0.6em;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.grow { flex: 1 1 auto; min-height: 0; }
+
+table { border-collapse: collapse; font-variant-numeric: tabular-nums; }
+th, td { padding: 0.3em 0.8em; text-align: left; border-bottom: 1px solid var(--border); }
+th { color: var(--muted); font-weight: 650; font-size: 0.9em; }
+td.num, th.num { text-align: right; }
+
+dl.pairs { display: grid; grid-template-columns: auto auto; gap: 0.4em 1.2em; align-items: baseline; justify-content: start; }
+dl.pairs dt { font-weight: 700; }
+dl.pairs dd { margin: 0; color: var(--muted); }
+dl.pairs dd::before { content: "– "; color: var(--border-2); }
+
+img { max-width: 100%; }
+
+/* ---------- Maths ---------- */
+.katex { font-size: 1.12em; }
+.katex-display { margin: 0.2em 0; }
+.ot-math-err { color: var(--amber); }
+
+/* ---------- Interaction ---------- */
+button, input { font: inherit; color: inherit; }
+ot-answer { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5em; }
+ot-answer > label { font-weight: 650; }
+.ot-input {
+  background: var(--bg);
+  border: 2px solid var(--border-2);
+  border-radius: 0.45em;
+  padding: 0.3em 0.55em;
+  min-height: 2.2em;
+  width: 7em;
+  font-size: 1.1em;
+  outline: none;
+}
+.ot-input:focus { border-color: var(--cyan); }
+.ot-input.wide { width: 14em; }
+.ot-unit { color: var(--muted); }
+.ot-send, ot-choice > button {
+  min-height: 2.2em;
+  min-width: 2.2em;
+  border-radius: 0.5em;
+  border: 2px solid var(--border-2);
+  background: var(--surface-2);
+  padding: 0.3em 0.9em;
+  font-weight: 650;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.ot-send { background: var(--cyan); border-color: var(--cyan); color: #06222a; }
+.ot-send[data-sent] { background: transparent; color: var(--green); border-color: var(--green-soft); }
+ot-choice { display: flex; flex-wrap: wrap; gap: 0.6em; }
+ot-choice.column { flex-direction: column; align-items: stretch; }
+ot-choice > button { text-align: left; font-size: 1.05em; }
+ot-choice > button[aria-pressed="true"] { border-color: var(--cyan); background: var(--cyan-soft); }
+ot-choice[data-revealed] > button[correct] { border-color: var(--green); background: var(--green-soft); }
+ot-choice[data-revealed] > button[correct]::after { content: " ✓"; color: var(--green); }
+ot-choice[data-revealed] > button:not([correct]) { opacity: 0.55; }
+
+ot-gap { display: inline-block; vertical-align: baseline; }
+ot-gap > input {
+  background: transparent;
+  border: none;
+  border-bottom: 0.12em solid var(--cyan);
+  border-radius: 0;
+  padding: 0 0.2em;
+  text-align: center;
+  outline: none;
+  font-weight: 700;
+  color: var(--cyan);
+  min-width: 3ch;
+}
+ot-gap[data-revealed] > input { color: var(--green); border-bottom-color: var(--green); }
+
+ot-hidden { display: inline-block; position: relative; vertical-align: middle; border-radius: 0.45em; }
+ot-hidden.block { display: block; }
+ot-hidden > .ot-hidden-body { visibility: hidden; }
+ot-hidden > .ot-cover {
+  position: absolute;
+  inset: -0.1em -0.2em;
+  border-radius: 0.45em;
+  background: repeating-linear-gradient(135deg, var(--surface-2) 0 0.5em, #262c37 0.5em 1em);
+  border: 1px solid var(--border-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-weight: 650;
+  font-size: 0.9em;
+  min-width: 2.5em;
+}
+ot-hidden[data-revealed] > .ot-hidden-body { visibility: visible; }
+ot-hidden[data-revealed] > .ot-cover { display: none; }
+
+/* ---------- Pointing and change ---------- */
+.ot-pointed {
+  outline: 0.16em solid var(--cyan);
+  outline-offset: 0.22em;
+  border-radius: 0.35em;
+  box-shadow: 0 0 0 0.5em rgba(34, 211, 238, 0.12);
+}
+ot-step.ot-pointed, ot-event.ot-pointed { outline: none; box-shadow: none; }
+
+/* ---------- Worked steps ---------- */
+ot-steps { display: grid; grid-template-columns: auto auto auto 1fr; column-gap: 0.4em; row-gap: 0.15em; align-items: baseline; justify-content: start; font-size: 1.25em; }
+ot-step { display: contents; }
+ot-step > .ot-s { padding: 0.2em 0; }
+ot-step > .ot-s-l { text-align: right; padding-left: 0.4em; }
+ot-step > .ot-s-r { text-align: left; }
+ot-step > .ot-s-full { grid-column: 1 / 4; padding-left: 0.4em; }
+ot-step > .ot-s-note { color: var(--cyan); font-size: 0.72em; padding-left: 1em; white-space: nowrap; }
+ot-step > .ot-s-text { grid-column: 1 / -1; color: var(--muted); font-size: 0.72em; padding: 0.35em 0.4em 0; }
+ot-step.ot-pointed > .ot-s, ot-step.ot-pointed > .ot-s-note { background: var(--cyan-soft); }
+ot-step.ot-pointed > :first-child { border-radius: 0.35em 0 0 0.35em; }
+ot-step.ot-pointed > :last-child { border-radius: 0 0.35em 0.35em 0; }
+ot-step[result] .ot-s { font-weight: 750; }
+ot-step[result] .ot-s-r, ot-step[result] .ot-s-full { color: var(--green); }
+
+/* ---------- Written methods (uppställning) ---------- */
+ot-written { display: inline-flex; flex-direction: column; align-self: center; font-size: 1.5em; font-variant-numeric: tabular-nums; }
+.ot-w-grid { display: grid; justify-content: start; line-height: 1.15; }
+.ot-w-grid > span { text-align: center; min-width: 0; }
+.ot-w-d { width: 0.72em; }
+.ot-w-c { width: 0.32em; }
+.ot-w-carry { font-size: 0.5em; color: var(--violet); align-self: end; font-weight: 700; }
+.ot-w-cross { text-decoration: line-through; text-decoration-color: var(--violet); text-decoration-thickness: 0.08em; color: var(--muted); }
+.ot-w-line { border-top: 0.07em solid var(--text); }
+.ot-w-bar { border-left: 0.07em solid var(--text); }
+.ot-w-result { color: var(--green); font-weight: 750; }
+.ot-w-sub { color: var(--muted); }
+.ot-w-op { color: var(--cyan); }
+.ot-w-ghost { visibility: hidden; }
+
+/* ---------- Visual components ---------- */
+/* Growable visuals: measured at their min size, then they take spare room. */
+ot-graph, ot-map, ot-chart, ot-image, ot-clock, ot-balance, ot-cycle, ot-mindmap {
+  display: block;
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+ot-graph { min-height: 13em; }
+ot-map { min-height: 13em; }
+ot-chart { min-height: 11em; }
+ot-image { min-height: 10em; }
+ot-clock { min-height: 9em; }
+ot-balance { min-height: 9em; }
+ot-cycle { min-height: 15em; }
+ot-mindmap { min-height: 15em; }
+ot-numberline { display: block; position: relative; min-height: 5em; }
+ot-fraction { display: block; position: relative; min-height: 3.2em; }
+ot-fraction[shape="circle"] { min-height: 7em; }
+.ot-vis { position: absolute; inset: 0; }
+.ot-vis svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.ot-lbl { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; line-height: 1.1; pointer-events: none; }
+ot-graph > :not(.ot-vis), ot-map > :not(.ot-vis), ot-numberline > :not(.ot-vis),
+ot-chart > table, ot-image > ot-label, ot-cycle > ot-item, ot-mindmap > ot-node { display: none; }
+ot-chart > canvas { position: absolute; inset: 0; }
+
+/* Graph (JSXGraph) */
+.ot-vis .JXGtext { color: var(--text); font-family: var(--font) !important; }
+.ot-vis .jxgbox { border: none; border-radius: var(--radius); background: transparent; }
+
+/* Image with credit and labels */
+ot-image .ot-img-wrap { position: absolute; inset: 0 0 1.4em 0; }
+ot-image img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; border-radius: var(--radius); }
+ot-image[fit="cover"] img { object-fit: cover; }
+ot-image .ot-credit { position: absolute; left: 0; right: 0; bottom: 0; height: 1.3em; font-size: 0.72em; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ot-pin { position: absolute; width: 0.7em; height: 0.7em; margin: -0.35em 0 0 -0.35em; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 0 0.18em var(--bg); }
+.ot-pin-label { position: absolute; transform: translateY(-50%); background: var(--surface); border: 1px solid var(--cyan); color: var(--text); padding: 0.15em 0.5em; border-radius: 0.35em; font-weight: 650; white-space: nowrap; font-size: 0.95em; }
+
+/* Timeline */
+ot-timeline { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; position: relative; padding-top: 0.2em; }
+ot-timeline::before { content: ""; position: absolute; left: 0.5em; right: 0.5em; top: 2.55em; border-top: 0.14em solid var(--border-2); }
+ot-event { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 0.35em; padding: 0 0.35em; position: relative; }
+ot-event > .ot-ev-year { font-weight: 750; color: var(--violet); white-space: nowrap; height: 1.6em; display: flex; align-items: flex-end; }
+ot-event > .ot-ev-dot { width: 0.9em; height: 0.9em; border-radius: 50%; background: var(--bg); border: 0.18em solid var(--violet); position: relative; z-index: 1; }
+ot-event > .ot-ev-text { font-size: 0.92em; text-wrap: balance; }
+ot-event[now] > .ot-ev-dot, ot-event.ot-pointed > .ot-ev-dot { background: var(--cyan); border-color: var(--cyan); }
+ot-event.ot-pointed > .ot-ev-text { color: var(--cyan); }
+@media (max-aspect-ratio: 1/1) {
+  ot-timeline { grid-auto-flow: row; grid-auto-columns: auto; grid-template-columns: 1fr; padding: 0; row-gap: 0.55em; }
+  ot-timeline::before { left: 4.75em; right: auto; top: 0.6em; bottom: 0.6em; border-top: none; border-left: 0.14em solid var(--border-2); }
+  ot-event { display: grid; grid-template-columns: 4em 1em 1fr; align-items: center; column-gap: 0.55em; text-align: left; padding: 0; }
+  ot-event > .ot-ev-year { height: auto; justify-content: flex-end; }
+  ot-event > .ot-ev-dot { justify-self: center; }
+}
+
+/* Cycle and mind map */
+.ot-node-box {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius);
+  padding: 0.45em 0.75em;
+  text-align: center;
+  max-width: 12em;
+  font-size: 0.92em;
+  line-height: 1.2;
+}
+.ot-node-box b, .ot-node-box strong { display: block; }
+.ot-node-box small { display: block; color: var(--muted); margin-top: 0.15em; }
+.ot-node-center { background: var(--violet-soft); border-color: var(--violet); font-weight: 750; font-size: 1.1em; }
+.ot-node-box.ot-pointed { border-color: var(--cyan); }
+
+/* Map */
+ot-map .ot-map-label { position: absolute; transform: translate(-50%, -50%); font-weight: 750; white-space: nowrap; text-shadow: 0 0 0.25em var(--bg), 0 0 0.25em var(--bg); pointer-events: none; }
+ot-map .ot-place-label { position: absolute; transform: translate(0.55em, -50%); font-weight: 650; white-space: nowrap; text-shadow: 0 0 0.25em var(--bg), 0 0 0.25em var(--bg), 0 0 0.25em var(--bg); }
+ot-map .ot-place-label.left { transform: translate(calc(-100% - 0.55em), -50%); }
+ot-map .ot-place-dot { position: absolute; width: 0.6em; height: 0.6em; margin: -0.3em 0 0 -0.3em; border-radius: 50%; background: var(--text); box-shadow: 0 0 0 0.15em var(--bg); }
+ot-map .ot-map-credit { position: absolute; right: 0.3em; bottom: 0.15em; font-size: 0.6em; color: var(--muted); opacity: 0.8; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ot-pointed { transition: none; }
+}
+
+/* ---------- Shell mechanics ---------- */
+/* Prepared but not yet shown: keeps its space, the tutor reveals it. */
+[later] { visibility: hidden; }
+/* Ancestors of growable visuals pass spare height down to them. */
+.ot-grows { flex-grow: 1; min-height: 0; }
+:where(div, section, article, figure, ot-hidden).ot-grows:not(.row) { display: flex; flex-direction: column; }
+ot-map > .ot-vis { overflow: hidden; border-radius: var(--radius); }
+ot-map > .ot-vis svg { overflow: hidden; }
