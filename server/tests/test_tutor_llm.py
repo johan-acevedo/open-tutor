@@ -117,3 +117,30 @@ def test_warm_up_builds_the_event_models():
     from open_tutor.tutor_llm import warm_up
 
     warm_up()  # runs in every job process before the first session; must not raise
+
+
+async def test_progress_reply_omits_tools_without_sending_unsupported_none(go_env):
+    requests = []
+    model = build_llm("tutor-progress", http_client=recorded_go(requests))
+    tutor = Tutor({"name": "Leo"}, room=None)
+    tools = list(tutor.tools)
+    ctx = context()
+    ctx.items.append(FunctionCall(call_id="drawing", name="commission_board",
+                                  arguments='{"need":"fractions","background":"Leo"}'))
+    ctx.items.append(FunctionCallOutput(call_id="drawing", name="commission_board",
+                                        output="Drawing in progress.", is_error=False))
+    try:
+        async with model.chat(chat_ctx=ctx, tools=tools, tool_choice="none") as stream:
+            async for _ in stream:
+                pass
+        body = json.loads(requests[0].content)
+        assert not body.get("tools")
+        assert body.get("tool_choice", "auto") == "auto"
+        assert body["input"][-1]["call_id"] == "drawing"
+        assert body["input"][-1]["type"] == "function_call_output"
+        # Only the progress reply loses tools. The finished board can use them again.
+        await run(model, ctx, tutor)
+        assert json.loads(requests[1].content)["tools"]
+        assert tools == list(tutor.tools)
+    finally:
+        await model.aclose()

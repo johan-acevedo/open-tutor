@@ -6,6 +6,16 @@ on:
     branches: [main]
 
 jobs:
+  material-tools:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m unittest discover -s tools/skolverket/tests
+      - run: python -m unittest discover -s tools/siyavula/tests
+
   documents:
     runs-on: ubuntu-latest
     steps:

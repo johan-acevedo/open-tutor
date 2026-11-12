@@ -6,13 +6,13 @@ gym/board-renderer r13 system prompt at r21 config) + session context to the
 board model, extracts board.html, screenshots it for the tutor's vision
 feedback, and returns both plus the model's short note.
 
-Board model: BOARD_MODEL env (default opencode-go/deepseek-v4.1-flash),
-thinking BOARD_THINKING (default low), via the pi CLI.
+Board model: BOARD_MODEL env (default opencode-go/muse-spark-1.3-contributor),
+thinking BOARD_THINKING (default minimal), via the pi CLI.
 
 BOARD_MAX_TOKENS (default 16384) limits output through the app's explicit
 board_budget.js Pi extension. A lower provider limit is preserved.
-Screenshots need headless Chromium (playwright); without it the tutor
-still gets the note, and rendering is skipped with a warning.
+Screenshots use Playwright and headless Chromium (installed by deploy/install.sh).
+Without the browser the tutor still gets the note, with a warning in the worker log.
 """
 
 from __future__ import annotations
@@ -26,8 +26,8 @@ import tempfile
 
 log = logging.getLogger("open-tutor")
 
-BOARD_MODEL = os.environ.get("BOARD_MODEL", "opencode-go/deepseek-v4.1-flash")
-BOARD_THINKING = os.environ.get("BOARD_THINKING", "low")
+BOARD_MODEL = os.environ.get("BOARD_MODEL", "opencode-go/muse-spark-1.3-contributor")
+BOARD_THINKING = os.environ.get("BOARD_THINKING", "minimal")
 BOARD_TIMEOUT_S = float(os.environ.get("BOARD_TIMEOUT_S", "150"))
 BOARD_W = int(os.environ.get("BOARD_W", "1920"))
 BOARD_H = int(os.environ.get("BOARD_H", "1080"))
@@ -118,7 +118,7 @@ var mesh = new THREE.Mesh(new THREE.CylinderGeometry(rTop, rBottom, height, segm
 Geometries: BoxGeometry(w,h,d), SphereGeometry(r, wSeg, hSeg), CylinderGeometry, ConeGeometry, PlaneGeometry. Lit materials (MeshStandardMaterial) need lights: scene.add(new THREE.AmbientLight(0xffffff, 1)); plus a DirectionalLight. MeshBasicMaterial/MeshNormalMaterial need no lights. Finish with renderer.render(scene, camera).
 
 Time
-- The child is waiting in silence while you work.
+- The tutor keeps helping the child while you work. Return the board promptly.
 
 First answer with the HTML document, starting with <!doctype html>. After the closing </html>, explain in 2-3 sentences what the board shows and what the tutor should start from.
 """
@@ -197,7 +197,10 @@ async def call_board_model(system: str, user_message: str) -> str:
     if failure:
         raise RuntimeError(f"board model error: {failure[:500]}")
     if truncated:
-        raise ValueError("board model reply truncated (length stop reason)")
+        html, _ = extract_board(reply)
+        if html is None or not html.lower().rstrip().endswith("</html>"):
+            raise ValueError("board model reply truncated (length stop reason)")
+        log.warning("board model hit token cap after a complete HTML document; accepting board")
     if not reply and proc.returncode:
         tail = out.decode("utf-8", errors="replace").strip()[-500:]
         raise RuntimeError(f"board model failed (exit {proc.returncode}): {tail}")

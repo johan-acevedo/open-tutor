@@ -1238,6 +1238,7 @@ dependencies = [
     { name = "livekit-plugins-openai" },
     { name = "livekit-plugins-silero" },
     { name = "livekit-plugins-soniox" },
+    { name = "playwright" },
     { name = "pydantic" },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -1262,6 +1263,7 @@ requires-dist = [
     { name = "livekit-plugins-openai", specifier = "~=1.8.10" },
     { name = "livekit-plugins-silero", specifier = "~=1.8.10" },
     { name = "livekit-plugins-soniox", specifier = "~=1.8.10" },
+    { name = "playwright", specifier = ">=1.55,<2" },
     { name = "pydantic", specifier = ">=2.10,<3" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.35,<1" },
 ]

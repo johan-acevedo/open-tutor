@@ -83,6 +83,10 @@ class _GoResponsesStream(responses.LLMStream):
 
 class GoResponsesLLM(responses.LLM):
     def chat(self, **kwargs: Any) -> responses.LLMStream:
+        if kwargs.get("tool_choice") == "none":
+            # Go accepts only "auto"; an empty tool list preserves speech-only replies.
+            kwargs["tools"] = []
+            kwargs["tool_choice"] = "auto"
         chat_ctx = kwargs.get("chat_ctx")
         healed, names = 0, []
         if isinstance(chat_ctx, llm.ChatContext):

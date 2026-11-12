@@ -3,8 +3,8 @@
 Covers the fix/board-generation-budget candidate: the board_budget.js
 extension really caps provider output through a fake pi hook, the app CLI
 loads that exact extension file and forwards the validated cap, the
-subprocess is killed AND reaped on timeout/cancel, and provider errors or
-length-truncated replies are rejected before they can become boards.
+subprocess is killed AND reaped on timeout/cancel, and provider errors and
+incomplete HTML are rejected even when a complete board survives a capped note.
 """
 
 import asyncio
@@ -217,3 +217,10 @@ async def test_render_board_accepts_complete_document(monkeypatch):
     result = await board_model.render_board("need", "background")
     assert result["html"].endswith("</html>")
     assert result["note"] == "note"
+
+
+async def test_token_cap_accepts_complete_html_with_truncated_note(fake_pi):
+    state, _ = fake_pi
+    reply = "<!doctype html><html><body>Done</body></html>Start with the"
+    state["lines"] = (end_line(reply, stop_reason="length"),)
+    assert await board_model.call_board_model("sys", "hi") == reply

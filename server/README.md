@@ -117,23 +117,26 @@ Default off, so open-source adopters get no behaviour or file change.
 ## Teaching boards
 
 - `commission_board` makes a new board for a new topic: placeholder first, then the
-  finished drawing at the same new id. The tool result names the board id.
+  finished drawing at the same new id. A LiveKit progress update releases the
+  voice turn immediately, so the tutor can keep helping while drawing runs.
+  The finished result arrives automatically with the board id and screenshot.
 - `edit_board` sends the saved HTML and the requested change back to the renderer.
   It updates the same board id, using an explicit id or the most recent board when
   omitted. The renderer is instructed to preserve unrelated content and controls.
   Failed edits restore the saved source. The tutor receives confirmation only when
-  the browser acknowledges that restoration. Concurrent edits to one board run in
-  order, each using the latest successful source. Boards live only in the session.
+  the browser acknowledges that restoration. Only one drawing or edit runs per
+  session; overlapping calls are refused immediately. A later edit uses the latest
+  successful source. Boards live only in the session.
   Input values changed inside the sandbox are not currently saved with that source.
-- Board engine defaults: `BOARD_MODEL=opencode-go/deepseek-v4.1-flash`,
-  `BOARD_THINKING=low` (env overrides stay; the installed Pi maps `off` to `low`
-  for this model, so the default names `low` explicitly). `BOARD_MAX_TOKENS=16384`
+- Board engine defaults: `BOARD_MODEL=opencode-go/muse-spark-1.3-contributor`,
+  `BOARD_THINKING=minimal`. Environment overrides still apply. `BOARD_MAX_TOKENS=16384`
   caps the provider's output-token limit for board requests only: `board_model.py`
   loads `open_tutor/board_budget.js` explicitly (`--extension` still applies with
   `--no-extensions`), and the extension clamps an existing `max_tokens` /
   `max_completion_tokens` down to the cap while keeping a lower configured limit.
-  Length-truncated replies are rejected, and timed-out or cancelled processes are
-  killed and reaped. The renderer prompt is adapted from the
+  Replies cut off before `</html>` are rejected. A complete HTML document is kept
+  if only its trailing tutor note hits the token cap. Timed-out or cancelled
+  processes are killed and reaped. The renderer prompt is adapted from the
   `gym/prompts/r13/system.md` on the `gym/board-renderer` branch, used by the r21
   configuration. Production requests a short tutor note and has no automatic review pass.
 - Dimension handshake: `board.show`/`board.update` acks return

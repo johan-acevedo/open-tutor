@@ -16,6 +16,7 @@ dependencies = [
   "pydantic>=2.10,<3",
   "aiohttp>=3.10,<4",
   "livekit-plugins-deepgram~=1.8.10",
+  "playwright>=1.55,<2",
 ]
 
 [dependency-groups]

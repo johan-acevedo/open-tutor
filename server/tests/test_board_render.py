@@ -2,7 +2,10 @@
 
 import asyncio
 import json
+from unittest.mock import AsyncMock
 import pathlib
+
+import pytest
 
 import open_tutor.board_model as board_model
 from open_tutor.agent import Tutor
@@ -21,7 +24,7 @@ async def test_failed_restore_does_not_tell_tutor_the_board_was_restored(monkeyp
 
     monkeypatch.setattr(board_model, "render_board", fail_render)
     monkeypatch.setattr(tutor, "_rpc", no_ack)
-    result = await tutor.edit_board(None, changes="Make the line orange")
+    result = await tutor.edit_board(AsyncMock(), changes="Make the line orange")
     assert "was restored" not in result
     assert "could not confirm" in result
     assert tutor.boards["b1"] is original
@@ -40,31 +43,49 @@ async def test_oversized_edit_restores_original_instead_of_truncating_html(monke
 
     monkeypatch.setattr(board_model, "render_board", oversized)
     monkeypatch.setattr(tutor, "add_board_seen", no_seen)
-    result = await tutor.edit_board(None, changes="Make the line orange")
+    result = await tutor.edit_board(AsyncMock(), changes="Make the line orange")
     assert "Invalid revised board" in result
     assert tutor.boards["b1"] is original
     assert room.local_participant.calls[-1][2]["html"] == original.html
 
 
-async def test_concurrent_changes_to_one_board_use_the_latest_successful_revision(monkeypatch):
-    tutor, _ = await make_tutor_with_board(FakeRoom())
+@pytest.mark.parametrize("first,second", [
+    ("commission", "commission"), ("commission", "edit"),
+    ("edit", "commission"), ("edit", "edit"),
+])
+async def test_overlapping_drawings_are_rejected_then_new_changes_can_run(monkeypatch, first, second):
+    room = FakeRoom()
+    tutor, _ = await make_tutor_with_board(room)
+    started, finish = asyncio.Event(), asyncio.Event()
+    rendered = []
 
-    async def revise(need, background, **kwargs):
-        html = kwargs["previous_html"]
-        await asyncio.sleep(0)
-        return {"html": html.replace("</body>", f"<p>{need}</p></body>"), "note": "", "png": None}
+    async def render(need, background, **kwargs):
+        rendered.append(need)
+        started.set()
+        await finish.wait()
+        return {"html": "<html><body>" + need + "</body></html>", "note": "", "png": None}
 
-    async def no_seen(*args, **kwargs):
-        pass
+    monkeypatch.setattr(board_model, "render_board", render)
+    monkeypatch.setattr(tutor, "add_board_seen", AsyncMock())
 
-    monkeypatch.setattr(board_model, "render_board", revise)
-    monkeypatch.setattr(tutor, "add_board_seen", no_seen)
-    await asyncio.gather(
-        tutor.edit_board(None, changes="orange"),
-        tutor.edit_board(None, changes="thicker"),
-    )
-    assert "orange" in tutor.boards["b1"].html
-    assert "thicker" in tutor.boards["b1"].html
+    def draw(kind, need):
+        if kind == "commission":
+            return tutor.commission_board(AsyncMock(), need=need, background="Leo")
+        return tutor.edit_board(AsyncMock(), changes=need)
+
+    task = asyncio.create_task(draw(first, "orange"))
+    try:
+        await asyncio.wait_for(started.wait(), 1)
+        calls_before = len(room.local_participant.calls)
+        result = await asyncio.wait_for(draw(second, "thicker"), 1)
+        assert "already" in result and "progress" in result
+        assert rendered == ["orange"]
+        assert len(room.local_participant.calls) == calls_before
+    finally:
+        finish.set()
+        await task
+    assert "on screen now" in await draw(second, "thicker")
+    assert rendered == ["orange", "thicker"]
 
 
 class FakeParticipant:
@@ -99,7 +120,7 @@ async def commission(board, html="<p>Hej</p>"):
     board_model.render_board, real = fake_render, board_model.render_board
     tutor.add_board_seen, real_seen = noseen, tutor.add_board_seen
     try:
-        result = await tutor.commission_board(None, need="x", background="y")
+        result = await tutor.commission_board(AsyncMock(), need="x", background="y")
     finally:
         board_model.render_board = real
         tutor.add_board_seen = real_seen
@@ -158,7 +179,7 @@ async def test_commissioned_dimensions_use_latest_ack_and_freeze_during_render()
     board_model.render_board, real = fake_render, board_model.render_board
     tutor.add_board_seen, real_seen = noseen, tutor.add_board_seen
     try:
-        result = await tutor.commission_board(None, need="x", background="y")
+        result = await tutor.commission_board(AsyncMock(), need="x", background="y")
     finally:
         board_model.render_board = real
         tutor.add_board_seen = real_seen
@@ -196,7 +217,7 @@ async def make_tutor_with_board(room, html="<p>v1</p>", board=None):
     board_model.render_board, real = fake_render, board_model.render_board
     tutor.add_board_seen, real_seen = noseen, tutor.add_board_seen
     try:
-        result = await tutor.commission_board(None, need="x", background="y")
+        result = await tutor.commission_board(AsyncMock(), need="x", background="y")
     finally:
         board_model.render_board = real
         tutor.add_board_seen = real_seen
@@ -224,7 +245,7 @@ async def test_create_then_edit_keeps_id_and_passes_prior_html():
     board_model.render_board, real = fake_edit, board_model.render_board
     tutor.add_board_seen, real_seen = noseen, tutor.add_board_seen
     try:
-        result = await tutor.edit_board(None, changes="make it v2")
+        result = await tutor.edit_board(AsyncMock(), changes="make it v2")
     finally:
         board_model.render_board = real
         tutor.add_board_seen = real_seen
@@ -262,7 +283,7 @@ async def test_edit_preserves_baseline_dimensions():
     board_model.render_board, real = fake_edit, board_model.render_board
     tutor.add_board_seen, real_seen = noseen, tutor.add_board_seen
     try:
-        await tutor.edit_board(None, changes="change it")
+        await tutor.edit_board(AsyncMock(), changes="change it")
     finally:
         board_model.render_board = real
         tutor.add_board_seen = real_seen
@@ -287,8 +308,8 @@ async def test_edit_explicit_and_implicit_target():
     board_model.render_board, real = fake_render, board_model.render_board
     tutor.add_board_seen, real_seen = noseen, tutor.add_board_seen
     try:
-        await tutor.commission_board(None, need="x", background="y")
-        await tutor.commission_board(None, need="x", background="y")
+        await tutor.commission_board(AsyncMock(), need="x", background="y")
+        await tutor.commission_board(AsyncMock(), need="x", background="y")
     finally:
         board_model.render_board = real
         tutor.add_board_seen = real_seen
@@ -305,11 +326,11 @@ async def test_edit_explicit_and_implicit_target():
 
     board_model.render_board, real2 = fake_edit, board_model.render_board
     try:
-        r1 = await tutor.edit_board(None, changes="fix first", board_id="b1")
+        r1 = await tutor.edit_board(AsyncMock(), changes="fix first", board_id="b1")
         assert "b1" in r1
         assert "one-revised" in tutor.boards["b1"].html
         assert "two" in tutor.boards["b2"].html  # untouched
-        r2 = await tutor.edit_board(None, changes="fix again")  # implicit: most recent (b1)
+        r2 = await tutor.edit_board(AsyncMock(), changes="fix again")  # implicit: most recent (b1)
         assert tutor.current_board_id == "b1"
         assert seen_ids == ["b1", "b1"]
         assert "one-revised" in tutor.boards["b1"].html
@@ -331,7 +352,7 @@ async def test_edit_unknown_or_missing_board_renders_nothing():
 
     board_model.render_board, real = boom, board_model.render_board
     try:
-        r = await tutor.edit_board(None, changes="x")
+        r = await tutor.edit_board(AsyncMock(), changes="x")
     finally:
         board_model.render_board = real
     assert "no board" in r.lower() and not called
@@ -342,7 +363,7 @@ async def test_edit_unknown_or_missing_board_renders_nothing():
     n_calls = len(room2.local_participant.calls)
     board_model.render_board, real = boom, board_model.render_board
     try:
-        r2 = await tutor2.edit_board(None, changes="x", board_id="b99")
+        r2 = await tutor2.edit_board(AsyncMock(), changes="x", board_id="b99")
     finally:
         board_model.render_board = real
     assert "unknown" in r2.lower() and not called
@@ -363,7 +384,7 @@ async def test_edit_model_failure_restores_original():
     board_model.render_board, real = boom, board_model.render_board
     tutor.add_board_seen, real_seen = noseen, tutor.add_board_seen
     try:
-        r = await tutor.edit_board(None, changes="break it")
+        r = await tutor.edit_board(AsyncMock(), changes="break it")
     finally:
         board_model.render_board = real
         tutor.add_board_seen = real_seen
@@ -387,7 +408,7 @@ async def test_edit_invalid_output_restores_original():
     board_model.render_board, real = empty, board_model.render_board
     tutor.add_board_seen, real_seen = noseen, tutor.add_board_seen
     try:
-        r = await tutor.edit_board(None, changes="break it")
+        r = await tutor.edit_board(AsyncMock(), changes="break it")
     finally:
         board_model.render_board = real
         tutor.add_board_seen = real_seen
@@ -420,7 +441,7 @@ async def test_edit_display_failure_restores_original():
     tutor.add_board_seen, real_seen = noseen, tutor.add_board_seen
     tutor._rpc = flaky  # type: ignore[method-assign]
     try:
-        r = await tutor.edit_board(None, changes="revise")
+        r = await tutor.edit_board(AsyncMock(), changes="revise")
     finally:
         board_model.render_board = real
         tutor.add_board_seen = real_seen
@@ -449,8 +470,8 @@ async def test_future_edit_uses_latest_successful_html():
     board_model.render_board, real = fake_edit, board_model.render_board
     tutor.add_board_seen, real_seen = noseen, tutor.add_board_seen
     try:
-        await tutor.edit_board(None, changes="to v2")
-        await tutor.edit_board(None, changes="to v3")
+        await tutor.edit_board(AsyncMock(), changes="to v2")
+        await tutor.edit_board(AsyncMock(), changes="to v3")
     finally:
         board_model.render_board = real
         tutor.add_board_seen = real_seen
