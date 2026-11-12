@@ -59,6 +59,39 @@ Checked against the real API on 2026-11-04 with fictional Swedish text:
 
 The worker logs the route at the start of each session (`tutor TTS route elevenlabs /text-to-dialogue/stream-input model eleven_v4_turbo voice … lang sv`). It also logs the time to first audio of each reply, never the text.
 
+## Local speech for pre-rendering
+
+VoxCPM2 is available over the tailnet at <https://johan-4070.tail2e1c4e.ts.net:8447>. It provides an unmetered HTTP synthesis endpoint. The app does not call it automatically; Deepgram remains the development fox's live voice path. A LiveKit adapter is still needed to use VoxCPM2 for live sessions.
+
+Use `warm-voice-v2` explicitly for Räven. Its anchor supports Swedish and English. `warm-voice-v1` is English, and `warm-voice-v3` is a clone anchor. The health response currently reports `warm-voice-v1` as the default.
+
+| Request | Response |
+|---|---|
+| `GET /health` | Model, device, available voices, sample rate, and `busy` |
+| `POST /tts` with JSON `{ "text": "…", "voice": "warm-voice-v2" }` | Raw signed 16-bit little-endian PCM, 48 kHz mono. `Content-Type: audio/pcm`; sample rate in `X-Sample-Rate` |
+
+The operator's interface contract limits text to 2000 characters. Only one synthesis can run at a time. A concurrent request receives HTTP 409 and must wait before retrying.
+
+To generate and convert a short sample:
+
+```sh
+curl --fail-with-body --silent --show-error \
+  -H 'Content-Type: application/json' \
+  --data '{"text":"Hej! Jag heter Räven.","voice":"warm-voice-v2"}' \
+  https://johan-4070.tail2e1c4e.ts.net:8447/tts -o raven.pcm
+ffmpeg -f s16le -ar 48000 -ac 1 -i raven.pcm raven.wav
+```
+
+Check the HTTP status before treating the response as audio. The PCM response has no WAV header.
+
+The operator reports about 8.9 GB of GPU memory held on johan-4070. Check `nvidia-smi` before heavy GPU work, and do not run heavy ComfyUI renders alongside this service. To release the GPU:
+
+```sh
+ssh johan-4070 'systemctl --user stop voxcpm-tts'
+```
+
+Operator handoff: 2026-11-12, `scripts/serve_voxcpm.py` and `voxcpm-tts.service`. Boot startup and persistent Tailscale serving were confirmed by the operator. A read-only check from dell5500 on the same date returned `status: ok`, model `VoxCPM2`, device `cuda:0`, all three voices, 48000 Hz, and `busy: false`. No synthesis or GPU workload was started for that check. Recheck Swedish years and numbers by ear before using generated clips.
+
 ## Configuration
 
 | Variable | Purpose |
