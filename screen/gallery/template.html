@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Smart Screen gallery</title>
+<style>
+  :root { --bg: #111318; --panel: #1b1e25; --line: #2e3543; --text: #eef1f5; --muted: #9ba3b4; --cyan: #22d3ee; --violet: #a78bfa; --amber: #f5b544; color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, "Segoe UI", Roboto, sans-serif; }
+  header.top { padding: 20px 24px 8px; max-width: 1500px; margin: 0 auto; }
+  header.top h1 { margin: 0 0 4px; font-size: 24px; }
+  header.top p { margin: 4px 0; color: var(--muted); max-width: 90ch; }
+  nav { position: sticky; top: 0; z-index: 5; background: rgba(17,19,24,.94); border-bottom: 1px solid var(--line); padding: 8px 24px; display: flex; gap: 6px; flex-wrap: wrap; }
+  nav a { color: var(--muted); text-decoration: none; padding: 3px 10px; border-radius: 99px; border: 1px solid var(--line); font-size: 13px; }
+  nav a:hover { color: var(--text); border-color: var(--muted); }
+  main { max-width: 1500px; margin: 0 auto; padding: 0 24px 60px; }
+  h2.group { margin: 36px 0 8px; font-size: 20px; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+  section.item { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; margin: 16px 0; }
+  .head { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; }
+  .head h3 { margin: 0; font-size: 18px; }
+  .pill { font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 99px; padding: 1px 8px; }
+  .req { margin: 6px 0 0; color: var(--text); }
+  .req b { color: var(--muted); font-weight: 600; }
+  .shots { display: flex; gap: 12px; margin-top: 12px; overflow-x: auto; padding-bottom: 4px; }
+  .shots figure { margin: 0; flex: 0 0 auto; }
+  .shots img { display: block; height: 300px; width: auto; border-radius: 6px; border: 1px solid var(--line); cursor: zoom-in; }
+  .shots figcaption { font-size: 12px; color: var(--muted); margin-top: 3px; }
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; align-items: center; }
+  button, select { background: #252a34; color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 5px 12px; font: inherit; cursor: pointer; }
+  button.primary { background: var(--cyan); color: #04232b; border-color: var(--cyan); font-weight: 600; }
+  .live { display: none; gap: 14px; margin-top: 12px; flex-wrap: wrap; align-items: flex-start; }
+  .live.on { display: flex; }
+  .frame-box { position: relative; overflow: hidden; border-radius: 8px; border: 1px solid var(--line); background: #181b22; }
+  .frame-box iframe { border: 0; position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+  .frame-cap { font-size: 12px; color: var(--muted); margin-top: 3px; }
+  details { margin-top: 10px; }
+  summary { cursor: pointer; color: var(--muted); }
+  pre { background: #0c0e12; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; overflow: auto; font: 12.5px/1.45 ui-monospace, Menlo, Consolas, monospace; white-space: pre-wrap; color: #d7dce5; max-height: 460px; }
+  .issues { font-size: 13px; color: var(--amber); margin: 8px 0 0; padding-left: 18px; }
+  .ok { font-size: 13px; color: #34d399; margin-top: 8px; }
+  .timing { font-size: 13px; color: var(--muted); margin-top: 6px; }
+  .events { font-size: 12px; color: var(--violet); min-height: 1em; }
+  dialog { border: 0; padding: 0; background: transparent; max-width: 96vw; max-height: 96vh; }
+  dialog img { max-width: 96vw; max-height: 92vh; display: block; border-radius: 8px; }
+  dialog::backdrop { background: rgba(0,0,0,.8); }
+  .doclinks a { color: var(--cyan); }
+  @media (max-width: 700px) { .shots img { height: 200px; } header.top, main, nav { padding-left: 12px; padding-right: 12px; } }
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>Smart Screen gallery</h1>
+  <p>Example screens for Open Tutor's Smart Screen. Each page body is what the small screen model would write; the shell
+  (theme, fitting, maths, components, answers, pointing, patches) wraps it. Screenshots are at 1366×768 and 390×844,
+  before the patch, during it (the soft highlight) and after it. "Open live" loads the real page in a sandboxed frame,
+  as the app will.</p>
+  <p class="doclinks"><a href="REFERENCE.md">Reference for the screen model</a> · <a href="NOTES.md">Notes: choices, tried and rejected</a></p>
+</header>
+<nav id="nav"></nav>
+<main id="main"></main>
+<dialog id="zoom"><img alt=""></dialog>
+<script>
+(async function () {
+  const data = await (await fetch('data.json', { cache: 'no-store' })).json();
+  const main = document.getElementById('main');
+  const nav = document.getElementById('nav');
+  const zoom = document.getElementById('zoom');
+  zoom.addEventListener('click', () => zoom.close());
+  const el = (tag, attrs, ...kids) => {
+    const e = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs || {})) {
+      if (k === 'class') e.className = v; else if (k.startsWith('on')) e.addEventListener(k.slice(2), v); else e.setAttribute(k, v);
+    }
+    for (const k of kids) if (k != null) e.append(k);
+    return e;
+  };
+  for (const g of data.groups) {
+    if (!g.items.length) continue;
+    nav.append(el('a', { href: '#' + g.key }, g.title));
+    main.append(el('h2', { class: 'group', id: g.key }, g.title));
+    for (const it of g.items) main.append(item(it));
+  }
+
+  function shot(key, size, suffix, cap) {
+    const src = `shots/${key}-${size}${suffix}.png`;
+    const img = el('img', { src, alt: cap, loading: 'lazy', onclick: () => { zoom.querySelector('img').src = src; zoom.showModal(); } });
+    img.onerror = () => fig.remove();
+    const fig = el('figure', {}, img, el('figcaption', {}, cap));
+    return fig;
+  }
+
+  function item(it) {
+    const s = el('section', { class: 'item', id: it.key });
+    const head = el('div', { class: 'head' }, el('h3', {}, it.title || it.name));
+    if (it.grade) head.append(el('span', { class: 'pill' }, it.grade));
+    if (it.subject) head.append(el('span', { class: 'pill' }, it.subject));
+    for (const t of it.shows || []) head.append(el('span', { class: 'pill' }, t));
+    s.append(head);
+    if (it.request) s.append(el('p', { class: 'req' }, el('b', {}, 'Tutor: '), it.request));
+    if (it.patch_request && it.patch) s.append(el('p', { class: 'req' }, el('b', {}, 'Later: '), it.patch_request));
+    if (it.timing) s.append(el('div', { class: 'timing' }, timingText(it.timing)));
+    const rep = it.report;
+    if (rep) {
+      const iss = [];
+      for (const [size, v] of Object.entries(rep.sizes || {})) {
+        for (const i of v.issues || []) iss.push(`${size}: ${i.kind}: ${i.msg}${i.where ? ' ' + i.where : ''}`);
+        for (const i of v.patch_issues || []) iss.push(`${size} patch: ${i.kind}: ${i.msg}`);
+      }
+      const sizes = Object.entries(rep.sizes || {}).map(([k, v]) => `${k}: text ${v.fontPx}px, ready in ${v.ready_ms} ms`).join(' · ');
+      if (iss.length) s.append(el('ul', { class: 'issues' }, ...iss.map(t => el('li', {}, t))));
+      else s.append(el('div', { class: 'ok' }, 'Shell found no problems. ' + sizes));
+      if (iss.length) s.append(el('div', { class: 'timing' }, sizes));
+    }
+    const shots = el('div', { class: 'shots' });
+    shots.append(shot(it.key, '1366x768', '', '1366×768'), shot(it.key, '390x844', '', '390×844'));
+    if (it.patch) shots.append(shot(it.key, '1366x768', '-patching', '1366×768 during patch'), shot(it.key, '1366x768', '-patched', '1366×768 after patch'),
+      shot(it.key, '390x844', '-patching', '390×844 during patch'), shot(it.key, '390x844', '-patched', '390×844 after patch'));
+    s.append(shots);
+    const live = el('div', { class: 'live' });
+    const events = el('div', { class: 'events' });
+    let frames = [];
+    const ids = [...new Set([...(it.body || '').matchAll(/\bid="([^"]+)"/g)].map(m => m[1]))];
+    const point = el('select', { onchange: () => frames.forEach(f => f.contentWindow.postMessage({ ot: 'point', id: point.value || null }, '*')) },
+      el('option', { value: '' }, 'Point at …'), ...ids.map(i => el('option', { value: i }, i)));
+    const controls = el('div', { class: 'controls' },
+      el('button', { class: 'primary', onclick: openLive }, 'Open live'),
+      it.patch ? el('button', { onclick: () => { openLive(); frames.forEach(f => f.contentWindow.postMessage({ ot: 'patch', html: it.patch }, '*')); } }, 'Apply patch') : null,
+      ids.length ? point : null,
+      el('button', { onclick: () => { live.classList.remove('on'); live.innerHTML = ''; frames = []; } }, 'Close live'),
+      events);
+    s.append(controls, live);
+    s.append(el('details', {}, el('summary', {}, 'Page body (what the model writes)'), el('pre', {}, it.body || '')));
+    if (it.patch) s.append(el('details', {}, el('summary', {}, 'Patch'), el('pre', {}, it.patch)));
+
+    let srcdoc = null;
+    async function openLive() {
+      if (live.classList.contains('on')) return;
+      live.classList.add('on');
+      srcdoc = srcdoc || await (await fetch(`frames/${it.key}.html`)).text();
+      const avail = Math.min(main.clientWidth - 40, 1400);
+      const sizes = [[1366, 768], [390, 844]];
+      // same height for both, side by side when there is room
+      const wide = avail > 700;
+      const scaleL = Math.min(1, wide ? (avail - 16) / (1366 + 390 * 768 / 844) : avail / 1366);
+      const scaleP = wide ? scaleL * 768 / 844 : Math.min(1, avail / 390);
+      sizes.forEach(([w, h], i) => {
+        const sc = i === 0 ? scaleL : scaleP;
+        const box = el('div', { class: 'frame-box', style: `width:${Math.round(w * sc)}px;height:${Math.round(h * sc)}px` });
+        const f = el('iframe', { sandbox: 'allow-scripts', title: `${it.title} ${w}x${h}`, style: `width:${w}px;height:${h}px;transform:scale(${sc})` });
+        f.srcdoc = srcdoc;
+        box.append(f);
+        live.append(el('div', {}, box, el('div', { class: 'frame-cap' }, `${w}×${h} shown at ${Math.round(sc * 100)}%`)));
+        frames.push(f);
+      });
+    }
+    window.addEventListener('message', (e) => {
+      if (!frames.some(f => f.contentWindow === e.source)) return;
+      const m = e.data || {};
+      if (m.ot === 'answer') events.textContent = `Sent to the tutor: ${m.id} = ${m.value}`;
+      if (m.ot === 'ready' && m.issues && m.issues.length) events.textContent = `Shell issues: ${m.issues.map(i => i.msg).join('; ')}`;
+    });
+    return s;
+  }
+  function timingText(t) {
+    const f = (x) => (x == null ? '–' : (typeof x === 'number' ? x.toFixed(1) + ' s' : x));
+    const p = t.page || t, q = t.patch || {};
+    return `Page: first text ${f(p.ttft_s ?? p.first_text_s)}, done ${f(p.total_s)} · Patch: first text ${f(q.ttft_s ?? q.first_text_s)}, done ${f(q.total_s)}`;
+  }
+})();
+</script>
+</body>
+</html>

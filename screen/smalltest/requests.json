@@ -1,0 +1,17 @@
+[
+  {"id": "tiotal", "child": "Ali, åk 2",
+   "request": "Ali räknar 8 + 5 och fastnar. Visa det på en tallinje med ett hopp upp till 10 och ett hopp vidare. Låt honom skriva svaret.",
+   "patch": "Ali skrev 13. Markera 13 på tallinjen."},
+  {"id": "norden", "child": "Maja, åk 6",
+   "request": "Maja läser om Norden. Visa länderna på en karta med huvudstäderna, och ett diagram som jämför hur många som bor i varje land (Sverige 10,6 miljoner, Danmark 6,0, Finland 5,6, Norge 5,6, Island 0,4).",
+   "patch": "Peka ut Sverige tydligare: färga Sverige grönt."},
+  {"id": "verb", "child": "Elsa, åk 5",
+   "request": "Engelska oregelbundna verb i dåtid: go–went, eat–ate, see–saw, have–had. Visa paren och tre meningar där Elsa fyller i rätt dåtidsform.",
+   "patch": "Elsa är osäker på första meningen. Visa svaret där."},
+  {"id": "andragrad", "child": "Omar, gymnasiet Ma2",
+   "request": "Andragradsfunktionen y = x² − 4x + 3. Rita grafen, markera nollställena och symmetrilinjen, och lös x² − 4x + 3 = 0 med pq-formeln steg för steg.",
+   "patch": "Lägg till vertex (2, −1) i grafen."},
+  {"id": "vikingar", "child": "Wilma, åk 4",
+   "request": "Vikingatiden. Gör en tankekarta om hur vikingarna levde: hem, mat, resor, tro och handel, och en kort tidslinje från 793 till 1066.",
+   "patch": "Lägg till på tidslinjen att Birka grundades omkring år 750."}
+]

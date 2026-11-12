@@ -19,7 +19,12 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["pytest>=8,<9", "pytest-asyncio>=1,<2", "httpx>=0.28,<1"]
+dev = [
+    "pytest>=8,<9",
+    "pytest-asyncio>=1,<2",
+    "httpx>=0.28,<1",
+    "playwright>=1.65.1",
+]
 
 [build-system]
 requires = ["hatchling>=1.25"]

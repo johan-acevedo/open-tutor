@@ -129,10 +129,39 @@ written division with decimals, weight units and price per kilo, decimals, the e
 3x + 5 = 20, linear equations, Pythagoras, the map of Europe and France's borders, the Roman
 Empire, and a large share of English phrase and reading practice in åk 5.
 
+## Example screens (work package 1, 2026-11-12)
+
+Everything is in `screen/` on branch `feat/screen-examples`; start with `screen/NOTES.md` (choices, what was tried
+and rejected, CSP) and `screen/REFERENCE.md` (what the screen model reads). Gallery with live pages and
+screenshots: http://dell5500.tail2e1c4e.ts.net:8790/ (user service `open-tutor-screen-gallery` on dell5500).
+
+- **Shell** (`screen/shell/`, about 36 kB gzipped, inlined into the frame's `srcdoc`): dark theme, Lexend, KaTeX,
+  fitting by root font size so the page fills the pane without scrolling at any size, hidden until finished,
+  `ot-hidden` and `later` for answers the tutor reveals, `ot-answer` / `ot-choice` / `ot-gap` that post the child's
+  answer to the parent, pointing (`{ot:'point', id}`), and patches written as `<ot-patch target do>` HTML that fade in
+  with a soft highlight. On `ready` the shell reports lint issues (KaTeX errors, unknown tags, overflow, crowded
+  diagrams …) for the Screen agent's look-and-fix step.
+- **Components**: `ot-steps`, `ot-written` (computed uppställning incl. liggande stolen), `ot-clock`, `ot-fraction`,
+  `ot-numberline`, `ot-balance`, `ot-graph` (JSXGraph), `ot-chart` (Chart.js from a `<table>`), `ot-map` (d3-geo with
+  Natural Earth and historical borders; replaces Leaflet), `ot-image` (Wikimedia Commons), `ot-timeline`, `ot-cycle`,
+  `ot-mindmap`. The model writes no JavaScript.
+- **Examples**: eight pages with one patch each (klockan, bråk, pris per kilo, ekvation, räta linjen, Romarriket,
+  engelska på kafé, vattnets kretslopp) covering every row of the capability table; the static prompt (role +
+  reference + examples) is about 4 300 tokens (`screen/tools/prompt.py`).
+- **Small-model test** (five requests the examples do not cover, `screen/smalltest/`): both models wrote valid pages
+  and minimal, correct patches on every request. With the final reference, page totals were 5–10 s for Muse Spark 1.3
+  Contributor (minimal reasoning) and 5–8 s for DeepSeek V4.1 Flash (low); patches 1–7 s. A rule in the reference
+  ("about 60 words, one main picture") was needed: before it, DeepSeek's pages fitted only at 11–15 px on a phone.
+- **CSP change for page frames**: add `connect-src https://cdn.jsdelivr.net https://commons.wikimedia.org` (map data,
+  image search). Nothing else changes; the frame stays `sandbox="allow-scripts"`.
+- **Open from this package**: image search should move to the Screen agent on the server (no content filter on
+  Commons results); the liggande stolen layout needs a teacher's check; not yet tried on a real iPhone or in WebKit.
+
 ## Work packages
 
 1. **Example screens, shell and components.** Owner: a separate Opus 5.5 thread. Status: started
-   2026-11-12. Output is reviewed by the lead and Johan before anything else builds on it.
+   2026-11-12. Draft delivered 2026-11-12 in PR #29 (`feat/screen-examples`); waits for review by the lead and
+   Johan before anything else builds on it.
 2. **The Screen agent on the server.** Owner: lead. Status: waits for 1. Follows the lesson,
    writes page bodies, checks its render, never blocks the tutor.
 3. **One-page view, reveal and answer box in the web app.** Owner: lead, with workers. Waits for 1.
