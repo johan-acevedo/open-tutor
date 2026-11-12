@@ -43,14 +43,28 @@ rendered board. No voice integration in this proof.
 ## Run it
 
 ```sh
-systemctl --user status open-tutor-proof   # app + proxy on 127.0.0.1:9773
-node scripts/verify.mjs                    # full proof, fresh profile
-node --test tests/                         # proxy bounds (8 tests)
-npm run build && npm run typecheck        # build = `vite build app`
+cd experiments/browser-screen
+npm install                              # pinned 1.5.2 packages + dev tools
+npm run build && npm run typecheck      # build = `vite build app`, typecheck = `tsc -p app`
+npm test                                 # proxy bounds (node --test tests/*.test.mjs)
+node scripts/verify.mjs                  # full proof, fresh tmp profile
+cat verification/result.json           # aggregate result (committed)
+```
+
+Service (installed out of repo, logs out of repo):
+
+```sh
+cp deploy/open-tutor-proof.service ~/.config/systemd/user/
+systemctl --user daemon-reload && systemctl --user enable --now open-tutor-proof.service
+# isolated tailscale route — leaves the existing 443/8443 serve routes alone:
+tailscale serve --bg --yes --https 9443 http://127.0.0.1:9773
 ```
 
 Open `https://dell5500.tail2e1c4e.ts.net:9443/` (tailnet) and enter the page
 code from `~/.config/open-tutor-proof/env` (`PROOF_TOKEN`, mode 600, never in repo).
+`PROOF_SELF_ORIGINS` in the unit must match the public origin or the proxy
+rejects browser `Origin` headers. `public/` is build output (git-ignored);
+screenshots on failure go to `/tmp`, never the repo.
 
 ## Things found while proving (all fixed except the last)
 
@@ -80,3 +94,14 @@ lesson context (typed topic, no uploads/transcript yet).
 
 Next: real leader election, fox/room integration, uploads + transcript into the
 lesson record, export/import for backup.
+
+## Latest verification run
+
+`node scripts/verify.mjs` writes `verification/result.json` (aggregate,
+committed): per-step PASS/FAIL plus `gaps` for known-open items. Reference
+run 2026-11-12 on dell5500, live `opencode-go/deepseek-v4.1-flash`:
+**15/15 checks green**, same conversation `samtal 1` across full browser
+close/reopen, vision described the visible revealed page ("Sida 1 av 2"
+with shown facit) and the hidden page correctly. The script also probes
+second-tab fencing and records it under `gaps` without failing the run
+(item 8 above — second tab wrongly shows owner on this Chromium).

@@ -327,13 +327,10 @@ async function boot(token: string) {
     if (!readOnly) {
       try {
         const watch = await (harness as any).watchDoc(DeckDoc, root.id, ctx);
-        if (watch) {
-          void (async () => {
-            for await (const _ of watch) {
-              if (closing) break;
-              await publish();
-            }
-          })();
+        if (watch && typeof watch.start === "function") {
+          watch.start(async () => {
+            if (!closing) await publish();
+          });
         }
       } catch {
         // watchDoc shape differs across releases; polling fallback below covers it.

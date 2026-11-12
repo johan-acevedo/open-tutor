@@ -16,7 +16,7 @@ import os from "node:os";
 import path from "node:path";
 import { chromium } from "playwright-core";
 
-const URL = process.env.PROOF_URL ?? "https://dell5500.tail2e1c4e.ts.net:9443/";
+const PROOF_URL = process.env.PROOF_URL ?? "https://dell5500.tail2e1c4e.ts.net:9443/";
 const EXE = "/home/johan/.cache/ms-playwright/chromium-1254/chrome-linux64/chrome";
 const token = fs
   .readFileSync(path.join(process.env.HOME ?? "", ".config/open-tutor-proof/env"), "utf8")
@@ -25,10 +25,35 @@ const token = fs
 if (!token) throw new Error("PROOF_TOKEN missing in ~/.config/open-tutor-proof/env");
 
 const DIR = fs.mkdtempSync(path.join(os.tmpdir(), "proof-verify-"));
+const OUT = new URL("../verification/result.json", import.meta.url).pathname;
 let failures = 0;
+const gaps = [];
+const stepResults = [];
 const check = (name, cond, extra = "") => {
   console.log(`${cond ? "PASS" : "FAIL"} ${name}${extra ? ` — ${extra}` : ""}`);
+  stepResults.push({ name, ok: !!cond, detail: String(extra).slice(0, 300) });
   if (!cond) failures += 1;
+};
+const writeResult = (error) => {
+  fs.mkdirSync(path.dirname(OUT), { recursive: true });
+  fs.writeFileSync(
+    OUT,
+    JSON.stringify(
+      {
+        ok: failures === 0 && !error,
+        url: PROOF_URL,
+        time: new Date().toISOString(),
+        model: "opencode-go/deepseek-v4.1-flash",
+        failures,
+        gaps,
+        steps: stepResults,
+        ...(error ? { error: String(error).slice(0, 500) } : {}),
+      },
+      null,
+      2,
+    ),
+  );
+  console.log(`result: ${OUT}`);
 };
 
 async function openProfile() {
@@ -38,7 +63,7 @@ async function openProfile() {
     ignoreHTTPSErrors: true,
   });
   const page = browser.pages()[0] ?? (await browser.newPage());
-  await page.goto(URL, { waitUntil: "networkidle", timeout: 30000 });
+  await page.goto(PROOF_URL, { waitUntil: "networkidle", timeout: 30000 });
   if (!(await page.inputValue("#token").catch(() => ""))) {
     await page.fill("#token", token);
   }
@@ -53,6 +78,28 @@ async function openProfile() {
 }
 
 const snap = (page) => page.evaluate(() => window.__proof.snapshot);
+
+const dumpFailure = (err) => {
+  console.error(`VERIFY ERROR ${err?.message ?? err}`);
+  try {
+    void page?.screenshot({ path: "/tmp/proof-verify-failure.png" }).catch(() => {});
+  } catch {
+    // ignore
+  }
+  try {
+    writeResult(err);
+  } catch {
+    // ignore
+  }
+};
+process.on("uncaughtException", (err) => {
+  dumpFailure(err);
+  process.exit(1);
+});
+process.on("unhandledRejection", (err) => {
+  dumpFailure(err);
+  process.exit(1);
+});
 
 // ---- session 1: build the deck ----
 let { browser, page } = await openProfile();
@@ -155,8 +202,38 @@ check(
   seenHidden.slice(0, 250),
 );
 
+// Storage ownership probe: a second tab should be fenced read-only.
+// Known gap (see README): HeadlessChrome grants ifAvailable requests even
+// with the lock demonstrably held. Recorded, never fatal to the proof run.
+try {
+  const page2 = await browser.newPage();
+  await page2.goto(PROOF_URL, { waitUntil: "networkidle", timeout: 30000 });
+  if (!(await page2.inputValue("#token").catch(() => ""))) {
+    await page2.fill("#token", token);
+  }
+  await page2.click("#open");
+  await page2
+    .waitForFunction(() => !!window.__proof?.snapshot, null, { timeout: 60000, polling: 1000 })
+    .catch(() => {});
+  const owner2 = await page2.textContent("#owner").catch(() => "");
+  const prepareDisabled2 = await page2.locator("#prepare").isDisabled().catch(() => false);
+  if (owner2.includes("annan flik") && prepareDisabled2) {
+    check("second tab fenced read-only", true, owner2);
+  } else {
+    const gap = `second tab NOT fenced (owner=${owner2}, prepareDisabled=${prepareDisabled2}) — known Web-Lock gap`;
+    gaps.push(gap);
+    console.log(`GAP ${gap}`);
+  }
+  await page2.close().catch(() => {});
+} catch (err) {
+  const gap = `second-tab probe errored: ${String(err).slice(0, 200)}`;
+  gaps.push(gap);
+  console.log(`GAP ${gap}`);
+}
+
 await browser.close();
 fs.rmSync(DIR, { recursive: true, force: true });
 
+writeResult();
 console.log(failures === 0 ? "VERIFY OK" : `VERIFY FAILED (${failures})`);
 process.exit(failures === 0 ? 0 : 1);

@@ -11,6 +11,7 @@ Type=simple
 # The provider key is read by the server from ~/.pi/agent/auth.json.
 EnvironmentFile=%h/.config/open-tutor-proof/env
 Environment=PROOF_PORT=9773
+Environment=PROOF_SELF_ORIGINS=https://dell5500.tail2e1c4e.ts.net:9443
 Environment=PROOF_PUBLIC_DIR=%h/.t3/worktrees/open-tutor/t3-231ad4af-2bb85d6e156e6ec5/experiments/browser-screen/public
 WorkingDirectory=%h/.t3/worktrees/open-tutor/t3-231ad4af-2bb85d6e156e6ec5/experiments/browser-screen/proxy
 ExecStart=%h/.local/bin/node server.mjs

@@ -1,0 +1,87 @@
+{
+  "ok": true,
+  "url": "https://dell5500.tail2e1c4e.ts.net:9443/",
+  "time": "2026-11-12T08:24:55.739Z",
+  "model": "opencode-go/deepseek-v4.1-flash",
+  "failures": 0,
+  "gaps": [
+    "second tab NOT fenced (owner=ägare: denna flik, prepareDisabled=false) — known Web-Lock gap"
+  ],
+  "steps": [
+    {
+      "name": "worker boots browser-owned session",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "page 1 prepared by live model",
+      "ok": true,
+      "detail": "Hur mycket är 3/4 av 20?"
+    },
+    {
+      "name": "child input saved to workspace",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "second page prepared (page deck, not chat log)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "input preserved across page switch",
+      "ok": true,
+      "detail": "\"5/8\""
+    },
+    {
+      "name": "answer box follows visible page",
+      "ok": true,
+      "detail": "5/8"
+    },
+    {
+      "name": "fox reveal shows answer on current page",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "stale reveal rejected (other page untouched)",
+      "ok": true,
+      "detail": "🦊 Räven: Avvisat: kommandot gällde en äldre sida (stale reveal). Den synliga sidan är pmwda7r6a7r rmwda7r6an4q."
+    },
+    {
+      "name": "duplicate reveal ignored",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "live vision sees revealed answer on visible page",
+      "ok": true,
+      "detail": "🦊 Räven ser: - Sidrubrik: \"Sida 1 av 2\", med underraden \"Open Tutor · webbläsargädd skärm (proof)\".\n- Ämne: Bråk.\n- Uppgiften: \"Hur mycket är 3/4 av 20?\"\n- I fältet \"Ditt svar:\" står det inskrivet \"5"
+    },
+    {
+      "name": "same durable conversation after reopen",
+      "ok": true,
+      "detail": "samtal 1 vs samtal 1"
+    },
+    {
+      "name": "pages restored after reopen",
+      "ok": true,
+      "detail": "pages=2"
+    },
+    {
+      "name": "input restored after reopen",
+      "ok": true,
+      "detail": "\"5/8\""
+    },
+    {
+      "name": "reveal state restored after reopen",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "live vision distinguishes hidden answer",
+      "ok": true,
+      "detail": "🦊 Räven ser: - Sidrubrik: \"Sida 2 av 2\", med underraden \"Open Tutor · webbläsargädd skärm (proof)\".\n- Ämne: Multiplikation.\n- Uppgiften: \"Vad är 7 · 8?\"\n- I fältet \"Ditt svar:\" står det bara \"...\" — alltså inget svar ifyllt.\n- Under \"Facit:\" står de"
+    }
+  ]
+}
