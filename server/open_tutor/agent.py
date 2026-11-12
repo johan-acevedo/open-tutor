@@ -37,6 +37,7 @@ from .board import (
     HtmlItem,
     Ids,
     Note,
+    PageItem,
     PendingItem,
     ResourceItem,
     youtube_embed,
@@ -133,8 +134,12 @@ def tts_route(engine) -> str:
 
 
 class Tutor(Agent):
+    @staticmethod
+    def _instructions(learner: dict[str, Any]) -> str:
+        return prompt.instructions(learner)
+
     def __init__(self, learner: dict[str, Any], room: rtc.Room, board: dict[str, Any] | None = None) -> None:
-        super().__init__(instructions=prompt.instructions(learner))
+        super().__init__(instructions=self._instructions(learner))
         self.learner = learner
         board = board or {}
         self.board_w, self.board_h = clamp_board_size(board.get("w", DEFAULT_BOARD_W),
@@ -583,6 +588,166 @@ class Tutor(Agent):
         await self.update_chat_ctx(ctx)
 
 
+class SmartTutor(Tutor):
+    """The tutor in smart-screen mode (``TUTOR_SCREEN=smart``).
+
+    The Screen agent next to it renders pages in the background; this tutor
+    asks for them with ``ask_screen`` and brings them in with ``show_page``,
+    ``reveal`` and ``point``. ``commission_board``/``edit_board`` are gone.
+    """
+
+    commission_board = None
+    edit_board = None
+
+    @staticmethod
+    def _instructions(learner: dict[str, Any]) -> str:
+        return prompt.smart_instructions(learner)
+
+    def __init__(self, learner: dict[str, Any], room: rtc.Room,
+                 board: dict[str, Any] | None = None, screen: Any = None) -> None:
+        if screen is None:
+            raise ValueError("SmartTutor needs a Screen")
+        self.screen = screen
+        super().__init__(learner, room, board=board)
+        # The Screen renders at the pane size the tutor keeps current.
+        screen.set_pane_source(lambda: (self.board_w, self.board_h))
+
+    @function_tool()
+    async def ask_screen(self, context: RunContext, ask: str) -> str:
+        """Ask the screen for a new page or a change to the visible one.
+
+        Ask in terms of what the child needs right now (who they are, what was
+        just said, what should land); the screen hears the whole lesson, so one
+        short ask is enough. Returns at once: keep talking with the child in
+        words while it works. Never announce a wait or describe the unseen page.
+        A finished page stays invisible until you call show_page; a change to
+        the visible page applies by itself and arrives with a note.
+
+        Args:
+            ask: What the child needs, e.g. "En sida om klockan halv sju för åk 1".
+        """
+        job = self.screen.ask(ask)
+        return ("The screen is working on it now "
+                f"(job {job}). Keep talking with the child in words: explain, ask, "
+                "or react to what they just said. Do not announce a wait. "
+                "A finished page stays invisible until you call show_page with its id; "
+                "a change to the visible page applies by itself.")
+
+    @function_tool()
+    async def show_page(self, context: RunContext, page_id: str) -> str:
+        """Put a finished screen page in front of the child.
+
+        Args:
+            page_id: Which finished page, e.g. "p1" (from the ready note).
+        """
+        page = self.screen.page((page_id or "").strip())
+        if page is None:
+            known = ", ".join(sorted(self.screen.pages)) or "none yet"
+            return (f"Unknown page id '{page_id}'. Finished pages: {known}. "
+                    "No page was shown. Explain in words instead, briefly.")
+        try:
+            item = PageItem(id=page.page_id, title=page.title, body=page.body)
+        except ValidationError:
+            return (f"Page {page.page_id} is too large to show. "
+                    "Explain in words instead, briefly.")
+        shown = await self._rpc("board.show", item.model_dump(exclude_none=True))
+        if not shown:
+            return (f"Page {page.page_id} could not be shown. "
+                    "Explain in words instead, briefly.")
+        self.screen.mark_visible(page.page_id)
+        return (f"Page {page.page_id} is now visible. "
+                "Teach from what it actually shows, as its author.")
+
+    @function_tool()
+    async def reveal(self, context: RunContext, part_id: str) -> str:
+        """Uncover a hidden answer or a `later` part on the visible page.
+
+        Args:
+            part_id: The part's id from the page source, e.g. "facit".
+        """
+        part = (part_id or "").strip()
+        if not part:
+            return "No part given. Nothing was revealed."
+        if self.screen.visible_id is None:
+            return "No page is on screen yet. Nothing was revealed."
+        ok = await self._rpc("board.reveal", {"id": self.screen.visible_id, "part": part})
+        if not ok:
+            return f"Part {part} could not be revealed. Explain in words instead, briefly."
+        return f"Part {part} is now visible. Talk about what it shows."
+
+    @function_tool()
+    async def point(self, context: RunContext, part_id: str) -> str:
+        """Highlight one part of the visible page.
+
+        Args:
+            part_id: The part's id from the page source, e.g. "steg-2".
+        """
+        part = (part_id or "").strip()
+        if not part:
+            return "No part given. Nothing was highlighted."
+        if self.screen.visible_id is None:
+            return "No page is on screen yet. Nothing was highlighted."
+        ok = await self._rpc("board.point", {"id": self.screen.visible_id, "part": part})
+        if not ok:
+            return f"Part {part} could not be highlighted. Explain in words instead, briefly."
+        return f"Part {part} is highlighted. Talk about it."
+
+    async def _prompt_when_free(self, session: AgentSession, text: str) -> None:
+        """Prompt the tutor once it is not speaking; while it (or the child)
+        is speaking, wait for that speech to finish first (bounded)."""
+        try:
+            for _ in range(100):
+                if session.agent_state != "speaking" and session.user_state != "speaking":
+                    break
+                await asyncio.sleep(0.3)
+        except Exception:
+            pass
+        prompt_event(session, text)
+
+    async def screen_page_ready(self, session: AgentSession, page: Any) -> None:
+        """A new page finished: add it to the context invisible, then prompt once."""
+        parts: list[Any] = []
+        if getattr(page, "png", None):
+            parts.append(llm.ImageContent(
+                image=f"data:image/png;base64,{base64.b64encode(page.png).decode()}",
+                inference_detail="high"))
+        text = (f"[Screen page {page.page_id} ('{page.title}') is ready but NOT visible. "
+                f"Source:\n{page.body}\nCall show_page('{page.page_id}') when it fits "
+                f"the lesson.]")
+        record_active("screen_ready", {"page": page.page_id, "title": page.title,
+                                           "image": bool(getattr(page, 'png', None))})
+        ctx = self.chat_ctx.copy()
+        ctx.add_message(role="user", content=[text, *parts])
+        await self.update_chat_ctx(ctx)
+        asyncio.create_task(self._prompt_when_free(
+            session, f"Screen page {page.page_id} ('{page.title}') is ready but not visible. "
+                      f"If it fits the lesson now, call show_page('{page.page_id}'); "
+                      f"otherwise keep teaching and bring it in later."))
+
+    async def screen_patch_ready(self, session: AgentSession, patch: Any) -> None:
+        """A change finished: apply it at once, add it to the context, no prompt."""
+        ok = await self._rpc("board.patch", {"id": patch.page_id, "patch": patch.patch})
+        parts: list[Any] = []
+        if getattr(patch, "png", None):
+            parts.append(llm.ImageContent(
+                image=f"data:image/png;base64,{base64.b64encode(patch.png).decode()}",
+                inference_detail="high"))
+        applied = "applied on the visible page" if ok else "could NOT be applied"
+        text = (f"[Screen change {applied} (page {patch.page_id}). "
+                f"Patch source:\n{patch.patch}\nThe screenshot shows the page now.]")
+        record_active("screen_patched", {"page": patch.page_id, "ok": ok})
+        ctx = self.chat_ctx.copy()
+        ctx.add_message(role="user", content=[text, *parts])
+        await self.update_chat_ctx(ctx)
+
+    async def screen_failed(self, session: AgentSession, message: str) -> None:
+        """A screen job failed: tell the tutor quietly, without prompting."""
+        record_active("screen_failed", {"message": message[:200]})
+        ctx = self.chat_ctx.copy()
+        ctx.add_message(role="user", content=[f"[Screen: {message}]"])
+        await self.update_chat_ctx(ctx)
+
+
 def prompt_event(session: AgentSession, text: str):
     """Ask for a reply to something that happened in the session (not speech).
 
@@ -632,10 +797,21 @@ async def entrypoint(ctx: JobContext) -> None:
         learner = {}
         board = {}
 
-    tutor = Tutor(learner, ctx.room, board=board)
-    tutor.child_identity = child.identity
-
     debug = DebugLog.create(ctx.room.name, learner, getattr(getattr(ctx, "job", None), "id", "?"))
+
+    smart = os.environ.get("TUTOR_SCREEN") == "smart"
+    screen = None
+    if smart:
+        from .screen import Screen, session_pages_dir
+        screen = Screen(
+            learner=learner,
+            pages_dir=session_pages_dir(ctx.room.name, getattr(debug, "directory", None)),
+            session_id=ctx.room.name,
+        )
+        tutor: Tutor = SmartTutor(learner, ctx.room, board=board, screen=screen)
+    else:
+        tutor = Tutor(learner, ctx.room, board=board)
+    tutor.child_identity = child.identity
     set_active(debug)
 
     voice = build_tts()
@@ -674,6 +850,34 @@ async def entrypoint(ctx: JobContext) -> None:
     ):
         session.on(sdk_event, debug.record_sdk)
 
+    if screen is not None:
+        assert isinstance(tutor, SmartTutor)
+        smart_tutor = tutor
+        screen.on_page = lambda page: asyncio.create_task(
+            smart_tutor.screen_page_ready(session, page))
+        screen.on_patch = lambda patch: asyncio.create_task(
+            smart_tutor.screen_patch_ready(session, patch))
+        screen.on_failure = lambda message: asyncio.create_task(
+            smart_tutor.screen_failed(session, message))
+
+        @session.on("conversation_item_added")
+        def forward_screen_turn(event) -> None:
+            # Every conversation turn also goes to the Screen; worker-injected
+            # session events ([Session event ...]) are not the child's words.
+            item = getattr(event, "item", None)
+            if getattr(item, "type", None) != "message":
+                return
+            role = getattr(item, "role", "")
+            if role not in ("user", "assistant"):
+                return
+            try:
+                text = item.text_content()
+            except Exception:
+                return
+            if not text or (role == "user" and text.startswith("[Session event")):
+                return
+            screen.add_turn("child" if role == "user" else "tutor", text)
+
     # ---- homework intake ----------------------------------------------------------
     pending: list[tuple[list[Any], str]] = []
     settle: asyncio.Task | None = None
@@ -684,6 +888,9 @@ async def entrypoint(ctx: JobContext) -> None:
         pending.clear()
         for parts, description in batch:
             await tutor.add_homework(parts, description)
+            if screen is not None:
+                screen.add_homework(description, [getattr(p, "image", None)
+                                                  for p in parts if getattr(p, "image", None)])
         await tutor.set_mode("talking")
         safe_interrupt(session, "homework")
         debug.record("prompt", {"kind": "homework_shared", "items": len(batch)})
@@ -735,6 +942,14 @@ async def entrypoint(ctx: JobContext) -> None:
         debug.record("browser_event", {"type": str(event.get("type", "?"))[:40]})
         if event.get("type") == "end":
             ending.set()
+        elif event.get("type") == "page-answer" and screen is not None:
+            # Smart-screen mode: the child's answer from an answer box prompts a reply.
+            page, part = str(event.get("page", ""))[:40], str(event.get("part", ""))[:40]
+            value = str(event.get("value", ""))
+            screen.record_answer(page, part, value, str(event.get("kind", "")))
+            debug.record("prompt", {"kind": "page_answer", "page": page, "part": part})
+            prompt_event(session, f"The child answered on page {page}, part {part}: "
+                                   f"{value[:500]} Respond briefly to what they wrote.")
         elif event.get("type") == "board-size":
             # The browser measures the real board pane (ResizeObserver) and
             # reports resizes/rotation mid-session; commission_board picks

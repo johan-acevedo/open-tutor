@@ -1,0 +1,83 @@
+#!/usr/bin/env python3
+"""Manual check: run one real Screen job per ask, back to back.
+
+Each positional argument is one tutor ask, run in order in a single process
+(pages stay visible between asks, so a second ask can patch the first page).
+Uses the real screen model and the real headless-Chromium renderer with an
+empty lesson. Prints timings, issues and where the files were saved.
+
+Run from the repo root (the key comes from the env wrapper, never printed):
+
+  OPEN_TUTOR_ENV=~/.config/open-tutor-screen-dev/env server/bin/with-env \
+    uv run --project server python server/bin/screen-try "En sida om ..."
+"""
+
+from __future__ import annotations
+
+import asyncio
+import os
+import sys
+import tempfile
+import time
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+
+from open_tutor.screen import Screen  # noqa: E402
+
+
+async def run_one(screen: Screen, ask: str) -> bool:
+    done: dict = {}
+    screen.on_page = lambda p: done.setdefault("page", p)
+    screen.on_patch = lambda p: done.setdefault("patch", p)
+    screen.on_failure = lambda m: done.setdefault("failure", m)
+    t0 = time.monotonic()
+    job = screen.ask(ask)
+    while "page" not in done and "patch" not in done and "failure" not in done:
+        if time.monotonic() - t0 > 120:
+            print(f"[{job}] GAVE UP after 120 s")
+            return False
+        await asyncio.sleep(0.5)
+    if "failure" in done:
+        print(f"[{job}] FAILED: {done['failure']}")
+        return False
+    result = done.get("page", done.get("patch"))
+    kind = "page" if "page" in done else "patch"
+    print(f"[{job}] {kind} {result.page_id} total={result.total_s:.1f}s "
+          f"(model={result.model_s:.1f}s render={result.render_s:.1f}s "
+          f"look={getattr(result, 'look_s', 0.0):.1f}s)")
+    print(f"[{job}] issues: {result.issues or 'none'}")
+    print(f"[{job}] saved: {result.directory}")
+    for path in sorted(result.directory.iterdir()):
+        print(f"[{job}]   {path.name} {path.stat().st_size} B")
+    if kind == "page":
+        print(f"[{job}] title: {result.title}")
+        screen.mark_visible(result.page_id)
+    return True
+
+
+async def main() -> int:
+    asks = sys.argv[1:]
+    if not asks:
+        print("usage: screen-try \"ask...\" [\"ask...\"]", file=sys.stderr)
+        return 2
+    print(f"model={os.environ.get('SCREEN_MODEL', 'muse-spark-1.3-contributor')} "
+          f"api={os.environ.get('SCREEN_API', 'auto')} "
+          f"reasoning={os.environ.get('SCREEN_REASONING', 'default')} "
+          f"look={os.environ.get('SCREEN_LOOK', '1')}")
+    out = tempfile.mkdtemp(prefix="screen-try-")
+    print(f"pages: {out}")
+    screen = Screen({"name": "Test", "grade": 4}, out, session_id="screen-try")
+    ok = True
+    try:
+        for ask in asks:
+            print(f"ask: {ask}")
+            if not await run_one(screen, ask):
+                ok = False
+                break
+    finally:
+        await screen.aclose()
+    return 0 if ok else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(asyncio.run(main()))
