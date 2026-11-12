@@ -255,6 +255,7 @@ class RenderedSection:
     descendants: list[SectionRef] = field(default_factory=list)
     stylesheets: list[Resource] = field(default_factory=list)
     images: list[Resource] = field(default_factory=list)
+    body_attributes: dict[str, str] = field(default_factory=dict)
     visible_text: str = ""
     visible_image_count: int = 0
     owned_text: str = ""
@@ -428,6 +429,8 @@ def render_section(resolver: SectionResolver, section_id: str) -> RenderedSectio
             descendants=list(descendants),
             stylesheets=stylesheets,
             images=images,
+            body_attributes={key: value for node in document.nodes if node.tag == "body"
+                             for key, value in node.attrs.items() if key in {"class", "lang", "dir"}},
             visible_text=visible_text,
             visible_image_count=visible_images,
             owned_text="\n\n".join(owned_texts),
@@ -477,6 +480,8 @@ def build_index_html(rendered: RenderedSection) -> str:
         if rendered.suppress_heading_numbers
         else ""
     )
+    body_attrs = "".join(f' {key}="{html_module.escape(value, quote=True)}"'
+                         for key, value in rendered.body_attributes.items())
     title = html_module.escape(section.heading or section.title, quote=True)
     return (
         "<!DOCTYPE html>\n"
@@ -493,7 +498,7 @@ def build_index_html(rendered: RenderedSection) -> str:
         f"{number_fix}\n"
         "    </style>\n"
         "  </head>\n"
-        "  <body>\n"
+        f'  <body{body_attrs} data-material-section="{section.id}">\n'
         "<!-- Safe to embed later with <iframe sandbox>: no scripts, local resources only. -->\n"
         f"{_provenance_header(rendered)}"
         f"{rendered.slice_html}\n"

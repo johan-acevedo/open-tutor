@@ -136,6 +136,8 @@ def create_app(
 
         @app.get("/{path:path}")
         async def page(path: str) -> FileResponse:
+            if path == "materials" or path == "api" or path.startswith(("materials/", "api/")):
+                raise HTTPException(status_code=404, detail="Not found")
             candidate = (WEB_DIST / path).resolve()
             if path and candidate.is_file() and candidate.is_relative_to(WEB_DIST.resolve()):
                 return FileResponse(candidate)

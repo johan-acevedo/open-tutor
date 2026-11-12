@@ -10,11 +10,14 @@ const ITEM = {
 } as const;
 
 const META = {
+  section_id: ITEM.section_id,
   attribution: 'Siyavula — Grade 6 Book — A simple circuit — CC-BY — siyavula.com',
 };
 
 function mockFetchOnce(body: unknown, ok = true, status = 200) {
-  const fetchMock = vi.fn(async () => ({ ok, status, json: async () => body }) as Response);
+  const fetchMock = vi.fn(async () => ({ ok, status, json: async () => body,
+    headers: new Headers({ 'content-type': 'text/html' }),
+    text: async () => `<body data-material-section="${ITEM.section_id}"></body>` }) as Response);
   vi.stubGlobal('fetch', fetchMock);
   return fetchMock;
 }
@@ -79,7 +82,7 @@ describe('MaterialSection', () => {
     });
     const fetchMock = vi.fn((url: string) => {
       if (url.includes('sec-ecd16baf9e4fee44')) return first as Promise<Response>;
-      return Promise.resolve({ ok: true, status: 200, json: async () => META } as Response);
+      return Promise.resolve({ ok: true, status: 200, json: async () => ({ ...META, section_id: 'sec-6a9c825e9c3f2cd2' }), headers: new Headers({ 'content-type': 'text/html' }), text: async () => '<body data-material-section="sec-6a9c825e9c3f2cd2"></body>' } as Response);
     });
     vi.stubGlobal('fetch', fetchMock);
     const onMounted = vi.fn();
@@ -128,4 +131,42 @@ describe('MaterialSection', () => {
     expect(onMounted).not.toHaveBeenCalled();
     await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy());
   });
+});
+
+
+it('re-shows the same section with a fresh acknowledgement and ignores duplicate loads', async () => {
+  mockFetchOnce(META);
+  const ack = vi.fn();
+  const fail = vi.fn();
+  const view = render(<MaterialSection item={{ ...ITEM }} onMounted={ack} onFailed={fail} />);
+  let frame = await screen.findByTitle(ITEM.title);
+  fireEvent.load(frame);
+  fireEvent.load(frame);
+  expect(ack).toHaveBeenCalledTimes(1);
+  view.rerender(<MaterialSection item={{ ...ITEM }} onMounted={ack} onFailed={fail} />);
+  await waitFor(() => expect(screen.getByTitle(ITEM.title)).not.toBe(frame));
+  frame = screen.getByTitle(ITEM.title);
+  fireEvent.load(frame);
+  expect(ack).toHaveBeenCalledTimes(2);
+});
+
+it('rejects metadata for another section', async () => {
+  mockFetchOnce({ ...META, section_id: 'sec-0000000000000001' });
+  const ack = vi.fn();
+  const fail = vi.fn();
+  render(<MaterialSection item={{ ...ITEM }} onMounted={ack} onFailed={fail} />);
+  await screen.findByRole('alert');
+  expect(fail).toHaveBeenCalled();
+  expect(ack).not.toHaveBeenCalled();
+});
+
+it('rejects an app shell returned as a material page', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => META,
+    headers: new Headers({ 'content-type': 'text/html' }), text: async () => '<html>App shell</html>' })));
+  const ack = vi.fn();
+  const fail = vi.fn();
+  render(<MaterialSection item={{ ...ITEM }} onMounted={ack} onFailed={fail} />);
+  await screen.findByRole('alert');
+  expect(ack).not.toHaveBeenCalled();
+  expect(fail).toHaveBeenCalled();
 });

@@ -168,7 +168,7 @@ class Tutor(Agent):
                 destination_identity=self.child_identity,
                 method=method,
                 payload=json.dumps(payload, ensure_ascii=False),
-                response_timeout=BOARD_RPC_TIMEOUT,
+                response_timeout=12.0 if payload.get("kind") == "material" else BOARD_RPC_TIMEOUT,
             )
             try:
                 data = json.loads(reply or "{}")

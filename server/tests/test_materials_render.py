@@ -333,3 +333,16 @@ def test_export_requires_fresh_directory(tmp_path):
     export_package(resolver, _ids(resolver)['Top'], out)
     with pytest.raises(ValueError, match='fresh empty'):
         export_package(resolver, _ids(resolver)['Top'], out)
+
+
+def test_export_preserves_body_styling_attributes(tmp_path):
+    doc = NESTED_DOC.replace('<body>', '<body class="energyandchange" lang="en" dir="ltr" id="not-copied">')
+    resolver = _resolver(tmp_path, NESTED_NAV, {'ch.xhtml': doc}, NESTED_ASSETS)
+    out = tmp_path / 'body-style'
+    section_id = _ids(resolver)['Top']
+    export_package(resolver, section_id, out)
+    page = (out / 'index.html').read_text()
+    assert 'class="energyandchange"' in page
+    assert 'dir="ltr"' in page
+    assert f'data-material-section="{section_id}"' in page
+    assert 'id="not-copied"' not in page

@@ -232,7 +232,7 @@ export function useSession(mobile = false) {
     }
   }, []);
 
-  const waitForMounted = useCallback((id: string) => {
+  const waitForMounted = useCallback((id: string, timeoutMs = MOUNT_TIMEOUT_MS) => {
     return new Promise<void>((resolve, reject) => {
       const waiter: { resolve: () => void; reject: (err: unknown) => void; timer: number } = {
         resolve,
@@ -250,7 +250,7 @@ export function useSession(mobile = false) {
           else mountResolvers.current.delete(id);
           reject(new RpcError(1501, 'The browser did not confirm rendering this board item'));
         }
-      }, MOUNT_TIMEOUT_MS);
+      }, timeoutMs);
     });
   }, []);
 
@@ -446,7 +446,7 @@ export function useSession(mobile = false) {
         });
         setFocused(null);
         setActiveItemId(v.item.id);
-        await waitForMounted(v.item.id);
+        await waitForMounted(v.item.id, v.item.kind === 'material' ? 10000 : MOUNT_TIMEOUT_MS);
         // For the first pending item this mount flips arrival->teaching:
         // report the size only once that transition has settled, so the
         // tutor commissions the finished pane, not the arrival one.
@@ -473,7 +473,7 @@ export function useSession(mobile = false) {
           return [...prev, v.item];
         });
         setActiveItemId(v.item.id);
-        await waitForMounted(v.item.id);
+        await waitForMounted(v.item.id, v.item.kind === 'material' ? 10000 : MOUNT_TIMEOUT_MS);
         await waitForBoardLayout();
         return JSON.stringify({ ok: true, board: readBoardSize() });
       });

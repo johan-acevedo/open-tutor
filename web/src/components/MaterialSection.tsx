@@ -11,7 +11,7 @@ type Props = {
 
 type Status =
   | { phase: 'loading' }
-  | { phase: 'ready'; attribution: string }
+  | { phase: 'ready'; attribution: string; generation: number }
   | { phase: 'error'; message: string };
 
 const FALLBACK_HEIGHT = 480;
@@ -27,9 +27,10 @@ function availHeight(wrap: HTMLElement | null): number | null {
   return h >= 1 ? h : null;
 }
 
-function parseAttribution(raw: unknown): string | null {
+function parseAttribution(raw: unknown, sectionId: string): string | null {
   if (typeof raw !== 'object' || raw === null) return null;
-  const attribution = (raw as Record<string, unknown>).attribution;
+  if (!('section_id' in raw) || raw.section_id !== sectionId || !('attribution' in raw)) return null;
+  const attribution = raw.attribution;
   return typeof attribution === 'string' && attribution ? attribution : null;
 }
 
@@ -37,7 +38,8 @@ function parseAttribution(raw: unknown): string | null {
  * Original book section beside the fox: metadata first, then the packaged
  * page in a fully opaque frame (`sandbox=""` — no scripts, no same-origin).
  *
- * Readiness: `onMounted` fires only after metadata parses AND the frame's
+ * Readiness: `onMounted` fires only after matching metadata, a successful HTML
+ * preflight with the source-ID marker, AND the frame's
  * `load` event fires for the current section. `onLoad` proves the top-level
  * document loaded — it says nothing about whether every image or stylesheet
  * inside finished, so image completeness is never claimed from it. Metadata
@@ -57,6 +59,7 @@ export default function MaterialSection({ item, onMounted, onFailed }: Props) {
   const seqRef = useRef(0);
   const liveRef = useRef(true);
   const failedRef = useRef(false);
+  const acknowledgedRef = useRef<number | null>(null);
 
   useEffect(() => {
     liveRef.current = true;
@@ -89,25 +92,6 @@ export default function MaterialSection({ item, onMounted, onFailed }: Props) {
     };
   }, []);
 
-  // Frame-level failure (jsdom and some browsers never route iframe errors
-  // through React's onError, so this listens imperatively). A failed frame
-  // rejects the acknowledgement; it never resolves it.
-  useEffect(() => {
-    if (status.phase !== 'ready') return;
-    const el = frameRef.current;
-    if (!el) return;
-    const onErr = () => {
-      if (!liveRef.current) return;
-      failedRef.current = true;
-      const message = 'Originalsidan kunde inte visas';
-      setStatus({ phase: 'error', message });
-      onFailed(item.id, message);
-    };
-    el.addEventListener('error', onErr);
-    return () => el.removeEventListener('error', onErr);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status.phase, item.id, sectionId, attempt]);
-
   // Metadata fetch, scoped to this item + retry attempt. Stale responses
   // (a newer section replaced this one) are ignored, never acknowledged.
   useEffect(() => {
@@ -119,10 +103,19 @@ export default function MaterialSection({ item, onMounted, onFailed }: Props) {
       try {
         const res = await fetch(metaUrl, { signal: ctrl.signal });
         if (!res.ok) throw new Error(`Material ${res.status}`);
-        const attribution = parseAttribution(await res.json());
+        const attribution = parseAttribution(await res.json(), sectionId);
         if (!attribution) throw new Error('Material metadata saknas');
         if (seqRef.current !== seq || !liveRef.current) return;
-        setStatus({ phase: 'ready', attribution });
+        const page = await fetch(pageUrl, { signal: ctrl.signal, cache: 'no-cache' });
+        if (!page.ok || !page.headers.get('content-type')?.includes('text/html')) {
+          throw new Error('Originalsidan kunde inte hämtas');
+        }
+        const html = await page.text();
+        if (!html.includes(`data-material-section="${sectionId}"`)) {
+          throw new Error('Fel originalsida returnerades');
+        }
+        if (seqRef.current !== seq || !liveRef.current) return;
+        setStatus({ phase: 'ready', attribution, generation: seq });
       } catch (err) {
         if (ctrl.signal.aborted || seqRef.current !== seq || !liveRef.current) return;
         const message = err instanceof Error ? err.message : 'Kunde inte hämta originalsidan';
@@ -133,7 +126,7 @@ export default function MaterialSection({ item, onMounted, onFailed }: Props) {
     })();
     return () => ctrl.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [item.id, sectionId, attempt]);
+  }, [item, attempt]);
 
   const ready = status.phase === 'ready';
   return (
@@ -159,19 +152,31 @@ export default function MaterialSection({ item, onMounted, onFailed }: Props) {
         )}
         {ready && (
           <iframe
-            key={`${item.id}:${sectionId}:${attempt}`}
-            ref={frameRef}
+            key={`${item.id}:${sectionId}:${attempt}:${status.phase === 'ready' ? status.generation : 0}`}
+            ref={(frame) => {
+              frameRef.current = frame;
+              if (frame) frame.onerror = () => {
+                if (!liveRef.current || status.phase !== 'ready' || status.generation !== seqRef.current) return;
+                failedRef.current = true;
+                const message = 'Originalsidan kunde inte visas';
+                setStatus({ phase: 'error', message });
+                onFailed(item.id, message);
+              };
+            }}
             className="ot-material-frame"
             title={item.title}
             src={pageUrl}
             sandbox=""
             referrerPolicy="no-referrer"
             style={{ height: frameH }}
-            onLoad={() => {
+            onLoad={(event) => {
               // Only the current section's first load counts: retries and
               // replacements remount the frame (key), and an earlier failure
               // already rejected this item's acknowledgement.
-              if (failedRef.current || !liveRef.current) return;
+              if (failedRef.current || !liveRef.current || status.phase !== 'ready'
+                || status.generation !== seqRef.current || event.currentTarget !== frameRef.current
+                || acknowledgedRef.current === status.generation) return;
+              acknowledgedRef.current = status.generation;
               onMounted(item.id);
             }}
           />

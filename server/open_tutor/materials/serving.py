@@ -55,7 +55,7 @@ from .render import PACKAGE_SCHEMA, SectionResolver, export_package, validate_pa
 
 # Bump when serving-visible renderer behaviour changes: cache directories carry
 # this version, so old packages are never reused after an upgrade.
-PACKAGE_VERSION = "2"
+PACKAGE_VERSION = "3"
 
 COMPLETE_MARKER = ".complete"
 
@@ -79,7 +79,7 @@ _STYLE_BLOCK_RE = re.compile(r"<style\b[^>]*>(.*?)</style\s*>", re.IGNORECASE | 
 _HOST_RE = re.compile(r"^(?:[A-Za-z0-9.\-]+|\[[0-9A-Fa-f:.]+\])(?::\d{1,5})?$")
 
 METADATA_CACHE_CONTROL = "no-store"
-PAGE_CACHE_CONTROL = "private, max-age=3600"
+PAGE_CACHE_CONTROL = "private, no-cache"
 ASSET_CACHE_CONTROL = "private, max-age=3600"
 
 
