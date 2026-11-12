@@ -809,6 +809,9 @@ async def entrypoint(ctx: JobContext) -> None:
             session_id=ctx.room.name,
         )
         tutor: Tutor = SmartTutor(learner, ctx.room, board=board, screen=screen)
+        # The first screen job must not pay for the browser launch: start it
+        # while the greeting still runs. The job path keeps its own fallback.
+        asyncio.create_task(screen.warmup())
     else:
         tutor = Tutor(learner, ctx.room, board=board)
     tutor.child_identity = child.identity

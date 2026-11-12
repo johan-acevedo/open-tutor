@@ -38,6 +38,9 @@ from screen.tools import screenkit as screenkit  # noqa: E402
 
 SCREEN_BASE_URL = "https://opencode.ai/inference/go/openai/v1"
 JOB_TIMEOUT_S = 45.0
+# Defaults: Muse Spark on Responses with minimal reasoning. DeepSeek models use
+# Chat Completions with low reasoning. SCREEN_MODEL / SCREEN_REASONING override;
+# the model itself is never changed by the timing work (see docs/smart-screen.md).
 MAX_TURNS = 40  # conversation turns kept per request; sessions run long
 MAX_HOMEWORK_IMAGES = 4
 
@@ -168,6 +171,8 @@ class Screen:
         self._runner: asyncio.Task | None = None
         self._pw = None
         self._browser = None
+        self._system: str | None = None  # static prefix, computed once so every
+        # call sends byte-identical instructions (provider prompt caching).
 
     # ---- lesson ----------------------------------------------------------
 
@@ -257,6 +262,25 @@ class Screen:
             if inspect.isawaitable(result):
                 await result
 
+    def system_prompt(self) -> str:
+        """The static prefix, computed once per session and reused verbatim."""
+        if self._system is None:
+            self._system = screen_prompt.system_prompt()
+        return self._system
+
+    async def warmup(self) -> None:
+        """Start the headless browser now (at session start) so the first job
+        does not pay for the launch. Safe to call more than once."""
+        try:
+            from playwright.async_api import async_playwright
+
+            if self._pw is None:
+                self._pw = await async_playwright().start()
+            if self._browser is None or not self._browser.is_connected():
+                self._browser = await self._pw.chromium.launch()
+        except Exception as error:  # noqa: BLE001 - first job will retry
+            log.warning("screen warmup failed: %s", error)
+
     def _learner_line(self) -> str:
         name = str(self.learner.get("name") or "").strip()[:40] or "eleven"
         grade = self.learner.get("grade")
@@ -336,6 +360,13 @@ class Screen:
             json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
         return job_dir
 
+    def model_spec(self) -> dict[str, str]:
+        """Which screen model and reasoning level this session uses."""
+        model = _screen_env("SCREEN_MODEL", "muse-spark-1.3-contributor")
+        api = _screen_env("SCREEN_API", "") or ("chat" if "deepseek" in model.lower() else "responses")
+        effort = _screen_env("SCREEN_REASONING", "") or ("low" if api == "chat" else "minimal")
+        return {"model": model, "api": api, "reasoning": effort}
+
     async def _run_job(self, job_id: str, ask: str) -> None:
         from .debug_log import record_active
 
@@ -343,7 +374,7 @@ class Screen:
         if not ask:
             await self._fail(job_id, "The screen got an empty ask. Explain in words instead, briefly.")
             return
-        system = screen_prompt.system_prompt()
+        system = self.system_prompt()
         user = self._build_user_text(ask)
         answer, model_s = await self._call_model(system, user)
         answer = strip_fences(answer)
@@ -367,9 +398,13 @@ class Screen:
         visible = self.pages[self.visible_id]
         png, issues, render_s = await self._render(visible.body, patch)
         total_s = time.monotonic() - t0
+        spec = self.model_spec()
+        w, h = self._pane_size()
         job_dir = self._save(job_id, ask,
                              {"patch.html": patch, "patched.png": png},
                              {"job": job_id, "kind": "patch", "page": visible.page_id,
+                              "model": spec["model"], "reasoning": spec["reasoning"],
+                              "pane": [w, h],
                               "model_s": round(model_s, 2), "render_s": round(render_s, 2),
                               "total_s": round(total_s, 2), "issues": issues})
         record_active("screen_patch", {"job": job_id, "page": visible.page_id,
@@ -398,10 +433,14 @@ class Screen:
                 png, issues, extra_s = await self._render(body, None)
                 render_s += extra_s
         total_s = time.monotonic() - t0
+        spec = self.model_spec()
+        w, h = self._pane_size()
         job_dir = self._save(job_id, ask,
                              {"page.html": body, "shot.png": png},
                              {"job": job_id, "kind": "page", "page": page_id,
                               "title": page_title(body, page_id),
+                              "model": spec["model"], "reasoning": spec["reasoning"],
+                              "pane": [w, h],
                               "model_s": round(model_s, 2), "render_s": round(render_s, 2),
                               "look_s": round(look_s, 2), "total_s": round(total_s, 2),
                               "issues": issues})
@@ -422,7 +461,7 @@ class Screen:
         """Show the model its own render; it answers OK or a corrected body."""
         from .debug_log import record_active
 
-        system = screen_prompt.system_prompt()
+        system = self.system_prompt()
         reported = ", ".join(str(i) for i in issues) if issues else "none"
         user = (f"The tutor's ask was: {ask}\n\nYour page rendered like the screenshot. "
                 f"The shell reports these issues: {reported}.\n\n"
@@ -502,7 +541,9 @@ class Screen:
     async def _default_render_page(self, body: str, patch: str | None,
                                    width: int, height: int) -> tuple[bytes, list]:
         """Render with the shell the way the app does, in headless Chromium.
-        One browser per session, shared across jobs; pages open and close."""
+        One browser per session, shared across jobs; pages open and close.
+        The browser is warmed up at session start (see warmup()); a first job
+        that arrives before the warmup finished still launches it here."""
         from playwright.async_api import async_playwright
 
         if self._pw is None:
@@ -512,7 +553,17 @@ class Screen:
         page = await self._browser.new_page(viewport={"width": width, "height": height})
         try:
             await page.set_content(screenkit.host_page(screenkit.compose(body)))
-            frame = page.frames[1] if len(page.frames) > 1 else page.main_frame
+            # The inner srcdoc frame may not exist on the very first tick;
+            # wait for it instead of falling back to the outer document,
+            # which never reports otReady and would cost a 30 s timeout.
+            frame = None
+            for _ in range(100):
+                if len(page.frames) > 1:
+                    frame = page.frames[1]
+                    break
+                await page.wait_for_timeout(50)
+            if frame is None:
+                frame = page.main_frame
             await frame.wait_for_function(
                 "() => document.documentElement.dataset.otReady === '1'", timeout=30000)
             info = await frame.evaluate("() => ({fontPx: ot.fontPx, issues: ot.issues})")
