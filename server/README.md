@@ -33,7 +33,7 @@ Go serves Muse Spark 1.3 Contributor only on its OpenAI Responses endpoint, `htt
 
 The Screen development fox uses Muse Spark 1.3 Contributor through OpenCode Go: `TUTOR_LLM=go` and `TUTOR_LLM_MODEL=muse-spark-1.3-contributor`. It uses the Responses API with the existing `OPENCODE_GO_API_KEY` and default `minimal` reasoning. The legacy `gemini-dev` override was removed from the running development configuration on 2026-11-12.
 
-The Screen development instance uses ZONOS3-Mini on pc2014 with the Swedish embedding voice:
+ZONOS3-Mini remains selectable on pc2014 with the Swedish embedding voice:
 
 ```sh
 TUTOR_TTS=zonos
@@ -43,7 +43,7 @@ TUTOR_TTS_VOICE=default_6c74e01948232c55
 
 `open_tutor/zonos_tts.py` posts complete sentences to `/v2/generate` with explicit embedding mode and decodes the returned WAV into 44.1 kHz mono PCM. LiveKit's standard sentence adapter connects it to streamed LLM text and handles playback cancellation. Each sentence waits for HTTP synthesis before playback; this endpoint does not stream generated audio. It requires no paid-provider API key. The direct provider probe and a real browser fox session both produced audio on 2026-11-12.
 
-Deepgram Flux remains selectable with these settings:
+The Screen development instance uses Deepgram Flux for live speech with these settings:
 
 ```sh
 TUTOR_TTS=deepgram
@@ -81,7 +81,7 @@ The Screen development worker enables this setting. Set it to `0` and restart th
 
 ## Local speech for pre-rendering
 
-VoxCPM2 is available over the tailnet at <https://johan-4070.tail2e1c4e.ts.net:8447>. It provides an unmetered HTTP synthesis endpoint. The app does not call it automatically; ZONOS3 on pc2014 is the development fox's live voice path. A LiveKit adapter is still needed to use VoxCPM2 for live sessions.
+VoxCPM2 is available over the tailnet at <https://johan-4070.tail2e1c4e.ts.net:8447>. It provides an unmetered HTTP synthesis endpoint. The app does not call it automatically; Deepgram is the development fox's live voice path. A LiveKit adapter is still needed to use VoxCPM2 for live sessions.
 
 Use `warm-voice-v2` explicitly for Räven. Its anchor supports Swedish and English. `warm-voice-v1` is English, and `warm-voice-v3` is a clone anchor. The health response currently reports `warm-voice-v1` as the default.
 
@@ -121,7 +121,7 @@ ZONOS3-Mini has two endpoints with the same API and voices:
 | johan-4070 | <https://johan-4070.tail2e1c4e.ts.net:8448> |
 | pc2014 | <https://pc2014.tail2e1c4e.ts.net:8448> |
 
-Both expose the same API and speaker ids. Change only `TUTOR_TTS_BASE_URL` to use the other host. The johan-4070 instance proxies port 1919. The development fox selects pc2014 through the ZONOS3 LiveKit adapter. Automatic provider failover is not implemented.
+Both expose the same API and speaker ids. Change only `TUTOR_TTS_BASE_URL` to use the other host. The johan-4070 instance proxies port 1919. The ZONOS3 LiveKit adapter can select either host; the development fox currently uses Deepgram. Automatic provider failover is not implemented.
 
 `GET /v2/speakers` was checked on both endpoints from dell5500 on 2026-11-12 and returned these embedding voices:
 
@@ -149,7 +149,7 @@ The pc2014 endpoint now runs Vulkan on the RX 6500 XT, according to Johan's late
 
 Operator measurements: a solo request generated about 3.7 seconds of audio in 1.3 seconds (2.9× realtime). Eight simultaneous requests all returned HTTP 200 in 6–12 seconds each, with aggregate throughput about 2.75× realtime and stable VRAM. Whisper confirmed Swedish output from the served endpoint. These are operator results, not measurements repeated by this thread.
 
-The operator recommends this box for unmetered bulk synthesis, pre-rendering, and fallback because latency under concurrency is unsuitable for live conversation. The development fox still selects this endpoint through its batch ZONOS3 adapter; a return to Deepgram for live speech is pending Johan's provider choice. VoxCPM2 on johan-4070 remains available but has no application adapter. The previous CPU service and Vulkan capacity verdict are historical; do not infer the active backend from those earlier notes.
+The operator recommends this box for unmetered bulk synthesis, pre-rendering, and fallback because latency under concurrency is unsuitable for live conversation. Johan selected Deepgram for the development fox's live speech. ZONOS3 remains available through its batch adapter when explicitly selected. VoxCPM2 on johan-4070 remains available but has no application adapter. The previous CPU service and Vulkan capacity verdict are historical; do not infer the active backend from those earlier notes.
 
 Service: `zonos3-tts.service`, enabled at boot. Source/build: `~/zonos3` on johan-4070; voice embeddings: `~/zonos3/voices`. Logs: `ssh johan-4070 'journalctl --user -u zonos3-tts'`. The same endpoint serves the Studio UI. The operator reports optional delivery steering through `steer.gguf` and `/v2/controls`. No backend rebuild, synthesis, or listening check was performed when recording this handoff.
 

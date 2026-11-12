@@ -1,6 +1,6 @@
 # Browser-owned Screen track
 
-Status: Screen fixes reviewed; Muse fox with local pc2014 ZONOS3 speech verified in development, 2026-11-12.
+Status: Screen fixes reviewed; Muse fox with Deepgram live speech and session logging verified in development, 2026-11-12.
 Lead: this thread. Workers receive focused briefs; the lead owns integration and decisions.
 
 ## Source of truth
@@ -266,3 +266,5 @@ Johan subsequently authorized using pc2014 ZONOS3 as the fox's active speech pro
 Development session logging is now enabled at Johan's request for experience iteration before merging. The worker's private environment sets `TUTOR_DEBUG_LOG=1` and stores session timelines and reports under `/home/johan/.local/state/open-tutor-screen-dev/sessions` on dell5500. A fictional learner connected through the served development API and LiveKit; its log captured the fox greeting, a typed learner request, the fox's response, and the disconnect, then wrote `report.json` with outcome `child_left`. Both files have mode 0600. Cloud audio recording stays off. Logging applies to new sessions and cannot recover earlier conversations; main and production are unchanged.
 
 Latest pc2014 operator handoff supersedes the earlier CPU-only verdict: competing GPU services were stopped and disabled with Johan's approval, and the same port-8448 endpoint now serves ZONOS3 through Vulkan with about 2.6 GB VRAM headroom. Johan reports correct Swedish, about 2.9× realtime solo, and eight successful simultaneous requests with 6–12 second latency each. This thread did not repeat those measurements. The operator recommends bulk/pre-render/fallback use; the development app still selects ZONOS3 while the live-provider choice is clarified. No application configuration or production change was made for this handoff.
+
+Johan selected Deepgram for live speech after the dedicated pc2014 Vulkan handoff. The development environment now uses `TUTOR_TTS=deepgram`, `TUTOR_TTS_MODEL=flux-ludvig-sv`, and `TUTOR_TTS_EXPRESSIVITY=1`; unused ZONOS3 URL/voice overrides were removed. Only the development worker was restarted. A fictional learner connected through the served development API and LiveKit, received non-silent audio, and left a captured fox transcript and final session report. The report confirms Deepgram plus Muse through Go with debug logging enabled. ZONOS3 remains selectable for bulk/pre-render/fallback work, with no automatic provider failover. Main and production are unchanged.
