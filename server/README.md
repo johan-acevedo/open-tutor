@@ -143,6 +143,26 @@ Default off, so open-source adopters get no behaviour or file change.
   `{ok:true, board:{w,h,device}}` once the pane has settled; the worker uses those
   dims for the frozen design box. Plain `{ok:true}` peers still work.
 
+## Material search proof
+
+`open_tutor/materials/search.py` builds an exact cosine index from passage records and
+`scripts/search_materials.py` drives it. This is the bounded EmbeddingGemma 2 proof, not a
+production feature: evidence, sample definition, per-query IDs and limitations are in
+[docs/material-library/step2b-embedding-proof.md](../docs/material-library/step2b-embedding-proof.md).
+
+The model and index are an optional dependency group and never part of the server runtime:
+
+```bash
+uv sync --group ml --python 3.13                 # sentence-transformers, torch, torchvision (CPU)
+bin/with-env uv run --no-sync python scripts/search_materials.py prove
+bin/with-env uv run --no-sync python scripts/search_materials.py query --query "how do plants make food?"
+```
+
+Weights stay in the Hugging Face cache and the index in
+`~/.local/share/open-tutor/materials/embeddinggemma-2-index`. Only owned passage text plus heading
+and breadcrumb context is embedded; passage HTML spans are never model input, empty passages are
+skipped, and hits carry `text_complete: false` when the original content is partly images.
+
 ## Tests
 
 ```bash
