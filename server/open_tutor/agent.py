@@ -45,6 +45,7 @@ from .config import AGENT_NAME, DEFAULT_TTS_MODEL, DEFAULT_TTS_VOICE, env_float
 from .debug_log import DebugLog, clear_active, record_active, set_active
 from .dialogue_tts import DialogueTTS, is_dialogue_model
 from .deepgram_tts import DeepgramFluxTTS, DEFAULT_MODEL as DEEPGRAM_DEFAULT_MODEL, parse_expressivity
+from .zonos_tts import ZonosTTS, DEFAULT_BASE_URL as ZONOS_DEFAULT_URL, DEFAULT_VOICE as ZONOS_DEFAULT_VOICE
 from .tutor_llm import build_llm, warm_up
 from .speech import speakable_stream, unspoken_stream
 
@@ -103,6 +104,14 @@ def build_tts():
                 os.environ.get("TUTOR_TTS_EXPRESSIVITY", "1")
             ),
             api_key=os.environ.get("DEEPGRAM_API_KEY") or None,
+        )
+    if provider == "zonos":
+        # Self-hosted ZONOS3-Mini ggml server (Swedish, unmetered). Opt-in:
+        # TUTOR_TTS=zonos [TUTOR_TTS_ZONOS_URL=...] [TUTOR_TTS_VOICE=<speaker id>].
+        # No silent fallback: a bad URL or voice raises here, before the session.
+        return ZonosTTS(
+            base_url=os.environ.get("TUTOR_TTS_ZONOS_URL", ZONOS_DEFAULT_URL),
+            voice=os.environ.get("TUTOR_TTS_VOICE", ZONOS_DEFAULT_VOICE),
         )
     model = os.environ.get("TUTOR_TTS_MODEL", DEFAULT_TTS_MODEL)
     voice = os.environ.get("TUTOR_TTS_VOICE") or DEFAULT_TTS_VOICE
