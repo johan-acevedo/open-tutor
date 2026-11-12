@@ -318,16 +318,21 @@ def build_index(
 
 
 def query_index(
-    index: SearchIndex, embedder: TextEmbedder, query: str, limit: int = 5
+    index: SearchIndex, embedder: TextEmbedder, query: str, limit: int | None = 5
 ) -> list[dict]:
-    """Rank passages against one query; raises if the index came from another model."""
+    """Rank passages against one query; raises if the index came from another model.
+
+    ``limit=None`` ranks every passage, so a caller that reduces passages to
+    sections (one candidate per section) does not have to guess a large enough
+    limit.
+    """
     if index.model_id != embedder.model_id or index.model_revision != embedder.model_revision:
         raise ValueError(
             "Index was built with "
             f"{index.model_id}@{index.model_revision}, but the loaded model is "
             f"{embedder.model_id}@{embedder.model_revision}; rebuild the index"
         )
-    if limit <= 0:
+    if limit is not None and limit <= 0:
         raise ValueError("limit must be positive")
     return rank_index(index, embedder.encode_query(query), limit=limit)
 

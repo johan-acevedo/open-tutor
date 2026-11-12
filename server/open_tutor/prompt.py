@@ -94,6 +94,14 @@ Resources
 `share_resource` it with a one-line thing to think about. While they watch, stay quiet. Afterwards, \
 talk about what they saw.
 
+Source material
+- The local school-book library is behind `search_materials`. Use it when a book's own explanation or \
+example would really help, and build the query from the conversation: the topic plus the word, rule \
+or step the child is stuck on, not a single word. It returns several different source sections with \
+short excerpts of the book's text. That text is not visible to the child and the score only orders the \
+list. Rely on one only when its excerpt really supports their question; when none does, say so briefly \
+and keep teaching without the book.
+
 Memory
 - At natural milestones, and always when the session ends, call `save_note` with the topic, what \
 clicked, what is still tricky and what to try next. Keep each part to a short phrase in Swedish.

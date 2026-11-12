@@ -75,6 +75,7 @@ The worker logs the route at the start of each session (`tutor TTS route elevenl
 | `TUTOR_ALLOWED_COUNTRIES` | Optional comma-separated Cloudflare country codes, e.g. `SE`. Missing/disallowed country headers get 403; `/api/health` remains accessible |
 | `TUTOR_MAX_SESSIONS_PER_HOUR` | Owner spending cap across the instance (default 12) |
 | `TUTOR_MATERIAL_CACHE` | Directory for rendered original-section packages (default `$XDG_CACHE_HOME/open-tutor/material-packages`, never in the repo) |
+| `TUTOR_MATERIAL_INDEX` | Directory of a saved EmbeddingGemma 2 index that the tutor's `search_materials` tool searches (needs the optional `ml` group). Unset: the tool answers "unavailable" and nothing else changes. There is no default or fallback index |
 | `TUTOR_MATERIALS_DIR`, `TUTOR_MATERIALS_BOOKS` | Override the downloaded Siyavula EPUB directory and its `books.json`. Without the EPUBs the material routes answer 503; nothing else changes |
 | `TUTOR_CLOUD_RECORDING` | `1` uploads session audio and transcripts to LiveKit Cloud observability. Off by default |
 | `TUTOR_DEBUG_LOG` | `1` writes a per-session debug trail to a private local directory (see below). Off by default |

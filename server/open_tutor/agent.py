@@ -45,6 +45,7 @@ from .config import AGENT_NAME, DEFAULT_TTS_MODEL, DEFAULT_TTS_VOICE, env_float
 from .debug_log import DebugLog, clear_active, record_active, set_active
 from .dialogue_tts import DialogueTTS, is_dialogue_model
 from .deepgram_tts import DeepgramFluxTTS, DEFAULT_MODEL as DEEPGRAM_DEFAULT_MODEL, parse_expressivity
+from .materials.runtime import MaterialsUnavailable, search_material
 from .tutor_llm import build_llm, warm_up
 from .speech import speakable_stream, unspoken_stream
 
@@ -63,6 +64,26 @@ BOARD_STARTED = (
     "ask a relevant question while it draws. Do not just announce a wait or describe "
     "the unseen board. Respond normally if the child speaks. "
     "The finished board and screenshot will arrive automatically; do not request another drawing."
+)
+
+# Tutor-facing reading of a material search result. The excerpts are the book's
+# own source text (possibly including teacher prose from the original EPUB), not
+# content the child can see, and a cosine score only orders the candidate list.
+MATERIAL_SEARCH_NOTE = (
+    "source_excerpt is the book's own source text, not something the child can see: "
+    "nothing was shown on the board and they still see only what was there before. "
+    "score only orders these candidates against the query; it is not a confidence that "
+    "a section answers the child's question. Read the excerpts and use one only when it "
+    "really supports what they asked; when none does, say briefly that the library did "
+    "not cover it and keep teaching in words. This searches only the indexed part of the "
+    "library, not every book."
+)
+MATERIAL_NO_QUERY = (
+    "No search query was given, so nothing was searched and nothing was shown. Say in a "
+    "few clear words what the child needs explained, then search again."
+)
+MATERIAL_SEARCH_FAILED = (
+    "Material search failed, so nothing was searched or shown. Continue teaching in words."
 )
 
 # Board size limits (CSS px). The client measures the real board pane and
@@ -474,6 +495,50 @@ class Tutor(Agent):
             + " Say one short sentence (what to look for), then stay quiet while they watch or read. "
             "When they come back or press 'Klar', talk about it."
         )
+
+    # ---- source material ---------------------------------------------------------
+
+    @function_tool()
+    async def search_materials(self, context: RunContext, query: str) -> str:
+        """Search the local school-book library for sections that explain this.
+
+        Use it when a book's own explanation, definition or worked example would
+        genuinely help, and build the query from the conversation: the topic plus
+        the word, rule or step the child is stuck on, not a single word. It searches
+        only the indexed part of the library and changes nothing on screen. It
+        returns several *different* source sections with short excerpts of the
+        book's own text. That text is not visible to the child, and the score only
+        orders the list. Read the excerpts and use one only when it really supports
+        the child's question; if none does, say briefly that the library did not
+        help and keep teaching in words.
+
+        Args:
+            query: What to look up, in Swedish or English, e.g. "hur en sluten krets
+                får lampan att lysa" or "photosynthesis light and dark reactions".
+        """
+        text = (query or "").strip()
+        if not text:
+            return MATERIAL_NO_QUERY
+        try:
+            payload = await search_material(text)
+        except MaterialsUnavailable as error:
+            log.info("material search unavailable: %s", error)
+            record_active("material_search", {"ok": False, "reason": str(error)[:200]})
+            return (
+                f"Material search is unavailable on this machine ({error}). Nothing was "
+                "searched and nothing was shown. Continue teaching in words."
+            )
+        except Exception as error:  # inference, disk or configuration failure
+            log.warning("material search failed: %s", error)
+            record_active("material_search", {
+                "ok": False, "reason": f"{type(error).__name__}: {error}"[:200]})
+            return MATERIAL_SEARCH_FAILED
+        record_active("material_search", {
+            "ok": True,
+            "query": text[:200],
+            "candidates": [candidate["section_id"] for candidate in payload["candidates"]],
+        })
+        return json.dumps({**payload, "note": MATERIAL_SEARCH_NOTE}, ensure_ascii=False)
 
     # ---- quiet work and memory -------------------------------------------------
 
