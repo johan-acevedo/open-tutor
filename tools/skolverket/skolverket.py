@@ -142,7 +142,6 @@ class Client:
     def get(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         """GET a JSON document. Returns the full parsed response, never truncated."""
         url = self._url(path, params)
-        cached_load_error: str | None = None
         if self.cache_dir:
             try:
                 os.makedirs(self.cache_dir, exist_ok=True)
@@ -150,8 +149,8 @@ class Client:
                 if os.path.exists(p) and time.time() - os.path.getmtime(p) < self.cache_ttl:
                     with open(p, encoding="utf-8") as fh:
                         return json.load(fh)
-            except (OSError, ValueError) as exc:  # corrupt cache: refetch live
-                cached_load_error = str(exc)
+            except (OSError, ValueError):  # corrupt cache: refetch live
+                pass
         req = urllib.request.Request(url, headers={"Accept": "application/json", "User-Agent": f"open-tutor-skolverket/{VERSION}"})
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:
@@ -171,7 +170,6 @@ class Client:
                     json.dump(data, fh, ensure_ascii=False)
             except OSError:
                 pass  # cache is best-effort; live data was already returned
-        _ = cached_load_error
         return data
 
     # -- valuestore ------------------------------------------------------

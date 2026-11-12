@@ -2,6 +2,12 @@
 
 A live voice tutor that helps children understand their schoolwork and take the next step themselves.
 
+## Educational material tools
+
+Agents can [look up Swedish curricula and subject content](tools/skolverket/README.md)
+through Skolverket's Syllabus API and [download English Siyavula books](tools/siyavula/README.md)
+with source records and file checks. These tools run independently of the tutor.
+
 ## Founding brief
 
 This document records the project's starting intent. Open Tutor is a working name. There is no application yet.

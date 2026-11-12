@@ -1,0 +1,163 @@
+{
+  "catalogue_url": "https://www.siyavula.com/read",
+  "catalogue_license_url": "https://creativecommons.org/licenses/by/3.0/",
+  "attribution": "Siyavula Education and the contributors credited in each book. Original English unbranded EPUBs, unchanged. See each book for authors, sponsors, image credits, and its embedded license notice.",
+  "books": [
+    {
+      "id": "natural-sciences-and-technology-4",
+      "title": "Natural Sciences and Technology, Grade 4",
+      "grade": 4,
+      "curriculum": "South Africa CAPS",
+      "language": "en",
+      "license": "CC-BY",
+      "url": "https://www.siyavula.com/downloads/books/science/Gr4_NaturalSciences_Learner_Eng_CC-BY.epub",
+      "filename": "Gr4_NaturalSciences_Learner_Eng_CC-BY.epub",
+      "sha256": "48f0d1027ea9e12abceb1aeca17372c9ddd7357c35e23f0d8c001a0a7901322a",
+      "bytes": 40926007
+    },
+    {
+      "id": "natural-sciences-and-technology-5",
+      "title": "Natural Sciences and Technology, Grade 5",
+      "grade": 5,
+      "curriculum": "South Africa CAPS",
+      "language": "en",
+      "license": "CC-BY",
+      "url": "https://www.siyavula.com/downloads/books/science/Gr5_NaturalSciences_Learner_Eng_CC-BY.epub",
+      "filename": "Gr5_NaturalSciences_Learner_Eng_CC-BY.epub",
+      "sha256": "5019d3898a67e98519cec671ef9487d893ad878bb227da8993199140df2a89f9",
+      "bytes": 46100488
+    },
+    {
+      "id": "natural-sciences-and-technology-6",
+      "title": "Natural Sciences and Technology, Grade 6",
+      "grade": 6,
+      "curriculum": "South Africa CAPS",
+      "language": "en",
+      "license": "CC-BY",
+      "url": "https://www.siyavula.com/downloads/books/science/Gr6_NaturalSciences_Learner_Eng_CC-BY.epub",
+      "filename": "Gr6_NaturalSciences_Learner_Eng_CC-BY.epub",
+      "sha256": "87d28ca7362de99fbf4d70f9b547f5640938adc1e8130f7d6b11ccce77d95264",
+      "bytes": 31912860
+    },
+    {
+      "id": "natural-sciences-7",
+      "title": "Natural Sciences, Grade 7",
+      "grade": 7,
+      "curriculum": "South Africa CAPS",
+      "language": "en",
+      "license": "CC-BY",
+      "url": "https://www.siyavula.com/downloads/books/science/Gr7_PhysicalSciences_Learner_Eng_CC-BY.epub",
+      "filename": "Gr7_PhysicalSciences_Learner_Eng_CC-BY.epub"
+    },
+    {
+      "id": "natural-sciences-8",
+      "title": "Natural Sciences, Grade 8",
+      "grade": 8,
+      "curriculum": "South Africa CAPS",
+      "language": "en",
+      "license": "CC-BY",
+      "url": "https://www.siyavula.com/downloads/books/science/Gr8_PhysicalSciences_Learner_Eng_CC-BY.epub",
+      "filename": "Gr8_PhysicalSciences_Learner_Eng_CC-BY.epub"
+    },
+    {
+      "id": "natural-sciences-9",
+      "title": "Natural Sciences, Grade 9",
+      "grade": 9,
+      "curriculum": "South Africa CAPS",
+      "language": "en",
+      "license": "CC-BY",
+      "url": "https://www.siyavula.com/downloads/books/science/Gr9_PhysicalSciences_Learner_Eng_CC-BY.epub",
+      "filename": "Gr9_PhysicalSciences_Learner_Eng_CC-BY.epub"
+    },
+    {
+      "id": "mathematics-10",
+      "title": "Mathematics, Grade 10",
+      "grade": 10,
+      "curriculum": "South Africa CAPS",
+      "language": "en",
+      "license": "CC-BY",
+      "url": "https://www.siyavula.com/downloads/books/maths/Gr10_Mathematics_Learner_Eng_CC-BY.epub",
+      "filename": "Gr10_Mathematics_Learner_Eng_CC-BY.epub"
+    },
+    {
+      "id": "physical-sciences-10",
+      "title": "Physical Sciences, Grade 10",
+      "grade": 10,
+      "curriculum": "South Africa CAPS",
+      "language": "en",
+      "license": "CC-BY",
+      "url": "https://www.siyavula.com/downloads/books/science/Gr10_PhysicalSciences_Learner_Eng_CC-BY.epub",
+      "filename": "Gr10_PhysicalSciences_Learner_Eng_CC-BY.epub"
+    },
+    {
+      "id": "mathematics-11",
+      "title": "Mathematics, Grade 11",
+      "grade": 11,
+      "curriculum": "South Africa CAPS",
+      "language": "en",
+      "license": "CC-BY",
+      "url": "https://www.siyavula.com/downloads/books/maths/Gr11_Mathematics_Learner_Eng_CC-BY.epub",
+      "filename": "Gr11_Mathematics_Learner_Eng_CC-BY.epub"
+    },
+    {
+      "id": "physical-sciences-11",
+      "title": "Physical Sciences, Grade 11",
+      "grade": 11,
+      "curriculum": "South Africa CAPS",
+      "language": "en",
+      "license": "CC-BY",
+      "url": "https://www.siyavula.com/downloads/books/science/Gr11_PhysicalSciences_Learner_Eng_CC-BY.epub",
+      "filename": "Gr11_PhysicalSciences_Learner_Eng_CC-BY.epub"
+    },
+    {
+      "id": "mathematics-12",
+      "title": "Mathematics, Grade 12",
+      "grade": 12,
+      "curriculum": "South Africa CAPS",
+      "language": "en",
+      "license": "CC-BY",
+      "url": "https://www.siyavula.com/downloads/books/maths/Gr12_Mathematics_Learner_Eng_CC-BY.epub",
+      "filename": "Gr12_Mathematics_Learner_Eng_CC-BY.epub"
+    },
+    {
+      "id": "physical-sciences-12",
+      "title": "Physical Sciences, Grade 12",
+      "grade": 12,
+      "curriculum": "South Africa CAPS",
+      "language": "en",
+      "license": "CC-BY",
+      "url": "https://www.siyavula.com/downloads/books/science/Gr12_PhysicalSciences_Learner_Eng_CC-BY.epub",
+      "filename": "Gr12_PhysicalSciences_Learner_Eng_CC-BY.epub"
+    }
+  ],
+  "unavailable": [
+    {
+      "id": "life-sciences-10",
+      "title": "Life Sciences, Grade 10",
+      "grade": 10,
+      "curriculum": "South Africa CAPS",
+      "language": "en",
+      "license": "CC-BY",
+      "url": "https://www.siyavula.com/downloads/books/life-science/Gr10_LifeSciences_Learner_Eng_CC-BY.epub",
+      "filename": "Gr10_LifeSciences_Learner_Eng_CC-BY.epub",
+      "reason": "Publisher URL returns a Git LFS pointer rather than an EPUB",
+      "expected_sha256": "f59063867bed0473fddfdcc73c9a740bf8313f8e427b6f6c772fb4835c1623de",
+      "expected_bytes": 104152423,
+      "checked_on": "2026-11-12"
+    },
+    {
+      "id": "mathematical-literacy-10",
+      "title": "Mathematical Literacy, Grade 10",
+      "grade": 10,
+      "curriculum": "South Africa CAPS",
+      "language": "en",
+      "license": "CC-BY",
+      "url": "https://www.siyavula.com/downloads/books/maths-lit/Gr10_MathsLit_Learner_Eng_CC-BY.epub",
+      "filename": "Gr10_MathsLit_Learner_Eng_CC-BY.epub",
+      "reason": "Publisher URL returns a Git LFS pointer rather than an EPUB",
+      "expected_sha256": "7a051f72369c34a7a6335afb1a985930e61ccb169df26bd4db9da5b639cd32a8",
+      "expected_bytes": 128728746,
+      "checked_on": "2026-11-12"
+    }
+  ]
+}

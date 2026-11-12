@@ -10,8 +10,7 @@ about Swedish school content: what a subject covers, its central content
   OpenAPI v1 (stable/active 1.16.x): https://api.skolverket.se/syllabus/v3/api-docs
   OpenAPI v2 groups (alpha 2.0.0):  https://api.skolverket.se/syllabus/v3/api-docs-v2/{subjects,courses,programs,curriculums,valuestore,search,...}
 - Base URL: `https://api.skolverket.se/syllabus`, data paths `/v1/...` (default, stable) or `/v2/...` (`--api v2`, alpha).
-- This tool only does HTTP GET. No tutor/UI/provider integration lives here,
-  and none is planned: this request authorizes this lookup tool only.
+- This tool only does HTTP GET. It runs independently of the tutor application.
 
 ## Use
 

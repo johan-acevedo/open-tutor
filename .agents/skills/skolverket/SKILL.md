@@ -1,3 +1,8 @@
+---
+name: skolverket
+description: Look up Swedish curricula, subjects, courses, and levels in Skolverket's Syllabus API, including Lgr22 and gymnasiet Gy11 and Gy25.
+---
+
 # Skolverket Syllabus lookup
 
 Read-only agent tool for Skolverket's open Syllabus API: curricula, subjects and
