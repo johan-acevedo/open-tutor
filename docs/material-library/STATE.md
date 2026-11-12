@@ -44,3 +44,9 @@ DeepSeek delivered 6ffdf42: optional CPU ML dependencies, exact local cosine ind
 ## Step 2b review
 
 Muse independently reproduced real model scores and returned IDs for both languages. Full default suite: 175 passed, 1 skipped; opt-in real-model tests also passed. No blockers. Parent removed enclosing block_range from search results so a later display consumer cannot confuse it with exact owned source content. Existing on-disk proof index predates this metadata correction and must be rebuilt before serving results. Next bounded unit: revision-pinned broader sample evaluation against a lexical baseline, with declared query relevance and off-topic examples; no HTTP or UI integration yet.
+
+## Step 2c evaluation, awaiting review
+
+DeepSeek delivered 73c1dd3: declared paired-language questions, a 316-passage evaluation pool, BM25 comparison, saved-vector rerunnable report, and explicit model revision support. Muse must verify label appropriateness and scoring against real artifacts before results are accepted. Corpus choices are deliberately bounded; this is not general retrieval quality. Scores for absent topics overlap scores for correct results, so the tutor must inspect candidates rather than treat cosine as answer confidence. Formula-heavy text remains incomplete: display must preserve original images and feed visible material back to the tutor.
+
+After this review and any small fixes, proceed to step 3 original-section rendering. Further confusable-pool evaluation is deferred until the complete prototype can be exercised; do not add a threshold classifier or keep expanding offline benchmarks now. Prototype search returns several distinct section candidates with excerpts/completeness/source metadata; the tutor selects only relevant material or declines when none supports the question. No automatic top-hit display based on score alone.
