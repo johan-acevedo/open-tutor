@@ -61,6 +61,14 @@ Checked against the real API on 2026-11-04 with fictional Swedish text:
 
 The worker logs the route at the start of each session (`tutor TTS route elevenlabs /text-to-dialogue/stream-input model eleven_v4_turbo voice … lang sv`). It also logs the time to first audio of each reply, never the text.
 
+## Adaptive interruption handling
+
+Set `TUTOR_ADAPTIVE_INTERRUPTION=1` to let LiveKit classify overlapping speech before stopping the tutor. The default remains VAD-based interruption detection. This setting keeps the existing STT, LLM, TTS, and endpointing delays.
+
+The classifier uses LiveKit Inference with the project's existing `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET`. Self-hosted workers receive a monthly development allowance. If the allowance runs out or inference fails, the SDK falls back to VAD-based interruption detection. See [LiveKit's allowance and fallback rules](https://docs.livekit.io/deploy/admin/quotas-and-limits/#adaptive-interruption-handling).
+
+The Screen development worker enables this setting. Set it to `0` and restart the worker to return to VAD-only handling.
+
 ## Local speech for pre-rendering
 
 VoxCPM2 is available over the tailnet at <https://johan-4070.tail2e1c4e.ts.net:8447>. It provides an unmetered HTTP synthesis endpoint. The app does not call it automatically; Deepgram remains the development fox's live voice path. A LiveKit adapter is still needed to use VoxCPM2 for live sessions.

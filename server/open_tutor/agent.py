@@ -1014,7 +1014,11 @@ async def entrypoint(ctx: JobContext) -> None:
         turn_handling=TurnHandlingOptions(
             turn_detection="stt",
             endpointing={"min_delay": env_float("TUTOR_MIN_ENDPOINT", 0.6), "max_delay": 4.0},
-            interruption={"enabled": True, "mode": "vad", "min_duration": 0.4},
+            interruption={
+                "enabled": True,
+                "mode": "adaptive" if os.environ.get("TUTOR_ADAPTIVE_INTERRUPTION") == "1" else "vad",
+                "min_duration": 0.4,
+            },
         ),
         max_tool_steps=6,
     )
