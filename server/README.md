@@ -114,7 +114,7 @@ Operator handoff: 2026-11-12, `scripts/serve_voxcpm.py` and `voxcpm-tts.service`
 
 ### ZONOS3-Mini alternative
 
-ZONOS3-Mini has two interchangeable CPU endpoints:
+ZONOS3-Mini has two endpoints with the same API and voices:
 
 | Host | Base URL |
 |---|---|
@@ -145,11 +145,11 @@ The OpenAI-compatible `/v1/audio/speech` endpoint accepts `model: "zonos3"`, `in
 
 On johan-4070, keep the managed ZONOS3 service on its CPU backend, batch 8. The operator verified correct Swedish output there and broken audio with this ggml CUDA build on the 4070 Ti SUPER. CPU operation adds no VRAM use and can coexist with VoxCPM2. The existing restriction on heavy ComfyUI renders still applies because VoxCPM2 remains GPU-resident.
 
-The pc2014 instance stays on the CPU backend on internal port 1919. The operator reports about 1.8 GB resident RAM, no VRAM use, and 1.2 GB of models on disk, with `zonos3-tts.service` enabled at boot and persistent Tailscale serving. Logs: `ssh pc2014 'journalctl --user -u zonos3-tts'`.
+The pc2014 endpoint now runs Vulkan on the RX 6500 XT, according to Johan's latest 2026-11-12 handoff. It keeps the same tailnet URL and voice IDs. The earlier CPU-only constraint was superseded after `voice-demo-asr`, `voice-demo-llm`, `voice-demo`, and `ageofbot` were stopped and disabled with Johan's approval; `t3-call` was untouched. The operator reports a GPU baseline of about 17 MB, ZONOS3 residency of 1.35 GB, and about 2.6 GB headroom. Logs: `ssh pc2014 'journalctl --user -u zonos3-tts'`.
 
-Operator verdict, 2026-11-12: the Vulkan backend produces correct Swedish on the RX 6500 XT, but must not host the service with the current GPU tenants. The desktop and two llama servers already occupy about 3.3 GiB of its 4 GiB VRAM; ZONOS3 adds about 0.9 GiB, reaching 98% occupancy (96% even with `--zac-cpu`). A concurrent batch or tenant spike risks spilling over the slow x4 link or running out of memory. The operator measured about 2.2× realtime with Vulkan versus 1.4× on CPU; capacity determines the hosting choice.
+Operator measurements: a solo request generated about 3.7 seconds of audio in 1.3 seconds (2.9× realtime). Eight simultaneous requests all returned HTTP 200 in 6–12 seconds each, with aggregate throughput about 2.75× realtime and stable VRAM. Whisper confirmed Swedish output from the served endpoint. These are operator results, not measurements repeated by this thread.
 
-The Vulkan build is retained at `~/zonos3/servers/ggml/build-vulkan/` on pc2014. Reconsider it only after GPU tenants move or sufficient VRAM becomes available; the operator's tested alternative uses `--gpu` on port 1920. The active tailnet endpoint remains on CPU.
+The operator recommends this box for unmetered bulk synthesis, pre-rendering, and fallback because latency under concurrency is unsuitable for live conversation. The development fox still selects this endpoint through its batch ZONOS3 adapter; a return to Deepgram for live speech is pending Johan's provider choice. VoxCPM2 on johan-4070 remains available but has no application adapter. The previous CPU service and Vulkan capacity verdict are historical; do not infer the active backend from those earlier notes.
 
 Service: `zonos3-tts.service`, enabled at boot. Source/build: `~/zonos3` on johan-4070; voice embeddings: `~/zonos3/voices`. Logs: `ssh johan-4070 'journalctl --user -u zonos3-tts'`. The same endpoint serves the Studio UI. The operator reports optional delivery steering through `steer.gguf` and `/v2/controls`. No backend rebuild, synthesis, or listening check was performed when recording this handoff.
 
