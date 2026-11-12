@@ -28,6 +28,8 @@ from open_tutor.materials.search import (
     load_index,
     normalize,
     query_index,
+    rank_index,
+    resolve_model_snapshot,
     save_index,
 )
 
@@ -276,6 +278,47 @@ def test_index_round_trips_with_model_identity_and_exact_vectors(tmp_path):
     assert [entry["passage_id"] for entry in loaded.entries] == ["psg-1", "psg-2"]
     assert loaded.vectors.tolist() == index.vectors.tolist()
     assert list(loaded.vector(1)) == pytest.approx([0.0, 0.0, 1.0])
+
+
+def test_rank_index_reranks_a_saved_query_vector_without_an_embedder(tmp_path):
+    embedder = StubEmbedder([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]], [1.0, 0.0, 0.0])
+    saved = save_index(
+        build_index([record("psg-1", "a"), record("psg-2", "b")], embedder), tmp_path / "index"
+    )
+    loaded = load_index(saved)
+
+    hits = rank_index(loaded, [0.0, 2.0, 0.0])
+
+    assert [hit["passage_id"] for hit in hits] == ["psg-2", "psg-1"]
+    assert hits[0]["score"] == pytest.approx(1.0, abs=1e-6)
+    assert len(rank_index(loaded, [1.0, 0.0, 0.0], limit=1)) == 1
+    with pytest.raises(ValueError, match="expected 3"):
+        rank_index(loaded, [1.0, 0.0])
+
+
+def test_model_revision_resolution_records_the_actual_snapshot_commit():
+    calls = []
+    full_hash = "a" * 40
+
+    def download(model_id, **kwargs):
+        calls.append((model_id, kwargs))
+        return f"/cache/models--x/snapshots/{full_hash}"
+
+    path, revision = resolve_model_snapshot("google/embeddinggemma-2", "main", download)
+
+    assert calls == [("google/embeddinggemma-2", {"revision": "main"})]
+    assert path.name == full_hash
+    assert revision == full_hash  # never the branch name, never a guessed prefix
+
+    _, prefix_revision = resolve_model_snapshot("google/embeddinggemma-2", "abc123", download)
+    assert prefix_revision == full_hash
+
+    _, default_revision = resolve_model_snapshot("google/embeddinggemma-2", None, download)
+    assert calls[-1] == ("google/embeddinggemma-2", {})
+    assert default_revision == full_hash
+
+    with pytest.raises(RuntimeError, match="resolved snapshot"):
+        resolve_model_snapshot("google/embeddinggemma-2", "b" * 40, download)
 
 
 def test_load_index_rejects_a_truncated_vector_file(tmp_path):

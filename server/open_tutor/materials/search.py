@@ -102,6 +102,28 @@ def ensure_supported_dtype(dtype: str) -> None:
         )
 
 
+def resolve_model_snapshot(model_id: str, revision: str | None, download) -> tuple[Path, str]:
+    """Resolve the cached snapshot and return it with its actual revision.
+
+    ``download`` is ``huggingface_hub.snapshot_download`` in production and a
+    stub in tests, so the argument handling can be pinned without torch. The
+    returned revision is the resolved snapshot directory name: a requested
+    branch or short prefix is never expanded into a guessed commit hash.
+    """
+    options = {"revision": revision} if revision else {}
+    path = Path(download(model_id, **options))
+    actual = path.name
+    if not actual:
+        raise RuntimeError(f"Could not resolve a snapshot revision for {model_id}")
+    if revision and len(revision) == 40 and actual != revision:
+        # A full commit hash must resolve to itself; anything else means the
+        # cache or the hub answered with a different snapshot.
+        raise RuntimeError(
+            f"Requested {model_id}@{revision}, but the resolved snapshot is {actual!r}"
+        )
+    return path, actual
+
+
 class TextEmbedder(Protocol):
     """What :func:`build_index` and :func:`query_index` need from an encoder."""
 
@@ -123,14 +145,21 @@ class EmbeddingGemmaEmbedder:
     text prefixes.
     """
 
-    def __init__(self, model_id: str = MODEL_ID, device: str = "cpu", batch_size: int = 8):
+    def __init__(
+        self,
+        model_id: str = MODEL_ID,
+        revision: str | None = None,
+        device: str = "cpu",
+        batch_size: int = 8,
+    ):
         import torch  # noqa: PLC0415 - optional ML dependency, never imported by the server
         from huggingface_hub import snapshot_download  # noqa: PLC0415
         from sentence_transformers import SentenceTransformer  # noqa: PLC0415
 
-        snapshot = Path(snapshot_download(model_id))
+        snapshot, resolved_revision = resolve_model_snapshot(model_id, revision, snapshot_download)
         self.model_id = model_id
-        self.model_revision = snapshot.name  # resolved commit directory in the HF cache
+        self.requested_revision = revision or ""
+        self.model_revision = resolved_revision  # actual commit directory in the HF cache
         self.model = SentenceTransformer(
             str(snapshot),
             device=device,
@@ -150,6 +179,7 @@ class EmbeddingGemmaEmbedder:
     def describe(self) -> dict:
         return {
             "model_id": self.model_id,
+            "requested_revision": self.requested_revision,
             "model_revision": self.model_revision,
             "dtype": self.dtype,
             "dimension": self.dimension,
@@ -299,9 +329,22 @@ def query_index(
         )
     if limit <= 0:
         raise ValueError("limit must be positive")
-    query_vector = [float(value) for value in embedder.encode_query(query)]
-    _check_vector(query_vector, index.dimension, "Query embedding")
-    cosine = normalize(query_vector)
+    return rank_index(index, embedder.encode_query(query), limit=limit)
+
+
+def rank_index(
+    index: SearchIndex, query_vector: Sequence[float], limit: int | None = None
+) -> list[dict]:
+    """Rank an already encoded query against an index, without a model call.
+
+    An evaluation can save query vectors and rerun rankings from them, which is
+    what makes a measurement reproducible without rebuilding embeddings.
+    """
+    if limit is not None and limit <= 0:
+        raise ValueError("limit must be positive")
+    values = [float(value) for value in query_vector]
+    _check_vector(values, index.dimension, "Query embedding")
+    cosine = normalize(values)
 
     scored: list[tuple[float, int]] = []
     for position in range(len(index.entries)):
@@ -309,8 +352,9 @@ def query_index(
         scored.append((sum(a * b for a, b in zip(cosine, vector)), position))
     scored.sort(key=lambda item: (-item[0], item[1]))
 
+    chosen = scored if limit is None else scored[:limit]
     results: list[dict] = []
-    for rank, (score, position) in enumerate(scored[:limit], start=1):
+    for rank, (score, position) in enumerate(chosen, start=1):
         results.append({**index.entries[position], "rank": rank, "score": round(score, 6)})
     return results
 

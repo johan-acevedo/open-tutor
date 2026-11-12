@@ -59,6 +59,16 @@ def _haystack(record: dict) -> str:
     return " ".join(parts).lower()
 
 
+def selector_match_count(records: list[dict], selector: dict) -> int:
+    """How many passages match a selector before its cap is applied."""
+    return sum(
+        1
+        for record in records
+        if record.get("book_id") == selector["book"]
+        and selector["needle"] in _haystack(record)
+    )
+
+
 def select_records(records: list[dict], selectors: list[dict], max_passages: int) -> list[dict]:
     """Passages matching each selector, in corpus order, capped per selector."""
     chosen: list[dict] = []
@@ -89,7 +99,7 @@ def _records(selectors: list[dict], data_dir: Path, books_path: Path) -> tuple[l
 def cmd_prove(args: argparse.Namespace) -> int:
     """One real query and two real documents: is the model loading at all?"""
     started = time.perf_counter()
-    embedder = EmbeddingGemmaEmbedder(model_id=args.model)
+    embedder = EmbeddingGemmaEmbedder(model_id=args.model, revision=args.revision or None)
     documents = [
         (
             "The northern lights",
@@ -135,7 +145,7 @@ def cmd_build(args: argparse.Namespace) -> int:
     if not chosen:
         raise ValueError("The selectors matched no passages; nothing to index")
 
-    embedder = EmbeddingGemmaEmbedder(model_id=args.model)
+    embedder = EmbeddingGemmaEmbedder(model_id=args.model, revision=args.revision or None)
     corpus = {
         "selectors": [
             {"book": selector["book"], "substring": selector["needle"], "cap": selector["cap"]}
@@ -169,7 +179,11 @@ def cmd_build(args: argparse.Namespace) -> int:
 
 def cmd_query(args: argparse.Namespace) -> int:
     index = load_index(Path(args.index))
-    embedder = EmbeddingGemmaEmbedder(model_id=args.model or index.model_id)
+    model_id = args.model or index.model_id
+    # Query the exact revision recorded in the index unless a caller overrides
+    # both the model and revision explicitly, so cached weights cannot drift.
+    revision = args.revision or (index.model_revision if model_id == index.model_id else "")
+    embedder = EmbeddingGemmaEmbedder(model_id=model_id, revision=revision or None)
     report = {
         "index": str(Path(args.index)),
         "model": embedder.describe(),
@@ -190,6 +204,7 @@ def main(argv: list[str] | None = None) -> int:
 
     prove = sub.add_parser("prove", help="encode one real query and two documents")
     prove.add_argument("--model", default=MODEL_ID)
+    prove.add_argument("--revision", default="", help="branch, tag, or commit hash to pin")
     prove.set_defaults(func=cmd_prove)
 
     build = sub.add_parser("build", help="embed a small passage selection into a local index")
@@ -204,6 +219,11 @@ def main(argv: list[str] | None = None) -> int:
     build.add_argument("--index", type=Path, default=default_index_dir())
     build.add_argument("--model", default=MODEL_ID)
     build.add_argument(
+        "--revision",
+        default="",
+        help="branch, tag, or commit hash to pin; the resolved commit is recorded",
+    )
+    build.add_argument(
         "--max-passages",
         type=int,
         default=DEFAULT_MAX_PASSAGES,
@@ -217,6 +237,11 @@ def main(argv: list[str] | None = None) -> int:
     query.add_argument("--query", action="append", required=True, help="query text; repeat")
     query.add_argument("--index", type=Path, default=default_index_dir())
     query.add_argument("--model", default="", help="override the model ID recorded in the index")
+    query.add_argument(
+        "--revision",
+        default="",
+        help="override the revision; default is the exact commit recorded in the index",
+    )
     query.add_argument("--limit", type=int, default=5)
     query.set_defaults(func=cmd_query)
 
