@@ -368,6 +368,10 @@ export default function BoardCard(props: CardProps) {
       return <ResourceCard {...props} />;
     case 'homework':
       return <HomeworkCard {...props} />;
+    case 'page':
+      // Pages are rendered by PageCard in Board (they need a frame registry),
+      // never through the generic card switch.
+      return null;
     default:
       return null;
   }

@@ -10,11 +10,22 @@ import BottomBar from './components/BottomBar';
 import TopMenu from './components/TopMenu';
 import EndCard from './components/EndCard';
 import HomeworkTray from './components/HomeworkTray';
+import ScreenDemo from './components/ScreenDemo';
 import { useViewport } from './useViewport';
 
 export default function App() {
+  // Dev-only Smart Screen demo: ?screen-demo=1 shows two example pages with
+  // patch/reveal/point buttons, no LiveKit session.
+  const screenDemo = (() => {
+    try {
+      return new URLSearchParams(window.location.search).get('screen-demo') === '1';
+    } catch {
+      return false;
+    }
+  })();
   const { mobile, keyboard } = useViewport();
   const session = useSession(mobile);
+  if (screenDemo) return <ScreenDemo />;
   const { phase, profile } = session;
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -92,7 +103,8 @@ export default function App() {
               onResourceClosed={(id) => void session.resourceClosed(id)}
               mobile={mobile}
               activeItemId={session.activeItemId}
-              onEnd={() => void session.endSession()}
+              registerPageFrame={session.registerPageFrame}
+              onPageAnswer={session.sendPageAnswer}
             />
             {session.homeworkDraft && (
               <HomeworkTray
