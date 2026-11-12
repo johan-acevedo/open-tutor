@@ -166,6 +166,9 @@ def download_book(book, data_dir):
             with tempfile.NamedTemporaryFile(dir=data_dir, suffix=".part", delete=False) as output:
                 temp = Path(output.name)
                 shutil.copyfileobj(response, output, length=1024 * 1024)
+            expected_bytes = response.headers.get("Content-Length")
+            if expected_bytes is not None and temp.stat().st_size != int(expected_bytes):
+                raise ValueError(f"Incomplete download: received {temp.stat().st_size} of {expected_bytes} bytes")
             headers = {key: response.headers.get(key) for key in ("Last-Modified", "ETag", "Content-Type")}
             final_url = response.url
         details = inspect_epub(temp, expected)

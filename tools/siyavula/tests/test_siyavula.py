@@ -102,6 +102,16 @@ class BooksTest(unittest.TestCase):
         self.assertEqual(result["resolved_url"], other["url"])
         self.assertTrue((self.directory / "other.epub.json").exists())
 
+    def test_truncated_transfer_is_reported_before_book_inspection(self):
+        other = {**self.book, "filename": "other.epub"}
+        response = io.BytesIO(self.content[:100])
+        response.headers = {"Content-Length": str(len(self.content))}
+        response.url = other["url"]
+        with patch.object(siyavula.urllib.request, "urlopen", return_value=response):
+            with self.assertRaisesRegex(ValueError, "Incomplete download: received 100"):
+                siyavula.download_book(other, self.directory)
+        self.assertFalse((self.directory / "other.epub").exists())
+
     def test_only_discovers_unbranded_english_epubs(self):
         links = siyavula.CatalogueLinks()
         links.feed('''<a href="/Gr4_Learner_Eng_CC-BY.epub">ePUB (CC-BY)</a>

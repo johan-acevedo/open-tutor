@@ -38,25 +38,35 @@ receipt with its source URL, hash, HTTP metadata, and EPUB contents.
 
 ## Selected material
 
-The [Siyavula catalogue](https://www.siyavula.com/read) lists these English
-unbranded CC BY EPUBs, available as book files on 2026-11-12:
+These English unbranded CC BY EPUBs from the
+[Siyavula catalogue](https://www.siyavula.com/read) were downloaded and passed
+inspection on elitebook on 2026-11-12:
 
 | Subject | South African grades |
 | --- | --- |
 | Natural Sciences and Technology | 4, 5, 6 |
-| Natural Sciences | 7, 8, 9 |
 | Mathematics | 10, 11, 12 |
-| Physical Sciences | 10, 11, 12 |
+| Physical Sciences | 10, 11 |
 
 These are source grade labels. They are not mappings to Swedish school years.
-Some filenames for Natural Sciences 7–9 say `PhysicalSciences`; the catalogue
-classifies those books as Natural Sciences.
 
 Two further catalogue entries, Mathematical Literacy 10 and Life Sciences 10,
 return Git LFS pointer text instead of EPUBs. A pointer identifies a file stored
 elsewhere; it does not contain the book. Their URLs, expected object hashes, and
-sizes are recorded under `unavailable` in `books.json`. The downloader excludes
-them from the default selection and reports them in the inventory.
+sizes are recorded under `unavailable` in `books.json`.
+
+Natural Sciences 7–9 and Physical Sciences 12 also failed ZIP archive validation
+during the live download. A diagnostic retry of Grade 7 confirmed an interrupted
+transfer: 54,626,266 bytes arrived out of the declared 90,554,874. These failures
+do not establish that the original books are corrupt. The four entries remain in
+`unavailable`, with the observed errors, rather than the verified selection.
+The downloader excludes these six entries by default and reports them in the
+inventory. The source grades 7–9 are called Natural Sciences in the catalogue,
+despite `PhysicalSciences` in their filenames.
+
+The committed `validation.json` records the inspected files, hashes, embedded
+license links, and excluded sources. The eight verified books total 322,154,465
+bytes. All their manifest resources are present.
 
 The selection excludes branded CC BY-ND files, teacher guides, Afrikaans books,
 and closed-copyright IT and CAT books. The catalogue offers mathematics 7–9 as
@@ -80,10 +90,12 @@ without committing large books to Git.
 
 ## Validation
 
-The inspector checks the SHA-256, ZIP integrity, EPUB mimetype, package document,
-reading order, English language metadata, and readable text. Its report includes
+The downloader rejects transfers shorter than the HTTP Content-Length when that
+header is present. The inspector checks the SHA-256, ZIP integrity, EPUB mimetype,
+package document, reading order, English language metadata, and readable text. Its report includes
 the original internal document paths, text counts, image counts, and missing
 manifest resources. It does not certify EPUB standards compliance or visual layout.
+Image counts include rendered mathematical expressions as well as illustrations.
 
 Downloads become final files only after inspection. A partial download has a
 temporary `.part` filename. If an existing book fails verification, move that file
