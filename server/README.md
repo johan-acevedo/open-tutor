@@ -5,6 +5,14 @@ Two processes, both in this package:
 - **Web service** (`open_tutor.web`, FastAPI): serves the built page from `web/dist`, and `POST /api/session` returns a short-lived LiveKit room token. The learner's name, school year and newest notes travel in the token's participant metadata. Nothing is stored on the server.
 - **Tutor worker** (`open_tutor.agent`, LiveKit Agents): joins each room as `open-tutor`, runs Soniox speech recognition, the tutor model and the voice, and drives the board through the protocol in [docs/protocol.md](../docs/protocol.md).
 
+The web service also serves original material sections read-only, rendered from the pinned Siyavula EPUBs (steps 3a/3b in [the material-library state](../docs/material-library/STATE.md)):
+
+- `GET /api/materials/sections/{id}` — visible text, image list, completeness, book/source/license metadata for the tutor.
+- `GET /materials/sections/{id}/index.html` — the original section page, embeddable as `<iframe sandbox="">`.
+- `GET /materials/sections/{id}/{asset}` — only the section's own packaged images and CSS.
+
+Packages are built lazily per section under `$XDG_CACHE_HOME/open-tutor/material-packages` and published atomically. A host without the EPUBs answers 503 on these routes and is otherwise unchanged.
+
 ## Run locally
 
 ```bash
@@ -66,6 +74,8 @@ The worker logs the route at the start of each session (`tutor TTS route elevenl
 | `TUTOR_ACCESS_CODE` | Optional family code. When set, the page asks for it once per browser |
 | `TUTOR_ALLOWED_COUNTRIES` | Optional comma-separated Cloudflare country codes, e.g. `SE`. Missing/disallowed country headers get 403; `/api/health` remains accessible |
 | `TUTOR_MAX_SESSIONS_PER_HOUR` | Owner spending cap across the instance (default 12) |
+| `TUTOR_MATERIAL_CACHE` | Directory for rendered original-section packages (default `$XDG_CACHE_HOME/open-tutor/material-packages`, never in the repo) |
+| `TUTOR_MATERIALS_DIR`, `TUTOR_MATERIALS_BOOKS` | Override the downloaded Siyavula EPUB directory and its `books.json`. Without the EPUBs the material routes answer 503; nothing else changes |
 | `TUTOR_CLOUD_RECORDING` | `1` uploads session audio and transcripts to LiveKit Cloud observability. Off by default |
 | `TUTOR_DEBUG_LOG` | `1` writes a per-session debug trail to a private local directory (see below). Off by default |
 | `TUTOR_DEBUG_LOG_DIR` | Override the debug trail directory (default `~/.local/state/open-tutor/sessions`) |

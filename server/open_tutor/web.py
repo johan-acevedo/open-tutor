@@ -21,6 +21,7 @@ from livekit import api
 from pydantic import BaseModel, Field
 
 from .config import AGENT_NAME
+from .materials.serving import SectionPackageStore, materials_router
 
 WEB_DIST = Path(os.environ.get("TUTOR_WEB_DIST", Path(__file__).resolve().parents[2] / "web" / "dist"))
 TOKEN_TTL = timedelta(hours=3)
@@ -72,9 +73,16 @@ class SessionLimiter:
         return True
 
 
-def create_app(environ: dict[str, str] | None = None) -> FastAPI:
+def create_app(
+    environ: dict[str, str] | None = None,
+    materials_store: SectionPackageStore | None = None,
+) -> FastAPI:
     env = dict(os.environ if environ is None else environ)
     app = FastAPI(title="Open Tutor", docs_url=None, redoc_url=None, openapi_url=None)
+    # Read-only original-section routes. The store resolves the corpus lazily, so
+    # importing or serving the app without the EPUBs still works; such requests
+    # answer a clear 503 instead.
+    app.include_router(materials_router(materials_store or SectionPackageStore.from_env(env)))
     limiter = SessionLimiter(int(env.get("TUTOR_MAX_SESSIONS_PER_HOUR", "12")))
     access_code = env.get("TUTOR_ACCESS_CODE", "")
     allowed_countries = {country.strip().upper() for country in env.get("TUTOR_ALLOWED_COUNTRIES", "").split(",") if country.strip()}
@@ -122,6 +130,7 @@ def create_app(environ: dict[str, str] | None = None) -> FastAPI:
         )
         return {"url": env["LIVEKIT_URL"], "token": token, "room": room}
 
+    # Mounted last: the catch-all page route must not shadow the material routes above.
     if (WEB_DIST / "index.html").is_file():
         app.mount("/assets", StaticFiles(directory=WEB_DIST / "assets"), name="assets")
 
