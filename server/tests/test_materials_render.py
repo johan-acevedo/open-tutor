@@ -80,7 +80,7 @@ def _write_epub(path: Path, nav_items: str, docs: dict[str, str], assets: dict[s
 
 def _resolver(tmp_path: Path, nav_items: str, docs: dict, assets: dict | None = None) -> SectionResolver:
     corpus = tmp_path / "corpus"
-    corpus.mkdir()
+    corpus.mkdir(parents=True)
     _write_epub(corpus / "tiny.epub", nav_items, docs, assets or {})
     books = {
         "catalogue_url": "https://www.siyavula.com/read",
@@ -115,7 +115,6 @@ NESTED_DOC = (
     '<div class="section"><h1 id="top">Top</h1><p>Parent intro.</p>'
     '<div class="section"><h2 id="sub">Sub</h2><p>Child body.</p>'
     '<img class="math-inline" src="equation/e1.png" alt=""/>'
-    '<img src="../evil.png"/><img src="https://example.com/x.png"/><img src="missing.png"/>'
     "</div><p>Parent tail.</p></div>"
     '<div class="section"><h2 id="peer">Peer</h2><p>Peer body.</p></div>'
     "</body></html>"
@@ -198,17 +197,11 @@ def test_unknown_id_and_unsafe_refs(tmp_path):
         render_section(resolver, "sec-nope")
     ids = _ids(resolver)
     out = tmp_path / "pkg"
-    metadata = export_package(resolver, ids["Sub"], out)
-    by_src = {image["src"]: image for image in metadata["images"]}
-    assert by_src["equation/e1.png"]["resolved"]
-    assert not by_src["../evil.png"]["resolved"]
-    assert not by_src["https://example.com/x.png"]["resolved"]
-    assert not by_src["missing.png"]["resolved"]
-    assert metadata["warnings"]
-    # Nothing escapes the package: no file outside out, no evil payload inside.
-    assert not (tmp_path / "evil.png").exists()
-    assert (out / "equation" / "e1.png").read_bytes() == PNG
-    assert validate_package(out, metadata) == []
+    unsafe = NESTED_DOC.replace('Child body.', 'Child body.<img src="../../../../etc/passwd"/>')
+    resolver = _resolver(tmp_path / "unsafe", NESTED_NAV, {"ch.xhtml": unsafe}, NESTED_ASSETS)
+    with pytest.raises(ValueError, match="Unresolved"):
+        export_package(resolver, _ids(resolver)["Sub"], out)
+    assert not out.exists()
 
 
 def test_export_is_deterministic(tmp_path):
@@ -237,6 +230,7 @@ def test_grade6_simple_circuit_keeps_illustration_excludes_peer(tmp_path):
     rendered = render_section(resolver, GRADE6_CIRCUIT_ID)
     assert rendered.section.title == "A simple circuit"
     assert rendered.section.breadcrumbs == ["Electric circuits"]
+    assert "Many misconceptions develop" not in rendered.visible_text
     assert "Many misconceptions develop" in rendered.owned_text
     assert "Many misconceptions develop" in rendered.slice_html
     assert "Circuit components" in rendered.slice_html  # intentional descendant
@@ -276,3 +270,37 @@ def test_grade10_substitution_keeps_worked_example_and_equations(tmp_path):
     assert rendered.section.license_evidence
     assert "Worked example 6" in rendered.owned_text
     assert not rendered.text_complete  # math lives in images, not text
+
+
+def test_visible_feedback_matches_scope_and_hidden_selectors():
+    from open_tutor.materials.render import visible_feedback
+    markup = '<div><p>Student intro</p><div class="teachers-guide">Secret teacher</div><div class="solution">Answer</div><div class="section"><h2>Child</h2><p>Child text<img src="eq.png"/></p></div></div>'
+    text, images = visible_feedback(markup, hide_solutions=True)
+    assert 'Student intro' in text and 'Child text' in text
+    assert 'Secret teacher' not in text and 'Answer' not in text
+    assert images == 1
+    text, _ = visible_feedback(markup, hide_solutions=False)
+    assert 'Answer' in text
+
+
+@pytest.mark.parametrize('addition', ['<iframe src="https://example.com"/>', '<img src="x" srcset="https://example.com 2x"/>', '<p style="background:url(https://example.com)">x</p>'])
+def test_unsupported_automatic_fetches_refused(addition):
+    from open_tutor.materials.render import assert_inert_source
+    with pytest.raises(ValueError):
+        assert_inert_source('<root>' + addition + '</root>')
+
+
+@needs_corpus
+def test_parent_feedback_includes_visible_math_descendants():
+    rendered = render_section(SectionResolver(), 'sec-83e2150c0737cec5')
+    assert len(rendered.visible_text) > 1000
+    assert rendered.visible_image_count > 100
+    assert not rendered.text_complete
+
+
+def test_export_requires_fresh_directory(tmp_path):
+    resolver = _resolver(tmp_path, NESTED_NAV, {'ch.xhtml': NESTED_DOC}, NESTED_ASSETS)
+    out = tmp_path / 'out'
+    export_package(resolver, _ids(resolver)['Top'], out)
+    with pytest.raises(ValueError, match='fresh empty'):
+        export_package(resolver, _ids(resolver)['Top'], out)

@@ -74,3 +74,7 @@ nothing beyond the image safeguard below.
   recorded honestly via `text_complete: false` plus the owned-text summary
   ("Do apply `alt=\"\"` to decorative visuals" — applied as preserve-don't-
   invent for informative math images the exporter cannot describe).
+
+## Parent corrections after DeepSeek review
+
+The original metadata contract did not describe all visible descendants and included hidden teacher prose. Use visible_text / visible_image_count for feedback; owned_text remains archival. The fixed hidden-selector list matches the audited 11 corpus stylesheets, not arbitrary CSS. Export now fails on unsupported auto-fetch vectors and unresolved assets and requires a fresh empty destination. Repeated exports to separate fresh directories are deterministic. The page uses compact attribution and a direct body-child slice; source heading-counter appearance still needs a browser check. Validation now reports unresolved warnings. HTTP CSP plus an empty-token iframe sandbox remain mandatory before integration.

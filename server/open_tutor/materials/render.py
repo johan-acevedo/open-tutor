@@ -16,8 +16,9 @@ Security posture for later embedding: no scripts are shipped, no external or
 absolute resources are fetched, and event-handler attributes plus
 ``javascript:`` links are stripped. The only files ever written are the
 package ``index.html``, ``metadata.json``, and members already present in
-the pinned EPUB (the book member allowlist). The output is inert and safe to
-embed later with ``<iframe sandbox>``.
+the pinned EPUB (the book member allowlist). Exports reject unsupported fetch vectors. HTTP serving must additionally use
+a restrictive CSP and ``<iframe sandbox>``; this is a pinned-corpus exporter,
+not a general sanitizer.
 
 Standard library only: no network access, no embeddings, no storage beyond
 reading the pinned EPUBs and writing the package directory.
@@ -151,6 +152,55 @@ def sanitize_slice(slice_html: str) -> tuple[str, list[str]]:
     return cleaned, notes
 
 
+def visible_feedback(markup: str, *, hide_solutions: bool) -> tuple[str, int]:
+    """Read the shipped scope excluding the pinned corpus CSS-hidden subtrees.
+
+    This handles the audited Siyavula selectors, not arbitrary CSS layout.
+    """
+    doc = parse_document(markup.encode("utf-8"))
+    texts: list[str] = []
+    images = 0
+
+    def walk(node, exercises=False):
+        nonlocal images
+        if not hasattr(node, "tag"):
+            texts.append(node.data)
+            return
+        classes = set(node.attrs.get("class", "").split())
+        if node.tag in {"script", "style", "head"} or "teachers-guide" in classes:
+            return
+        if hide_solutions and node.tag == "div" and "solution" in classes:
+            return
+        if not hide_solutions and exercises and node.tag == "h1" and "title" in classes:
+            return
+        if node.tag == "img":
+            images += 1
+        for child in node.content:
+            walk(child, exercises or "exercises" in classes)
+        if node.tag in {"p", "div", "li", "h1", "h2", "h3", "h4", "td"}:
+            texts.append("\n")
+
+    walk(doc.root)
+    return "\n".join(" ".join(line.split()) for line in "".join(texts).splitlines() if line.strip()), images
+
+
+def assert_inert_source(markup: str) -> None:
+    """Reject unsupported automatic-fetch vectors before exporting any files."""
+    doc = parse_document(markup.encode("utf-8"))
+    blocked = {"base", "style", "iframe", "object", "embed", "video", "audio",
+               "source", "track", "use", "link", "meta", "svg", "form", "script"}
+    for node in doc.nodes:
+        if node.tag in blocked:
+            raise ValueError(f"Unsupported active/resource element: {node.tag}")
+        for key, value in node.attrs.items():
+            if key.startswith("on") or key in {"srcset", "poster", "background", "srcdoc"}:
+                raise ValueError(f"Unsupported active/resource attribute: {key}")
+            if key == "style" and re.search(r"url\s*\(|@import|expression\s*\(", value, re.I):
+                raise ValueError("Unsupported fetching inline style")
+            if key == "src" and node.tag != "img":
+                raise ValueError("Only packaged image src is supported")
+
+
 def _image_kind(attrs_src: str, classes: str) -> str:
     class_set = set(classes.split())
     if "math-inline" in class_set:
@@ -186,6 +236,8 @@ class RenderedSection:
     descendants: list[SectionRef] = field(default_factory=list)
     stylesheets: list[Resource] = field(default_factory=list)
     images: list[Resource] = field(default_factory=list)
+    visible_text: str = ""
+    visible_image_count: int = 0
     owned_text: str = ""
     owned_image_kinds: list[str] = field(default_factory=list)
     sanitize_notes: list[str] = field(default_factory=list)
@@ -193,7 +245,7 @@ class RenderedSection:
 
     @property
     def text_complete(self) -> bool:
-        return not self.owned_image_kinds
+        return self.visible_image_count == 0
 
 
 def render_section(resolver: SectionResolver, section_id: str) -> RenderedSection:
@@ -247,6 +299,8 @@ def render_section(resolver: SectionResolver, section_id: str) -> RenderedSectio
             descendants = [other for other in doc_sections if other.fragment]
         descendants.sort(key=lambda other: document.by_id[other.fragment].order)
         slice_html = raw[scope.start : scope.end].decode("utf-8")
+        if scope.tag == "body":
+            slice_html = slice_html[slice_html.index(">") + 1 : slice_html.rfind("</")]
         cleaned, notes = sanitize_slice(slice_html)
 
         doc_dir = posixpath.dirname(section.document_href)
@@ -339,6 +393,9 @@ def render_section(resolver: SectionResolver, section_id: str) -> RenderedSectio
             if not resource.resolved:
                 warnings.append(f"unresolved {resource.kind} {resource.ref!r}: {resource.reason}")
 
+        visible_text, visible_images = visible_feedback(
+            f"<root>{cleaned}</root>", hide_solutions=book.grade in {4, 5, 6}
+        )
         return RenderedSection(
             section=section,
             book=book,
@@ -346,6 +403,8 @@ def render_section(resolver: SectionResolver, section_id: str) -> RenderedSectio
             descendants=list(descendants),
             stylesheets=stylesheets,
             images=images,
+            visible_text=visible_text,
+            visible_image_count=visible_images,
             owned_text="\n\n".join(owned_texts),
             owned_image_kinds=owned_kinds,
             sanitize_notes=notes,
@@ -355,56 +414,24 @@ def render_section(resolver: SectionResolver, section_id: str) -> RenderedSectio
 
 def _provenance_header(rendered: RenderedSection) -> str:
     section, book = rendered.section, rendered.book
-    heading = section.heading or section.title
-    crumbs = " › ".join(section.breadcrumbs) if section.breadcrumbs else "top level"
-    license_evidence = "".join(
-        f"<li><code>{html_module.escape(link)}</code></li>"
-        for link in section.license_evidence
-    ) or "<li>recorded in books.json only</li>"
-    if rendered.descendants:
-        descendants = "".join(
-            f"<li>{html_module.escape(child.heading or child.title)} "
-            f"(<code>{html_module.escape(child.id)}</code>)</li>"
-            for child in rendered.descendants
-        )
-    else:
-        descendants = "<li>none: this section has no child subsections</li>"
     return (
-        '<header class="material-provenance">\n'
-        f"<p><strong>Original teaching content.</strong> {html_module.escape(heading)}</p>\n"
-        "<dl>\n"
-        f"<dt>Book</dt><dd>{html_module.escape(book.title)} "
-        f"(grade {book.grade}, <code>{html_module.escape(book.id)}</code>)</dd>\n"
-        f"<dt>Section</dt><dd>{html_module.escape(section.title)} "
-        f"(<code>{html_module.escape(section.id)}</code>); {html_module.escape(crumbs)}</dd>\n"
-        f"<dt>Source</dt><dd>{html_module.escape(section.document_href)}"
-        f"#{html_module.escape(section.fragment)} via "
-        f"<code>{html_module.escape(section.source_url)}</code></dd>\n"
-        f"<dt>License</dt><dd>{html_module.escape(section.license)} "
-        f"(<code>{html_module.escape(section.license_url)}</code>)\n"
-        "<ul>\n"
-        f"{license_evidence}\n"
-        "</ul></dd>\n"
-        "</dl>\n"
-        "<p>Included descendants (intentional):</p>\n"
-        "<ul>\n"
-        f"{descendants}\n"
-        "</ul>\n"
-        "<p>Mathematics lives in the images below; the surrounding text alone "
-        "is not the complete teaching source.</p>\n"
-        "</header>\n"
+        '<header class="material-provenance"><p>'
+        f'Siyavula — {html_module.escape(book.title)} — '
+        f'{html_module.escape(section.heading or section.title)} — '
+        f'{html_module.escape(section.license)} — siyavula.com'
+        '</p></header>\n'
     )
 
 
 def build_index_html(rendered: RenderedSection) -> str:
-    """Standalone package page: original slice plus wrapper chrome.
+    """Standalone package page: original slice plus compact attribution.
 
     The slice keeps its original tags, attributes, and relative references
     verbatim (minus active vectors). Only this wrapper is new: doctype,
     language, title, viewport, stylesheet links in catalogue order, a small
     responsive safeguard for images, and a visible provenance header. The
     wrapper adds no ``<h1>`` of its own so the original heading hierarchy is
-    left intact.
+    left intact. The slice root remains a direct body child for source CSS.
     """
     section = rendered.section
     # Only resolved members are linked: an unresolvable stylesheet stays out
@@ -425,16 +452,14 @@ def build_index_html(rendered: RenderedSection) -> str:
         f"{links}\n"
         "    <style>\n"
         "      /* Viewer wrapper (not original content): keep wide figures usable. */\n"
-        "      main.material-body img { max-width: 100%; height: auto; }\n"
+        "      body img { max-width: 100%; height: auto; }\n"
         "      .material-provenance { font-family: system-ui, sans-serif; font-size: 0.9rem; }\n"
         "    </style>\n"
         "  </head>\n"
         "  <body>\n"
         "<!-- Safe to embed later with <iframe sandbox>: no scripts, local resources only. -->\n"
         f"{_provenance_header(rendered)}"
-        '    <main class="material-body">\n'
         f"{rendered.slice_html}\n"
-        "    </main>\n"
         "  </body>\n"
         "</html>\n"
     )
@@ -443,17 +468,25 @@ def build_index_html(rendered: RenderedSection) -> str:
 def export_package(
     resolver: SectionResolver, section_id: str, out_dir: Path | str
 ) -> dict:
-    """Export one section package. Deterministic: reruns yield identical bytes."""
+    """Export to a fresh empty directory; equal inputs yield identical bytes."""
     out = Path(out_dir)
     rendered = render_section(resolver, section_id)
     section, book = rendered.section, rendered.book
     epub_path = resolver.epub_path_for(section)
 
+    assert_inert_source(f"<root>{rendered.slice_html}</root>")
+    if rendered.warnings:
+        raise ValueError("Unresolved package resources: " + "; ".join(rendered.warnings))
+    if out.exists() and any(out.iterdir()):
+        raise ValueError("Export requires a fresh empty directory per section/version")
     payloads: dict[str, bytes] = {}
     with zipfile.ZipFile(epub_path) as archive:
         for resource in rendered.stylesheets + rendered.images:
             if resource.resolved and resource.package_path not in payloads:
-                payloads[resource.package_path] = archive.read(resource.member)
+                data = archive.read(resource.member)
+                if resource.kind == "stylesheet" and re.search(rb"url\s*\(|@import|@font-face", data, re.I):
+                    raise ValueError("Unsupported CSS resource fetch: " + resource.member)
+                payloads[resource.package_path] = data
     index_html = build_index_html(rendered).encode("utf-8")
     metadata = {
         "schema": PACKAGE_SCHEMA,
@@ -495,6 +528,9 @@ def export_package(
             for sheet in rendered.stylesheets
         ],
         "owned_text": rendered.owned_text,
+        "visible_text": rendered.visible_text,
+        "visible_image_count": rendered.visible_image_count,
+        "feedback_policy": "pinned Siyavula CSS hidden selectors excluded; scope includes descendants",
         "text_complete": rendered.text_complete,
         "images": [
             {
@@ -533,7 +569,7 @@ def export_package(
 def validate_package(out_dir: Path | str, metadata: dict) -> list[str]:
     """Check an exported package: manifest integrity plus resource resolution."""
     out = Path(out_dir)
-    errors: list[str] = []
+    errors: list[str] = list(metadata.get("warnings", []))
     for entry in metadata.get("files", []):
         target = out / Path(*Path(entry["path"]).parts)
         if not target.is_file():
@@ -579,9 +615,8 @@ def validate_package(out_dir: Path | str, metadata: dict) -> list[str]:
         }
     )
     for ref in sorted(local_refs):
-        if ref.startswith(("/", "..")) or posixpath.normpath(ref).startswith("../"):
-            continue
         if ref not in expected:
+            errors.append(f"unpackaged reference: {ref}")
             continue
         if (out / Path(*Path(expected[ref]).parts)).is_file():
             continue
