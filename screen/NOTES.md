@@ -2,6 +2,13 @@
 
 ## Toolbox follow-up, 2026-11-13
 
+Fit correction: a visual's old absolute pixel positions must not size the next font
+measurement. Generated drawing layers, chart canvases and image views are excluded only
+while measuring their em-sized hosts, then redrawn. The six-node mind map now uses the
+pane instead of shrinking into its upper half. Ten visual kinds are checked through
+portrait/wide resizes by `tools/check_fit.py`. Synthetic and new Hydrogen low evidence:
+`review/2026-11-13-growable-fit/`. Real dense pages still warn; lint was not weakened.
+
 Successive patch previews now replay earlier patches before the candidate. This fixes
 false missing-id lint for ids inserted by a previous patch; the model already received
 that source/history. Genuine patch errors are saved and sent to the tutor as a failure
