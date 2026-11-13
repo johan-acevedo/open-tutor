@@ -755,11 +755,13 @@ export function useSession(mobile = false) {
       await room.localParticipant.setMicrophoneEnabled(next);
       setMicEnabled(next);
       if (next) setMicBlocked(false);
+      // Logged so a quiet stretch in a session can be told apart from a muted one.
+      void sendToAgent(JSON.stringify({ type: 'mic', on: next }), TOPIC_SESSION_EVENT);
     } catch {
       setMicEnabled(false);
       setMicBlocked(true);
     }
-  }, [micEnabled]);
+  }, [micEnabled, sendToAgent]);
 
   const retryMic = useCallback(async () => {
     const room = roomRef.current;

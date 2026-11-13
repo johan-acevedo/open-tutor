@@ -908,7 +908,10 @@ async def entrypoint(ctx: JobContext) -> None:
         turn_handling=TurnHandlingOptions(
             turn_detection="stt",
             endpointing={"min_delay": env_float("TUTOR_MIN_ENDPOINT", 0.6), "max_delay": 4.0},
-            interruption={"enabled": True, "mode": "vad", "min_duration": 0.4},
+            # TUTOR_INTERRUPT_MIN_S: how long sound must last before it stops the fox.
+            # 0.4 s let room noise cut it off; the dev setup tries 2.0 (2026-11-13).
+            interruption={"enabled": True, "mode": "vad",
+                          "min_duration": env_float("TUTOR_INTERRUPT_MIN_S", 0.4)},
         ),
         # One retry on the same route, 5 s each: the child should not wait a minute for a
         # slow provider. A route that still fails is the failover's or the apology's job.
@@ -1060,7 +1063,10 @@ async def entrypoint(ctx: JobContext) -> None:
         except json.JSONDecodeError:
             return
         debug.record("browser_event", {"type": str(event.get("type", "?"))[:40]})
-        if event.get("type") == "end":
+        if event.get("type") == "mic":
+            # The child (or a parent) pressed the microphone button.
+            debug.record("mic", {"on": bool(event.get("on"))})
+        elif event.get("type") == "end":
             ending.set()
         elif event.get("type") == "page-answer" and screen is not None:
             # Smart-screen mode: the child's answer from an answer box prompts a reply.
