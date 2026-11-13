@@ -1,0 +1,147 @@
+{
+ "case": "vinkel",
+ "sizes": {
+  "370x610": {
+   "fontPx": 17.5,
+   "issues": [],
+   "graphs": [
+    {
+     "flags": [
+      "label 'Vinkelben' on segment ben-2 crosses its own line by 26 px"
+     ],
+     "lengths": [
+      {
+       "tag": "ot-segment",
+       "id": "ben-1",
+       "label": "Vinkelben",
+       "units": 4.0,
+       "number": null
+      },
+      {
+       "tag": "ot-segment",
+       "id": "ben-2",
+       "label": "Vinkelben",
+       "units": 3.996,
+       "number": null
+      }
+     ],
+     "labels": [
+      {
+       "text": "Vinkelben",
+       "segment": "ben-1",
+       "edge_px": 18.4,
+       "inside": false,
+       "overlap_px": -8.8
+      },
+      {
+       "text": "Vinkelben",
+       "segment": "ben-2",
+       "edge_px": 18.4,
+       "inside": false,
+       "overlap_px": 25.6
+      }
+     ],
+     "kinds": [
+      "ot-segment",
+      "ot-segment",
+      "ot-point"
+     ]
+    }
+   ],
+   "flags": [
+    "label 'Vinkelben' on segment ben-2 crosses its own line by 26 px"
+   ],
+   "ids": [
+    "ot-map-data",
+    "page",
+    "graf",
+    "ben-1",
+    "ben-2",
+    "spets"
+   ],
+   "pointable": {
+    "ot-map-data": true,
+    "page": true,
+    "graf": true,
+    "ben-1": true,
+    "ben-2": true,
+    "spets": true
+   },
+   "pointable_named": [
+    "spets"
+   ],
+   "visible_text": "En vinkel på 60\n∘\nVinkelben\nVinkelben\n60\n∘\n\nTvå vinkelben möts i vinkelspetsen."
+  },
+  "1000x700": {
+   "fontPx": 30.25,
+   "issues": [],
+   "graphs": [
+    {
+     "flags": [
+      "label 'Vinkelben' on segment ben-2 crosses its own line by 45 px"
+     ],
+     "lengths": [
+      {
+       "tag": "ot-segment",
+       "id": "ben-1",
+       "label": "Vinkelben",
+       "units": 4.0,
+       "number": null
+      },
+      {
+       "tag": "ot-segment",
+       "id": "ben-2",
+       "label": "Vinkelben",
+       "units": 3.996,
+       "number": null
+      }
+     ],
+     "labels": [
+      {
+       "text": "Vinkelben",
+       "segment": "ben-1",
+       "edge_px": 31.8,
+       "inside": false,
+       "overlap_px": -15.1
+      },
+      {
+       "text": "Vinkelben",
+       "segment": "ben-2",
+       "edge_px": 31.8,
+       "inside": false,
+       "overlap_px": 44.7
+      }
+     ],
+     "kinds": [
+      "ot-segment",
+      "ot-segment",
+      "ot-point"
+     ]
+    }
+   ],
+   "flags": [
+    "label 'Vinkelben' on segment ben-2 crosses its own line by 45 px"
+   ],
+   "ids": [
+    "ot-map-data",
+    "page",
+    "graf",
+    "ben-1",
+    "ben-2",
+    "spets"
+   ],
+   "pointable": {
+    "ot-map-data": true,
+    "page": true,
+    "graf": true,
+    "ben-1": true,
+    "ben-2": true,
+    "spets": true
+   },
+   "pointable_named": [
+    "spets"
+   ],
+   "visible_text": "En vinkel på 60\n∘\nVinkelben\nVinkelben\n60\n∘\n\nTvå vinkelben möts i vinkelspetsen."
+  }
+ }
+}

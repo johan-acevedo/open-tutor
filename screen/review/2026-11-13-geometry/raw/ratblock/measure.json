@@ -1,0 +1,331 @@
+{
+ "case": "ratblock",
+ "sizes": {
+  "370x610": {
+   "fontPx": 17.5,
+   "issues": [],
+   "graphs": [
+    {
+     "flags": [
+      "label '2 cm' on segment hojd crosses its own line by 3 px"
+     ],
+     "lengths": [
+      {
+       "side": 0,
+       "label": "",
+       "units": 4.0,
+       "number": null
+      },
+      {
+       "side": 1,
+       "label": "",
+       "units": 2.0,
+       "number": null
+      },
+      {
+       "side": 2,
+       "label": "",
+       "units": 4.0,
+       "number": null
+      },
+      {
+       "side": 3,
+       "label": "",
+       "units": 2.0,
+       "number": null
+      },
+      {
+       "side": 0,
+       "label": "",
+       "units": 4.0,
+       "number": null
+      },
+      {
+       "side": 1,
+       "label": "",
+       "units": 1.803,
+       "number": null
+      },
+      {
+       "side": 2,
+       "label": "",
+       "units": 4.0,
+       "number": null
+      },
+      {
+       "side": 3,
+       "label": "",
+       "units": 1.803,
+       "number": null
+      },
+      {
+       "side": 0,
+       "label": "",
+       "units": 1.803,
+       "number": null
+      },
+      {
+       "side": 1,
+       "label": "",
+       "units": 2.0,
+       "number": null
+      },
+      {
+       "side": 2,
+       "label": "",
+       "units": 1.803,
+       "number": null
+      },
+      {
+       "side": 3,
+       "label": "",
+       "units": 2.0,
+       "number": null
+      },
+      {
+       "tag": "ot-segment",
+       "id": "hojd",
+       "label": "2 cm",
+       "units": 2.0,
+       "number": 2.0,
+       "implied_scale": 1.0
+      },
+      {
+       "tag": "ot-segment",
+       "id": "langd",
+       "label": "4 cm",
+       "units": 4.0,
+       "number": 4.0,
+       "implied_scale": 1.0
+      },
+      {
+       "tag": "ot-segment",
+       "id": "bredd",
+       "label": "3 cm",
+       "units": 1.803,
+       "number": 3.0,
+       "implied_scale": 0.601
+      }
+     ],
+     "labels": [
+      {
+       "text": "2 cm",
+       "segment": "hojd",
+       "edge_px": 18.4,
+       "inside": false,
+       "overlap_px": 3.1
+      },
+      {
+       "text": "4 cm",
+       "segment": "langd",
+       "edge_px": 18.4,
+       "inside": false,
+       "overlap_px": -8.8
+      },
+      {
+       "text": "3 cm",
+       "segment": "bredd",
+       "edge_px": 18.4,
+       "inside": false,
+       "overlap_px": -8.8
+      }
+     ],
+     "kinds": [
+      "ot-polygon",
+      "ot-polygon",
+      "ot-polygon",
+      "ot-segment",
+      "ot-segment",
+      "ot-segment"
+     ]
+    }
+   ],
+   "flags": [
+    "label '2 cm' on segment hojd crosses its own line by 3 px"
+   ],
+   "ids": [
+    "ot-map-data",
+    "page",
+    "ratblock",
+    "hojd",
+    "langd",
+    "bredd"
+   ],
+   "pointable": {
+    "ot-map-data": true,
+    "page": true,
+    "ratblock": true,
+    "hojd": true,
+    "langd": true,
+    "bredd": true
+   },
+   "pointable_named": [
+    "hojd"
+   ],
+   "visible_text": "Rätblockets mått\n\nPeka på höjden.\n\n2 cm\n4 cm\n3 cm"
+  },
+  "1000x700": {
+   "fontPx": 30.25,
+   "issues": [],
+   "graphs": [
+    {
+     "flags": [
+      "label '2 cm' on segment hojd crosses its own line by 4 px"
+     ],
+     "lengths": [
+      {
+       "side": 0,
+       "label": "",
+       "units": 4.0,
+       "number": null
+      },
+      {
+       "side": 1,
+       "label": "",
+       "units": 2.0,
+       "number": null
+      },
+      {
+       "side": 2,
+       "label": "",
+       "units": 4.0,
+       "number": null
+      },
+      {
+       "side": 3,
+       "label": "",
+       "units": 2.0,
+       "number": null
+      },
+      {
+       "side": 0,
+       "label": "",
+       "units": 4.0,
+       "number": null
+      },
+      {
+       "side": 1,
+       "label": "",
+       "units": 1.803,
+       "number": null
+      },
+      {
+       "side": 2,
+       "label": "",
+       "units": 4.0,
+       "number": null
+      },
+      {
+       "side": 3,
+       "label": "",
+       "units": 1.803,
+       "number": null
+      },
+      {
+       "side": 0,
+       "label": "",
+       "units": 1.803,
+       "number": null
+      },
+      {
+       "side": 1,
+       "label": "",
+       "units": 2.0,
+       "number": null
+      },
+      {
+       "side": 2,
+       "label": "",
+       "units": 1.803,
+       "number": null
+      },
+      {
+       "side": 3,
+       "label": "",
+       "units": 2.0,
+       "number": null
+      },
+      {
+       "tag": "ot-segment",
+       "id": "hojd",
+       "label": "2 cm",
+       "units": 2.0,
+       "number": 2.0,
+       "implied_scale": 1.0
+      },
+      {
+       "tag": "ot-segment",
+       "id": "langd",
+       "label": "4 cm",
+       "units": 4.0,
+       "number": 4.0,
+       "implied_scale": 1.0
+      },
+      {
+       "tag": "ot-segment",
+       "id": "bredd",
+       "label": "3 cm",
+       "units": 1.803,
+       "number": 3.0,
+       "implied_scale": 0.601
+      }
+     ],
+     "labels": [
+      {
+       "text": "2 cm",
+       "segment": "hojd",
+       "edge_px": 31.7,
+       "inside": false,
+       "overlap_px": 4.3
+      },
+      {
+       "text": "4 cm",
+       "segment": "langd",
+       "edge_px": 31.8,
+       "inside": false,
+       "overlap_px": -15.1
+      },
+      {
+       "text": "3 cm",
+       "segment": "bredd",
+       "edge_px": 31.8,
+       "inside": false,
+       "overlap_px": -15.1
+      }
+     ],
+     "kinds": [
+      "ot-polygon",
+      "ot-polygon",
+      "ot-polygon",
+      "ot-segment",
+      "ot-segment",
+      "ot-segment"
+     ]
+    }
+   ],
+   "flags": [
+    "label '2 cm' on segment hojd crosses its own line by 4 px"
+   ],
+   "ids": [
+    "ot-map-data",
+    "page",
+    "ratblock",
+    "hojd",
+    "langd",
+    "bredd"
+   ],
+   "pointable": {
+    "ot-map-data": true,
+    "page": true,
+    "ratblock": true,
+    "hojd": true,
+    "langd": true,
+    "bredd": true
+   },
+   "pointable_named": [
+    "hojd"
+   ],
+   "visible_text": "Rätblockets mått\n\nPeka på höjden.\n\n2 cm\n4 cm\n3 cm"
+  }
+ }
+}

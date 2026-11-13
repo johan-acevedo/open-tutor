@@ -1,0 +1,379 @@
+{
+ "case": "plan",
+ "sizes": {
+  "370x610": {
+   "fontPx": 17.5,
+   "issues": [],
+   "graphs": [
+    {
+     "flags": [
+      "label '3 cm' crosses its own outline by 3 px",
+      "label '3 cm' crosses its own outline by 3 px",
+      "label '1 cm' crosses its own outline by 3 px",
+      "label '1 cm' is inside the outlined shape",
+      "label '2 cm' crosses its own outline by 3 px"
+     ],
+     "lengths": [
+      {
+       "side": 0,
+       "label": "4 cm",
+       "units": 4.0,
+       "number": 4.0,
+       "implied_scale": 1.0
+      },
+      {
+       "side": 1,
+       "label": "3 cm",
+       "units": 3.0,
+       "number": 3.0,
+       "implied_scale": 1.0
+      },
+      {
+       "side": 2,
+       "label": "4 cm",
+       "units": 4.0,
+       "number": 4.0,
+       "implied_scale": 1.0
+      },
+      {
+       "side": 3,
+       "label": "3 cm",
+       "units": 3.0,
+       "number": 3.0,
+       "implied_scale": 1.0
+      },
+      {
+       "side": 0,
+       "label": "3 cm",
+       "units": 3.0,
+       "number": 3.0,
+       "implied_scale": 1.0
+      },
+      {
+       "side": 1,
+       "label": "1 cm",
+       "units": 1.0,
+       "number": 1.0,
+       "implied_scale": 1.0
+      },
+      {
+       "side": 2,
+       "label": "2 cm",
+       "units": 2.0,
+       "number": 2.0,
+       "implied_scale": 1.0
+      },
+      {
+       "side": 3,
+       "label": "1 cm",
+       "units": 1.0,
+       "number": 1.0,
+       "implied_scale": 1.0
+      },
+      {
+       "side": 4,
+       "label": "1 cm",
+       "units": 1.0,
+       "number": 1.0,
+       "implied_scale": 1.0
+      },
+      {
+       "side": 5,
+       "label": "2 cm",
+       "units": 2.0,
+       "number": 2.0,
+       "implied_scale": 1.0
+      }
+     ],
+     "labels": [
+      {
+       "text": "4 cm",
+       "edge_px": 18.4,
+       "inside": false,
+       "overlap_px": -8.7
+      },
+      {
+       "text": "3 cm",
+       "edge_px": 18.4,
+       "inside": false,
+       "overlap_px": 3.1
+      },
+      {
+       "text": "4 cm",
+       "edge_px": 18.4,
+       "inside": false,
+       "overlap_px": -8.8
+      },
+      {
+       "text": "3 cm",
+       "edge_px": 18.4,
+       "inside": false,
+       "overlap_px": 3.1
+      },
+      {
+       "text": "3 cm",
+       "edge_px": 18.4,
+       "inside": false,
+       "overlap_px": -8.7
+      },
+      {
+       "text": "1 cm",
+       "edge_px": 18.4,
+       "inside": false,
+       "overlap_px": 3.1
+      },
+      {
+       "text": "2 cm",
+       "edge_px": 18.4,
+       "inside": false,
+       "overlap_px": -8.8
+      },
+      {
+       "text": "1 cm",
+       "edge_px": 12.5,
+       "inside": true,
+       "overlap_px": -2.9
+      },
+      {
+       "text": "1 cm",
+       "edge_px": 18.4,
+       "inside": false,
+       "overlap_px": -8.8
+      },
+      {
+       "text": "2 cm",
+       "edge_px": 18.4,
+       "inside": false,
+       "overlap_px": 3.1
+      }
+     ],
+     "kinds": [
+      "ot-polygon",
+      "sides-labels",
+      "ot-polygon",
+      "sides-labels"
+     ],
+     "scale_median": 1.0,
+     "scale_spread": 0.0
+    }
+   ],
+   "flags": [
+    "label '3 cm' crosses its own outline by 3 px",
+    "label '3 cm' crosses its own outline by 3 px",
+    "label '1 cm' crosses its own outline by 3 px",
+    "label '1 cm' is inside the outlined shape",
+    "label '2 cm' crosses its own outline by 3 px"
+   ],
+   "ids": [
+    "ot-map-data",
+    "page",
+    "figurer",
+    "rektangel",
+    "l-form",
+    "svar",
+    "svar-input"
+   ],
+   "pointable": {
+    "ot-map-data": true,
+    "page": true,
+    "figurer": true,
+    "rektangel": true,
+    "l-form": true,
+    "svar": true,
+    "svar-input": true
+   },
+   "pointable_named": [
+    "rektangel"
+   ],
+   "visible_text": "Rektangel och L-form\n4 cm\n3 cm\n4 cm\n3 cm\n3 cm\n1 cm\n2 cm\n1 cm\n1 cm\n2 cm\nRektangelns omkrets\ncm\nSkicka"
+  },
+  "1000x700": {
+   "fontPx": 30.25,
+   "issues": [],
+   "graphs": [
+    {
+     "flags": [
+      "label '3 cm' crosses its own outline by 5 px",
+      "label '3 cm' crosses its own outline by 5 px",
+      "label '1 cm' crosses its own outline by 4 px",
+      "label '2 cm' is inside the outlined shape",
+      "label '1 cm' is inside the outlined shape",
+      "label '2 cm' crosses its own outline by 4 px"
+     ],
+     "lengths": [
+      {
+       "side": 0,
+       "label": "4 cm",
+       "units": 4.0,
+       "number": 4.0,
+       "implied_scale": 1.0
+      },
+      {
+       "side": 1,
+       "label": "3 cm",
+       "units": 3.0,
+       "number": 3.0,
+       "implied_scale": 1.0
+      },
+      {
+       "side": 2,
+       "label": "4 cm",
+       "units": 4.0,
+       "number": 4.0,
+       "implied_scale": 1.0
+      },
+      {
+       "side": 3,
+       "label": "3 cm",
+       "units": 3.0,
+       "number": 3.0,
+       "implied_scale": 1.0
+      },
+      {
+       "side": 0,
+       "label": "3 cm",
+       "units": 3.0,
+       "number": 3.0,
+       "implied_scale": 1.0
+      },
+      {
+       "side": 1,
+       "label": "1 cm",
+       "units": 1.0,
+       "number": 1.0,
+       "implied_scale": 1.0
+      },
+      {
+       "side": 2,
+       "label": "2 cm",
+       "units": 2.0,
+       "number": 2.0,
+       "implied_scale": 1.0
+      },
+      {
+       "side": 3,
+       "label": "1 cm",
+       "units": 1.0,
+       "number": 1.0,
+       "implied_scale": 1.0
+      },
+      {
+       "side": 4,
+       "label": "1 cm",
+       "units": 1.0,
+       "number": 1.0,
+       "implied_scale": 1.0
+      },
+      {
+       "side": 5,
+       "label": "2 cm",
+       "units": 2.0,
+       "number": 2.0,
+       "implied_scale": 1.0
+      }
+     ],
+     "labels": [
+      {
+       "text": "4 cm",
+       "edge_px": 31.8,
+       "inside": false,
+       "overlap_px": -15.1
+      },
+      {
+       "text": "3 cm",
+       "edge_px": 31.8,
+       "inside": false,
+       "overlap_px": 4.7
+      },
+      {
+       "text": "4 cm",
+       "edge_px": 31.8,
+       "inside": false,
+       "overlap_px": -15.1
+      },
+      {
+       "text": "3 cm",
+       "edge_px": 31.8,
+       "inside": false,
+       "overlap_px": 4.7
+      },
+      {
+       "text": "3 cm",
+       "edge_px": 31.8,
+       "inside": false,
+       "overlap_px": -15.1
+      },
+      {
+       "text": "1 cm",
+       "edge_px": 31.8,
+       "inside": false,
+       "overlap_px": 4.2
+      },
+      {
+       "text": "2 cm",
+       "edge_px": 31.8,
+       "inside": true,
+       "overlap_px": -15.1
+      },
+      {
+       "text": "1 cm",
+       "edge_px": 31.7,
+       "inside": true,
+       "overlap_px": -15.0
+      },
+      {
+       "text": "1 cm",
+       "edge_px": 31.8,
+       "inside": false,
+       "overlap_px": -15.1
+      },
+      {
+       "text": "2 cm",
+       "edge_px": 31.8,
+       "inside": false,
+       "overlap_px": 4.2
+      }
+     ],
+     "kinds": [
+      "ot-polygon",
+      "sides-labels",
+      "ot-polygon",
+      "sides-labels"
+     ],
+     "scale_median": 1.0,
+     "scale_spread": 0.0
+    }
+   ],
+   "flags": [
+    "label '3 cm' crosses its own outline by 5 px",
+    "label '3 cm' crosses its own outline by 5 px",
+    "label '1 cm' crosses its own outline by 4 px",
+    "label '2 cm' is inside the outlined shape",
+    "label '1 cm' is inside the outlined shape",
+    "label '2 cm' crosses its own outline by 4 px"
+   ],
+   "ids": [
+    "ot-map-data",
+    "page",
+    "figurer",
+    "rektangel",
+    "l-form",
+    "svar",
+    "svar-input"
+   ],
+   "pointable": {
+    "ot-map-data": true,
+    "page": true,
+    "figurer": true,
+    "rektangel": true,
+    "l-form": true,
+    "svar": true,
+    "svar-input": true
+   },
+   "pointable_named": [
+    "rektangel"
+   ],
+   "visible_text": "Rektangel och L-form\n4 cm\n3 cm\n4 cm\n3 cm\n3 cm\n1 cm\n2 cm\n1 cm\n1 cm\n2 cm\nRektangelns omkrets\ncm\nSkicka"
+  }
+ }
+}

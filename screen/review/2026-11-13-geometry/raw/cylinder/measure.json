@@ -1,0 +1,193 @@
+{
+ "case": "cylinder",
+ "sizes": {
+  "370x610": {
+   "fontPx": 17.5,
+   "issues": [],
+   "graphs": [
+    {
+     "flags": [
+      "label '5 cm' on segment hojd crosses its own line by 3 px"
+     ],
+     "lengths": [
+      {
+       "tag": "ot-segment",
+       "id": null,
+       "label": "",
+       "units": 5.0,
+       "number": null
+      },
+      {
+       "tag": "ot-segment",
+       "id": null,
+       "label": "",
+       "units": 5.0,
+       "number": null
+      },
+      {
+       "tag": "ot-segment",
+       "id": "radie",
+       "label": "3 cm",
+       "units": 3.0,
+       "number": 3.0,
+       "implied_scale": 1.0
+      },
+      {
+       "tag": "ot-segment",
+       "id": "hojd",
+       "label": "5 cm",
+       "units": 5.0,
+       "number": 5.0,
+       "implied_scale": 1.0
+      }
+     ],
+     "labels": [
+      {
+       "text": "3 cm",
+       "segment": "radie",
+       "edge_px": 18.4,
+       "inside": false,
+       "overlap_px": -8.8
+      },
+      {
+       "text": "5 cm",
+       "segment": "hojd",
+       "edge_px": 18.4,
+       "inside": false,
+       "overlap_px": 3.1
+      }
+     ],
+     "kinds": [
+      "ot-fn",
+      "ot-fn",
+      "ot-fn",
+      "ot-segment",
+      "ot-segment",
+      "ot-point",
+      "ot-segment",
+      "ot-segment"
+     ]
+    }
+   ],
+   "flags": [
+    "label '5 cm' on segment hojd crosses its own line by 3 px"
+   ],
+   "ids": [
+    "ot-map-data",
+    "page",
+    "cylinder",
+    "centrum",
+    "radie",
+    "hojd"
+   ],
+   "pointable": {
+    "ot-map-data": true,
+    "page": true,
+    "cylinder": true,
+    "centrum": true,
+    "radie": true,
+    "hojd": true
+   },
+   "pointable_named": [
+    "cylinder",
+    "centrum",
+    "radie"
+   ],
+   "visible_text": "En cylinder\n\nPeka på radien.\n\n3 cm\n5 cm"
+  },
+  "1000x700": {
+   "fontPx": 30.25,
+   "issues": [],
+   "graphs": [
+    {
+     "flags": [
+      "label '5 cm' on segment hojd crosses its own line by 5 px"
+     ],
+     "lengths": [
+      {
+       "tag": "ot-segment",
+       "id": null,
+       "label": "",
+       "units": 5.0,
+       "number": null
+      },
+      {
+       "tag": "ot-segment",
+       "id": null,
+       "label": "",
+       "units": 5.0,
+       "number": null
+      },
+      {
+       "tag": "ot-segment",
+       "id": "radie",
+       "label": "3 cm",
+       "units": 3.0,
+       "number": 3.0,
+       "implied_scale": 1.0
+      },
+      {
+       "tag": "ot-segment",
+       "id": "hojd",
+       "label": "5 cm",
+       "units": 5.0,
+       "number": 5.0,
+       "implied_scale": 1.0
+      }
+     ],
+     "labels": [
+      {
+       "text": "3 cm",
+       "segment": "radie",
+       "edge_px": 31.8,
+       "inside": false,
+       "overlap_px": -15.1
+      },
+      {
+       "text": "5 cm",
+       "segment": "hojd",
+       "edge_px": 31.8,
+       "inside": false,
+       "overlap_px": 4.7
+      }
+     ],
+     "kinds": [
+      "ot-fn",
+      "ot-fn",
+      "ot-fn",
+      "ot-segment",
+      "ot-segment",
+      "ot-point",
+      "ot-segment",
+      "ot-segment"
+     ]
+    }
+   ],
+   "flags": [
+    "label '5 cm' on segment hojd crosses its own line by 5 px"
+   ],
+   "ids": [
+    "ot-map-data",
+    "page",
+    "cylinder",
+    "centrum",
+    "radie",
+    "hojd"
+   ],
+   "pointable": {
+    "ot-map-data": true,
+    "page": true,
+    "cylinder": true,
+    "centrum": true,
+    "radie": true,
+    "hojd": true
+   },
+   "pointable_named": [
+    "cylinder",
+    "centrum",
+    "radie"
+   ],
+   "visible_text": "En cylinder\n\nPeka på radien.\n\n3 cm\n5 cm"
+  }
+ }
+}

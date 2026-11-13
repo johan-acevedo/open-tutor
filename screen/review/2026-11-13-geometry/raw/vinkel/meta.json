@@ -1,0 +1,41 @@
+{
+ "case": "vinkel",
+ "ask": "Visa en vinkel som är 60 grader. Rita vinkelbenen från spetsen och markera vinkeln vid spetsen med 60°, så att eleven ser vilken vinkel det är. Eleven ska kunna peka på vinkelspetsen. Räkna inte ut något svar.",
+ "steer": null,
+ "pane": [
+  370,
+  610
+ ],
+ "wall_s": 11.73,
+ "spec": {
+  "model": "gemini-4-hydrogen",
+  "api": "chat",
+  "reasoning": "low"
+ },
+ "calls": [
+  {
+   "look": false,
+   "seconds": 10.59,
+   "user_chars": 571,
+   "answer_chars": 356
+  }
+ ],
+ "failures": [],
+ "model_s": 10.588400600943714,
+ "look_s": 0.0,
+ "retry_s": 0.0,
+ "render_s": 1.1428909958340228,
+ "total_s": 11.732595225796103,
+ "issues": [],
+ "residual_lint": [],
+ "repaired": false,
+ "screen_repair": {
+  "look": false,
+  "look_fix": false,
+  "retry": false,
+  "retry_applied": false,
+  "notes": [
+   "look pass skipped: page target budget"
+  ]
+ }
+}
