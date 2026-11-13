@@ -50,6 +50,7 @@ SAFE_CONFIG_KEYS = (
     "TUTOR_STT_MODEL",
     "TUTOR_STT_MAX_ENDPOINT_MS",
     "TUTOR_MIN_ENDPOINT",
+    "TUTOR_NOISE_CANCELLATION",
     "TUTOR_AGENT_NAME",
     "TUTOR_CLOUD_RECORDING",
     "TUTOR_DEBUG_LOG",
@@ -478,5 +479,14 @@ def _summarize(events: list[dict[str, Any]]) -> dict[str, Any]:
         ],
         "greeting_said": next(
             (e["t_rel_s"] for e in events if e["event"] == "greeting"), None
+        ),
+        # Which audio filter the child's microphone went through (noise.py).
+        "noise_cancellation": next(
+            (
+                e.get("noise_cancellation")
+                for e in events
+                if e["event"] == "worker_session_started"
+            ),
+            None,
         ),
     }

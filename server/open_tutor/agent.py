@@ -29,12 +29,11 @@ from livekit.agents import (
     cli,
     function_tool,
     llm,
-    room_io,
 )
 from livekit.plugins import cartesia, elevenlabs, silero, soniox
 from pydantic import ValidationError
 
-from . import prompt
+from . import noise, prompt
 from .board import (
     HtmlItem,
     Ids,
@@ -842,6 +841,9 @@ server = AgentServer()
 
 
 def prewarm(proc: JobProcess) -> None:
+    # A misspelt TUTOR_NOISE_CANCELLATION must stop the worker at boot, not silently run
+    # unfiltered while the operator believes the room is being cleaned.
+    noise.noise_cancellation_mode()
     proc.userdata["vad"] = silero.VAD.load(min_silence_duration=0.5)
     warm_up()
 
@@ -896,6 +898,10 @@ async def entrypoint(ctx: JobContext) -> None:
 
     voice = build_tts()
     log.info("tutor TTS route %s", tts_route(voice))
+    # TUTOR_NOISE_CANCELLATION: off (default) | nc | bvc, applied to the child's inbound
+    # audio before the VAD and the recogniser (noise.py).
+    noise_mode = noise.noise_cancellation_mode()
+    log.info("tutor noise cancellation %s", noise_mode)
     # TUTOR_FILLERS=1: a short fox sound when the reply is late (fillers.py). None when off.
     fillers = build_fillers(voice, delay=env_float("TUTOR_FILLER_AFTER_S", DEFAULT_FILLER_DELAY))
     llm_timeout = env_float("TUTOR_LLM_TIMEOUT_S", 5.0)
@@ -1120,16 +1126,17 @@ async def entrypoint(ctx: JobContext) -> None:
             agent=tutor,
             room=ctx.room,
             # text_input=False: the worker owns lk.chat from connect time (see
-            # text_input.py), so RoomIO must not take the topic over.
-            room_options=room_io.RoomOptions(participant_identity=child.identity,
-                                             text_input=False),
+            # text_input.py), so RoomIO must not take the topic over. audio_input carries
+            # the noise-cancellation filter when one is configured.
+            room_options=noise.room_options(child.identity, noise_mode),
             # TUTOR_CLOUD_RECORDING=1 uploads session audio and transcripts to LiveKit
             # Cloud observability. Off by default; the local debug log (TUTOR_DEBUG_LOG=1)
             # is the reviewable trail when Cloud is off or unreachable.
             record=os.environ.get("TUTOR_CLOUD_RECORDING") == "1",
         )
         debug.record("worker_session_started", {
-            "cloud_recording": os.environ.get("TUTOR_CLOUD_RECORDING") == "1"})
+            "cloud_recording": os.environ.get("TUTOR_CLOUD_RECORDING") == "1",
+            "noise_cancellation": noise_mode})
         if fillers is not None:
             # Publishes the filler track and starts making the clips in the background;
             # a failure here leaves the feature off and never breaks the session.

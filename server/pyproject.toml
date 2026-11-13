@@ -17,6 +17,7 @@ dependencies = [
   "aiohttp>=3.10,<4",
   "livekit-plugins-deepgram~=1.8.10",
   "playwright>=1.55,<2",
+  "livekit-plugins-noise-cancellation~=0.3",
 ]
 
 [dependency-groups]
