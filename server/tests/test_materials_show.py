@@ -222,7 +222,7 @@ async def test_success_shows_material_and_feeds_visible_text(monkeypatch, tmp_pa
     assert "incomplete" in result and "1 image(s)" in result
     assert "1 original source image(s)" in result
     assert "attached in page order (1-1)" in result
-    assert "Every visible image in this section was attached." in result
+    assert "Every unique visible image file in this section was attached." in result
     # Scope and language are distinguished; teaching stays active.
     assert "scrolls" in result and "only its top" in result
     assert "English source data" in result and "Swedish" in result
@@ -417,6 +417,7 @@ async def test_real_substitution_section_marks_equation_images(monkeypatch, tmp_
     assert "incomplete" in result and "image(s)" in result
     # Real formula images are attached, so the note no longer claims blindness.
     assert "original source image(s)" in result
+    assert "14 unique files; 29 page references with repeats" in result
     assert "attached in page order" in result
     assert "could not be attached" not in result
     _, _, payload = room.local_participant.calls[0]
@@ -525,7 +526,7 @@ def test_note_reports_attached_and_omitted_images_without_claiming_all_read():
     )
     assert "6 original source image(s)" in note
     assert "attached in page order (1-6)" in note
-    assert "14 more visible image(s) were left out" in note
+    assert "14 more visible image files were left out" in note
     assert "do not claim the whole example" in note
     assert "not a screenshot" in note and "current viewport" in note
     assert note.count("attached in page order") == 1
@@ -546,7 +547,7 @@ def test_note_with_every_image_attached_is_explicit():
         "b5", "sec-aaaaaaaaaaaaaaaa", meta, {"attached": 2, "omitted": 0}
     )
     assert "2 original source image(s)" in note
-    assert "Every visible image in this section was attached." in note
+    assert "Every unique visible image file in this section was attached." in note
     assert "left out" not in note
 
 

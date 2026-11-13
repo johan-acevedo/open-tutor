@@ -171,13 +171,14 @@ def _material_seen_note(
         )
         if omitted:
             figures += (
-                f"{omitted} more visible image(s) were left out by the image budget: you "
+                f"{omitted} more visible image files were left out by the image budget "
+                f"({attached + omitted} unique files; {image_count} page references with repeats): you "
                 "have not read those, so do not claim the whole example or page is covered. "
                 "If one of them matters, ask the child to read it aloud or teach that step "
                 "in words."
             )
         else:
-            figures += "Every visible image in this section was attached."
+            figures += "Every unique visible image file in this section was attached."
     else:
         figures = (
             f"The text is incomplete: {image_count} image(s) in the page carry content "
