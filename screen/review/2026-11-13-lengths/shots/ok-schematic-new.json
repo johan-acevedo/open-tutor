@@ -1,0 +1,13 @@
+{
+ "independent": {
+  "rektangel": {
+   "known": [],
+   "flags": [],
+   "skipped": "opted out (free/schematic)"
+  }
+ },
+ "shell": {
+  "370x610": [],
+  "1000x700": []
+ }
+}

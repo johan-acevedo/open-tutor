@@ -1,0 +1,1 @@
+Lägg till triangelns tre hörn som punkter som eleven kan peka på. Ändra inga mått.
