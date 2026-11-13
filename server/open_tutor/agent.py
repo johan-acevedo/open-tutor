@@ -925,7 +925,7 @@ async def entrypoint(ctx: JobContext) -> None:
             if role not in ("user", "assistant"):
                 return
             try:
-                text = item.text_content()
+                text = item.text_content  # a property, not a method
             except Exception:
                 return
             if not text or (role == "user" and text.startswith("[Session event")):
