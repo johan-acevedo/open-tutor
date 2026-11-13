@@ -159,6 +159,13 @@ def build_llm(session_id: str, http_client: Any = None) -> llm.LLM:
     extra: dict[str, Any] = {}
     if route.reasoning_effort:
         extra["reasoning_effort"] = route.reasoning_effort
+    if route.name.startswith("go"):
+        extra["client"] = AsyncOpenAI(
+            api_key=route.api_key,
+            base_url=route.base_url,
+            max_retries=0,
+            default_headers={"User-Agent": USER_AGENT, "x-opencode-session": session_id},
+        )
     return openai.LLM(
         model=route.model, base_url=route.base_url, api_key=route.api_key, temperature=0.6, **extra
     )

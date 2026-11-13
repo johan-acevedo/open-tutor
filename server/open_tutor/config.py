@@ -34,6 +34,15 @@ LLM_ROUTES = {
         "key": "OPENCODE_GO_API_KEY",
         "reasoning_effort": "minimal",
     },
+    # DeepSeek V4.1 Flash on the same Go subscription (Chat Completions). Stand-in while
+    # Muse on Go is slow (2026-11-13: first token after 5-10 s, some calls hang).
+    "go-deepseek": {
+        "api": "chat",
+        "base_url": "https://opencode.ai/inference/go/openai/v1",
+        "model": "deepseek-v4.1-flash",
+        "key": "OPENCODE_GO_API_KEY",
+        "reasoning_effort": None,
+    },
     "gemini-dev": {
         "api": "chat",
         "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
