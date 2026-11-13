@@ -1,0 +1,23 @@
+{
+ "round": "r21",
+ "generated_at": "2026-11-11T10:20:29+00:00",
+ "notes": "Adopted prompt-review edits (prompts/r13): settled-state-immediately, >=18px text, tutor-leads interactivity line, school-conventions one-liner, KaTeX textcolor tip. DeepSeek opencode-go.",
+ "targets": {
+  "median_wall_s": 20.0,
+  "pct_correct": 90.0,
+  "mean_clarity": 4.5
+ },
+ "members": {
+  "deepseek-v4.1-flash": {
+   "tune": {
+    "n": 1,
+    "judged": 1,
+    "fail": 0,
+    "pct_correct": 100.0,
+    "mean_clarity": 5.0,
+    "median_wall": 183.18,
+    "p90_wall": 183.18
+   }
+  }
+ }
+}

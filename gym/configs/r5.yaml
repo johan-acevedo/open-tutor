@@ -1,0 +1,12 @@
+round: r5
+notes: "r3 recipe (r1 framing + review pass on every board, plain review) + one line of school-context awareness: write maths the way Swedish schools teach it at the child's grade (uppställning, decimal comma, unit conversions, Swedish terms). Haiku and Muse Spark. MiniMax kicked."
+prompt: prompts/r5
+thinking:
+  default: low
+  muse-spark-1.3-contributor: minimal
+fix_pass: always
+toolkit: null
+members:
+  - claude-haiku-5-5
+  - muse-spark-1.3-contributor
+panels: [tune]

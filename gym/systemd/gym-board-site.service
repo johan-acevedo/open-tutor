@@ -1,0 +1,13 @@
+[Unit]
+Description=Board gym progress site (open-tutor)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 -m http.server 8743 --bind 100.91.148.43 --directory %h/gym-data/board-gym/site
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,32 @@
+{
+ "round": "r12",
+ "generated_at": "2026-11-11T10:20:29+00:00",
+ "notes": "Haiku: r9 recipe (reference examples, thinking medium) but fix pass only when the layout script finds text off screen, overlaps or JS errors (no review otherwise). Tests whether the examples hold quality without the always-review time cost.",
+ "targets": {
+  "median_wall_s": 20.0,
+  "pct_correct": 90.0,
+  "mean_clarity": 4.5
+ },
+ "members": {
+  "claude-haiku-5-5": {
+   "hidden": {
+    "n": 11,
+    "judged": 11,
+    "fail": 0,
+    "pct_correct": 63.6,
+    "mean_clarity": 4.0,
+    "median_wall": 22.76,
+    "p90_wall": 33.15
+   },
+   "tune": {
+    "n": 14,
+    "judged": 14,
+    "fail": 0,
+    "pct_correct": 85.7,
+    "mean_clarity": 3.93,
+    "median_wall": 14.72,
+    "p90_wall": 27.6
+   }
+  }
+ }
+}

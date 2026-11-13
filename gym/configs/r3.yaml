@@ -1,0 +1,20 @@
+round: r3
+notes: "Haiku: r1 framing + a review pass on every board (it sees its own settled render and HTML, fixes or returns unchanged). Muse Spark and MiniMax: r1 framing + BoardKit drawing library described as an optional tool (code computes geometry and counts) + fix pass on layout findings. DeepSeek parked (3 rounds, no path to 15 s)."
+prompt:
+  default: prompts/r1
+  muse-spark-1.3-contributor: prompts/r3
+  minimax-m3.1-flash: prompts/r3
+thinking:
+  default: low
+  muse-spark-1.3-contributor: minimal
+fix_pass:
+  default: true
+  claude-haiku-5-5: always
+toolkit:
+  file: gym/toolkit/board-kit.js
+  url: https://cdn.jsdelivr.net/gh/johan-acevedo/board-kit@0.1.0/board-kit.js
+members:
+  - claude-haiku-5-5
+  - muse-spark-1.3-contributor
+  - minimax-m3.1-flash
+panels: [tune]

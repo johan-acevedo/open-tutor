@@ -1,0 +1,56 @@
+{
+ "round": "r1",
+ "generated_at": "2026-11-11T10:20:29+00:00",
+ "notes": "Space and time awareness in the framing (exact 1920x1080, no scroll/scale, settled state counts, the child is waiting, the draft is only intent). Thinking minimal for the slow members (DeepSeek, Muse Spark), low for Haiku and MiniMax. One shot, no fix pass. longcat kicked.",
+ "targets": {
+  "median_wall_s": 20.0,
+  "pct_correct": 90.0,
+  "mean_clarity": 4.5
+ },
+ "members": {
+  "claude-haiku-5-5": {
+   "tune": {
+    "n": 14,
+    "judged": 14,
+    "fail": 0,
+    "pct_correct": 64.3,
+    "mean_clarity": 3.71,
+    "median_wall": 4.63,
+    "p90_wall": 8.75
+   }
+  },
+  "deepseek-v4.1-flash": {
+   "tune": {
+    "n": 14,
+    "judged": 14,
+    "fail": 0,
+    "pct_correct": 71.4,
+    "mean_clarity": 4.21,
+    "median_wall": 37.48,
+    "p90_wall": 74.48
+   }
+  },
+  "minimax-m3.1-flash": {
+   "tune": {
+    "n": 14,
+    "judged": 14,
+    "fail": 0,
+    "pct_correct": 42.9,
+    "mean_clarity": 3.14,
+    "median_wall": 13.53,
+    "p90_wall": 22.51
+   }
+  },
+  "muse-spark-1.3-contributor": {
+   "tune": {
+    "n": 14,
+    "judged": 14,
+    "fail": 0,
+    "pct_correct": 28.6,
+    "mean_clarity": 3.5,
+    "median_wall": 11.41,
+    "p90_wall": 18.29
+   }
+  }
+ }
+}

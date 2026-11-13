@@ -1,0 +1,10 @@
+round: r17
+notes: "Johan-philosophy rewrite (prompts/r11): situation + inventory only, no method. No Swedish examples, no toolkit rules, open internet, dynamic board/device/lang placeholders. Heads-up vs r13."
+prompt: prompts/r11
+thinking: medium
+fix_pass: true
+toolkit: null
+board: {w: 1920, h: 1080, device: desktop, lang: Swedish}
+members:
+  - claude-haiku-5-5
+panels: [tune]

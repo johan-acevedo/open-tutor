@@ -1,0 +1,9 @@
+round: r14
+notes: "Haiku r13 + component toolkit appendix (KaTeX, JSXGraph, Chart.js pinned snippets, use-only-if-better + no-guessing rules). One new variable: the toolkit."
+prompt: prompts/r8
+thinking: medium
+fix_pass: true
+toolkit: null
+members:
+  - claude-haiku-5-5
+panels: [tune]

@@ -1,0 +1,23 @@
+{
+ "round": "r19",
+ "generated_at": "2026-11-11T10:20:29+00:00",
+ "notes": "DeepSeek v4.1-flash (ultrafast access) on the latest prompt (r12: philosophy rewrite + API docs + interactive). Thinking off for speed. Same judge (argon) for comparability.",
+ "targets": {
+  "median_wall_s": 20.0,
+  "pct_correct": 90.0,
+  "mean_clarity": 4.5
+ },
+ "members": {
+  "deepseek-v4.1-flash": {
+   "tune": {
+    "n": 14,
+    "judged": 11,
+    "fail": 3,
+    "pct_correct": 81.8,
+    "mean_clarity": 4.0,
+    "median_wall": 99.06,
+    "p90_wall": 180.01
+   }
+  }
+ }
+}

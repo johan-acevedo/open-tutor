@@ -4,3 +4,8 @@ __pycache__/
 .venv/
 node_modules/
 web/dist/
+
+# board gym: session data lives in ~/gym-data/board-gym, never here
+gym/data/
+gym/runs/
+gym/**/node_modules/

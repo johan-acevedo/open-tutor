@@ -1,0 +1,23 @@
+{
+ "round": "r20",
+ "generated_at": "2026-11-11T10:20:29+00:00",
+ "notes": "DeepSeek V4.1 Flash via Fireworks ultrafast router (1200-1600 tok/s) on the latest prompt (r12), thinking off, argon judge. Heads-up vs r19 (same model, opencode-go pipe).",
+ "targets": {
+  "median_wall_s": 20.0,
+  "pct_correct": 90.0,
+  "mean_clarity": 4.5
+ },
+ "members": {
+  "fireworks/accounts/fireworks/routers/deepseek-v4p1-flash-1017-ultrafast": {
+   "tune": {
+    "n": 26,
+    "judged": 12,
+    "fail": 14,
+    "pct_correct": 25.0,
+    "mean_clarity": 2.33,
+    "median_wall": 16.01,
+    "p90_wall": 23.68
+   }
+  }
+ }
+}
