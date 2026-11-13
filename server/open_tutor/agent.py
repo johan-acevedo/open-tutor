@@ -741,11 +741,15 @@ class SmartTutor(Tutor):
         await self.update_chat_ctx(ctx)
 
     async def screen_failed(self, session: AgentSession, message: str) -> None:
-        """A screen job failed: tell the tutor quietly, without prompting."""
+        """A screen job failed: tell the tutor and let it say so once it is free.
+
+        Quiet failure left the child waiting in silence (2026-11-13: 26 s until
+        the child asked "Hur går det?")."""
         record_active("screen_failed", {"message": message[:200]})
-        ctx = self.chat_ctx.copy()
-        ctx.add_message(role="user", content=[f"[Screen: {message}]"])
-        await self.update_chat_ctx(ctx)
+        await self._prompt_when_free(
+            session,
+            f"The screen failed: {message} Tell the child in one short sentence that "
+            "the picture did not work, and carry on teaching in words.")
 
 
 def prompt_event(session: AgentSession, text: str):
