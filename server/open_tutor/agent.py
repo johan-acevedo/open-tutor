@@ -1154,8 +1154,10 @@ server = AgentServer()
 
 def prewarm(proc: JobProcess) -> None:
     # A misspelt TUTOR_NOISE_CANCELLATION must stop the worker at boot, not silently run
-    # unfiltered while the operator believes the room is being cleaned.
-    noise.noise_cancellation_mode()
+    # unfiltered while the operator believes the room is being cleaned. A configured
+    # filter then loads its native side here: on 2026-11-14 the first import inside a
+    # session blocked the loop for about a second and pushed the greeting back.
+    noise.warm_up(noise.noise_cancellation_mode())
     proc.userdata["vad"] = silero.VAD.load(min_silence_duration=0.5)
     warm_up()
 
