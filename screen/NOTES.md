@@ -2,6 +2,14 @@
 
 ## Toolbox follow-up, 2026-11-13
 
+Timing now takes priority. New jobs stop at 20 s and aim for 12 s. Clean pages
+use a look only while that soft budget has room; known lint buys one capped
+correction directly. Each optional model call is at most 6 s, and a look never
+starts a second correction chain. This can miss answer leaks on clean pages.
+Five real DeepSeek jobs now stayed below 20 s but did not meet 12 s; the first
+model call alone took 12.4–16.5 s. See `review/2026-11-13-page-budget/` for the
+evidence, separate-batch caveat and the old/new look comparison.
+
 Pane/repair review: corrected-page renders are bounded too, with a short margin
 for saving and delivery. A renderer timeout keeps the already rendered page.
 Retry acknowledgements and patch responses are not accepted as page bodies.

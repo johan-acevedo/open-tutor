@@ -184,37 +184,35 @@ One `Screen` per session, owned by the worker next to the `Tutor`.
      page body;
   4. renders it with `screen/tools/screenkit.py` at the child's pane size and collects the
      shell's issues and a screenshot;
-  5. for a new page, **looks once** (`SCREEN_LOOK=1`, default on): the model gets its own
-     screenshot, the page source, the pane and the issues, and answers `OK` or a corrected
-     body, which is rendered again (see below);
+  5. for a new page, makes at most one optional check or correction within the timing budget
+     below, then keeps the usable page if optional work fails;
   6. saves source, screenshot, the ask and timings under the session's log folder (`pages/`);
   7. hands the result to the tutor.
-- One job at a time; a second ask while one runs is queued (latest wins). 45 s limit per job.
+- One job at a time; a second ask while one runs is queued (latest wins). 20 s limit per job.
   A failure is told to the tutor quietly ("explain in words").
 
-### The look pass and one bounded lint retry (page jobs)
+### Page timing budget (2026-11-13)
 
-- **The look pass sees what it repairs:** the screenshot, the page body it wrote, the ask, the
-  pane and the shell's exact issue lines. It checks readability at that pane size, whether the
-  page does what the tutor asked, and whether it gives the answer away. For the last one it
-  names the question the page actually asks and checks every visible number, mark, label and
-  picture step against it: a solved step, the result marked, or 6/8 printed under "Hur många
-  åttondelar är 3/4?" is a leak even when lint reports nothing. Lint only sees layout, tags,
-  maths and ids; it cannot see teaching leakage in words or pictures, and neither the prompt nor
-  the log claims it can.
-- **One retry, only for actionable lint.** If issues a body can fix remain after the look
-  (and the final render), the model gets exactly one more call with the ask, the pane, the
-  source of the page it is correcting and the exact lint text (e.g. `dense: text is only
-  14.75px on this screen (minimum 16px)…`, `heading: title takes more than two lines…`).
-  `SCREEN_LINT_RETRY=0` turns it off. Advisory issues never buy a retry: `slow` loading,
-  `load` failures and `image` credits stay in the log.
-- **Delivery wins over repair.** Optional steps start only while a final render still fits the
-  job's 45 s limit, and the look and retry calls are bounded by the time that is left. A
-  correction that fails, times out or comes back with more actionable lint than before is
-  dropped and the page in hand is delivered. Whatever actionable lint remains is written to the
-  job's `meta.json` (`residual_lint`, `repair`) and logged as `delivered with residual lint`;
-  a usable page is never dropped to avoid showing one. No model fallback, and patches are not
-  retried.
+- The default job limit is 20 s. Generation leaves two seconds for the first render. A
+  generation timeout reports failure to the tutor so it can explain in words.
+- Clean pages get a look only when it can fit the 12 s soft target, including a final-render
+  reserve. The look sees the source, screenshot, ask and pane, with short readability and
+  answer-leak criteria. Each optional call is capped at 6 s. `SCREEN_LOOK=0` disables it;
+  `SCREEN_LOOK=always` allows inspection up to the hard limit for diagnostics.
+- Actionable lint goes directly to one source-and-lint correction instead of a visual look
+  first. `SCREEN_LINT_RETRY=0` disables that. There is no look-plus-retry chain. Advisory
+  loading and credit issues stay in the log.
+- Failed or late optional work keeps the already rendered page. Remaining lint and skipped
+  work are saved in `meta.json` (`residual_lint`, `repair`) and logged. Patches get no retry.
+- Quality tradeoff: a clean page can be delivered without semantic inspection. Lint cannot
+  catch an answer given away in a diagram or explanation. The reference still tells the
+  writer to hide answers, but a clean lint result is not a teaching-quality guarantee.
+
+Five measured jobs before this policy took 18.9–29.3 s, all with a look answering `OK`.
+Five after it took 13.6–17.9 s with no failures and no look calls. These are separate batches,
+so provider variation prevents a clean speedup claim. The under-12 s target is not met on
+this route: generation alone took 12.4–16.5 s in the second batch. Sources, timing data,
+screenshots and rerun commands are in `screen/review/2026-11-13-page-budget/`.
 
 ### Tutor tools (replace `commission_board` and `edit_board` in smart mode)
 

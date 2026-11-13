@@ -37,7 +37,9 @@ from screen.tools import prompt as screen_prompt  # noqa: E402
 from screen.tools import screenkit as screenkit  # noqa: E402
 
 SCREEN_BASE_URL = "https://opencode.ai/inference/go/openai/v1"
-JOB_TIMEOUT_S = 45.0
+JOB_TIMEOUT_S = 20.0
+PAGE_TARGET_S = 12.0
+OPTIONAL_STEP_LIMIT_S = 6.0
 # Defaults: Muse Spark on Responses with minimal reasoning. DeepSeek models use
 # Chat Completions with low reasoning. SCREEN_MODEL / SCREEN_REASONING override;
 # the model itself is never changed by the timing work (see docs/smart-screen.md).
@@ -47,7 +49,7 @@ MAX_HOMEWORK_IMAGES = 4
 # delivery: a step only starts while a final render still fits the job limit.
 FINAL_RENDER_RESERVE_S = 3.0
 DELIVERY_RESERVE_S = 0.2
-MIN_OPTIONAL_STEP_S = 3.0
+MIN_OPTIONAL_STEP_S = 2.0
 # The shell's `dense` minimum is 16 px below 600 px wide (screen/shell/shell.js).
 NARROW_PANE_WIDTH = 600
 NARROW_PANE_HEIGHT = 640
@@ -448,7 +450,8 @@ class Screen:
             return
         system = self.system_prompt()
         user = self._build_user_text(ask)
-        answer, model_s = await self._call_model(system, user)
+        generation_time = self.timeout - min(2.0, self.timeout * 0.2)
+        answer, model_s = await asyncio.wait_for(self._call_model(system, user), timeout=generation_time)
         answer = strip_fences(answer)
         if not answer:
             await self._fail(job_id, "The screen answered empty. Explain in words instead, briefly.")
@@ -499,18 +502,20 @@ class Screen:
         width, height = self._pane_size()
         png, issues, render_s = await self._render(body, None)
         reserve_s = max(render_s, FINAL_RENDER_RESERVE_S)
-        step_s = max(MIN_OPTIONAL_STEP_S, min(model_s, 20.0))
+        step_s = MIN_OPTIONAL_STEP_S
         look_s = retry_s = 0.0
         repair: dict[str, Any] = {"look": False, "look_fix": False, "retry": False,
                                   "retry_applied": False, "notes": []}
 
-        # One look at its own render (default on). It is optional work, so it
-        # starts only while a final render still fits the job limit.
-        if _screen_env("SCREEN_LOOK", "1") != "0":
-            if self._time_left(t0) >= step_s + reserve_s:
+        # Spend the soft target only on optional inspection. Known lint goes
+        # straight to one correction instead of paying for a look first.
+        look_mode = _screen_env("SCREEN_LOOK", "1")
+        look_target = self.timeout if look_mode == "always" else min(self.timeout, PAGE_TARGET_S)
+        if look_mode != "0" and not actionable_issues(issues):
+            if look_target - (time.monotonic() - t0) >= step_s + reserve_s:
                 repair["look"] = True
                 fixed, look_s, why = await self._bounded(
-                    t0, reserve_s, self._look_once(ask, body, png, issues, width, height))
+                    t0, reserve_s, self._look_once(ask, body, png, issues, width, height), target_s=look_target)
                 if why:
                     repair["notes"].append(f"look pass {why}")
                 elif fixed and fixed != body:
@@ -526,13 +531,15 @@ class Screen:
                             reserve_s = max(reserve_s, rendered[2])
                             repair["look_fix"] = True
             else:
-                repair["notes"].append("look pass skipped: no time left")
+                repair["notes"].append("look pass skipped: page target budget")
+        elif look_mode != "0" and actionable_issues(issues):
+            repair["notes"].append("look pass skipped: correct lint directly")
 
         # One corrective retry when actionable lint is still there: the page
         # source, the ask, the pane and the exact lint text. Advisory issues
         # (slow loading, image credits) never buy a retry.
         leftover = actionable_issues(issues)
-        if leftover and _screen_env("SCREEN_LINT_RETRY", "1") != "0":
+        if leftover and not repair["look"] and _screen_env("SCREEN_LINT_RETRY", "1") != "0":
             if self._time_left(t0) >= step_s + reserve_s:
                 repair["retry"] = True
                 corrected, retry_s, why = await self._bounded(
@@ -559,6 +566,9 @@ class Screen:
         if residual:
             log.warning("screen page %s delivered with residual lint: %s",
                         page_id, "; ".join(residual))
+        if not repair["look"]:
+            log.info("screen page %s delivered without look: %s", page_id,
+                     "; ".join(repair["notes"]) or "disabled")
         total_s = time.monotonic() - t0
         spec = self.model_spec()
         job_dir = self._save(job_id, ask,
@@ -574,6 +584,7 @@ class Screen:
         record_active("screen_page", {"job": job_id, "page": page_id,
                                       "total_s": round(total_s, 2), "issues": issues,
                                       "residual_lint": residual,
+                                      "look": repair["look"], "repair_notes": repair["notes"],
                                       "retry": repair["retry"],
                                       "retry_applied": repair["retry_applied"]})
         result = PageResult(job_id=job_id, page_id=page_id,
@@ -592,12 +603,15 @@ class Screen:
         return self.timeout - (time.monotonic() - t0)
 
     async def _bounded(self, t0: float, reserve_s: float,
-                       call: Awaitable[Any]) -> tuple[Any, float, str]:
+                       call: Awaitable[Any], *, target_s: float | None = None) -> tuple[Any, float, str]:
         """Run one optional model step inside the job budget; it never raises.
         Returns (result, seconds, why-not), with why-not empty on success."""
         started = time.monotonic()
         try:
-            result = await asyncio.wait_for(call, timeout=max(0.05, self._time_left(t0) - reserve_s))
+            remaining = self._time_left(t0) - reserve_s
+            if target_s is not None:
+                remaining = min(remaining, target_s - (started - t0) - reserve_s)
+            result = await asyncio.wait_for(call, timeout=max(0.001, min(OPTIONAL_STEP_LIMIT_S, remaining)))
         except asyncio.TimeoutError:
             return None, time.monotonic() - started, "timed out"
         except Exception as error:  # noqa: BLE001 - the page still ships
@@ -628,17 +642,9 @@ class Screen:
             f"{pane_context(width, height)}\n\n"
             f"Your page body (source):\n\n{body}\n\n"
             f"Your page rendered like the screenshot. The shell reports these issues:\n{reported}\n\n"
-            "Read the screenshot and the source together, the way the child will:\n"
-            "1. Readability: is the text large enough and uncrowded at this pane size, and "
-            "does everything fit without scrolling?\n"
-            "2. The question and the visible clues: name the question the page actually asks, "
-            "then check every visible number, mark, label and picture step against it. Does the "
-            "page give the answer away before the child's turn (a solved step, the result marked "
-            "or written out, the answer inside a picture)? The shell's lint only sees layout and "
-            "tags; words and pictures that leak the answer are yours to catch.\n"
-            "3. Faithfulness: does it do what the tutor asked, and nothing extra?\n\n"
-            "Fix every problem you find, and answer with the corrected full page body only "
-            "(no explanation). If the page is right, answer with exactly: OK")
+            "Check readability and agreement with the ask. Does any visible number, mark, label "
+            "or solved step give away the answer to the child's question? Lint does not detect answer leaks. "
+            "Answer OK if right, otherwise only the corrected page body.")
         answer, _ = await self._call_model(self.system_prompt(), user, look_png=png)
         answer = strip_fences(answer)
         record_active("screen_look", {"fixed": bool(answer and answer != "OK")})

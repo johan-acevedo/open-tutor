@@ -348,9 +348,9 @@ async def test_look_sees_the_source_the_pane_and_the_childs_question(tmp_path, m
     look = looks[0]
     assert source in look  # the look pass finally gets the page it is repairing
     assert "Pane: 370×558 px" in look and "En sida om bråk" in look
-    assert "name the question the page actually asks" in look
-    assert "number, mark, label and picture step" in look
-    assert "lint only sees layout and tags" in look  # no claim lint spots the leak
+    assert "number, mark, label" in look
+    assert "child's question" in look
+    assert "Lint does not detect answer leaks" in look
     await screen.aclose()
 
 
@@ -391,7 +391,7 @@ async def test_actionable_lint_buys_exactly_one_retry(tmp_path, monkeypatch, lin
     screen.ask("En sida om bråk")
     await screen.wait_idle()
 
-    assert [w[0] for w in writes] == [None, b"PNG1", None]  # page, look, one retry
+    assert [w[0] for w in writes] == [None, None]  # page, one direct lint correction
     assert delivered["page"].body == "<h1>Delar</h1><p>En fråga.</p>"
     assert delivered["page"].png == b"PNG2" and delivered["page"].residual_issues == []
     meta = job_meta(tmp_path)
@@ -419,7 +419,7 @@ async def test_retry_carries_the_source_the_pane_and_the_exact_lint(tmp_path, mo
     screen.ask("En sida om bråk")
     await screen.wait_idle()
 
-    retry = writes[2][1]
+    retry = writes[1][1]
     assert source in retry and "En sida om bråk" in retry and "Pane: 370×558 px" in retry
     assert DENSE["msg"] in retry  # exact shell text, not a paraphrase
     await screen.aclose()
@@ -446,6 +446,72 @@ async def test_a_valid_page_gets_no_extra_look_or_retry(tmp_path, monkeypatch):
     assert len(calls) == 2 and len(renders) == 1  # page, one look, no retry
     meta = job_meta(tmp_path)
     assert meta["repair"]["retry"] is False and meta["residual_lint"] == []
+    await screen.aclose()
+
+
+async def test_clean_page_skips_look_when_the_soft_budget_is_used(tmp_path, monkeypatch):
+    monkeypatch.setenv("SCREEN_LOOK", "1")
+    monkeypatch.setattr("open_tutor.screen.PAGE_TARGET_S", 0.05, raising=False)
+    monkeypatch.setattr("open_tutor.screen.FINAL_RENDER_RESERVE_S", 0.01)
+    monkeypatch.setattr("open_tutor.screen.MIN_OPTIONAL_STEP_S", 0.005)
+    calls, delivered = [], []
+
+    async def model(system, user, images, look_png):
+        calls.append(look_png)
+        if look_png is None:
+            await asyncio.sleep(0.04)
+            return "<h1>Delar</h1>"
+        return "OK"
+
+    screen = make_screen(tmp_path, model_call=model, timeout=1.0)
+    screen.on_page = delivered.append
+    screen.ask("En sida om bråk")
+    await screen.wait_idle()
+    assert len(calls) == 1 and delivered[0].body == "<h1>Delar</h1>"
+    assert any("target" in note for note in job_meta(tmp_path)["repair"]["notes"])
+    await screen.aclose()
+
+
+async def test_a_slow_look_is_capped_independently_of_the_job_limit(tmp_path, monkeypatch):
+    monkeypatch.setenv("SCREEN_LOOK", "1")
+    monkeypatch.setattr("open_tutor.screen.OPTIONAL_STEP_LIMIT_S", 0.02, raising=False)
+    monkeypatch.setattr("open_tutor.screen.MIN_OPTIONAL_STEP_S", 0)
+    monkeypatch.setattr("open_tutor.screen.FINAL_RENDER_RESERVE_S", 0.01)
+    delivered = []
+
+    async def model(system, user, images, look_png):
+        if look_png is not None:
+            await asyncio.sleep(0.2)
+            return "OK"
+        return "<h1>Delar</h1>"
+
+    screen = make_screen(tmp_path, model_call=model, timeout=1.0)
+    screen.on_page = delivered.append
+    screen.ask("En sida om bråk")
+    await screen.wait_idle()
+    assert delivered[0].total_s < 0.1
+    assert "look pass timed out" in job_meta(tmp_path)["repair"]["notes"]
+    await screen.aclose()
+
+
+async def test_a_look_fix_does_not_start_a_second_correction(tmp_path, monkeypatch):
+    monkeypatch.setenv("SCREEN_LOOK", "1")
+    calls, delivered = [], []
+
+    async def model(system, user, images, look_png):
+        calls.append(look_png)
+        return "<h1>Ändrad</h1>" if look_png else "<h1>Först</h1>"
+
+    async def render(body, patch, w, h):
+        return b"PNG", [DENSE] if "Ändrad" in body else []
+
+    screen = make_screen(tmp_path, model_call=model, render_page=render)
+    screen.on_page = delivered.append
+    screen.ask("En sida om bråk")
+    await screen.wait_idle()
+    assert calls == [None, b"PNG"]
+    assert delivered[0].residual_issues
+    assert not job_meta(tmp_path)["repair"]["retry"]
     await screen.aclose()
 
 

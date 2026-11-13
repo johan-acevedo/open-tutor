@@ -1,0 +1,97 @@
+[
+  {
+    "run": 1,
+    "calls": [
+      {
+        "kind": "page",
+        "seconds": 16.506,
+        "input_chars": 524,
+        "output_chars": 442,
+        "image_bytes": 0
+      }
+    ],
+    "failures": [],
+    "model_s": 16.506536500994116,
+    "look_s": 0.0,
+    "retry_s": 0.0,
+    "render_s": 1.431101652327925,
+    "total_s": 17.939146861899644,
+    "issues": []
+  },
+  {
+    "run": 2,
+    "calls": [
+      {
+        "kind": "page",
+        "seconds": 13.069,
+        "input_chars": 524,
+        "output_chars": 610,
+        "image_bytes": 0
+      }
+    ],
+    "failures": [],
+    "model_s": 13.069217892829329,
+    "look_s": 0.0,
+    "retry_s": 0.0,
+    "render_s": 1.2233242462389171,
+    "total_s": 14.293897598981857,
+    "issues": []
+  },
+  {
+    "run": 3,
+    "calls": [
+      {
+        "kind": "page",
+        "seconds": 12.416,
+        "input_chars": 524,
+        "output_chars": 404,
+        "image_bytes": 0
+      }
+    ],
+    "failures": [],
+    "model_s": 12.415924776345491,
+    "look_s": 0.0,
+    "retry_s": 0.0,
+    "render_s": 1.1994129158556461,
+    "total_s": 13.61676051421091,
+    "issues": []
+  },
+  {
+    "run": 4,
+    "calls": [
+      {
+        "kind": "page",
+        "seconds": 14.538,
+        "input_chars": 524,
+        "output_chars": 527,
+        "image_bytes": 0
+      }
+    ],
+    "failures": [],
+    "model_s": 14.538365882821381,
+    "look_s": 0.0,
+    "retry_s": 0.0,
+    "render_s": 1.320859446655959,
+    "total_s": 15.860570804681629,
+    "issues": []
+  },
+  {
+    "run": 5,
+    "calls": [
+      {
+        "kind": "page",
+        "seconds": 15.174,
+        "input_chars": 524,
+        "output_chars": 611,
+        "image_bytes": 0
+      }
+    ],
+    "failures": [],
+    "model_s": 15.173855137079954,
+    "look_s": 0.0,
+    "retry_s": 0.0,
+    "render_s": 1.438463943079114,
+    "total_s": 16.61377571988851,
+    "issues": []
+  }
+]
