@@ -76,6 +76,12 @@ A step without `$` is a short explanation line. `result` on a step makes it gree
 ```
 `sides` labels each side in turn (A→B, B→C, C→A). Right angles are marked by themselves.
 
+**Circle:** no `ot-circle` tag. For radius 4 at (0, 0), use two `ot-fn color="cyan" domain="-4 4"`
+curves in one `ot-graph`: `sqrt(16-x^2)` and `-sqrt(16-x^2)`. Add `<ot-point id="medelpunkt" x="0" y="0"></ot-point>`
+and `<ot-segment id="radie" from="0 0" to="4 0">4 cm</ot-segment>`. Show given measures; keep unanswered results absent or hidden.
+`<ot-text id="gradtal" x="1" y="0.5">60°</ot-text>` draws centred text in graph coordinates, without a dot.
+Leave room around it: text has no automatic line avoidance or visible pointing feedback.
+
 **Chart** from a plain table. `type` is `bar`, `hbar`, `line` or `pie`; more columns give more series.
 ```html
 <ot-chart type="bar" unit="mm">

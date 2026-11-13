@@ -1,0 +1,261 @@
+{
+ "case": "cirkel-ref",
+ "base_ask": "cirkel",
+ "steered": true,
+ "sizes": {
+  "370x610": {
+   "unitX": 32.5,
+   "unitY": 32.5,
+   "flags": [],
+   "curves": [
+    {
+     "text": "sqrt(16 - x^2)",
+     "id": "cirkel-ovre",
+     "domain": "-4 4",
+     "widthU": 8.0,
+     "heightU": 4.0,
+     "aboveU": 4.0,
+     "belowU": -0.0
+    },
+    {
+     "text": "-sqrt(16 - x^2)",
+     "id": "cirkel-undre",
+     "domain": "-4 4",
+     "widthU": 8.0,
+     "heightU": 4.0,
+     "aboveU": 0.0,
+     "belowU": 4.0
+    }
+   ],
+   "segments": [
+    {
+     "id": "radie",
+     "text": "4 cm",
+     "units": 4.0,
+     "number": 4.0,
+     "len_px": 130.0
+    }
+   ],
+   "measured": {
+    "widest_curve_units": 8.0,
+    "up_units": 4.0,
+    "down_units": 4.0,
+    "given_r": 4.0
+   },
+   "radius_label": {
+    "text": "4 cm",
+    "edge_px": 18.4,
+    "box_gap_px": 8.8
+   },
+   "labels": [
+    {
+     "text": "4 cm",
+     "x": 205,
+     "y": 201,
+     "w": 45,
+     "h": 19.2,
+     "segment": "radie",
+     "edge_px": 18.4,
+     "box_gap_px": 8.8
+    }
+   ],
+   "fontPx": 17.5,
+   "issues": [],
+   "ids": [
+    "ot-map-data",
+    "page",
+    "graf",
+    "cirkel-ovre",
+    "cirkel-undre",
+    "medelpunkt",
+    "radie"
+   ],
+   "point": {
+    "ot-map-data": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 1,
+      "strokeWidth": 0
+     }
+    },
+    "page": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 1,
+      "strokeWidth": 0
+     }
+    },
+    "graf": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 1,
+      "strokeWidth": 0
+     }
+    },
+    "cirkel-ovre": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 0,
+      "strokeWidth": 2.46
+     }
+    },
+    "cirkel-undre": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 0,
+      "strokeWidth": 2.46
+     }
+    },
+    "medelpunkt": {
+     "ok": true,
+     "effect": {
+      "kids": 1,
+      "pointed": 0,
+      "strokeWidth": 2.5
+     }
+    },
+    "radie": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 0,
+      "strokeWidth": 2.31
+     }
+    }
+   },
+   "visible_text": "Cirkel och radie\n4 cm\n\nRadien går från medelpunkten till cirkelns kant."
+  },
+  "1000x700": {
+   "unitX": 47.2,
+   "unitY": 47.2,
+   "flags": [],
+   "curves": [
+    {
+     "text": "sqrt(16 - x^2)",
+     "id": "cirkel-ovre",
+     "domain": "-4 4",
+     "widthU": 8.0,
+     "heightU": 4.0,
+     "aboveU": 4.0,
+     "belowU": 0.0
+    },
+    {
+     "text": "-sqrt(16 - x^2)",
+     "id": "cirkel-undre",
+     "domain": "-4 4",
+     "widthU": 8.0,
+     "heightU": 4.0,
+     "aboveU": 0.0,
+     "belowU": 4.0
+    }
+   ],
+   "segments": [
+    {
+     "id": "radie",
+     "text": "4 cm",
+     "units": 4.0,
+     "number": 4.0,
+     "len_px": 188.8
+    }
+   ],
+   "measured": {
+    "widest_curve_units": 8.0,
+    "up_units": 4.0,
+    "down_units": 4.0,
+    "given_r": 4.0
+   },
+   "radius_label": {
+    "text": "4 cm",
+    "edge_px": 31.8,
+    "box_gap_px": 15.1
+   },
+   "labels": [
+    {
+     "text": "4 cm",
+     "x": 517.4,
+     "y": 187.6,
+     "w": 75,
+     "h": 33.3,
+     "segment": "radie",
+     "edge_px": 31.8,
+     "box_gap_px": 15.1
+    }
+   ],
+   "fontPx": 30.25,
+   "issues": [],
+   "ids": [
+    "ot-map-data",
+    "page",
+    "graf",
+    "cirkel-ovre",
+    "cirkel-undre",
+    "medelpunkt",
+    "radie"
+   ],
+   "point": {
+    "ot-map-data": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 1,
+      "strokeWidth": 0
+     }
+    },
+    "page": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 1,
+      "strokeWidth": 0
+     }
+    },
+    "graf": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 1,
+      "strokeWidth": 0
+     }
+    },
+    "cirkel-ovre": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 0,
+      "strokeWidth": 4.26
+     }
+    },
+    "cirkel-undre": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 0,
+      "strokeWidth": 4.26
+     }
+    },
+    "medelpunkt": {
+     "ok": true,
+     "effect": {
+      "kids": 1,
+      "pointed": 0,
+      "strokeWidth": 1.58
+     }
+    },
+    "radie": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 0,
+      "strokeWidth": 3.99
+     }
+    }
+   },
+   "visible_text": "Cirkel och radie\n4 cm\n\nRadien går från medelpunkten till cirkelns kant."
+  }
+ }
+}

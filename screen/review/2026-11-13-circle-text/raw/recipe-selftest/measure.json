@@ -1,0 +1,643 @@
+{
+ "case": "recipe",
+ "base_ask": "cirkel",
+ "steered": true,
+ "sizes": {
+  "370x610": {
+   "unitX": 22.800000000000004,
+   "unitY": 22.8,
+   "flags": [],
+   "curves": [
+    {
+     "text": "sqrt(16 - x^2)",
+     "id": null,
+     "domain": "-4 4",
+     "widthU": 8.0,
+     "heightU": 4.0,
+     "aboveU": 4.0,
+     "belowU": 0.0
+    },
+    {
+     "text": "-sqrt(16 - x^2)",
+     "id": null,
+     "domain": "-4 4",
+     "widthU": 8.0,
+     "heightU": 4.0,
+     "aboveU": 0.0,
+     "belowU": 4.0
+    }
+   ],
+   "segments": [
+    {
+     "id": "radie",
+     "text": "4 cm",
+     "units": 4.0,
+     "number": 4.0,
+     "len_px": 91.2
+    }
+   ],
+   "measured": {
+    "widest_curve_units": 8.0,
+    "up_units": 4.0,
+    "down_units": 4.0,
+    "given_r": 4.0
+   },
+   "radius_label": {
+    "text": "4 cm",
+    "edge_px": 18.4,
+    "box_gap_px": 8.8
+   },
+   "labels": [
+    {
+     "text": "M",
+     "x": 165.2,
+     "y": 89.9,
+     "w": 15,
+     "h": 19.2,
+     "segment": "radie",
+     "edge_px": 14.4,
+     "box_gap_px": 4.8
+    },
+    {
+     "text": "4 cm",
+     "x": 185.6,
+     "y": 86,
+     "w": 45,
+     "h": 19.2,
+     "segment": "radie",
+     "edge_px": 18.4,
+     "box_gap_px": 8.8
+    },
+    {
+     "text": "kant",
+     "x": 216.5,
+     "y": 49.6,
+     "w": 38,
+     "h": 19.2,
+     "segment": "radie",
+     "edge_px": 54.7,
+     "box_gap_px": 45.1
+    }
+   ],
+   "fontPx": 17.5,
+   "second_graph_angle": {
+    "fontPx": 17.5,
+    "flags": [
+     "the Vinkelben label intersects its leg centreline"
+    ],
+    "segments": [
+     {
+      "id": "ben1",
+      "from": "0 0",
+      "to": "5 0",
+      "text": "",
+      "px": [
+       {
+        "x": 67.5,
+        "y": 190
+       },
+       {
+        "x": 257.5,
+        "y": 190
+       }
+      ]
+     },
+     {
+      "id": "ben2",
+      "from": "0 0",
+      "to": "2,5 4,3",
+      "text": "",
+      "px": [
+       {
+        "x": 67.5,
+        "y": 190
+       },
+       {
+        "x": 162.5,
+        "y": 26.6
+       }
+      ]
+     }
+    ],
+    "angles": [
+     {
+      "vertex_px": {
+       "x": 67.5,
+       "y": 190
+      },
+      "deg": 59.83,
+      "legs": [
+       "ben1",
+       "ben2"
+      ],
+      "far": [
+       {
+        "x": 257.5,
+        "y": 190
+       },
+       {
+        "x": 162.5,
+        "y": 26.599999999999994
+       }
+      ]
+     }
+    ],
+    "angle_deg": 59.83,
+    "label_60": {
+     "text": "60°",
+     "from_vertex_px": 63.2,
+     "from_vertex_em": 3.6,
+     "inside_wedge": true,
+     "legs": [
+      {
+       "edge_px": 34.2,
+       "box_gap_px": 24.6
+      },
+      {
+       "edge_px": 28.8,
+       "box_gap_px": 11.0
+      }
+     ]
+    },
+    "label_ben": {
+     "text": "Vinkelben",
+     "from_end_px": 0.0,
+     "from_end_em": 0.0,
+     "edge_px": 0.0,
+     "box_gap_px": 0.0
+    },
+    "labels": [
+     {
+      "text": "S",
+      "x": 69.5,
+      "y": 165.9,
+      "w": 11,
+      "h": 19.2,
+      "segment": "ben2",
+      "edge_px": 0.8,
+      "box_gap_px": 0.0
+     },
+     {
+      "text": "60°",
+      "x": 105.7,
+      "y": 146.2,
+      "w": 30,
+      "h": 19.2,
+      "segment": "ben2",
+      "edge_px": 28.8,
+      "box_gap_px": 11.0
+     },
+     {
+      "text": "Vinkelben",
+      "x": 121,
+      "y": 17.0,
+      "w": 83,
+      "h": 19.2,
+      "segment": "ben2",
+      "edge_px": 0.0,
+      "box_gap_px": 0.0
+     }
+    ],
+    "texts": [
+     "ot-segment",
+     "ot-segment",
+     "ot-point",
+     "ot-text",
+     "ot-text"
+    ]
+   },
+   "issues": [],
+   "ids": [
+    "ot-map-data",
+    "page",
+    "cirkel",
+    "medelpunkt",
+    "radie",
+    "kant",
+    "vinkel",
+    "ben1",
+    "ben2",
+    "spets",
+    "matt",
+    "ben-sned"
+   ],
+   "point": {
+    "ot-map-data": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 1,
+      "strokeWidth": 0
+     }
+    },
+    "page": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 1,
+      "strokeWidth": 0
+     }
+    },
+    "cirkel": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 1,
+      "strokeWidth": 0
+     }
+    },
+    "medelpunkt": {
+     "ok": true,
+     "effect": {
+      "kids": 1,
+      "pointed": 0,
+      "strokeWidth": 2.5
+     }
+    },
+    "radie": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 0,
+      "strokeWidth": 2.31
+     }
+    },
+    "kant": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 0,
+      "strokeWidth": 0
+     }
+    },
+    "vinkel": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 1,
+      "strokeWidth": 0
+     }
+    },
+    "ben1": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 0,
+      "strokeWidth": 2.31
+     }
+    },
+    "ben2": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 0,
+      "strokeWidth": 2.31
+     }
+    },
+    "spets": {
+     "ok": true,
+     "effect": {
+      "kids": 1,
+      "pointed": 0,
+      "strokeWidth": 2.5
+     }
+    },
+    "matt": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 0,
+      "strokeWidth": 0
+     }
+    },
+    "ben-sned": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 0,
+      "strokeWidth": 0
+     }
+    }
+   },
+   "visible_text": "Cirkel och vinkel\nM\n4 cm\nkant\nS\n60°\nVinkelben\n\nProv: givna mått syns, svaret inte."
+  },
+  "1000x700": {
+   "unitX": 26.100000000000005,
+   "unitY": 26.1,
+   "flags": [],
+   "curves": [
+    {
+     "text": "sqrt(16 - x^2)",
+     "id": null,
+     "domain": "-4 4",
+     "widthU": 8.0,
+     "heightU": 4.0,
+     "aboveU": 4.0,
+     "belowU": 0.0
+    },
+    {
+     "text": "-sqrt(16 - x^2)",
+     "id": null,
+     "domain": "-4 4",
+     "widthU": 8.0,
+     "heightU": 4.0,
+     "aboveU": 0.0,
+     "belowU": 4.0
+    }
+   ],
+   "segments": [
+    {
+     "id": "radie",
+     "text": "4 cm",
+     "units": 4.0,
+     "number": 4.0,
+     "len_px": 104.4
+    }
+   ],
+   "measured": {
+    "widest_curve_units": 8.0,
+    "up_units": 4.0,
+    "down_units": 4.0,
+    "given_r": 4.0
+   },
+   "radius_label": {
+    "text": "4 cm",
+    "edge_px": 20.8,
+    "box_gap_px": 9.9
+   },
+   "labels": [
+    {
+     "text": "M",
+     "x": 477.6,
+     "y": 103.4,
+     "w": 17,
+     "h": 21.7,
+     "segment": "radie",
+     "edge_px": 16.3,
+     "box_gap_px": 5.4
+    },
+    {
+     "text": "4 cm",
+     "x": 502.2,
+     "y": 98.9,
+     "w": 49,
+     "h": 21.7,
+     "segment": "radie",
+     "edge_px": 20.8,
+     "box_gap_px": 9.9
+    },
+    {
+     "text": "kant",
+     "x": 536.0,
+     "y": 57,
+     "w": 44,
+     "h": 21.7,
+     "segment": "radie",
+     "edge_px": 62.6,
+     "box_gap_px": 51.8
+    }
+   ],
+   "fontPx": 19.75,
+   "second_graph_angle": {
+    "fontPx": 19.75,
+    "flags": [
+     "the Vinkelben label intersects its leg centreline"
+    ],
+    "segments": [
+     {
+      "id": "ben1",
+      "from": "0 0",
+      "to": "5 0",
+      "text": "",
+      "px": [
+       {
+        "x": 365.7,
+        "y": 217.5
+       },
+       {
+        "x": 583.2,
+        "y": 217.5
+       }
+      ]
+     },
+     {
+      "id": "ben2",
+      "from": "0 0",
+      "to": "2,5 4,3",
+      "text": "",
+      "px": [
+       {
+        "x": 365.7,
+        "y": 217.5
+       },
+       {
+        "x": 474.5,
+        "y": 30.5
+       }
+      ]
+     }
+    ],
+    "angles": [
+     {
+      "vertex_px": {
+       "x": 365.7,
+       "y": 217.5
+      },
+      "deg": 59.83,
+      "legs": [
+       "ben1",
+       "ben2"
+      ],
+      "far": [
+       {
+        "x": 583.25,
+        "y": 217.5
+       },
+       {
+        "x": 474.49999999999994,
+        "y": 30.450000000000017
+       }
+      ]
+     }
+    ],
+    "angle_deg": 59.83,
+    "label_60": {
+     "text": "60°",
+     "from_vertex_px": 72.4,
+     "from_vertex_em": 3.7,
+     "inside_wedge": true,
+     "legs": [
+      {
+       "edge_px": 39.2,
+       "box_gap_px": 28.3
+      },
+      {
+       "edge_px": 33.0,
+       "box_gap_px": 12.8
+      }
+     ]
+    },
+    "label_ben": {
+     "text": "Vinkelben",
+     "from_end_px": 0.0,
+     "from_end_em": 0.0,
+     "edge_px": 0.0,
+     "box_gap_px": 0.0
+    },
+    "labels": [
+     {
+      "text": "S",
+      "x": 368.1,
+      "y": 190.4,
+      "w": 13,
+      "h": 21.7,
+      "segment": "ben2",
+      "edge_px": 0.5,
+      "box_gap_px": 0.0
+     },
+     {
+      "text": "60°",
+      "x": 409.6,
+      "y": 167.5,
+      "w": 34,
+      "h": 21.7,
+      "segment": "ben2",
+      "edge_px": 33.0,
+      "box_gap_px": 12.8
+     },
+     {
+      "text": "Vinkelben",
+      "x": 427,
+      "y": 19.6,
+      "w": 95,
+      "h": 21.7,
+      "segment": "ben2",
+      "edge_px": 0.0,
+      "box_gap_px": 0.0
+     }
+    ],
+    "texts": [
+     "ot-segment",
+     "ot-segment",
+     "ot-point",
+     "ot-text",
+     "ot-text"
+    ]
+   },
+   "issues": [],
+   "ids": [
+    "ot-map-data",
+    "page",
+    "cirkel",
+    "medelpunkt",
+    "radie",
+    "kant",
+    "vinkel",
+    "ben1",
+    "ben2",
+    "spets",
+    "matt",
+    "ben-sned"
+   ],
+   "point": {
+    "ot-map-data": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 1,
+      "strokeWidth": 0
+     }
+    },
+    "page": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 1,
+      "strokeWidth": 0
+     }
+    },
+    "cirkel": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 1,
+      "strokeWidth": 0
+     }
+    },
+    "medelpunkt": {
+     "ok": true,
+     "effect": {
+      "kids": 1,
+      "pointed": 0,
+      "strokeWidth": 2.42
+     }
+    },
+    "radie": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 0,
+      "strokeWidth": 2.61
+     }
+    },
+    "kant": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 0,
+      "strokeWidth": 0
+     }
+    },
+    "vinkel": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 1,
+      "strokeWidth": 0
+     }
+    },
+    "ben1": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 0,
+      "strokeWidth": 2.61
+     }
+    },
+    "ben2": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 0,
+      "strokeWidth": 2.61
+     }
+    },
+    "spets": {
+     "ok": true,
+     "effect": {
+      "kids": 1,
+      "pointed": 0,
+      "strokeWidth": 2.42
+     }
+    },
+    "matt": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 0,
+      "strokeWidth": 0
+     }
+    },
+    "ben-sned": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 0,
+      "strokeWidth": 0
+     }
+    }
+   },
+   "visible_text": "Cirkel och vinkel\nM\n4 cm\nkant\nS\n60°\nVinkelben\n\nProv: givna mått syns, svaret inte."
+  }
+ }
+}

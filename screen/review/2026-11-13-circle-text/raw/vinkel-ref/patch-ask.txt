@@ -1,0 +1,1 @@
+Lägg Vinkelben utanför det sneda benets ände så att texten inte rör linjen, och flytta 60° närmare spetsen. Eleven ska kunna peka på vinkelspetsen. Ändra bara etiketternas läge.

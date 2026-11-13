@@ -1,0 +1,36 @@
+{
+ "case": "vinkel-ref2",
+ "base_ask": "vinkel",
+ "steered": true,
+ "ask": "Visa en vinkel som är 60 grader. Det ena vinkelbenet går från spetsen till (5, 0), det andra till (2,5, 4,3). Skriv 60° strax innanför spetsen, inne i vinkeln, och skriv Vinkelben vid slutet av det sneda benet. Eleven ska kunna peka på vinkelspetsen. Rita ingen båge och räkna inte ut något.",
+ "pane": [
+  370,
+  610
+ ],
+ "wall_s": 10.21,
+ "spec": {
+  "model": "gemini-4-hydrogen",
+  "api": "chat",
+  "reasoning": "low"
+ },
+ "calls": [
+  {
+   "look": false,
+   "seconds": 8.99,
+   "system_chars": 19787,
+   "user_chars": 653,
+   "answer_chars": 363
+  }
+ ],
+ "failures": [],
+ "system_chars": 19787,
+ "candidate_chars": 705,
+ "model_s": 8.992281307000667,
+ "look_s": 0.0,
+ "retry_s": 0.0,
+ "render_s": 1.212510921061039,
+ "total_s": 10.204945025965571,
+ "issues": [],
+ "residual_lint": [],
+ "repaired": false
+}

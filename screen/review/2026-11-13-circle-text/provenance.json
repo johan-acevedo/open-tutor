@@ -1,0 +1,88 @@
+{
+ "batch": "circle and positioned text, baseline vs candidate reference",
+ "date": "2026-11-13",
+ "base_commit": "848f8c1",
+ "branch": "t3/research-smart-screen-circle-text",
+ "model": {
+  "model": "gemini-4-hydrogen",
+  "api": "chat",
+  "reasoning": "low",
+  "thinking": ""
+ },
+ "env": "OPEN_TUTOR_ENV=~/.config/open-tutor-smart-dev/env server/bin/with-env",
+ "pane": [
+  370,
+  610
+ ],
+ "measure_sizes": [
+  [
+   370,
+   610
+  ],
+  [
+   1000,
+   700
+  ]
+ ],
+ "reference_chars": {
+  "baseline_system_prompt": 19080,
+  "candidate_appended": 636,
+  "candidate_v2_appended": 705
+ },
+ "jobs": {
+  "cirkel-bas": {
+   "calls": 1,
+   "look": 0,
+   "lint_retry": 0
+  },
+  "cirkel-ref": {
+   "calls": 2,
+   "look": 1,
+   "look_returned": "OK",
+   "lint_retry": 0
+  },
+  "vinkel-bas": {
+   "calls": 1,
+   "look": 0,
+   "lint_retry": 0
+  },
+  "vinkel-ref": {
+   "calls": 1,
+   "look": 1,
+   "look_cut_by_budget_s": 3.35,
+   "lint_retry": 0
+  },
+  "vinkel-ref2": {
+   "calls": 1,
+   "look": 0,
+   "lint_retry": 0
+  },
+  "vinkel-ref-patch": {
+   "calls": 1,
+   "look": 0,
+   "lint_retry": 0
+  }
+ },
+ "provider_calls_total": 8,
+ "failures": 0,
+ "commands": [
+  "server/bin/with-env uv run --project server python screen/tools/probe_circle_text.py run --out /tmp/circle-text --cases cirkel-bas,cirkel-ref,vinkel-bas,vinkel-ref,vinkel-ref2",
+  "server/bin/with-env uv run --project server python screen/tools/probe_circle_text.py patch --dir /tmp/circle-text --case vinkel-ref",
+  "uv run --project server python screen/tools/probe_circle_text.py measure --dir screen/review/2026-11-13-circle-text/raw",
+  "uv run --project server python screen/tools/probe_circle_text.py selftest --out /tmp/circle-recipe"
+ ],
+ "network": "Chromium fetched the public shell CDN libraries and fonts; the provider key came from the env wrapper and was never printed",
+ "parent_review": {
+  "finite_geometry": "replaced projected reach with finite-segment clipping and box distance; old crossings were false positives",
+  "reference": "five English lines, tested in their final prompt position",
+  "cases": [
+   "cirkel-final",
+   "vinkel-final"
+  ],
+  "additional_calls": 4,
+  "provider_calls_total": 12,
+  "page_jobs_total": 7,
+  "patch_jobs_total": 1,
+  "runtime_changed": false
+ }
+}
