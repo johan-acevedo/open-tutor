@@ -36,5 +36,5 @@ packages = ["open_tutor"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["tests"]
+testpaths = ["tests", "../screen/tests"]
 pythonpath = ["."]
