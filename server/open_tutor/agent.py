@@ -48,6 +48,7 @@ from .debug_log import DebugLog, clear_active, record_active, set_active
 from .dialogue_tts import DialogueTTS, is_dialogue_model
 from .deepgram_tts import DeepgramFluxTTS, DEFAULT_MODEL as DEEPGRAM_DEFAULT_MODEL, parse_expressivity
 from .session_llm import SessionLLM
+from .page_answers import PageAnswers
 from .text_input import TOPIC_CHAT, TypedChat
 from .fillers import DEFAULT_DELAY_S as DEFAULT_FILLER_DELAY, build_fillers
 from .tutor_llm import build_session_llm, warm_up
@@ -989,6 +990,15 @@ async def entrypoint(ctx: JobContext) -> None:
         screen.on_failure = lambda message: asyncio.create_task(
             smart_tutor.screen_failed(session, message))
 
+        async def note_page_answer(text: str) -> None:
+            ctx_ = tutor.chat_ctx.copy()
+            ctx_.add_message(role="user", content=[text])
+            await tutor.update_chat_ctx(ctx_)
+
+        page_answers = PageAnswers(
+            prompt=lambda text: prompt_event(session, text),
+            note=note_page_answer, record=debug.record)
+
         @session.on("conversation_item_added")
         def forward_screen_turn(event) -> None:
             # Every conversation turn also goes to the Screen; worker-injected
@@ -1005,6 +1015,8 @@ async def entrypoint(ctx: JobContext) -> None:
                 return
             if not text or (role == "user" and text.startswith("[Session event")):
                 return
+            if role == "user":
+                page_answers.child_spoke()
             screen.add_turn("child" if role == "user" else "tutor", text)
 
     # ---- homework intake ----------------------------------------------------------
@@ -1079,9 +1091,7 @@ async def entrypoint(ctx: JobContext) -> None:
             page, part = str(event.get("page", ""))[:40], str(event.get("part", ""))[:40]
             value = str(event.get("value", ""))
             screen.record_answer(page, part, value, str(event.get("kind", "")))
-            debug.record("prompt", {"kind": "page_answer", "page": page, "part": part})
-            prompt_event(session, f"The child answered on page {page}, part {part}: "
-                                   f"{value[:500]} Respond briefly to what they wrote.")
+            page_answers.add(page, part, value)
         elif event.get("type") == "board-size":
             # The browser measures the real board pane (ResizeObserver) and
             # reports resizes/rotation mid-session; commission_board picks
