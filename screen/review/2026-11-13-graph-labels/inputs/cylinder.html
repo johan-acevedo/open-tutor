@@ -1,0 +1,12 @@
+<h1>En cylinder</h1>
+<p>Peka på <b class="cyan">radien</b>.</p>
+<ot-graph id="cylinder" x="-4 5" y="-1 6.5" axes="off">
+  <ot-fn domain="-3 3">5 + 0.2*sqrt(9 - x^2)</ot-fn>
+  <ot-fn domain="-3 3">5 - 0.2*sqrt(9 - x^2)</ot-fn>
+  <ot-fn domain="-3 3">-0.2*sqrt(9 - x^2)</ot-fn>
+  <ot-segment from="-3 0" to="-3 5"></ot-segment>
+  <ot-segment from="3 0" to="3 5"></ot-segment>
+  <ot-point id="centrum" x="0" y="5"></ot-point>
+  <ot-segment id="radie" from="0 5" to="3 5" color="cyan">3 cm</ot-segment>
+  <ot-segment id="hojd" from="3.5 0" to="3.5 5" color="amber">5 cm</ot-segment>
+</ot-graph>

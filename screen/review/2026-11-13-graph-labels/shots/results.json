@@ -1,0 +1,41 @@
+{
+ "shell": "worktree",
+ "failures": [],
+ "crowding_reported": [
+  "CROWD new plan 370x610: label '3 cm' crosses an outline; keep given measures; shorten labels, use separate graphs or give the graph more room",
+  "CROWD new plan 370x610: label '2 cm' crosses an outline; keep given measures; shorten labels, use separate graphs or give the graph more room",
+  "CROWD new plan 370x610: label '1 cm' crosses an outline; keep given measures; shorten labels, use separate graphs or give the graph more room",
+  "CROWD new plan 370x610: labels '3 cm' and '2 cm' overlap by 10 px; keep given measures; shorten labels, use separate graphs or give the graph more room",
+  "CROWD new plan 370x610: labels '2 cm' and '1 cm' overlap by 12 px; keep given measures; shorten labels, use separate graphs or give the graph more room",
+  "CROWD new plan 1000x700: labels '3 cm' and '2 cm' overlap by 10 px; keep given measures; shorten labels, use separate graphs or give the graph more room",
+  "CROWD new plan 1000x700: labels '2 cm' and '1 cm' overlap by 27 px; keep given measures; shorten labels, use separate graphs or give the graph more room",
+  "CROWD new short-edges 370x610: label 'diagonalen' does not fit inside the pane; keep given measures; shorten labels, use separate graphs or give the graph more room"
+ ],
+ "notes": [
+  "fixed-or-flagged new plan 370x610: figurer: label '3 cm' crosses an outline",
+  "fixed-or-flagged new plan 370x610: figurer: label '2 cm' crosses an outline",
+  "fixed-or-flagged new plan 370x610: figurer: label '1 cm' crosses an outline",
+  "fixed-or-flagged new plan 370x610: figurer: label '2 cm' crosses an outline",
+  "fixed-or-flagged new plan 370x610: figurer: labels '3 cm' and '2 cm' overlap",
+  "fixed-or-flagged new plan 370x610: figurer: labels '2 cm' and '1 cm' overlap",
+  "fixed-or-flagged new plan 1000x700: figurer: labels '3 cm' and '2 cm' overlap",
+  "fixed-or-flagged new plan 1000x700: figurer: labels '2 cm' and '1 cm' overlap",
+  "fixed-or-flagged new short-edges 370x610: graf: label 'diagonalen' does not fit inside the pane"
+ ],
+ "prior_shell_failures": [
+  "prior cylinder 370x610: UNREPORTED: cylinder: label '5 cm' crosses its own line; cylinder: label '5 cm' crosses an outline",
+  "prior cylinder 1000x700: UNREPORTED: cylinder: label '5 cm' crosses its own line; cylinder: label '5 cm' crosses an outline",
+  "prior plan 370x610: UNREPORTED: figurer: label '3 cm' crosses its own line; figurer: label '3 cm' crosses an outline; figurer: label '3 cm' crosses its own line; figurer: label '3 cm' crosses an outline; figurer: label '1 cm' crosses its own line; figurer: label '1 cm' crosses an outline; figurer: label '1 cm' crosses an outline; figurer: label '1 cm' is inside the outlined shape; figurer: label '2 cm' crosses its own line; figurer: label '2 cm' crosses an outline; figurer: labels '3 cm' and '1 cm' overlap; figurer: labels '3 cm' and '2 cm' overlap; figurer: labels '2 cm' and '1 cm' overlap; figurer: labels '1 cm' and '2 cm' overlap",
+  "prior plan 1000x700: UNREPORTED: figurer: label '3 cm' crosses its own line; figurer: label '3 cm' crosses an outline; figurer: label '3 cm' crosses its own line; figurer: label '3 cm' crosses an outline; figurer: label '1 cm' crosses its own line; figurer: label '1 cm' crosses an outline; figurer: label '2 cm' is inside the outlined shape; figurer: label '1 cm' crosses an outline; figurer: label '1 cm' is inside the outlined shape; figurer: label '2 cm' crosses its own line; figurer: label '2 cm' crosses an outline; figurer: labels '3 cm' and '2 cm' overlap; figurer: labels '1 cm' and '2 cm' overlap",
+  "prior ratblock 370x610: UNREPORTED: ratblock: label '2 cm' crosses its own line; ratblock: label '2 cm' crosses an outline; ratblock: label '3 cm' crosses its own line; ratblock: label '3 cm' crosses an outline",
+  "prior ratblock 1000x700: UNREPORTED: ratblock: label '2 cm' crosses its own line; ratblock: label '2 cm' crosses an outline; ratblock: label '3 cm' crosses its own line; ratblock: label '3 cm' crosses an outline",
+  "prior vinkel 370x610: UNREPORTED: graf: label 'Vinkelben' crosses its own line; graf: label 'Vinkelben' crosses an outline",
+  "prior vinkel 1000x700: UNREPORTED: graf: label 'Vinkelben' crosses its own line; graf: label 'Vinkelben' crosses an outline",
+  "prior l-cw 370x610: UNREPORTED: figurer: label '1 cm' crosses its own line; figurer: label '1 cm' crosses an outline; figurer: label '1 cm' is inside the outlined shape; figurer: label '1 cm' is inside the outlined shape; figurer: label '2 cm' crosses its own line; figurer: label '2 cm' crosses an outline; figurer: label '1 cm' crosses its own line; figurer: label '1 cm' crosses an outline",
+  "prior l-cw 1000x700: UNREPORTED: figurer: label '1 cm' crosses its own line; figurer: label '1 cm' crosses an outline; figurer: label '1 cm' is inside the outlined shape; figurer: label '1 cm' is inside the outlined shape; figurer: label '2 cm' crosses its own line; figurer: label '2 cm' crosses an outline; figurer: label '1 cm' crosses its own line; figurer: label '1 cm' crosses an outline",
+  "prior notch-long 370x610: UNREPORTED: figurer: label 'ett cm' crosses its own line; figurer: label 'ett cm' crosses an outline; figurer: label 'en cm' crosses its own line; figurer: label 'en cm' crosses an outline; figurer: label 'en cm' is inside the outlined shape; figurer: label 'två cm' crosses its own line; figurer: label 'två cm' crosses an outline; figurer: labels 'två centimeter' and 'en cm' overlap",
+  "prior notch-long 1000x700: UNREPORTED: figurer: label 'ett cm' crosses its own line; figurer: label 'ett cm' crosses an outline; figurer: label 'en cm' crosses its own line; figurer: label 'en cm' crosses an outline; figurer: label 'en cm' is inside the outlined shape; figurer: label 'två cm' crosses its own line; figurer: label 'två cm' crosses an outline",
+  "prior short-edges 370x610: UNREPORTED: graf: label 'en centimeter' crosses its own line; graf: label 'en centimeter' crosses an outline; graf: label 'diagonalen' crosses its own line; graf: label 'diagonalen' crosses an outline; graf: label 'diagonalen' is inside the outlined shape",
+  "prior short-edges 1000x700: UNREPORTED: graf: label 'en centimeter' crosses its own line; graf: label 'en centimeter' crosses an outline; graf: label 'diagonalen' crosses its own line; graf: label 'diagonalen' crosses an outline"
+ ]
+}

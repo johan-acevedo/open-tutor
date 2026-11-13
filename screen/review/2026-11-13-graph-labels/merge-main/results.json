@@ -1,0 +1,28 @@
+[
+  {
+    "pane": {
+      "width": 370,
+      "height": 610
+    },
+    "issues": [],
+    "image": [
+      {
+        "complete": true,
+        "width": 960
+      }
+    ]
+  },
+  {
+    "pane": {
+      "width": 1000,
+      "height": 700
+    },
+    "issues": [],
+    "image": [
+      {
+        "complete": true,
+        "width": 960
+      }
+    ]
+  }
+]

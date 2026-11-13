@@ -1,0 +1,18 @@
+CROWD new plan 370x610: label '3 cm' crosses an outline; keep given measures; shorten labels, use separate graphs or give the graph more room
+CROWD new plan 370x610: label '2 cm' crosses an outline; keep given measures; shorten labels, use separate graphs or give the graph more room
+CROWD new plan 370x610: label '1 cm' crosses an outline; keep given measures; shorten labels, use separate graphs or give the graph more room
+CROWD new plan 370x610: labels '3 cm' and '2 cm' overlap by 10 px; keep given measures; shorten labels, use separate graphs or give the graph more room
+CROWD new plan 370x610: labels '2 cm' and '1 cm' overlap by 12 px; keep given measures; shorten labels, use separate graphs or give the graph more room
+CROWD new plan 1000x700: labels '3 cm' and '2 cm' overlap by 10 px; keep given measures; shorten labels, use separate graphs or give the graph more room
+CROWD new plan 1000x700: labels '2 cm' and '1 cm' overlap by 27 px; keep given measures; shorten labels, use separate graphs or give the graph more room
+CROWD new short-edges 370x610: label 'diagonalen' does not fit inside the pane; keep given measures; shorten labels, use separate graphs or give the graph more room
+fixed-or-flagged new plan 370x610: figurer: label '3 cm' crosses an outline
+fixed-or-flagged new plan 370x610: figurer: label '2 cm' crosses an outline
+fixed-or-flagged new plan 370x610: figurer: label '1 cm' crosses an outline
+fixed-or-flagged new plan 370x610: figurer: label '2 cm' crosses an outline
+fixed-or-flagged new plan 370x610: figurer: labels '3 cm' and '2 cm' overlap
+fixed-or-flagged new plan 370x610: figurer: labels '2 cm' and '1 cm' overlap
+fixed-or-flagged new plan 1000x700: figurer: labels '3 cm' and '2 cm' overlap
+fixed-or-flagged new plan 1000x700: figurer: labels '2 cm' and '1 cm' overlap
+fixed-or-flagged new short-edges 370x610: graf: label 'diagonalen' does not fit inside the pane
+OK: no unreported label defects.
