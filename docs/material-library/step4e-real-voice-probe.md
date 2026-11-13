@@ -45,8 +45,7 @@ never aired: the session ended first by design. It is **not** covered.
 
 - **Real STT → real tutor → real tools.** The spoken Swedish request was acted
   on literally: announced book search, then the exact circuit section appeared.
-  No transcript strings are quoted (preview sets no `TUTOR_DEBUG_LOG`, so there
-  is no per-session debug trail; proof is functional, not textual).
+  No STT transcript strings are quoted (preview sets no `TUTOR_DEBUG_LOG`). Parent independently found room-scoped systemd journal records confirming `tools executed: search_materials`, `board rpc board.show b1 acknowledged=True`, and `tools executed: show_material` for this exact room at 01:30:37–01:30:47 UTC.
 - **Model chose search + show itself.** Section `sec-ecd16baf9e4fee44` matches
   the request; the "could not show" fallback never appeared, so the true
   browser acknowledgement (`board.show` → metadata + HTML preflight + frame
@@ -81,3 +80,9 @@ No second scenario, no retrieval-quality statement, no latency claim, no
 server-side tool-argument log (no debug trail exists for preview), no product
 or deployment change. Small probe CLI is the only new artifact; parent owns
 review, rerun decisions, and any follow-up.
+
+## Parent review
+
+The parent inspected the actual report, captions, screenshot and source figures, and independently verified tool execution and the boolean board acknowledgement in the room-scoped systemd journal. The probe now reads those filtered journal messages and exits nonzero on missing material identity, tools, ack, source-image fetches, audible tutor audio, clean end, or browser errors. Those gates were applied retrospectively to the saved real run without another provider call. Future runs require access to the preview's user journal (run on elitebook).
+
+The recorded first search/display wait is long in this single run; this is a working prototype, not evidence of conversational retrieval latency. Optimizing cold model loading and testing a maths conversation remain follow-up work. Source diagrams were shown and discussed successfully; this does not establish learning outcomes.

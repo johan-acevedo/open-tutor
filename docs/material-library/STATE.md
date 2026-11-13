@@ -23,7 +23,7 @@ Each step gets a small brief and ends with executable evidence. Workers use isol
 
 ## Current state
 
-Steps 1 and 2a are implemented and cross-reviewed. Step 2b has a real-model proof awaiting Muse review. Eight validated EPUBs are on elitebook at ~/.local/share/open-tutor/materials/siyavula, with books.json and validation evidence under tools/siyavula. The served corpus is https://elitebook.tail2e1c4e.ts.net/open-tutor-materials/.
+Steps 1 and 2a are implemented and cross-reviewed. Steps 2b–4d are implemented and cross-reviewed; the real voice/browser circuit probe passed. Eight validated EPUBs are on elitebook at ~/.local/share/open-tutor/materials/siyavula, with books.json and validation evidence under tools/siyavula. The served corpus is https://elitebook.tail2e1c4e.ts.net/open-tutor-materials/.
 
 Source baseline: origin/main 675f334. Existing material tools are independent of the tutor. EmbeddingGemma 2 has now run on a bounded 118-passage sample; this is not yet a full-corpus retrieval evaluation or integrated tutor feature.
 
@@ -116,3 +116,7 @@ Muse delivered211c1dc, cherry-picked as f605f29. Parent validated actual disk co
 ## Step 4c review corrections
 
 DeepSeek independently verified all7233 entries against recomputed extraction and original book SHA-256, unit norms, metadata parity, and all8 books. Shipped index is valid. Parent tightened builder validation to unit vectors and float32, fingerprints the actual formatted document inputs (headings/breadcrumbs/template included), echoes dtype on reuse and handles missing optional dependencies as a JSON error. Added cheap checks for zero vectors, dtype, heading/template changes and build/reuse with a forbidden model constructor. Fixed the remaining old image-file wording assertion. Existing verified disk artifact remains untouched; its legacy fingerprint predates this stronger cache identity, so a future build-full invocation will rebuild once before using the new reuse contract. No rebuild is required to run its already-verified vectors. Real conversation probe still running independently.
+
+## Real-provider circuit proof complete / final PR
+
+Muse delivered1a7b37d, cherry-picked as cafbc1c: rerunnable synthetic-learner browser/voice probe and evidence. Parent reviewed actual report/captions/screenshot and original circuit figures, and independently verified room-scoped journal events for search_materials, true board.show acknowledgement, and show_material. Added fail-fast evidence gates and two cheap probe checks; the saved actual run passes them without another provider call. Source image descriptions match the attached wiring figures. Only the circuit scenario is proven, with synthetic learner speech and real Soniox/Muse Go/Deepgram/LiveKit; no human learning outcome or maths voice scenario claim. First search/display wait was long; optimize cold loading separately. Full eight-book text index is enabled in the persistent isolated preview. PR33 final body/CI must include the probe before merge; family production services stay untouched.

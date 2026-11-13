@@ -15,7 +15,7 @@ Run (from the repo root; spends a little on existing provider keys):
       --url https://elitebook.tail2e1c4e.ts.net:9443/ --name Pax
 
 Output (outside git): report.json, timeline.jsonl, captions, screenshots,
-thesynthetic tape + clips, fetched section HTML/metadata. No tokens or keys.
+the synthetic tape + clips, fetched section HTML/metadata. No tokens or keys.
 """
 
 from __future__ import annotations
@@ -106,6 +106,51 @@ def build_tape(clips: list[tuple[Path, float]], total: float, dest: Path) -> Non
     write_wav(dest, bytes(tape), rate)
 
 
+def room_tool_messages(room: str, since: str) -> list[str]:
+    """Read only this synthetic room's tool/ack messages, never credential logs."""
+    result = subprocess.run(
+        ['journalctl', '--user', '-u', 'open-tutor-materials-agent', '--since', since,
+         '--no-pager', '-o', 'cat'], capture_output=True, text=True, timeout=20,
+    )
+    messages = []
+    for line in result.stdout.splitlines():
+        try:
+            entry = json.loads(line)
+        except ValueError:
+            continue
+        if entry.get('room') != room:
+            continue
+        message = entry.get('message', '')
+        if message.startswith(('tools executed:', 'board rpc board.show')):
+            messages.append(message)
+    return messages
+
+
+def evidence_failures(report: dict, samples: list[dict], errors: list[str]) -> list[str]:
+    """A successful process exit requires material, tools, audio and clean end."""
+    failed = []
+    fetched = report.get('fetched') or {}
+    messages = report.get('tool_messages') or []
+    if not (report.get('material') or {}).get('section_id'):
+        failed.append('No material was shown')
+    if fetched.get('meta_status') != 200 or not fetched.get('has_marker'):
+        failed.append('Original material identity was not verified')
+    if fetched.get('visible_image_count', 0) > 0 and fetched.get('img_http_200', 0) <= 0:
+        failed.append('No original source images were fetched successfully')
+    for tool in ['search_materials', 'show_material']:
+        if not any(message.startswith('tools executed:') and tool in message for message in messages):
+            failed.append('No real tool execution logged: ' + tool)
+    if not any('board rpc board.show' in message and 'acknowledged=True' in message for message in messages):
+        failed.append('No real browser acknowledgement logged')
+    if not any(sample.get('rms', 0) > 0.01 for sample in samples):
+        failed.append('No audible tutor audio measured')
+    if not report.get('ended_cleanly'):
+        failed.append('Session did not end cleanly')
+    if errors:
+        failed.append('Browser errors occurred')
+    return failed
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--url", default=URL_DEFAULT)
@@ -117,6 +162,7 @@ def main() -> None:
     ap.add_argument("--session-budget", type=float, default=480.0)
     args = ap.parse_args()
 
+    started_utc = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     out = Path(args.out) if args.out else (
         Path.home() / ".local/state/open-tutor/material-probe" / stamp)
@@ -143,14 +189,15 @@ def main() -> None:
             raise SystemExit(f"--no-synth but no {tape}")
         log(out, "tape_reused", tape=str(tape))
     else:
-        u1pcm, u1rate = asyncio.run(synth_clip(U1, out / "clip_u1_24k.pcm"))
+        learner_u1 = U1.replace("Jag heter Pax", f"Jag heter {args.name}")
+        u1pcm, u1rate = asyncio.run(synth_clip(learner_u1, out / "clip_u1_24k.pcm"))
         u2pcm, u2rate = asyncio.run(synth_clip(U2, out / "clip_u2_24k.pcm"))
         c1, c2 = out / "clip_u1.wav", out / "clip_u2.wav"
         write_wav(c1, u1pcm, u1rate)
         write_wav(c2, u2pcm, u2rate)
         build_tape([(c1, U1_AT), (c2, U2_AT)], TAPE_END, tape)
         log(out, "tape_built", tape=str(tape), u1_rate=u1rate, u2_rate=u2rate,
-            u1_text=U1, u2_text=U2, synthetic_learner_speech=True)
+            u1_text=learner_u1, u2_text=U2, synthetic_learner_speech=True)
 
     room_name: dict = {}
     captions: list[dict] = []
@@ -356,11 +403,16 @@ def main() -> None:
         "fetched": fetched if sid else None,
         "captions": captions,
         "ended_cleanly": ended,
+        "tool_messages": room_tool_messages(room_name.get("room", ""), started_utc),
     }
+    report["verification_failures"] = evidence_failures(report, samples, errors)
     (out / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2))
     print(f"OUT={out}")
     print(json.dumps({k: (v if k != "captions" else f"{len(v)} turns")
                       for k, v in report.items()}, ensure_ascii=False, indent=2)[:2000])
+
+    if report["verification_failures"]:
+        raise SystemExit("Probe failed: " + "; ".join(report["verification_failures"]))
 
 
 if __name__ == "__main__":
