@@ -266,6 +266,36 @@ Provider-independent: a non-retryable LLM error is recorded as `provider_error` 
 provider's own message, and the worker says one short apology through TTS (no LLM) and
 ends the session instead of leaving the child in silence.
 
+### A typed message must never vanish (2026-11-13)
+
+A message the child typed while the tutor was still working on its greeting was
+sometimes lost: no answer and no `chat_item` in the log. Reproduced deterministically
+and traced to two silent holes in how the message travelled:
+
+- **The room had nobody to deliver to.** LiveKit drops a data message published while
+the agent participant is not yet in the room; the browser's `sendText` still resolves
+(`remoteParticipants` empty, send confirmed, nothing in the worker).
+- **The room had no handler.** A stream that arrives before the topic's handler is
+registered is disposed by the RTC layer, with only an INFO line on the `livekit`
+logger (silenced to WARN in our worker). RoomIO registers `lk.chat` inside
+`AgentSession.start()`, which is after the participant wait, TTS/STT construction and
+the debug log — a window of a few hundred ms in a fast start, seconds under load.
+
+The worker now owns `lk.chat` from the moment the room connects (`text_input.py`,
+`text_input=False` in `RoomOptions`): every message is recorded as `chat_typed` on
+arrival, messages that arrive before the session can answer are queued and answered
+afterwards (one reply that greets too, since the greeting has not been heard), and a
+message that cannot be handled is recorded as `chat_typed_failed` instead of
+disappearing. Handling still interrupts the current speech and generates a reply; it
+tolerates uninterruptible speech and a stalled stream read (15 s). The page holds
+everything it sends to the tutor until the agent participant is in the room
+(`web/src/agentGate.ts`), which closes the first hole for our app.
+
+`server/tests/test_typed_chat.py` pins the queueing, the greeting merge, the
+interrupt, the failure records and the 15 s read timeout;
+`server/scripts/typed_chat_probe.py` sends typed messages at chosen moments against a
+deliberately slow stub provider and reports what the worker's log recorded.
+
 ## Work packages
 
 1. **Example screens, shell and components.** Owner: a separate Opus 5.5 thread. Status: started
