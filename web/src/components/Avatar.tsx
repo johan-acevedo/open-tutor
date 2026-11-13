@@ -7,8 +7,6 @@ type Props = {
   caption: string;
   captionFading: boolean;
   decorative?: boolean;
-  compact?: boolean;
-  onToggleSize?: () => void;
 };
 
 /** Fallback silhouette shown when a pose image is missing (404). */
@@ -23,7 +21,28 @@ export function AvatarFallback() {
   );
 }
 
-function PillIcon({ pill }: { pill: Pill }) {
+/**
+ * The tutor's current pose image. Shared by the desktop companion, the big
+ * phone fox and the round fox head in the phone strip, so a pose that has not
+ * shipped yet falls back everywhere.
+ */
+export function PoseImage({ pose, decorative }: { pose: Pose; decorative?: boolean }) {
+  const [missing, setMissing] = useState(false);
+  // A pose image may be absent (e.g. working.webp before it ships); when the
+  // pose changes, retry the new image instead of sticking on the fallback.
+  useEffect(() => setMissing(false), [pose]);
+  if (missing) return <AvatarFallback />;
+  return (
+    <img
+      className="ot-avatar-img"
+      src={`/character/${pose}.webp`}
+      alt={decorative ? '' : 'Tutorn'}
+      onError={() => setMissing(true)}
+    />
+  );
+}
+
+export function PillIcon({ pill }: { pill: Pill }) {
   if (pill.icon === 'bars') {
     return (
       <span className={`ot-bars${pill.animateBars ? ' animated' : ''}`} aria-hidden="true">
@@ -62,37 +81,13 @@ function PillIcon({ pill }: { pill: Pill }) {
   );
 }
 
-export default function Avatar({ pose, pill, caption, captionFading, decorative, compact, onToggleSize }: Props) {
-  const [missing, setMissing] = useState(false);
-  // A pose image may be absent (e.g. working.webp before it ships); when the
-  // pose changes, retry the new image instead of sticking on the fallback.
-  useEffect(() => setMissing(false), [pose]);
+export default function Avatar({ pose, pill, caption, captionFading, decorative }: Props) {
   const toneClass = pill ? `ot-pill-${pill.tone}` : '';
 
   return (
     <>
       <div className={`ot-companion ot-pose-${pose}`}>
-        {missing ? (
-          <AvatarFallback />
-        ) : (
-          <img
-            className="ot-avatar-img"
-            src={`/character/${pose}.webp`}
-            alt={decorative ? '' : 'Tutorn'}
-            onError={() => setMissing(true)}
-          />
-        )}
-        {onToggleSize && (
-          <button
-            type="button"
-            className="ot-size-btn"
-            aria-label={compact ? 'Gör tutorn större' : 'Gör tutorn mindre'}
-            aria-pressed={compact}
-            onClick={onToggleSize}
-          >
-            {compact ? '+' : '−'}
-          </button>
-        )}
+        <PoseImage pose={pose} decorative={decorative} />
       </div>
       <div className="ot-voice-bubble">
         {!decorative && pill && (

@@ -10,6 +10,8 @@ type Props = {
   onItemMounted: (id: string) => void;
   onResourceClosed: (id: string) => void;
   mobile?: boolean;
+  /** The phone shows the fox instead of the empty-board placeholder card. */
+  showEmptyState?: boolean;
   activeItemId?: string | null;
   registerPageFrame?: (id: string, send: ((msg: PageShellMessage) => void) | null) => void;
   onPageAnswer?: (answer: PageAnswer) => void;
@@ -30,6 +32,7 @@ export default function Board({
   onItemMounted,
   onResourceClosed,
   mobile = false,
+  showEmptyState = true,
   activeItemId,
   registerPageFrame = registerNoop,
   onPageAnswer = noopAnswer,
@@ -83,7 +86,7 @@ export default function Board({
         </nav>
       )}
       <div className="ot-board-scroll" data-book={items.length}>
-        {items.length === 0 && (
+        {items.length === 0 && showEmptyState && (
           <div className="ot-board-empty" role="status" aria-label="Whiteboard">
             <h1 className="ot-board-empty-greeting">Hej {learnerName}!</h1>
             <p>Här hamnar det vi jobbar med.</p>

@@ -7,11 +7,13 @@ import ProfilePicker from './components/ProfilePicker';
 import Avatar from './components/Avatar';
 import Board from './components/Board';
 import BottomBar from './components/BottomBar';
+import PhoneStage from './components/PhoneStage';
 import TopMenu from './components/TopMenu';
 import EndCard from './components/EndCard';
 import HomeworkTray from './components/HomeworkTray';
 import ScreenDemo from './components/ScreenDemo';
 import { useViewport } from './useViewport';
+import { usePhoneStage } from './phoneStage';
 
 export default function App() {
   // Dev-only Smart Screen demo: ?screen-demo=1 shows two example pages with
@@ -23,14 +25,19 @@ export default function App() {
       return false;
     }
   })();
-  const { mobile, keyboard } = useViewport();
+  const { mobile, portrait, keyboard } = useViewport();
   const session = useSession(mobile);
+  // Narrow portrait phones get the two-view stage: big fox, or item + fox strip.
+  const phonePortrait = mobile && portrait;
+  const stage = usePhoneStage({
+    hasItem: session.items.length > 0,
+    itemSignal: session.boardSignal,
+  });
   if (screenDemo) return <ScreenDemo />;
   const { phase, profile } = session;
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const cameraRef = useRef<HTMLInputElement | null>(null);
-  const [smallCompanion, setSmallCompanion] = useState(false);
 
   useEffect(() => {
     if (phase === 'profiles') {
@@ -54,9 +61,26 @@ export default function App() {
     document.querySelector<HTMLInputElement>('.ot-chat-input')?.focus();
   }
 
+  const homeworkTray = session.homeworkDraft ? (
+    <HomeworkTray
+      draft={session.homeworkDraft}
+      busy={session.homeworkSending}
+      onCamera={() => cameraRef.current?.click()}
+      onFiles={() => fileRef.current?.click()}
+      onCancel={() => session.setHomeworkDraft(null)}
+      onSend={() => void session.sendHomework()}
+      onRemove={(index) => {
+        const draft = session.homeworkDraft;
+        if (draft?.kind !== 'files') return;
+        const files = draft.files.filter((_, i) => i !== index);
+        session.setHomeworkDraft(files.length ? { ...draft, files } : { kind: 'picker' });
+      }}
+    />
+  ) : null;
+
   return (
     <div
-      className={`ot-root${mobile ? ' ot-phone' : ''}${keyboard ? ' ot-keyboard' : ''}${smallCompanion ? ' ot-small-companion' : ''}${inSession ? ' ot-in-session' : ''}`}
+      className={`ot-root${mobile ? ' ot-phone' : ''}${phonePortrait ? ' ot-phone-portrait' : ''}${keyboard ? ' ot-keyboard' : ''}${inSession ? ' ot-in-session' : ''}`}
     >
       <header className="ot-topbar">
         <div className="ot-wordmark">Open Tutor</div>
@@ -92,7 +116,28 @@ export default function App() {
         </div>
       )}
 
-      {(phase === 'live' || phase === 'ending') && profile && (
+      {(phase === 'live' || phase === 'ending') && profile && phonePortrait && (
+        <PhoneStage
+          learnerName={profile.name}
+          items={session.items}
+          focused={session.focused}
+          mode={mode}
+          // The homework tray lives on the board surface, so it needs the item view.
+          stage={session.homeworkDraft ? { ...stage, view: 'item', foxView: false } : stage}
+          pose={avatar.pose}
+          pill={avatar.pill}
+          caption={session.caption}
+          captionFading={session.captionFading}
+          activeItemId={session.activeItemId}
+          onItemMounted={session.onItemMounted}
+          onResourceClosed={(id) => void session.resourceClosed(id)}
+          registerPageFrame={session.registerPageFrame}
+          onPageAnswer={session.sendPageAnswer}
+          overlay={homeworkTray}
+        />
+      )}
+
+      {(phase === 'live' || phase === 'ending') && profile && !phonePortrait && (
         <main className={`ot-main ot-main-${mode}`}>
           <section className="ot-board" aria-label="Whiteboard">
             <Board
@@ -106,22 +151,7 @@ export default function App() {
               registerPageFrame={session.registerPageFrame}
               onPageAnswer={session.sendPageAnswer}
             />
-            {session.homeworkDraft && (
-              <HomeworkTray
-                draft={session.homeworkDraft}
-                busy={session.homeworkSending}
-                onCamera={() => cameraRef.current?.click()}
-                onFiles={() => fileRef.current?.click()}
-                onCancel={() => session.setHomeworkDraft(null)}
-                onSend={() => void session.sendHomework()}
-                onRemove={(index) => {
-                  const draft = session.homeworkDraft;
-                  if (draft?.kind !== 'files') return;
-                  const files = draft.files.filter((_, i) => i !== index);
-                  session.setHomeworkDraft(files.length ? { ...draft, files } : { kind: 'picker' });
-                }}
-              />
-            )}
+            {homeworkTray}
           </section>
           <aside className="ot-avatar-col" aria-label="Tutor">
             <Avatar
@@ -129,8 +159,6 @@ export default function App() {
               pill={avatar.pill}
               caption={session.caption}
               captionFading={session.captionFading}
-              compact={smallCompanion}
-              onToggleSize={mobile ? () => setSmallCompanion((small) => !small) : undefined}
             />
           </aside>
         </main>
