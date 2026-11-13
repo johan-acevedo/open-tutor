@@ -340,7 +340,7 @@ def test_incomplete_note_names_images_and_next_step():
     note = _material_seen_note("b2", "sec-aaaaaaaaaaaaaaaa", meta)
     assert "incomplete" in note and "3 image(s)" in note
     assert "cannot read" in note
-    assert "not this text note" in note  # exact next step, no faked understanding
+    assert "read it aloud" in note  # actionable fallback, no nonexistent image tool
 
 
 async def test_resolution_runs_off_the_event_loop(monkeypatch, tmp_path):
@@ -402,30 +402,26 @@ async def test_real_substitution_section_marks_equation_images(monkeypatch, tmp_
     assert payload["title"] == "Solving by substitution"
 
 
-async def test_success_adds_quoted_note_to_chat_context(monkeypatch, tmp_path):
-    """The acked page reaches the tutor through the existing chat-context path."""
+async def test_success_returns_note_once_without_mutating_context(monkeypatch, tmp_path):
+    store = _synthetic_store(tmp_path)
+    _patch_store(monkeypatch, store)
+    tutor = make_tutor(FakeRoom())
+    update = AsyncMock(side_effect=RuntimeError('context unavailable'))
+    monkeypatch.setattr(tutor, 'update_chat_ctx', update)
+    result = await tutor.show_material(AsyncMock(), section_id=_section_id(store))
+    assert 'Visible intro words.' in result
+    assert 'Teacher secret planning.' not in result
+    update.assert_not_awaited()
+
+
+async def test_string_false_ack_is_not_success(monkeypatch, tmp_path):
     store = _synthetic_store(tmp_path)
     _patch_store(monkeypatch, store)
     room = FakeRoom()
+    room.local_participant.perform_rpc = AsyncMock(return_value='{"ok":"false"}')
     tutor = make_tutor(room)
-    messages: list[dict] = []
-
-    class FakeCtx:
-        def copy(self):
-            return self
-
-        def add_message(self, *, role, content):
-            messages.append({"role": role, "content": content})
-
-    async def fake_update(ctx):
-        assert ctx is not None
-
-    monkeypatch.setattr(tutor, "update_chat_ctx", fake_update)
-    monkeypatch.setattr(type(tutor), "chat_ctx", property(lambda self: FakeCtx()))
-    await tutor.show_material(AsyncMock(), section_id=_section_id(store))
-    assert len(messages) == 1
-    assert messages[0]["role"] == "user"
-    text = messages[0]["content"][0]
-    assert "Material now on screen" in text
-    assert "Visible intro words." in text
-    assert "Teacher secret planning." not in text
+    seen = AsyncMock()
+    monkeypatch.setattr(tutor, 'add_material_seen', seen)
+    result = await tutor.show_material(AsyncMock(), section_id=_section_id(store))
+    assert result == MATERIAL_SHOW_NOT_SHOWN
+    seen.assert_not_awaited()
