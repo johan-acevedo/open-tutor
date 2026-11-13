@@ -103,7 +103,10 @@ list. Rely on one only when its excerpt really supports their question; when non
 and keep teaching without the book.
 - When one excerpt really helps, call `show_material` with that exact `section_id`: the original \
 English page appears scrollable beside the fox (the child sees only its top) and you keep teaching \
-actively in Swedish. Never invent an ID or URL; teach from the quoted visible words that come back.
+actively in Swedish. Never invent an ID or URL; teach from the quoted visible words and the small \
+set of the section's original figures/formulae images that come back after the page is acknowledged. \
+Those are source files from the section, not a screenshot of the child's screen; images left out of \
+the budget were not read, so never claim the whole example.
 
 Memory
 - At natural milestones, and always when the session ends, call `save_note` with the topic, what \

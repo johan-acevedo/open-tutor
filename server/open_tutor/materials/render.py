@@ -171,17 +171,18 @@ def sanitize_slice(slice_html: str) -> tuple[str, list[str]]:
     return cleaned, notes
 
 
-def visible_feedback(markup: str, *, hide_solutions: bool) -> tuple[str, int]:
+def visible_scope(markup: str, *, hide_solutions: bool) -> tuple[str, list[str]]:
     """Read the shipped scope excluding the pinned corpus CSS-hidden subtrees.
 
-    This handles the audited Siyavula selectors, not arbitrary CSS layout.
+    Returns the visible words and the ``src`` of every visible image in
+    document order (repeats kept, one entry per ``img`` element). This handles
+    the audited Siyavula selectors, not arbitrary CSS layout.
     """
     doc = parse_document(markup.encode("utf-8"))
     texts: list[str] = []
-    images = 0
+    image_sources: list[str] = []
 
     def walk(node, exercises=False):
-        nonlocal images
         if not hasattr(node, "tag"):
             texts.append(node.data)
             return
@@ -193,14 +194,27 @@ def visible_feedback(markup: str, *, hide_solutions: bool) -> tuple[str, int]:
         if not hide_solutions and exercises and node.tag == "h1" and "title" in classes:
             return
         if node.tag == "img":
-            images += 1
+            image_sources.append(str(node.attrs.get("src", "")))
         for child in node.content:
             walk(child, exercises or "exercises" in classes)
         if node.tag in {"p", "div", "li", "h1", "h2", "h3", "h4", "td"}:
             texts.append("\n")
 
     walk(doc.root)
-    return "\n".join(" ".join(line.split()) for line in "".join(texts).splitlines() if line.strip()), images
+    return (
+        "\n".join(
+            " ".join(line.split())
+            for line in "".join(texts).splitlines()
+            if line.strip()
+        ),
+        image_sources,
+    )
+
+
+def visible_feedback(markup: str, *, hide_solutions: bool) -> tuple[str, int]:
+    """Visible words plus the number of visible images (step 3a contract)."""
+    text, image_sources = visible_scope(markup, hide_solutions=hide_solutions)
+    return text, len(image_sources)
 
 
 def assert_inert_source(markup: str) -> None:

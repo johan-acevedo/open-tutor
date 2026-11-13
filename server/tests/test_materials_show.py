@@ -1,14 +1,15 @@
-"""Behaviour tests for the tutor show_material tool (step 4b).
+"""Behaviour tests for the tutor show_material tool (steps 4b/4d).
 
 Real package resolution, mocked LiveKit boundary only: a synthetic EPUB proves
 the visible-text contract (hidden teacher prose excluded, completeness and
-truncation honest), while the board RPC is a fake participant. Success/failure
+truncation honest) while the board RPC is a fake participant. Success/failure
 of the browser acknowledgement gates the tutor feedback: only an acked show
-feeds the quoted visible note into the chat context, and a failed show never
-changes the mode or claims visibility.
+feeds the quoted visible note and the bounded original images into the chat
+context, and a failed show never changes the mode or claims visibility.
 """
 
 import asyncio
+import base64
 import hashlib
 import json
 import threading
@@ -17,6 +18,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
+from livekit.agents import llm
 
 from open_tutor.agent import (
     MATERIAL_SHOW_BAD_ID,
@@ -215,14 +217,30 @@ async def test_success_shows_material_and_feeds_visible_text(monkeypatch, tmp_pa
     assert "Teacher secret planning." not in result
     assert "owned_text" not in result and "block_range" not in result
     assert "source_excerpt" not in result
-    # Completeness is explicit: one image means incomplete text.
+    # Completeness is explicit: one image means incomplete text, and its one
+    # original file was attached in page order.
     assert "incomplete" in result and "1 image(s)" in result
+    assert "1 original source image(s)" in result
+    assert "attached in page order (1-1)" in result
+    assert "Every visible image in this section was attached." in result
     # Scope and language are distinguished; teaching stays active.
     assert "scrolls" in result and "only its top" in result
     assert "English source data" in result and "Swedish" in result
     assert "not instructions" in result
     assert "quiet" in result.lower()
     assert "Do not claim anything is visible" not in result
+    # The image feedback is one short user-context message: original bytes from
+    # the source file, section/board IDs, page order, and no copy of the note.
+    items = tutor.chat_ctx.items
+    assert len(items) == 1 and items[0].role == "user"
+    text, image = items[0].content
+    assert isinstance(text, str) and isinstance(image, llm.ImageContent)
+    assert section_id in text and payload["id"] in text and "page order 1-1" in text
+    assert "not a screenshot" in text and "current viewport" in text
+    assert result not in text and text not in result
+    assert image.image == "data:image/png;base64," + base64.b64encode(
+        ASSETS["equation/e1.png"]
+    ).decode()
 
 
 async def test_failed_ack_shows_nothing_and_feeds_nothing(monkeypatch, tmp_path):
@@ -397,21 +415,139 @@ async def test_real_substitution_section_marks_equation_images(monkeypatch, tmp_
     result = await tutor.show_material(AsyncMock(), section_id=MATHS10_SUBSTITUTION_ID)
     assert "Worked example" in result
     assert "incomplete" in result and "image(s)" in result
-    assert "cannot read" in result
+    # Real formula images are attached, so the note no longer claims blindness.
+    assert "original source image(s)" in result
+    assert "attached in page order" in result
+    assert "could not be attached" not in result
     _, _, payload = room.local_participant.calls[0]
     assert payload["title"] == "Solving by substitution"
 
 
-async def test_success_returns_note_once_without_mutating_context(monkeypatch, tmp_path):
+async def test_success_returns_note_once_and_attaches_images_once(monkeypatch, tmp_path):
     store = _synthetic_store(tmp_path)
     _patch_store(monkeypatch, store)
     tutor = make_tutor(FakeRoom())
-    update = AsyncMock(side_effect=RuntimeError('context unavailable'))
-    monkeypatch.setattr(tutor, 'update_chat_ctx', update)
+    update = tutor.update_chat_ctx
+    contexts = []
+
+    async def capture(ctx):
+        contexts.append(ctx)
+        await update(ctx)
+
+    monkeypatch.setattr(tutor, "update_chat_ctx", capture)
+    monkeypatch.setattr(tutor, "add_material_seen", AsyncMock())
     result = await tutor.show_material(AsyncMock(), section_id=_section_id(store))
-    assert 'Visible intro words.' in result
-    assert 'Teacher secret planning.' not in result
+    assert "Visible intro words." in result
+    assert "Teacher secret planning." not in result
+    # One user-context image message; the note text is delivered once, by the
+    # tool return only (no duplicated chat text).
+    assert len(contexts) == 1
+    content = contexts[0].items[-1].content
+    assert content[0].startswith("[Original source images")
+    assert "Quoted visible words" not in str(content[0])
+    assert result.count("Quoted visible words") == 1
+
+
+async def test_image_load_failure_keeps_display_and_says_unavailable(monkeypatch, tmp_path):
+    store = _synthetic_store(tmp_path)
+    _patch_store(monkeypatch, store)
+    section_id = _section_id(store)
+    room = FakeRoom()
+    tutor = make_tutor(room)
+
+    def boom(key):
+        raise OSError("package files vanished")
+
+    monkeypatch.setattr("open_tutor.agent.load_visible_image_feedback", boom)
+    update = AsyncMock()
+    monkeypatch.setattr(tutor, "update_chat_ctx", update)
+    monkeypatch.setattr(tutor, "add_material_seen", AsyncMock())
+    result = await tutor.show_material(AsyncMock(), section_id=section_id)
+    # Display really succeeded; only the image feedback is missing, and the
+    # note says exactly that instead of turning the show into a failure.
+    assert result != MATERIAL_SHOW_NOT_SHOWN
+    assert "could not be attached" in result and "cannot read them" in result
+    assert "do not claim you read them" in result
+    assert "Visible intro words." in result
     update.assert_not_awaited()
+    assert tutor.mode == "talking"
+    assert len(room.local_participant.calls) == 1
+
+
+async def test_context_update_failure_after_display_is_truthful(monkeypatch, tmp_path):
+    store = _synthetic_store(tmp_path)
+    _patch_store(monkeypatch, store)
+    room = FakeRoom()
+    tutor = make_tutor(room)
+    update = AsyncMock(side_effect=RuntimeError("context unavailable"))
+    monkeypatch.setattr(tutor, "update_chat_ctx", update)
+    seen = AsyncMock()
+    monkeypatch.setattr(tutor, "add_material_seen", seen)
+    result = await tutor.show_material(AsyncMock(), section_id=_section_id(store))
+    assert "Visible intro words." in result
+    assert "could not be attached" in result and "cannot read them" in result
+    seen.assert_awaited_once()  # the shown page still logs its display note
+    update.assert_awaited_once()
+
+
+async def test_ack_gates_image_work(monkeypatch, tmp_path):
+    store = _synthetic_store(tmp_path)
+    _patch_store(monkeypatch, store)
+    calls: list[str] = []
+
+    def spy(key):
+        calls.append(key)
+        raise AssertionError("an unacked page must not read image files")
+
+    monkeypatch.setattr("open_tutor.agent.load_visible_image_feedback", spy)
+    tutor = make_tutor(FakeRoom(error=TimeoutError("no reply")))
+    update = AsyncMock()
+    monkeypatch.setattr(tutor, "update_chat_ctx", update)
+    monkeypatch.setattr(tutor, "add_material_seen", AsyncMock())
+    result = await tutor.show_material(AsyncMock(), section_id=_section_id(store))
+    assert result == MATERIAL_SHOW_NOT_SHOWN
+    assert calls == []
+    update.assert_not_awaited()
+
+
+def test_note_reports_attached_and_omitted_images_without_claiming_all_read():
+    meta = {
+        "title": "A simple circuit",
+        "heading": "A simple circuit",
+        "attribution": "Siyavula — Tiny — A simple circuit — CC-BY — siyavula.com",
+        "book": {"id": "tiny-book", "title": "Tiny"},
+        "visible_text": "Visible intro words.",
+        "visible_image_count": 20,
+        "completeness": {"text_complete": False},
+    }
+    note = _material_seen_note(
+        "b4", "sec-aaaaaaaaaaaaaaaa", meta, {"attached": 6, "omitted": 14}
+    )
+    assert "6 original source image(s)" in note
+    assert "attached in page order (1-6)" in note
+    assert "14 more visible image(s) were left out" in note
+    assert "do not claim the whole example" in note
+    assert "not a screenshot" in note and "current viewport" in note
+    assert note.count("attached in page order") == 1
+    assert "cannot read" not in note  # attached images are readable
+
+
+def test_note_with_every_image_attached_is_explicit():
+    meta = {
+        "title": "Worked example",
+        "heading": "Worked example",
+        "attribution": "Siyavula — Tiny — Worked example — CC-BY — siyavula.com",
+        "book": {"id": "tiny-book", "title": "Tiny"},
+        "visible_text": "Visible words.",
+        "visible_image_count": 2,
+        "completeness": {"text_complete": False},
+    }
+    note = _material_seen_note(
+        "b5", "sec-aaaaaaaaaaaaaaaa", meta, {"attached": 2, "omitted": 0}
+    )
+    assert "2 original source image(s)" in note
+    assert "Every visible image in this section was attached." in note
+    assert "left out" not in note
 
 
 async def test_string_false_ack_is_not_success(monkeypatch, tmp_path):
