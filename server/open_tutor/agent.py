@@ -46,6 +46,7 @@ from .board import (
 )
 from .config import AGENT_NAME, DEFAULT_TTS_MODEL, DEFAULT_TTS_VOICE, env_float
 from .debug_log import DebugLog, clear_active, record_active, set_active
+from .diag import parse_diag
 from .dialogue_tts import DialogueTTS, is_dialogue_model
 from .deepgram_tts import DeepgramFluxTTS, DEFAULT_MODEL as DEEPGRAM_DEFAULT_MODEL, parse_expressivity
 from .materials.image_feedback import load_visible_image_feedback
@@ -1389,6 +1390,18 @@ async def entrypoint(ctx: JobContext) -> None:
         try:
             event = json.loads(await reader.read_all())
         except json.JSONDecodeError:
+            return
+        if not isinstance(event, dict):
+            return
+        if event.get("type") == "diag":
+            # Sequenced browser diagnostics: keep only the normalized batch.
+            # The debug log stamps server receive time; seq/dropped expose
+            # what never made it off the page.
+            parsed = parse_diag(event)
+            if parsed is None:
+                debug.record("browser_event", {"type": "diag-rejected"})
+                return
+            debug.record("diag", parsed)
             return
         debug.record("browser_event", {"type": str(event.get("type", "?"))[:40]})
         if event.get("type") == "mic":
