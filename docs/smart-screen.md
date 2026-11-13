@@ -361,9 +361,29 @@ arrives early, and owns the single failover. LiveKit's `FallbackAdapter` was rej
 it is per-request failover, i.e. the per-turn switch thought signatures forbid.
 
 Measured on dell5500 with my own instance (`gemini` preferred, `go-deepseek`
-fallback), three e2e runs: the greeting audio started 1.2-1.6 s after the session
-began, the race chose go-deepseek twice and gemini once with both warm-up times around
-1-4 s, and no provider errors. See the `feat/session-voice` PR for the per-run numbers.
+fallback, `TUTOR_SCREEN=smart`, real providers and voices), three passing e2e runs:
+
+- The greeting audio started **0.83-0.92 s** after the session began (greeting event at
+  0.38-0.43 s, TTS first audio 0.45 s later). It played even while the preferred route
+  was pointed at a provider that never answers.
+- The race chose gemini twice (warm-up 2.59/–, 1.72/4.46 s) and go-deepseek once
+  (gemini did not answer, 4.83 s), and `llm_node_ttft` was 1.8-14.9 s: the providers were
+  slow while several test sessions ran on the machine.
+- Two of the three runs also hit one failover each (`gemini` -> `go-deepseek`) after gemini
+  timed out twice at 5 s. The child still got an answer.
+- Two earlier attempts failed: both providers exceeded the 5 s wall on the same turn
+  (two attempts on one, one on the other, 15 s in total), and the existing apology ended
+  the session. With these providers `TUTOR_LLM_TIMEOUT_S=8` is the safer setting; 5 s fits
+  a warm prompt (2-3 s) but not a screenshot turn or a loaded provider.
+`server/scripts/smart_screen_e2e.py --first-message-delay 8` sends its first typed message
+only after the greeting, so a run measures the greeting path; the default sends at once
+and the worker then answers with the greeting folded into that reply.
+
+- A deliberately silent preferred route (a local socket that accepts and never answers)
+  showed both recovery paths: the greeting at 0.83 s, `llm_chosen` keeping the preferred
+  route because neither answered, then `llm_failover` to go-deepseek on the first turn.
+  When go-deepseek later failed, the failover back to gemini was refused
+  (`llm_failover_skipped`: it needs thought signatures) and the apology path took over.
 
 ## Work packages
 

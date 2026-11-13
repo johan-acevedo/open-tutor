@@ -1084,11 +1084,15 @@ async def entrypoint(ctx: JobContext) -> None:
     outcome = "unknown"
     warm_up_task: asyncio.Task | None = None
 
-    async def opening() -> None:
-        """The session is ready and nothing was typed before it: greet in fixed text."""
-        # The greeting is starting, so a message typed from now on needs an answer only.
+    def opening(_instruction: str) -> None:
+        """The session is ready and nothing was typed before it: greet in fixed text.
+
+        Synchronous on purpose. `TypedChat.start` calls this where it would otherwise
+        prompt the LLM, so marking the greeting as heard here (rather than inside the
+        task) closes the window in which a typed message would try to greet as well.
+        """
         typed.mark_heard()
-        await greet(session, debug, greeting, greeting_variant, learner)
+        asyncio.create_task(greet(session, debug, greeting, greeting_variant, learner))
 
     try:
         # The warm-up race runs during the greeting, so the choice is usually ready
@@ -1119,7 +1123,7 @@ async def entrypoint(ctx: JobContext) -> None:
         # answered with the greeting folded into one reply, so the line is not repeated.
         await typed.start(
             prompt.greeting_instruction(learner),
-            lambda _instruction: asyncio.create_task(opening()),
+            opening,
             greet_instruction=TYPED_BEFORE_GREETING.format(line=greeting),
         )
 

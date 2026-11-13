@@ -211,7 +211,9 @@ before it has said anything, and the other candidate does not need thought signa
 the session fails over to it for the rest of the run (`llm_failover` in the log). Failing
 over to a signature-checking route is not safe, and a failure after the child has heard
 words is not repeated; both fall to the existing apology path, which speaks one sentence
-without the LLM and ends the session instead of leaving silence with no event.
+without the LLM and ends the session instead of leaving silence with no event. 5 s fits a
+warm text prompt (2-3 s to first token here); a turn carrying a screenshot, or a provider
+under load, can need more, so raise `TUTOR_LLM_TIMEOUT_S` if sessions end with the apology.
 
 ## Tests
 
