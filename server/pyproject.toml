@@ -27,10 +27,22 @@ dev = [
     "httpx>=0.28,<1",
     "playwright>=1.65.1",
 ]
+# Optional embedding proof (`scripts/search_materials.py`). Ordinary server runtime and
+# `uv sync` do not install it: use `uv sync --group ml`. CPU-only torch on purpose.
+ml = ["sentence-transformers>=6.1,<7", "torch>=2.6,<3", "torchvision>=0.20,<1"]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+torchvision = { index = "pytorch-cpu" }
 
 [build-system]
 requires = ["hatchling>=1.25"]
 build-backend = "hatchling.build"
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["open_tutor"]

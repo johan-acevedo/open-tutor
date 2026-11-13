@@ -688,7 +688,7 @@ async def test_patch_jobs_never_use_the_lint_retry(tmp_path, monkeypatch):
 def test_non_smart_mode_still_exposes_boards():
     assert tool_names(Tutor) == {"commission_board", "edit_board", "find_resources",
                                  "share_resource", "start_quiet_work", "stay_quiet",
-                                 "save_note"}
+                                 "save_note", "search_materials", "show_material"}
     text = instructions({"name": "Leo"})
     assert "commission_board" in text and "ask_screen" not in text
 

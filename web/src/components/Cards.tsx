@@ -3,6 +3,7 @@ import katex from 'katex';
 import type { BoardItem } from '../protocol';
 import { renderMarkdown } from '../markdown';
 import { sanitiseSvg } from '../svgSanitize';
+import MaterialSection from './MaterialSection';
 
 export const IMAGE_MOUNT_TIMEOUT_MS = 4000;
 
@@ -12,6 +13,8 @@ type CardProps = {
   onMounted: (id: string) => void;
   onResourceClosed?: (id: string) => void;
   revealThrough?: number;
+  /** Immediate failure signal so a board RPC is rejected, not timed out. */
+  onFailed?: (id: string, message: string) => void;
 };
 
 function useReportMounted(item: BoardItem, onMounted: (id: string) => void, waitForImage = false) {
@@ -332,6 +335,11 @@ function ResourceCard({ item, onMounted, onResourceClosed }: CardProps) {
   );
 }
 
+function MaterialCard({ item, onMounted, onFailed }: CardProps) {
+  if (item.kind !== 'material') return null;
+  return <MaterialSection item={item} onMounted={onMounted} onFailed={onFailed ?? (() => {})} />;
+}
+
 function HomeworkCard({ item, onMounted }: CardProps) {
   if (item.kind !== 'homework') return null;
   const { ref } = useReportMounted(item, onMounted);
@@ -366,6 +374,8 @@ export default function BoardCard(props: CardProps) {
       return <PendingCard {...props} />;
     case 'resource':
       return <ResourceCard {...props} />;
+    case 'material':
+      return <MaterialCard {...props} />;
     case 'homework':
       return <HomeworkCard {...props} />;
     case 'page':

@@ -31,6 +31,7 @@ export type BoardItem =
   | { id: string; kind: 'html'; title?: string; html: string; height?: number; width?: number }
   | { id: string; kind: 'image'; title?: string; url: string; alt: string }
   | { id: string; kind: 'page'; title: string; body: string }
+  | { id: string; kind: 'material'; title: string; section_id: string }
   | { id: string; kind: 'pending'; title: string; height?: number }
   | {
       id: string;

@@ -18,10 +18,15 @@ const KNOWN_KINDS = new Set([
   'resource',
   'homework',
   'page',
+  'material',
 ]);
 
 // LiveKit RPC payloads stay small; only the body travels, the web app holds the shell.
 const PAGE_BODY_MAX = 20000;
+
+// Stable catalogue section IDs only (sec- + 16 lowercase hex). The browser
+// derives the page URL from this ID; the agent can never supply a URL.
+const SECTION_ID_RE = /^sec-[0-9a-f]{16}$/;
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -167,6 +172,15 @@ export function validateBoardItem(raw: unknown): ValidateResult {
         return { ok: false, error: `page body must be at most ${PAGE_BODY_MAX} characters` };
       }
       return { ok: true, item: { id, kind: 'page', title: raw.title, body: raw.body } };
+    }
+    case 'material': {
+      if (typeof raw.title !== 'string' || !raw.title) {
+        return { ok: false, error: 'material item needs a non-empty title string' };
+      }
+      if (typeof raw.section_id !== 'string' || !SECTION_ID_RE.test(raw.section_id)) {
+        return { ok: false, error: 'material item needs a valid section_id (sec-…)' };
+      }
+      return { ok: true, item: { id, kind: 'material', title: raw.title, section_id: raw.section_id } };
     }
     case 'homework': {
       if (typeof raw.title !== 'string') return { ok: false, error: 'homework item needs title string' };

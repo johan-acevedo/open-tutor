@@ -203,7 +203,9 @@ export function useSession(mobile = false) {
   const preparedRoomRef = useRef<Room | null>(null);
   const profileRef = useRef<Profile | null>(null);
   const intentionalEndRef = useRef(false);
-  const mountResolvers = useRef(new Map<string, Array<() => void>>());
+  const mountResolvers = useRef(
+    new Map<string, Array<{ resolve: () => void; reject: (err: unknown) => void; timer: number }>>(),
+  );
   const audioRef = useRef<HTMLAudioElement | null>(null);
   // Extra elements for a second agent audio track (the fox's filler sounds).
   const extraAudioRef = useRef<HTMLAudioElement[]>([]);
@@ -266,28 +268,46 @@ export function useSession(mobile = false) {
     const list = mountResolvers.current.get(id);
     if (list) {
       mountResolvers.current.delete(id);
-      for (const fn of list) fn();
+      for (const w of list) {
+        window.clearTimeout(w.timer);
+        w.resolve();
+      }
     }
   }, []);
 
-  const waitForMounted = useCallback((id: string) => {
+  // A card reports a terminal render failure (e.g. the material section or
+  // its frame failed to load). Reject now so the board RPC answers with an
+  // error instead of timing out — a failed render is never acknowledged.
+  const rejectMounted = useCallback((id: string, message: string) => {
+    const list = mountResolvers.current.get(id);
+    if (list) {
+      mountResolvers.current.delete(id);
+      for (const w of list) {
+        window.clearTimeout(w.timer);
+        w.reject(new RpcError(1500, message));
+      }
+    }
+  }, []);
+
+  const waitForMounted = useCallback((id: string, timeoutMs = MOUNT_TIMEOUT_MS) => {
     return new Promise<void>((resolve, reject) => {
-      const list = mountResolvers.current.get(id) ?? [];
-      const finish = () => {
-        window.clearTimeout(timer);
-        resolve();
+      const waiter: { resolve: () => void; reject: (err: unknown) => void; timer: number } = {
+        resolve,
+        reject,
+        timer: 0,
       };
-      list.push(finish);
+      const list = mountResolvers.current.get(id) ?? [];
+      list.push(waiter);
       mountResolvers.current.set(id, list);
-      const timer = window.setTimeout(() => {
+      waiter.timer = window.setTimeout(() => {
         const pending = mountResolvers.current.get(id);
         if (pending) {
-          const remaining = pending.filter((fn) => fn !== finish);
+          const remaining = pending.filter((w) => w !== waiter);
           if (remaining.length) mountResolvers.current.set(id, remaining);
           else mountResolvers.current.delete(id);
           reject(new RpcError(1501, 'The browser did not confirm rendering this board item'));
         }
-      }, MOUNT_TIMEOUT_MS);
+      }, timeoutMs);
     });
   }, []);
 
@@ -507,7 +527,7 @@ export function useSession(mobile = false) {
         setFocused(null);
         setActiveItemId(v.item.id);
         setBoardSignal((n) => n + 1);
-        await waitForMounted(v.item.id);
+        await waitForMounted(v.item.id, v.item.kind === 'material' ? 10000 : MOUNT_TIMEOUT_MS);
         // For the first pending item this mount flips arrival->teaching:
         // report the size only once that transition has settled, so the
         // tutor commissions the finished pane, not the arrival one.
@@ -535,7 +555,7 @@ export function useSession(mobile = false) {
         });
         setActiveItemId(v.item.id);
         setBoardSignal((n) => n + 1);
-        await waitForMounted(v.item.id);
+        await waitForMounted(v.item.id, v.item.kind === 'material' ? 10000 : MOUNT_TIMEOUT_MS);
         await waitForBoardLayout();
         return JSON.stringify({ ok: true, board: readBoardSize() });
       });
@@ -1117,6 +1137,7 @@ export function useSession(mobile = false) {
     onItemMounted: resolveMounted,
     registerPageFrame,
     sendPageAnswer,
+    onItemFailed: rejectMounted,
   };
 }
 

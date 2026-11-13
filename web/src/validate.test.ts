@@ -76,6 +76,49 @@ describe('validateBoardItem', () => {
     // Legacy boards without width still validate (fluid-width fit).
     expect(validateBoardItem({ id: 'h1', kind: 'html', html: '<b>x</b>' }).ok).toBe(true);
   });
+
+  it('validates material section references', () => {
+    const good = validateBoardItem({
+      id: 'm1',
+      kind: 'material',
+      title: 'A simple circuit',
+      section_id: 'sec-ecd16baf9e4fee44',
+    });
+    expect(good.ok).toBe(true);
+    if (good.ok) {
+      expect(good.item).toEqual({
+        id: 'm1',
+        kind: 'material',
+        title: 'A simple circuit',
+        section_id: 'sec-ecd16baf9e4fee44',
+      });
+    }
+    // Not a catalogue ID: rejected, never turned into a URL.
+    expect(
+      validateBoardItem({ id: 'm1', kind: 'material', title: 'X', section_id: 'sec-xyz' }).ok,
+    ).toBe(false);
+    expect(
+      validateBoardItem({
+        id: 'm1',
+        kind: 'material',
+        title: 'X',
+        section_id: 'https://evil.example/page.html',
+      }).ok,
+    ).toBe(false);
+    // An agent-supplied URL is dropped: the item carries no URL at all.
+    const withUrl = validateBoardItem({
+      id: 'm1',
+      kind: 'material',
+      title: 'X',
+      section_id: 'sec-ecd16baf9e4fee44',
+      url: 'https://evil.example/page.html',
+    });
+    expect(withUrl.ok).toBe(true);
+    if (withUrl.ok) expect('url' in withUrl.item).toBe(false);
+    expect(validateBoardItem({ id: 'm1', kind: 'material', section_id: 'sec-ecd16baf9e4fee44' }).ok).toBe(
+      false,
+    );
+  });
 });
 
 describe('validateBoardItem page kind', () => {

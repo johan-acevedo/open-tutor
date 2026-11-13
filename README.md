@@ -2,7 +2,11 @@
 
 A live voice tutor that helps children understand their schoolwork and take the next step themselves.
 
-## Educational material tools
+## Educational material library
+
+The tutor can search eight English Siyavula books with EmbeddingGemma 2 and show original sections beside the avatar while explaining in Swedish. Browser acknowledgement gates display claims; a bounded set of original images supports explanations of figures and formulae. Image-only passages are not text-searchable. See [implementation and validation](docs/material-library/STATE.md) and the [real-provider voice probe](docs/material-library/step4e-real-voice-probe.md).
+
+### Source and curriculum tools
 
 Agents can [look up Swedish curricula and subject content](tools/skolverket/README.md)
 through Skolverket's Syllabus API and [download English Siyavula books](tools/siyavula/README.md)
@@ -10,7 +14,7 @@ with source records and file checks. These tools run independently of the tutor.
 
 ## Founding brief
 
-This document records the project's starting intent. Open Tutor is a working name. There is no application yet.
+This section records the project's starting intent. Open Tutor is a working name; the application and material library now have an isolated running prototype.
 
 The [product requirements](PRD.md), [visual style guide](design/STYLE-GUIDE.md), and [selected image mockups](design/mockups/pass-2/README.md) develop this intent into the first experience. The [build plan](BUILD-PLAN.md) and [review presentation](review/README.md) propose how to reach the first homework session.
 
