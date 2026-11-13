@@ -2,6 +2,12 @@
 
 ## Toolbox follow-up, 2026-11-13
 
+Pane/repair review: corrected-page renders are bounded too, with a short margin
+for saving and delivery. A renderer timeout keeps the already rendered page.
+Retry acknowledgements and patch responses are not accepted as page bodies.
+The failing-before/passing-after regression and real DeepSeek renders are in
+`review/2026-11-13-pane-retry/`.
+
 Page and patch markup is sanitized before it joins the live document. Both
 composers escape the body into an inert template. Boot reads that text, then
 uses native `setHTML` or loads DOMPurify 3.4.17 when the native method is absent.

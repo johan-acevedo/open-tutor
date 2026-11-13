@@ -46,6 +46,7 @@ MAX_HOMEWORK_IMAGES = 4
 # Optional repair work (the look pass, the one lint retry) may not eat the
 # delivery: a step only starts while a final render still fits the job limit.
 FINAL_RENDER_RESERVE_S = 3.0
+DELIVERY_RESERVE_S = 0.2
 MIN_OPTIONAL_STEP_S = 3.0
 # The shell's `dense` minimum is 16 px below 600 px wide (screen/shell/shell.js).
 NARROW_PANE_WIDTH = 600
@@ -516,7 +517,7 @@ class Screen:
                     if self._time_left(t0) < reserve_s:
                         repair["notes"].append("look fix not rendered: no time left")
                     else:
-                        rendered, why = await self._render_optional(fixed)
+                        rendered, why = await self._render_optional(fixed, t0)
                         if rendered is None:
                             repair["notes"].append(f"look fix dropped: {why}")
                         else:
@@ -539,7 +540,7 @@ class Screen:
                 if why:
                     repair["notes"].append(f"lint retry {why}")
                 elif corrected and corrected != body:
-                    rendered, why = await self._render_optional(corrected)
+                    rendered, why = await self._render_optional(corrected, t0)
                     if rendered is None:
                         repair["notes"].append(f"lint retry dropped: {why}")
                     elif len(actionable_issues(rendered[1])) > len(leftover):
@@ -603,10 +604,15 @@ class Screen:
             return None, time.monotonic() - started, f"failed: {type(error).__name__}"
         return result, time.monotonic() - started, ""
 
-    async def _render_optional(self, body: str) -> tuple[tuple[bytes, list, float] | None, str]:
+    async def _render_optional(self, body: str, t0: float) -> tuple[tuple[bytes, list, float] | None, str]:
         """Re-render a repair; a failure keeps the page already in hand."""
         try:
-            png, issues, render_s = await self._render(body, None)
+            remaining = self._time_left(t0) - DELIVERY_RESERVE_S
+            if remaining <= 0:
+                return None, "no time left for render"
+            png, issues, render_s = await asyncio.wait_for(self._render(body, None), timeout=remaining)
+        except asyncio.TimeoutError:
+            return None, "render timed out"
         except Exception as error:  # noqa: BLE001 - a usable page is not dropped
             return None, f"render failed: {type(error).__name__}"
         return (png, issues, render_s), ""
@@ -656,7 +662,7 @@ class Screen:
         answer, _ = await self._call_model(self.system_prompt(), user)
         answer = strip_fences(answer)
         record_active("screen_lint_retry", {"fixed": bool(answer)})
-        return answer or None
+        return None if answer == "OK" or classify_answer(answer) == "patch" else (answer or None)
 
     # ---- real model call -------------------------------------------------
 

@@ -515,6 +515,33 @@ async def test_a_failed_look_pass_still_delivers_the_page(tmp_path, monkeypatch)
     await screen.aclose()
 
 
+async def test_a_slow_repair_render_keeps_the_page_before_the_job_deadline(tmp_path, monkeypatch):
+    monkeypatch.setenv("SCREEN_LOOK", "1")
+    monkeypatch.setattr("open_tutor.screen.MIN_OPTIONAL_STEP_S", 0)
+    monkeypatch.setattr("open_tutor.screen.FINAL_RENDER_RESERVE_S", 0.01)
+    delivered, failures = [], []
+
+    async def model(system, user, images, look_png):
+        return "<h1>Förbättrad</h1>" if look_png is not None else "<h1>Första sidan</h1>"
+
+    async def render(body, patch, w, h):
+        if "Förbättrad" in body:
+            await asyncio.sleep(30)
+        return b"PNG", []
+
+    screen = make_screen(tmp_path, model_call=model, render_page=render, timeout=0.5)
+    screen.on_page = delivered.append
+    screen.on_failure = failures.append
+    screen.ask("En sida om bråk")
+    await screen.wait_idle()
+
+    assert not failures
+    assert delivered[0].body == "<h1>Första sidan</h1>"
+    assert any("render timed out" in note for note in job_meta(tmp_path)["repair"]["notes"])
+    assert delivered[0].total_s < 0.5
+    await screen.aclose()
+
+
 async def test_a_timed_out_retry_still_delivers_the_page(tmp_path, monkeypatch):
     monkeypatch.setenv("SCREEN_LOOK", "1")
     delivered = {}
@@ -562,6 +589,13 @@ async def test_a_retry_that_makes_lint_worse_is_dropped(tmp_path, monkeypatch):
 
     assert delivered["page"].body == "<h1>Delar</h1>" and delivered["page"].png == b"PNG1"
     assert any("made lint worse" in note for note in job_meta(tmp_path)["repair"]["notes"])
+    await screen.aclose()
+
+
+@pytest.mark.parametrize("reply", ["OK", '<ot-patch target="steg">x</ot-patch>'])
+async def test_retry_does_not_replace_a_page_with_an_acknowledgement_or_patch(tmp_path, reply):
+    screen = make_screen(tmp_path, model_call=AsyncMock(return_value=reply))
+    assert await screen._retry_with_lint("En sida", "<h1>Bråk</h1>", ["dense: small"], 370, 610) is None
     await screen.aclose()
 
 
