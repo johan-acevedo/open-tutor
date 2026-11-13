@@ -1,0 +1,27 @@
+{
+ "ask": "Rita en triangel med sidorna 3 cm, 4 cm och 5 cm. Måtten ska stå vid sidorna. En svarsruta för triangelns omkrets. Rita inget svar.",
+ "patch_ask": "Lägg till triangelns tre hörn som punkter som eleven kan peka på. Ändra inga mått.",
+ "wall_s": 9.93,
+ "patch_wall_s": 3.26,
+ "calls": [
+  {
+   "look": false,
+   "seconds": 8.62,
+   "user_chars": 493,
+   "answer_chars": 236
+  },
+  {
+   "look": false,
+   "seconds": 2.76,
+   "user_chars": 790,
+   "answer_chars": 240
+  }
+ ],
+ "failures": [],
+ "patch_failures": [],
+ "model_s": 8.618249659892172,
+ "render_s": 1.2999485130421817,
+ "retry_s": 0.0,
+ "residual_issues": [],
+ "patch_issues": []
+}

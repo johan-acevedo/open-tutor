@@ -1,5 +1,20 @@
 # Smart Screen: choices, tried and rejected
 
+## Qualified length lint for measured plane figures, 2026-11-13
+
+`ot-polygon sides` on an explicitly to-scale figure now warn when a drawn side
+disagrees with its label, independent of absolute drawing scale (exact
+graph-unit ratios against the figure's own median; segments, angles, areas,
+unknowns, `free`/`schematic` graphs and hidden answers never warn). One
+REFERENCE.md line draws sides to scale and teaches the `schematic` opt-out.
+A 4-vs-5 synthetic warns while consistent scaled/rounded/mixed-unit figures
+and real writer bodies stay quiet; hidden figures warn only after reveal and
+repaired warnings clear. Reproduce with `tools/check_lengths.py
+[--prior-ref 5ff811e]`; CI pins the decision logic in
+`tests/test_length_lint.py`. Evidence: `review/2026-11-13-lengths/`, incl. one
+fresh Hydrogen-low page plus patch (lint-clean, inspected at both sizes).
+No new tags, no server change (`length` is actionable by default).
+
 ## Graph label placement + overlap lint, 2026-11-13
 
 Side/segment labels use polygon winding and measured clearance. Placement and
@@ -13,7 +28,7 @@ not the accepted example. Parent review corrected a NaN in the independent check
 and then fixed five previously unreported outline crossings. Reproduce with
 `tools/check_graph_labels.py --prior-ref 848f8c1`; evidence is in
 `review/2026-11-13-graph-labels/`. Arbitrary text/curves/decorations are outside
-this lint; no new tags or length lint.
+this lint; no new tags. Length consistency is the follow-up change above.
 
 ## Toolbox follow-up, 2026-11-13
 
