@@ -273,7 +273,7 @@
 
     // Data tags: they only carry attributes and text for their parent component.
     ['ot-fn', 'ot-point', 'ot-segment', 'ot-polygon', 'ot-text', 'ot-mark', 'ot-jump', 'ot-item', 'ot-node',
-     'ot-country', 'ot-area', 'ot-place', 'ot-label', 'ot-patch'].forEach(function (t) {
+     'ot-country', 'ot-region', 'ot-area', 'ot-place', 'ot-label', 'ot-patch'].forEach(function (t) {
       define(t, class extends Base {});
     });
 
@@ -695,7 +695,7 @@
     define('ot-map', class extends Visual {
       build() { this._data = mapData(this); }
       draw(w, h, f) { drawMap(this, w, h, f); }
-      pointAt(child) { return ringAt(this, child._px); }
+      pointAt(child) { return pointRegion(this, child); }
     });
 
     // ---- ot-image: photo or illustration with credit; ot-label children make labelled parts
@@ -1402,6 +1402,129 @@
     return best;
   }
   function historyUrl(y) { return DATA.history + 'world_' + (y < 0 ? 'bc' + (-y) : y) + '.geojson'; }
+
+  // ---- Sweden's 21 län (regions). The shapes travel with the shell, not with the page:
+  // screen/shell/data/lan-sverige.json is inlined by compose(), so a region map needs no
+  // request and no bytes in the page body (LiveKit RPC is about 15 kB).
+  var REGION_WORDS = ['län', 'lan', 'länen', 'lanen', 'regioner', 'counties', 'all'];
+  var lanValue;
+  function lanData() {
+    if (lanValue !== undefined) return lanValue;
+    lanValue = null;
+    var node = document.getElementById('ot-map-data');
+    if (!node) { issue('map', 'the shell has no region data'); return null; }
+    try { lanValue = JSON.parse(node.textContent); }
+    catch (e) { issue('load', 'could not read the region data: ' + ((e && e.message) || e)); }
+    return lanValue;
+  }
+  function showsRegions(el) {
+    var v = (el.getAttribute('regions') || '').trim().toLowerCase();
+    if (!v) return false;
+    if (REGION_WORDS.indexOf(v) >= 0) return true;
+    issue('map', 'unknown regions="' + v + '" (use regions="län")', el);
+    return false;
+  }
+  // "Skåne", "Skåne län", "Region Skåne", "Skånes län", "M", "SE-M" all name the same region.
+  function regionKey(s) {
+    return String(s || '').trim().toLowerCase()
+      .replace(/^region\s+/, '')
+      .replace(/\s+län$/, '')
+      .replace(/[åä]/g, 'a').replace(/ö/g, 'o')
+      .replace(/[^a-z0-9]/g, '');
+  }
+  function regionIndex(data) {
+    var index = {};
+    data.regions.forEach(function (r) {
+      var k = regionKey(r.name), code = r.code.toLowerCase();
+      [k, k + 's', 'lan' + code, 'se' + code, code].forEach(function (key) { index[key] = r; });
+    });
+    return index;
+  }
+  function findRegion(index, el) {
+    var k = regionKey(el.getAttribute('name') || el.getAttribute('code') || el.textContent);
+    if (!k) return null;
+    return index[k] || (k.slice(-1) === 's' ? index[k.slice(0, -1)] : null) || null;
+  }
+  function regionFeature(data, r) {
+    var polys = r.parts.map(function (part) {
+      var ring = [];
+      for (var i = 0; i + 1 < part.length; i += 2) ring.push([part[i] / data.scale, part[i + 1] / data.scale]);
+      return [ring];
+    });
+    return { type: 'Feature', properties: {}, geometry: { type: 'MultiPolygon', coordinates: polys } };
+  }
+  function regionLabelled(r, data) { return [r.label[0] / data.scale, r.label[1] / data.scale]; }
+  // Rounded to whole pixels: neighbours share their border vertices, so identical rounding
+  // keeps shared borders identical and the lines clean.
+  function regionPath(proj, part, scale) {
+    var d = '';
+    for (var i = 0; i + 1 < part.length; i += 2) {
+      var p = proj([part[i] / scale, part[i + 1] / scale]);
+      if (!p || isNaN(p[0]) || isNaN(p[1])) return '';
+      d += (i ? 'L' : 'M') + Math.round(p[0]) + ' ' + Math.round(p[1]);
+    }
+    return d ? d + 'Z' : '';
+  }
+  function regionShape(r, data, proj, cls, fill, stroke, width) {
+    var d = r.parts.map(function (part) { return regionPath(proj, part, data.scale); }).join('');
+    if (!d) return '';
+    return '<path class="' + cls + '" data-code="' + r.code + '" d="' + d + '" fill="' + fill +
+      '" stroke="' + stroke + '" stroke-width="' + width + '" stroke-linejoin="round"/>';
+  }
+  // Pointing at a region outlines the whole region; anything else keeps the ring.
+  function pointRegion(host, child) {
+    var code = child && child._region && child._region.code;
+    if (code) {
+      var shapes = $$('.ot-region-shape[data-code="' + code + '"]', host.layer());
+      if (shapes.length) {
+        var shape = shapes[shapes.length - 1];
+        shape.classList.add('ot-pointed');
+        return function () { shape.classList.remove('ot-pointed'); };
+      }
+    }
+    return ringAt(host, child && child._px);
+  }
+  // Every region of a full map can be pointed at by id `lan-<bokstav>` (lan-M is Skåne).
+  function ensureRegionTargets(el) {
+    if (el._regionTargets) return el._regionTargets;
+    var data = lanData();
+    if (!data) return null;
+    el._regionTargets = {};
+    data.regions.forEach(function (r) {
+      var id = 'lan-' + r.code;
+      var existing = document.getElementById(id);  // the page may name one itself
+      if (existing) { el._regionTargets[r.code] = existing; return; }
+      var kid = document.createElement('ot-region');
+      kid.id = id;
+      kid.setAttribute('name', r.name);
+      kid._auto = true;
+      kid._region = r;
+      el.appendChild(kid);
+      el._regionTargets[r.code] = kid;
+    });
+    return el._regionTargets;
+  }
+  function regionLabelMode(el, all) {
+    var v = (el.getAttribute('labels') || '').trim().toLowerCase();
+    if (v) {
+      if (['namn', 'names', 'name'].indexOf(v) >= 0) return 'namn';
+      if (['kort', 'koder', 'codes', 'nummer'].indexOf(v) >= 0) return 'kort';
+      if (['ingen', 'off', 'inga'].indexOf(v) >= 0) return 'ingen';
+      issue('map', 'unknown labels="' + v + '" (use labels="namn", "kort" or "ingen")', el);
+    }
+    // 21 names never fit: the letter codes on the map plus the key below it read at any size.
+    return all ? 'kort' : 'namn';
+  }
+  function regionLegend(data, el) {
+    var marked = {};
+    $$(':scope > ot-region', el).forEach(function (ch) { if (ch._region && !ch._auto) marked[ch._region.code] = true; });
+    return data.regions.slice()
+      .sort(function (a, b) { return a.name.localeCompare(b.name, 'sv'); })
+      .map(function (r) {
+        return '<span class="ot-region-key' + (marked[r.code] ? ' ot-region-key-on' : '') + '" data-code="' +
+          r.code + '"><b>' + esc(r.code) + '</b>' + esc(r.name) + '</span>';
+      }).join('');
+  }
   function mapData(el) {
     var urls = [DATA.countries];
     var year = el.getAttribute('year');
@@ -1487,6 +1610,19 @@
       if (!ft) { issue('map', 'unknown country "' + (ch.getAttribute('name') || ch.textContent.trim()) + '"', ch); return; }
       ch._ft = ft; focus.push(biggestPart(ft));
     });
+    // Swedish län: all 21 with regions="län", or the ones ot-region marks.
+    var data = lanData();
+    var index = data ? regionIndex(data) : {};
+    var allRegions = showsRegions(el) && !!data;
+    var targets = allRegions ? ensureRegionTargets(el) : null;
+    var marked = [];
+    $$(':scope > ot-region', el).forEach(function (ch) {
+      if (ch._auto) return;
+      var r = data && findRegion(index, ch);
+      if (!r) { issue('map', 'unknown region "' + (ch.getAttribute('name') || ch.textContent.trim()) + '" (svenska län)', ch); return; }
+      ch._region = r; marked.push(ch);
+      focus.push(rewind(regionFeature(data, r)));
+    });
     areas.forEach(function (ch) {
       if (!hist) { issue('map', 'ot-area needs year="..." on ot-map', ch); return; }
       var ft = matchArea(hist, ch.getAttribute('name'));
@@ -1500,6 +1636,22 @@
     });
     var viewKey = (el.getAttribute('view') || '').trim().toLowerCase();
     var view = VIEWS[viewKey] || (nums(viewKey).length === 4 ? nums(viewKey) : null);
+    // d3 reads a ring wound the other way as the rest of the globe, so the fit needs rewind()
+    if (allRegions && !view) { data.regions.forEach(function (r) { focus.push(rewind(regionFeature(data, r))); }); }
+    // A key under the map gets its own strip, so the map is fitted into what is left.
+    var mode = regionLabelMode(el, allRegions);
+    var lay = el.layer();
+    lay.innerHTML = '';
+    var credit = hist ? 'Gränser: historical-basemaps · Natural Earth' : 'Natural Earth';
+    var legend = null, strip = 0;
+    if (allRegions && mode === 'kort') {
+      legend = document.createElement('div');
+      legend.className = 'ot-map-legend';
+      legend.innerHTML = regionLegend(data, el) + '<span class="ot-map-legend-src">' + esc(credit) + '</span>';
+      lay.appendChild(legend);
+      strip = legend.offsetHeight + 0.3 * f;
+    }
+    var mapH = Math.max(h * 0.55, h - strip);
     var target;
     if (view) target = bboxFeature(view);
     else if (focus.length) target = { type: 'FeatureCollection', features: focus };
@@ -1509,14 +1661,15 @@
     var wide = (b[1][0] - b[0][0]) > 150;
     var proj = wide ? d3.geoEqualEarth() : d3.geoAzimuthalEqualArea().rotate([-lon0, -lat0]);
     var pad = view ? 0.4 * f : Math.min(w, h) * 0.08;
-    proj.fitExtent([[pad, pad], [w - pad, h - pad]], target);
+    proj.fitExtent([[pad, pad], [w - pad, mapH - pad]], target);
     var path = d3.geoPath(proj);
     var s = '<rect width="' + w + '" height="' + h + '" fill="' + ocean + '" rx="' + 0.6 * f + '"/>';
     s += '<path d="' + path(d3.geoGraticule10()) + '" fill="none" stroke="#ffffff" stroke-opacity="0.05"/>';
     var bordersOn = hist ? el.hasAttribute('borders') : el.getAttribute('borders') !== 'off';
+    var neighbourFill = allRegions ? '#242b39' : land;
     world.forEach(function (ft) {
       var d = path(ft);
-      if (d) s += '<path d="' + d + '" fill="' + land + '" stroke="' + (bordersOn ? border : land) + '" stroke-width="' + (bordersOn ? 0.8 : 0.5) + '" stroke-linejoin="round"/>';
+      if (d) s += '<path d="' + d + '" fill="' + neighbourFill + '" stroke="' + (bordersOn ? border : neighbourFill) + '" stroke-width="' + (bordersOn ? 0.8 : 0.5) + '" stroke-linejoin="round"/>';
     });
     var html = '';
     function labelAt(ft, ch, col) {
@@ -1541,27 +1694,76 @@
       var col = color(ch.getAttribute('color'), 'cyan');
       s += '<path d="' + path(ch._ft) + '" fill="' + alpha(col, 0.35) + '" stroke="' + col + '" stroke-width="' + Math.max(1.5, f * 0.1) + '" stroke-linejoin="round"/>';
     });
+    var geoByCode = {};
+    if (allRegions) {
+      var regionFill = alpha('#9fb2d4', 0.1);
+      data.regions.forEach(function (r) {
+        s += regionShape(r, data, proj, 'ot-region-shape', regionFill, '#8494b3', Math.max(1, f * 0.05));
+        geoByCode[r.code] = r.parts.map(function (part) {
+          var ring = [];
+          for (var i = 0; i + 1 < part.length; i += 2) {
+            var q = proj([part[i] / data.scale, part[i + 1] / data.scale]);
+            if (q) ring.push([q[0], q[1]]);
+          }
+          return ring;
+        });
+      });
+    }
+    var markedCodes = {};
+    marked.forEach(function (ch) {
+      if (!ch._region) return;
+      var col = color(ch.getAttribute('color'), 'cyan');
+      markedCodes[ch._region.code] = true;
+      s += regionShape(ch._region, data, proj, 'ot-region-shape', alpha(col, 0.38), col, Math.max(1.6, f * 0.1));
+    });
+    if (allRegions && mode !== 'ingen') {
+      data.regions.forEach(function (r) {
+        var p = proj(regionLabelled(r, data));
+        if (!p || isNaN(p[0])) return;
+        var kid = targets && targets[r.code];
+        if (kid) kid._px = { x: p[0], y: p[1] };
+        if (markedCodes[r.code]) return;
+        var short = mode === 'kort';
+        // Letter codes are sized by the map, not by the page: a tall page font over a small map
+        // would put 21 letters the size of Skåne on it.
+        var size = short ? ';font-size:' + Math.min(0.7 * f, Math.max(7, mapH / 26)).toFixed(1) + 'px' : '';
+        html += '<div class="ot-map-label ot-region-label' + (short ? ' ot-region-code' : '') + '" data-code="' + r.code +
+          '" style="left:' + p[0] + 'px;top:' + p[1] + 'px;color:' + (short ? c.text : c.muted) + size + '">' +
+          esc(short ? r.code : r.name) + '</div>';
+      });
+    }
+    marked.forEach(function (ch) {
+      if (!ch._region) return;
+      var p = proj(regionLabelled(ch._region, data));
+      if (!p || isNaN(p[0])) return;
+      ch._px = { x: p[0], y: p[1] };
+      var t = ch.textContent.trim();
+      if (t) html += '<div class="ot-map-label ot-region-label" style="left:' + p[0] + 'px;top:' + p[1] + 'px;color:' + color(ch.getAttribute('color'), 'cyan') + '">' + rich(t) + '</div>';
+    });
     areas.forEach(function (ch) { if (ch._ft) labelAt(ch._ft, ch, color(ch.getAttribute('color'), 'amber')); });
     countries.forEach(function (ch) { if (ch._ft) labelAt(ch._ft, ch, c.text); });
     places.forEach(function (ch) {
       if (!ch._ll) return;
       var p = proj(ch._ll);
-      if (!p || p[0] < 0 || p[1] < 0 || p[0] > w || p[1] > h) { issue('map', 'place outside the map: ' + ch.textContent.trim(), ch); return; }
+      if (!p || p[0] < 0 || p[1] < 0 || p[0] > w || p[1] > mapH) { issue('map', 'place outside the map: ' + ch.textContent.trim(), ch); return; }
       ch._px = { x: p[0], y: p[1] };
       var col = color(ch.getAttribute('color'), 'text');
       var left = ch.getAttribute('side') === 'left' || (ch.getAttribute('side') !== 'right' && p[0] > w * 0.82);
       html += '<div class="ot-place-dot" style="left:' + p[0] + 'px;top:' + p[1] + 'px;background:' + col + '"></div>';
       html += '<div class="ot-place-label' + (left ? ' left' : '') + '" style="left:' + p[0] + 'px;top:' + p[1] + 'px;color:' + col + '">' + rich(ch.textContent.trim()) + '</div>';
     });
-    var credit = hist ? 'Gränser: historical-basemaps · Natural Earth' : 'Natural Earth';
-    var lay = el.layer();
-    lay.innerHTML = svg(w, h, s) + html + '<div class="ot-map-credit">' + credit + '</div>';
-    declutter(lay, f);
+    if (legend) {
+      legend.insertAdjacentHTML('beforebegin', svg(w, h, s));
+      lay.insertAdjacentHTML('beforeend', html);
+    } else {
+      lay.innerHTML = svg(w, h, s) + html + '<div class="ot-map-credit">' + credit + '</div>';
+    }
+    declutter(lay, f, geoByCode, el);
   }
 
   // Map labels: places keep their spot (a place label may flip to the other side of its dot);
   // country and realm labels move up, down or sideways to a free spot, greedily.
-  function declutter(lay, f) {
+  function declutter(lay, f, geoByCode, host) {
     var placed = [];
     function box(e) { var r = e.getBoundingClientRect(); return { l: r.left - 2, t: r.top - 1, r: r.right + 2, b: r.bottom + 1 }; }
     function hits(b) { return placed.some(function (p) { return b.l < p.r && b.r > p.l && b.t < p.b && b.b > p.t; }); }
@@ -1577,16 +1779,110 @@
       }
       placed.push(box(l));
     });
+    // A map label stays as close to its own spot as it can: the least crowded free spot wins.
+    // Region codes are two letters in a crowded country, so they search a fine spiral around
+    // their own spot (measured, not re-laid out) and take the quietest place within reach.
+    var layer0 = lay.getBoundingClientRect();
+    function overlap(a, b) {
+      var w = Math.min(a.r, b.r) - Math.max(a.l, b.l);
+      var h = Math.min(a.b, b.b) - Math.max(a.t, b.t);
+      return w > 0 && h > 0 ? w * h : 0;
+    }
     $$('.ot-map-label', lay).forEach(function (l) {
+      if (l.classList.contains('ot-region-code')) return;
       var x0 = parseFloat(l.style.left), y0 = parseFloat(l.style.top);
       var tries = [[0, 0], [0, -1.1], [0, 1.1], [-2.5, 0], [2.5, 0], [0, -2.2], [0, 2.2], [-2.5, -1.1], [2.5, 1.1]];
+      var bestAt = [x0, y0], bestCost = Infinity;
       for (var i = 0; i < tries.length; i++) {
-        l.style.left = (x0 + tries[i][0] * f) + 'px'; l.style.top = (y0 + tries[i][1] * f) + 'px';
-        if (!hits(box(l))) break;
-        if (i === tries.length - 1) { l.style.left = x0 + 'px'; l.style.top = y0 + 'px'; }
+        l.style.left = (x0 + tries[i][0] * f) + 'px';
+        l.style.top = (y0 + tries[i][1] * f) + 'px';
+        var bx = box(l), cost = 0;
+        for (var k = 0; k < placed.length; k++) cost += overlap(bx, placed[k]);
+        if (cost < bestCost) { bestCost = cost; bestAt = [x0 + tries[i][0] * f, y0 + tries[i][1] * f]; if (!cost) break; }
       }
+      l.style.left = bestAt[0] + 'px'; l.style.top = bestAt[1] + 'px';
       placed.push(box(l));
     });
+    function inside(rings, x, y) {
+      if (!rings) return true;
+      var hit = false;
+      for (var i = 0; i < rings.length; i++) {
+        var ring = rings[i];
+        for (var a = 0, k = ring.length - 1; a < ring.length; k = a++) {
+          var xi = ring[a][0], yi = ring[a][1], xk = ring[k][0], yk = ring[k][1];
+          if ((yi > y) !== (yk > y) && x < (xk - xi) * (y - yi) / (yk - yi) + xi) hit = !hit;
+        }
+      }
+      return hit;
+    }
+    // 2.5 px of air around each code: labels this close read as one word.
+    var PX = 2.5, PY = 2, OUTSIDE = 260;  // OUTSIDE: what it costs to leave the region
+    var skipped = 0, codeCount = 0, crowded = 0;
+    $$('.ot-region-code', lay).forEach(function (l) {
+      codeCount++;
+      var w = l.offsetWidth, h = l.offsetHeight;
+      var x0 = parseFloat(l.style.left), y0 = parseFloat(l.style.top);
+      var rings = geoByCode && geoByCode[l.getAttribute('data-code')];
+      function at(dx, dy) {
+        return { l: layer0.left + x0 + dx - w / 2 - PX, t: layer0.top + y0 + dy - h / 2 - PY,
+                 r: layer0.left + x0 + dx + w / 2 + PX, b: layer0.top + y0 + dy + h / 2 + PY };
+      }
+      // A code prefers its own region, then a clean window: a spot outside the region costs
+      // extra, and a spot that overlaps another label costs the overlap. Least total wins,
+      // so a narrow region is labelled just beside itself with a leader, not on top of a neighbour.
+      var best = null, bestScore = Infinity, bestInside = false;
+      for (var r = 0; r <= 3.2 * f; r += 0.3 * f) {
+        var n = r ? 16 : 1;
+        for (var a = 0; a < n; a++) {
+          var ang = (a / n) * Math.PI * 2;
+          var dx0 = r * Math.cos(ang), dy0 = r * Math.sin(ang);
+          var bx = at(dx0, dy0), cost = 0, ins = inside(rings, x0 + dx0, y0 + dy0);
+          for (var k = 0; k < placed.length; k++) cost += overlap(bx, placed[k]);
+          var score = cost + 0.3 * (dx0 * dx0 + dy0 * dy0) + (ins ? 0 : OUTSIDE);
+          if (score < bestScore) { bestScore = score; best = bx; bestInside = ins; }
+        }
+      }
+      if (!best) best = at(0, 0);
+      var bestCost = 0;
+      for (var k3 = 0; k3 < placed.length; k3++) bestCost += overlap(best, placed[k3]);
+      if (bestCost > 0.35 * w * h) {
+        l.hidden = true; skipped++;
+        var key = lay.querySelector('.ot-region-key[data-code="' + l.getAttribute('data-code') + '"]');
+        if (key) key.classList.add('ot-region-key-off');
+        return;
+      }
+      for (var c3 = 0; c3 < placed.length; c3++) {
+        var ow = Math.min(best.r, placed[c3].r) - Math.max(best.l, placed[c3].l) - 2 * PX;
+        var oh = Math.min(best.b, placed[c3].b) - Math.max(best.t, placed[c3].t) - 2 * PY;
+        if (ow > 1 && oh > 1) { crowded++; break; }
+      }
+      var dx = (best.l + best.r) / 2 - layer0.left - x0, dy = (best.t + best.b) / 2 - layer0.top - y0;
+      l.style.left = (x0 + dx) + 'px';
+      l.style.top = (y0 + dy) + 'px';
+      placed.push(best);
+      // a code that had to move gets a thin leader so it still points at its own region
+      if (!bestInside || Math.sqrt(dx * dx + dy * dy) > 0.8 * f) {
+        var lead = document.createElement('div');
+        lead.className = 'ot-region-leader';
+        lead.style.left = x0 + 'px';
+        lead.style.top = y0 + 'px';
+        lead.style.width = Math.sqrt(dx * dx + dy * dy) + 'px';
+        lead.style.transform = 'rotate(' + Math.atan2(dy, dx) + 'rad)';
+        lay.appendChild(lead);
+      }
+    });
+    // A map too small for 21 codes reads better as borders plus the key, than as a pile of
+    // letters. Say so, so the screen model can give the map more room or show fewer regions.
+    if (skipped) {
+      issue('crowded', skipped + ' of ' + codeCount + ' regions have no letter on the map at this size ' +
+        "(their rows in the key are dimmed): give the map more height or show fewer regions", host);
+    }
+    if (codeCount && (skipped + crowded) > 0.5 * codeCount) {
+      $$('.ot-region-code', lay).forEach(function (l) { l.hidden = true; });
+      $$('.ot-region-leader', lay).forEach(function (l) { l.remove(); });
+      issue('crowded', 'the regions are too small for letter codes on this map (' + (skipped + crowded) + ' of ' +
+        codeCount + ' did not fit): the key names them. Give the map more height or show fewer regions', host);
+    }
   }
 
   // ---------------------------------------------------------------- images

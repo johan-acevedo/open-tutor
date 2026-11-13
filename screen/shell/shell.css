@@ -354,6 +354,25 @@ ot-map .ot-place-label { position: absolute; transform: translate(0.55em, -50%);
 ot-map .ot-place-label.left { transform: translate(calc(-100% - 0.55em), -50%); }
 ot-map .ot-place-dot { position: absolute; width: 0.6em; height: 0.6em; margin: -0.3em 0 0 -0.3em; border-radius: 50%; background: var(--text); box-shadow: 0 0 0 0.15em var(--bg); }
 ot-map .ot-map-credit { position: absolute; right: 0.3em; bottom: 0.15em; font-size: 0.6em; color: var(--muted); opacity: 0.8; }
+/* Sweden's 21 län: thin shared borders, letter codes on the map, names in the key below it. */
+ot-map .ot-region-shape { paint-order: stroke; }
+ot-map .ot-region-shape.ot-pointed { stroke: var(--cyan); stroke-width: 2.6px; }
+ot-map .ot-region-label.ot-region-code { font-size: 0.7em; line-height: 1.05; letter-spacing: 0.02em; }
+ot-map .ot-region-leader { position: absolute; height: 1px; background: var(--muted); opacity: 0.7; transform-origin: 0 50%; pointer-events: none; }
+ot-map .ot-map-legend {
+  position: absolute; left: 0.45em; right: 0.45em; bottom: 1.15em;
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 0.05em 0.7em;
+  font-size: 0.64em; line-height: 1.35; color: var(--muted); pointer-events: none;
+}
+ot-map .ot-map-legend > span { white-space: nowrap; }
+ot-map .ot-map-legend-src { color: var(--muted); opacity: 0.85; margin-top: 0.35em; }
+ot-map .ot-map-legend b { color: var(--text); font-weight: 750; margin-right: 0.28em; }
+ot-map .ot-map-legend .ot-region-key-on { color: var(--text); }
+ot-map .ot-map-legend .ot-region-key-off { opacity: 0.45; }
+ot-map .ot-region-label { font-size: 0.85em; }
+ot-map .ot-region-label:not(.ot-region-code) {
+  background: rgba(22, 32, 45, 0.78); padding: 0.06em 0.34em; border-radius: 0.3em;
+}
 
 @media (prefers-reduced-motion: reduce) {
   .ot-pointed { transition: none; }

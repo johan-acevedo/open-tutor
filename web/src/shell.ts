@@ -1,7 +1,7 @@
 // Smart Screen shell, bundled as text from screen/shell/.
 // Only the page body travels over LiveKit; the web app composes the frame itself,
 // the same way screen/tools/screenkit.py compose() does it.
-import { frameHtml, shellCss, shellJs } from 'virtual:screen-shell';
+import { frameHtml, shellCss, shellJs, mapLanData } from 'virtual:screen-shell';
 
 // Frame policy from screenkit.py (CSP). The frame stays sandbox="allow-scripts".
 export const PAGE_CSP =
@@ -19,6 +19,7 @@ export function composePage(body: string): string {
   return frameHtml
     .replace('{{CSP}}', () => PAGE_CSP)
     .replace('{{CSS}}', () => shellCss)
+    .replace('{{LAN}}', () => mapLanData.replace(/</g, '\\u003c'))
     .replace('{{JS}}', () => shellJs.replace(/<\/script/g, '<\\/script'))
     .replace('{{BODY}}', () => body);
 }

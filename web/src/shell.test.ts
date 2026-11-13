@@ -15,6 +15,14 @@ describe('composePage', () => {
     expect(doc).toContain(`s.indexOf('$')`);
   });
 
+  it('carries Sweden\'s 21 län as data inside the frame, not in the page body', () => {
+    // The region polygons travel with the shell: a page body stays far under the LiveKit RPC limit.
+    expect(doc).toContain('id="ot-map-data"');
+    expect(doc).toContain('"regions":[{"code":"AB","name":"Stockholm"');
+    expect(doc.indexOf('id="ot-map-data"')).toBeLessThan(doc.indexOf('<main class="ot-page"'));
+    expect(body).not.toContain('"regions"');
+  });
+
   it('puts the body last inside the page main', () => {
     const mainAt = doc.indexOf('<main class="ot-page" id="page">');
     expect(mainAt).toBeGreaterThan(-1);

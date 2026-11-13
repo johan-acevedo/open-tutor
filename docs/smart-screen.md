@@ -135,7 +135,8 @@ Everything is in `screen/` on branch `feat/screen-examples`; start with `screen/
 and rejected, CSP) and `screen/REFERENCE.md` (what the screen model reads). Gallery with live pages and
 screenshots: http://dell5500.tail2e1c4e.ts.net:8790/ (user service `open-tutor-screen-gallery` on dell5500).
 
-- **Shell** (`screen/shell/`, about 36 kB gzipped, inlined into the frame's `srcdoc`): dark theme, Lexend, KaTeX,
+- **Shell** (`screen/shell/`, about 54 kB gzipped, inlined into the frame's `srcdoc`; 16 kB of that is the 21 län
+  polygons from `shell/data/`, see `screen/shell/data/README.md`): dark theme, Lexend, KaTeX,
   fitting by root font size so the page fills the pane without scrolling at any size, hidden until finished,
   `ot-hidden` and `later` for answers the tutor reveals, `ot-answer` / `ot-choice` / `ot-gap` that post the child's
   answer to the parent, pointing (`{ot:'point', id}`), and patches written as `<ot-patch target do>` HTML that fade in
@@ -143,11 +144,12 @@ screenshots: http://dell5500.tail2e1c4e.ts.net:8790/ (user service `open-tutor-s
   diagrams …) for the Screen agent's look-and-fix step.
 - **Components**: `ot-steps`, `ot-written` (computed uppställning incl. liggande stolen), `ot-clock`, `ot-fraction`,
   `ot-numberline`, `ot-balance`, `ot-graph` (JSXGraph), `ot-chart` (Chart.js from a `<table>`), `ot-map` (d3-geo with
-  Natural Earth and historical borders; replaces Leaflet), `ot-image` (Wikimedia Commons), `ot-timeline`, `ot-cycle`,
+  Natural Earth and historical borders, plus Sweden's 21 län with letter codes and a key; replaces Leaflet),
+  `ot-image` (Wikimedia Commons), `ot-timeline`, `ot-cycle`,
   `ot-mindmap`. The model writes no JavaScript.
-- **Examples**: eight pages with one patch each (klockan, bråk, pris per kilo, ekvation, räta linjen, Romarriket,
-  engelska på kafé, vattnets kretslopp) covering every row of the capability table; the static prompt (role +
-  reference + examples) is about 4 300 tokens (`screen/tools/prompt.py`).
+- **Examples**: nine pages with one patch each (klockan, bråk, pris per kilo, ekvation, räta linjen, Romarriket,
+  engelska på kafé, vattnets kretslopp, Sveriges län) covering every row of the capability table; the static prompt
+  (role + reference + examples) is about 4 600 tokens (`screen/tools/prompt.py`).
 - **Small-model test** (five requests the examples do not cover, `screen/smalltest/`): both models wrote valid pages
   and minimal, correct patches on every request. With the final reference, page totals were 5–10 s for Muse Spark 1.3
   Contributor (minimal reasoning) and 5–8 s for DeepSeek V4.1 Flash (low); patches 1–7 s. A rule in the reference

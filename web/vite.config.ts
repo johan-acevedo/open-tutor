@@ -22,7 +22,8 @@ function screenTextPlugin() {
         return (
           `export const frameHtml = ${JSON.stringify(read(shellDir, 'frame.html'))};\n` +
           `export const shellCss = ${JSON.stringify(read(shellDir, 'shell.css'))};\n` +
-          `export const shellJs = ${JSON.stringify(read(shellDir, 'shell.js'))};\n`
+          `export const shellJs = ${JSON.stringify(read(shellDir, 'shell.js'))};\n` +
+          `export const mapLanData = ${JSON.stringify(read(shellDir, 'data/lan-sverige.json'))};\n`
         );
       }
       if (id === '\0virtual:screen-demo') {

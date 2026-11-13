@@ -20,6 +20,7 @@ import time
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SHELL = ROOT / "shell"
+DATA = SHELL / "data"
 
 # Proposed frame policy for Smart Screen pages (see screen/README.md).
 CSP = ("default-src 'none'; "
@@ -34,8 +35,12 @@ def compose(body: str) -> str:
     frame = (SHELL / "frame.html").read_text()
     css = (SHELL / "shell.css").read_text()
     js = (SHELL / "shell.js").read_text()
+    # Sweden's 21 län travel with the shell, not with the page body (RPC keeps to ~15 kB).
+    lan = json.loads((DATA / "lan-sverige.json").read_text())
+    lan_text = json.dumps(lan, ensure_ascii=False, separators=(",", ":")).replace("<", "\\u003c")
     # Replace BODY last so a body can never inject into the shell slots.
     return (frame.replace("{{CSP}}", CSP).replace("{{CSS}}", css)
+            .replace("{{LAN}}", lan_text)
             .replace("{{JS}}", js.replace("</script", "<\\/script"))
             .replace("{{BODY}}", body))
 

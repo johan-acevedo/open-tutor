@@ -38,6 +38,14 @@ Work package 1 of `docs/smart-screen.md` (example screens, shell and components)
   element keeps its space invisible. Revealing moves nothing else on the page.
 - **Swedish conventions built in.** Decimal comma inside maths (`$9,5$` is typeset correctly without `{,}`), true minus,
   `sv-SE` number formatting on axes and charts, f.Kr./e.Kr. on timelines, 24-hour digital time.
+- **Sweden's 21 län ship with the shell, not with the page.** `<ot-map regions="län">` needs the region
+  polygons. The 10m Natural Earth admin-1 world file is 40 MB (over jsDelivr's limit) and the 50m file has no
+  Sweden, so `shell/data/lan-sverige.json` holds the 21 features cut out, topology-simplified with mapshaper and
+  quantised to 1/1000 degree (28 kB; see `shell/data/README.md`). `compose()` inlines it in the frame, like the
+  shell itself: no request, and nothing in the page body (LiveKit RPC is ~15 kB). Letter codes on the map
+  (`AB` … `BD`) plus a key under it, since 21 names never fit; codes are sized by the map, not by the page font,
+  and a label that cannot sit over its region moves to a free spot with a leader line, or is left out (its key row
+  dims) with a `crowded` issue when the pane is too small. Every region is pointable as `lan-<bokstav>`.
 - **Computed, not written, maths procedures.** `ot-written` computes uppställning itself (carries, växling, partial
   products, liggande stolen with step-by-step `steps="n"`), so a small model cannot get the arithmetic wrong.
   Right angles in polygons are detected and marked; timeline events sort themselves by year.

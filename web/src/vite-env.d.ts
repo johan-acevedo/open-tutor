@@ -4,6 +4,7 @@ declare module 'virtual:screen-shell' {
   export const frameHtml: string;
   export const shellCss: string;
   export const shellJs: string;
+  export const mapLanData: string;
 }
 
 declare module 'virtual:screen-demo' {
