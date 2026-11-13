@@ -1,0 +1,4 @@
+Largest page RPC payload: (1348, 'engelska.html') bytes. Body escaping happens after RPC.
+sanitizer passed: native page + patch + reveal
+sanitizer passed: library page + patch + reveal
+sanitizer passed: library blocked

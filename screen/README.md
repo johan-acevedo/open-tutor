@@ -20,3 +20,8 @@ Embedding: put `compose(body)` (see `tools/screenkit.py`) in `<iframe sandbox="a
 `{ot:'ready'}` before showing the frame. Send `{ot:'patch', html}`, `{ot:'point', id}`, `{ot:'reveal', id}`,
 `{ot:'restore', state}`; receive `{ot:'answer', id, value}` and `{ot:'input', id, value}`. Check
 `event.source === iframe.contentWindow`. The protocol is documented at the top of `shell/shell.js`.
+
+The body slot in `frame.html` takes HTML-escaped text, not raw markup. Both
+`screenkit.compose` and the web composer follow this contract. Boot sanitizes
+that source before inserting it; patches use the same sanitizer. Check both
+browser paths with `uv run --project server python screen/tools/check_sanitizer.py`.

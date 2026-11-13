@@ -2,6 +2,22 @@
 
 ## Toolbox follow-up, 2026-11-13
 
+Page and patch markup is sanitized before it joins the live document. Both
+composers escape the body into an inert template. Boot reads that text, then
+uses native `setHTML` or loads DOMPurify 3.4.17 when the native method is absent.
+The same parser handles patches. Scripts, event handlers, model styles and
+embedded documents are removed. Teaching attributes such as `correct` and `later`
+survive. Invalid colour markup cannot be interpolated into component SVG.
+If the fallback cannot load, source remains inert and the shell reports a boot
+issue. It never inserts the original unsanitized HTML as a fallback.
+
+`tools/check_sanitizer.py` exercises both paths, blocked fallback loading,
+component/reveal preservation and example RPC sizes. The largest example's
+serialized `PageItem` is 1,348 UTF-8 bytes. Escaping happens after RPC, so it
+does not enlarge the message. `tools/probe_local_shell.py` runs the existing
+live E2E probe with local built assets in that browser only, without restarting
+the dev services. Safari's actual browser remains Johan's device check.
+
 Narrow panes up to 600 px use one column for rows and grids even when the pane
 is landscape. Their title is smaller, and the reference asks for two to four
 title words. Lint reports phone text below 16 px, includes any fallback scale,
@@ -34,7 +50,7 @@ Work package 1 of `docs/smart-screen.md` (example screens, shell and components)
 ## Main choices
 - **The model writes no JavaScript.** Every component is a declarative tag with attributes and plain child text.
   Small models get JS signatures, escaping and timing wrong; they get HTML attributes right.
-  `<script>` in a body still runs (HTML stays flexible), but no example uses it.
+  Model scripts and event handlers are stripped before pages or patches enter the live DOM.
 - **Fit by font size, not by scaling a fixed canvas.** Everything is in `em`. The shell binary-searches the largest root
   font size (capped at about 1/23 of the pane height and 1/21 of its width) at which the page fits without scrolling,
   then lets growable visuals (graph, map, chart, image, clock, balance, cycle, mind map) take the spare height and draws
