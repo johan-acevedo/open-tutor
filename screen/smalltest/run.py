@@ -14,6 +14,7 @@ the run continues.
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import pathlib
@@ -189,17 +190,28 @@ def do_call(spec: dict, client, system: str, user_text: str) -> dict:
 def main() -> int:
     from openai import OpenAI
 
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--model', choices=['muse', 'deepseek', 'both'], default='both')
+    parser.add_argument('--requests', type=pathlib.Path, default=ROOT / 'smalltest' / 'requests.json')
+    parser.add_argument('--sizes', default='1366x768,390x844')
+    args = parser.parse_args()
+    sizes = [tuple(map(int, size.split('x'))) for size in args.sizes.split(',')]
+    if any(len(size) != 2 or min(size) <= 0 for size in sizes):
+        parser.error('--sizes must contain positive WIDTHxHEIGHT pairs')
+
     api_key = os.environ.get("OPENCODE_GO_API_KEY", "")
     if not api_key:
         print("OPENCODE_GO_API_KEY is empty: run through server/bin/with-env", file=sys.stderr)
         return 2
 
-    cases = json.loads((ROOT / "smalltest" / "requests.json").read_text())
+    cases = json.loads(args.requests.read_text())
     system = prompt_mod.system_prompt()
     print(f"system prompt: {len(system)} chars", flush=True)
 
     results: dict = {"models": {}}
     for spec in MODELS:
+        if args.model != 'both' and spec['folder'] != args.model:
+            continue
         model_dir = OUT / spec["folder"]
         shots_dir = model_dir / "shots"
         model_dir.mkdir(parents=True, exist_ok=True)
@@ -263,6 +275,7 @@ def main() -> int:
                         try:
                             rep = screenkit.render(
                                 body, shots_dir, cid,
+                                sizes=sizes,
                                 patch=patch_html if patch_html.strip() else None,
                                 browser=browser)
                             render_reports[cid] = rep

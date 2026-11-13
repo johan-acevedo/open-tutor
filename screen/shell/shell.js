@@ -2152,7 +2152,14 @@
       bad = drawVisuals();
     }
     bad.forEach(function (b) { issue('crowded', b.r.msg || 'does not fit', b.el); });
-    if (px < SMALL_FONT) issue('dense', 'text is only ' + px + 'px on this screen; the page holds too much. Cut text or split it into two pages.');
+    var scale = page.offsetWidth ? page.getBoundingClientRect().width / page.offsetWidth : 1;
+    var readable = window.innerWidth <= 600 ? 16 : SMALL_FONT;
+    var textPx = Math.floor(px * scale * 100) / 100;
+    if (textPx < readable) issue('dense', 'text is only ' + textPx + 'px on this screen (minimum ' + readable + 'px). Keep one teaching step and one main visual; cut text or split the page.');
+    $$('h1', page).forEach(function (heading) {
+      var line = parseFloat(getComputedStyle(heading).lineHeight);
+      if (heading.offsetHeight > line * 2.25) issue('heading', 'title takes more than two lines. Use a short title of two to four words; put the question below it.', heading);
+    });
     return px;
   }
 

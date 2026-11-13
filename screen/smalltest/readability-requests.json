@@ -1,0 +1,8 @@
+[
+  {"id": "brak", "child": "Test, åk 6",
+   "request": "Eleven räknar 3/4 + 1/8. Visa bara nästa steg för att förstå åttondelar och en svarsruta. Ingen bild, markering eller text får avslöja summan innan eleven svarat.",
+   "patch": "Eleven har svarat. Visa nu summan och hur den räknas fram."},
+  {"id": "linje", "child": "Test, åk 8",
+   "request": "Visa en graf av y = 2x + 3 och hjälp eleven förstå k-värdet. En kort fråga och en svarsruta, men inget synligt svar på frågan.",
+   "patch": "Eleven förstår k-värdet. Peka nu ut skärningen med y-axeln med en punkt."}
+]

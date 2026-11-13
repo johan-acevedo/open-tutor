@@ -1,0 +1,131 @@
+{
+ "models": {
+  "deepseek": {
+   "model_id": "deepseek-v4.1-flash",
+   "api": "chat",
+   "session": "smalltest-deepseek",
+   "cases": {
+    "brak": {
+     "page": {
+      "first_text_s": 6.74,
+      "total_s": 9.02,
+      "chars": 675,
+      "usage": {
+       "total_tokens": 7391
+      },
+      "error": null,
+      "attempts": 1
+     },
+     "patch": {
+      "first_text_s": 6.13,
+      "total_s": 7.64,
+      "chars": 516,
+      "usage": {
+       "total_tokens": 7458
+      },
+      "error": null,
+      "attempts": 1
+     },
+     "render": {
+      "370x610": {
+       "ready_ms": 404,
+       "fontPx": 17.5,
+       "issues": [],
+       "patch_issues": [
+        {
+         "kind": "dense",
+         "msg": "text is only 12.75px on this screen (minimum 16px). Keep one teaching step and one main visual; cut text or split the page."
+        }
+       ],
+       "fontPx_after": 12.75
+      },
+      "370x558": {
+       "ready_ms": 370,
+       "fontPx": 16.75,
+       "issues": [],
+       "patch_issues": [
+        {
+         "kind": "dense",
+         "msg": "text is only 11.5px on this screen (minimum 16px). Keep one teaching step and one main visual; cut text or split the page."
+        }
+       ],
+       "fontPx_after": 11.5
+      },
+      "1000x700": {
+       "ready_ms": 304,
+       "fontPx": 30.25,
+       "issues": [],
+       "patch_issues": [],
+       "fontPx_after": 21
+      }
+     }
+    },
+    "linje": {
+     "page": {
+      "first_text_s": 3.69,
+      "total_s": 6.33,
+      "chars": 730,
+      "usage": {
+       "total_tokens": 7058
+      },
+      "error": null,
+      "attempts": 1
+     },
+     "patch": {
+      "first_text_s": 2.85,
+      "total_s": 4.12,
+      "chars": 320,
+      "usage": {
+       "total_tokens": 7192
+      },
+      "error": null,
+      "attempts": 1
+     },
+     "render": {
+      "370x610": {
+       "ready_ms": 573,
+       "fontPx": 14.75,
+       "issues": [
+        {
+         "kind": "dense",
+         "msg": "text is only 14.75px on this screen (minimum 16px). Keep one teaching step and one main visual; cut text or split the page."
+        }
+       ],
+       "patch_issues": [
+        {
+         "kind": "dense",
+         "msg": "text is only 12.75px on this screen (minimum 16px). Keep one teaching step and one main visual; cut text or split the page."
+        }
+       ],
+       "fontPx_after": 12.75
+      },
+      "370x558": {
+       "ready_ms": 552,
+       "fontPx": 13.75,
+       "issues": [
+        {
+         "kind": "dense",
+         "msg": "text is only 13.75px on this screen (minimum 16px). Keep one teaching step and one main visual; cut text or split the page."
+        }
+       ],
+       "patch_issues": [
+        {
+         "kind": "dense",
+         "msg": "text is only 11.5px on this screen (minimum 16px). Keep one teaching step and one main visual; cut text or split the page."
+        }
+       ],
+       "fontPx_after": 11.5
+      },
+      "1000x700": {
+       "ready_ms": 615,
+       "fontPx": 20.5,
+       "issues": [],
+       "patch_issues": [],
+       "fontPx_after": 16.75
+      }
+     }
+    }
+   }
+  }
+ }
+}

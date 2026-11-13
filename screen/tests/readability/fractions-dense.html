@@ -1,0 +1,27 @@
+<h1>Räkna $\frac{3}{4} + \frac{1}{8}$</h1>
+<div class="row">
+  <div class="stack wide">
+    <div class="card">
+      <h2>De två bråken</h2>
+      <ot-fraction id="tre-fjardedelar" value="3/4" color="cyan"></ot-fraction>
+      <ot-fraction id="en-attondel" value="1/8" color="violet"></ot-fraction>
+    </div>
+    <div class="card">
+      <h2>Åttondelar på tallinjen</h2>
+      <ot-numberline id="tallinje" from="0" to="1" step="1/8"></ot-numberline>
+      <p class="muted">Åtta åttondelar är en hel.</p>
+    </div>
+  </div>
+  <div class="stack">
+    <div class="card green">
+      <h2>Samma nämnare först</h2>
+      <p>Fjärdedelar och åttondelar är olika stora bitar.</p>
+      <p class="big">$\frac{3}{4} = \frac{3 \cdot 2}{4 \cdot 2} = \frac{?}{8}$</p>
+    </div>
+    <p class="tip">Gör om fjärdedelarna till åttondelar. Sedan kan du lägga ihop bitarna.</p>
+    <div class="card">
+      <ot-answer id="svar" kind="text" label="Summan blir"></ot-answer>
+    </div>
+    <ot-hidden id="facit">$\frac{6}{8} + \frac{1}{8} = \frac{7}{8}$</ot-hidden>
+  </div>
+</div>

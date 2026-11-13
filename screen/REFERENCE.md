@@ -6,14 +6,14 @@ exactly fill the screen, as large as it can, on a laptop or a phone. Never write
 `<head>`, `<style>`, `<script>` or inline `style=`.
 
 ## A good page
-- One idea. A title (`<h1>`), then two to four blocks. Short sentences in Swedish.
+- One teaching step. A title (`<h1>`, two to four words), then two to four blocks. Put long questions below the title.
 - Keep it small: at most about 60 words of text and one main picture (graph, map, chart, diagram).
   The more you write, the smaller every letter gets; on a phone a full page becomes unreadable.
   If the lesson needs more, the tutor will ask for the next page.
 - Use Swedish school notation: decimal comma (47,50), `·` or `×`, `÷`, f.Kr./e.Kr., 24-hour time.
 - Show the thing itself (a clock, a graph, a map) rather than describe it.
 - Give an `id` to every part the tutor may point at, reveal or change later.
-- Never put the answer in plain sight if the child should find it: use `ot-hidden` or `later`.
+- Keep answers hidden in pictures too: no result mark, completed jump or solved step before the child's turn. Use `later` or `ot-hidden`.
 
 ## Layout
 | Write | You get |
