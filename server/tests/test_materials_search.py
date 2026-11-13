@@ -35,7 +35,16 @@ from open_tutor.materials.search import (
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
-from search_materials import DEFAULT_SELECT_CAP, parse_selector, select_records  # noqa: E402
+from search_materials import (  # noqa: E402
+    DEFAULT_SELECT_CAP,
+    FULL_INDEX_NAME,
+    STRIP_RECORD_KEYS,
+    default_full_index_dir,
+    full_library_fingerprint,
+    parse_selector,
+    refuse_protected_index,
+    select_records,
+)
 
 
 class StubEmbedder:
@@ -382,6 +391,34 @@ def test_select_records_caps_each_selector_and_keeps_corpus_order():
         "maths-1",
     ]
     assert len(select_records(records, [parse_selector("natural-sciences-and-technology-6:circuit:2")], max_passages=1)) == 1
+
+
+# --- full-library guards (stdlib only, no model) ----------------------------------
+
+
+def test_build_full_refuses_the_proof_and_evaluation_indexes(tmp_path):
+    from open_tutor.materials.search import default_index_dir
+
+    assert default_full_index_dir().name == FULL_INDEX_NAME
+    with pytest.raises(ValueError, match="needs its own directory"):
+        refuse_protected_index(default_index_dir())
+    with pytest.raises(ValueError, match="needs its own directory"):
+        refuse_protected_index(default_index_dir().with_name("retrieval-eval-index"))
+    # A sibling full-library directory (and any other path) is accepted.
+    refuse_protected_index(tmp_path / FULL_INDEX_NAME)
+
+
+def test_full_library_fingerprint_tracks_sources_and_model():
+    shas = {"book-a": "0" * 64, "book-b": "1" * 64}
+    ids = ["psg-1", "psg-2"]
+    first = full_library_fingerprint(shas, 400, 1200, ids, "google/embeddinggemma-2", "rev")
+    assert first == full_library_fingerprint(shas, 400, 1200, ids, "google/embeddinggemma-2", "rev")
+    changed_sha = dict(shas, **{"book-a": "2" * 64})
+    assert full_library_fingerprint(changed_sha, 400, 1200, ids, "google/embeddinggemma-2", "rev") != first
+    assert full_library_fingerprint(shas, 400, 1200, ids + ["psg-3"], "google/embeddinggemma-2", "rev") != first
+    assert full_library_fingerprint(shas, 400, 1200, ids, "google/embeddinggemma-2", "other") != first
+    # The XHTML slice never reaches the model, so it is stripped before embedding.
+    assert "html" in STRIP_RECORD_KEYS
 
 
 # --- the real model, opt-in -----------------------------------------------------
