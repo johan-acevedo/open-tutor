@@ -282,6 +282,340 @@ async def test_latest_ask_wins_while_a_job_runs(tmp_path, monkeypatch):
     await screen.aclose()
 
 
+# ---- pane, look and lint repair --------------------------------------------
+
+DENSE = {"kind": "dense", "msg": "text is only 14.75px on this screen (minimum 16px). "
+                                 "Keep one teaching step and one main visual; cut text or split the page."}
+HEADING = {"kind": "heading", "where": "<h1>",
+           "msg": "title takes more than two lines. Use a short title of two to four words; "
+                  "put the question below it."}
+
+
+def job_meta(tmp_path, job="s1"):
+    return json.loads((tmp_path / "pages" / job / "meta.json").read_text())
+
+
+async def test_page_request_states_the_narrow_pane_and_the_layout_rule(tmp_path, monkeypatch):
+    monkeypatch.setenv("SCREEN_LOOK", "0")
+    users = []
+
+    async def model(system, user, images, look_png):
+        users.append(user)
+        return "<h1>Delar</h1>"
+
+    screen = make_screen(tmp_path, model_call=model, get_pane_size=lambda: (370, 610))
+    screen.ask("En sida om bråk")
+    await screen.wait_idle()
+
+    assert "Pane: 370×610 px" in users[0] and "narrow" in users[0]
+    assert "one reading column" in users[0] and "short title" in users[0]
+    assert "no side panel" in users[0]
+    await screen.aclose()
+
+
+async def test_wide_pane_gets_the_size_without_the_narrow_rule(tmp_path, monkeypatch):
+    monkeypatch.setenv("SCREEN_LOOK", "0")
+    users = []
+
+    async def model(system, user, images, look_png):
+        users.append(user)
+        return "<h1>Delar</h1>"
+
+    screen = make_screen(tmp_path, model_call=model, get_pane_size=lambda: (1000, 700))
+    screen.ask("En sida om bråk")
+    await screen.wait_idle()
+
+    assert "Pane: 1000×700 px" in users[0]
+    assert "one reading column" not in users[0] and "narrow" not in users[0]
+    await screen.aclose()
+
+
+async def test_look_sees_the_source_the_pane_and_the_childs_question(tmp_path, monkeypatch):
+    monkeypatch.setenv("SCREEN_LOOK", "1")
+    looks = []
+    source = "<h1>Delar</h1><p>Hur många åttondelar är 3/4?</p>"
+
+    async def model(system, user, images, look_png):
+        if look_png is None:
+            return source
+        looks.append(user)
+        return "OK"
+
+    screen = make_screen(tmp_path, model_call=model, get_pane_size=lambda: (370, 558))
+    screen.ask("En sida om bråk")
+    await screen.wait_idle()
+
+    look = looks[0]
+    assert source in look  # the look pass finally gets the page it is repairing
+    assert "Pane: 370×558 px" in look and "En sida om bråk" in look
+    assert "name the question the page actually asks" in look
+    assert "number, mark, label and picture step" in look
+    assert "lint only sees layout and tags" in look  # no claim lint spots the leak
+    await screen.aclose()
+
+
+ACTIONABLE = [
+    DENSE,
+    HEADING,
+    {"kind": "overflow", "msg": "page does not fit even at 14px text; it was shrunk to 88%. "
+                                 "Cut content or split the page."},
+    {"kind": "crowded", "msg": "does not fit", "where": '<ot-graph id="graf">'},
+    {"kind": "math", "msg": "KaTeX error: \\frac"},
+    {"kind": "tag", "msg": "unknown tag <ot-bla>", "where": "<ot-bla>"},
+    {"kind": "id", "msg": 'duplicate id "svar"', "where": '<ot-answer id="svar">'},
+    "patch failed: Error",
+]
+
+
+@pytest.mark.parametrize("lint", ACTIONABLE)
+async def test_actionable_lint_buys_exactly_one_retry(tmp_path, monkeypatch, lint):
+    monkeypatch.setenv("SCREEN_LOOK", "1")
+    writes, renders = [], []
+
+    async def render(body, patch, w, h):
+        renders.append(body)
+        return (b"PNG1", [lint]) if len(renders) == 1 else (b"PNG2", [])
+
+    async def model(system, user, images, look_png):
+        writes.append((look_png, user))
+        if look_png is not None:
+            return "OK"
+        if "still reports these problems" in user:
+            return "<h1>Delar</h1><p>En fråga.</p>"
+        return "<h1>Delar</h1><p>Lång text.</p>"
+
+    delivered = {}
+    screen = make_screen(tmp_path, model_call=model, render_page=render,
+                         get_pane_size=lambda: (370, 610))
+    screen.on_page = lambda p: delivered.setdefault("page", p)
+    screen.ask("En sida om bråk")
+    await screen.wait_idle()
+
+    assert [w[0] for w in writes] == [None, b"PNG1", None]  # page, look, one retry
+    assert delivered["page"].body == "<h1>Delar</h1><p>En fråga.</p>"
+    assert delivered["page"].png == b"PNG2" and delivered["page"].residual_issues == []
+    meta = job_meta(tmp_path)
+    assert meta["repair"]["retry"] is True and meta["repair"]["retry_applied"] is True
+    assert meta["residual_lint"] == [] and "retry_s" in meta
+    await screen.aclose()
+
+
+async def test_retry_carries_the_source_the_pane_and_the_exact_lint(tmp_path, monkeypatch):
+    monkeypatch.setenv("SCREEN_LOOK", "1")
+    writes = []
+    source = "<h1>Delar</h1><p>Lång text.</p>"
+
+    async def model(system, user, images, look_png):
+        writes.append((look_png, user))
+        if look_png is not None:
+            return "OK"
+        if "still reports these problems" in user:
+            return "<h1>Delar</h1>"
+        return source
+
+    screen = make_screen(tmp_path, model_call=model,
+                         render_page=AsyncMock(return_value=(b"PNG", [DENSE])),
+                         get_pane_size=lambda: (370, 558))
+    screen.ask("En sida om bråk")
+    await screen.wait_idle()
+
+    retry = writes[2][1]
+    assert source in retry and "En sida om bråk" in retry and "Pane: 370×558 px" in retry
+    assert DENSE["msg"] in retry  # exact shell text, not a paraphrase
+    await screen.aclose()
+
+
+async def test_a_valid_page_gets_no_extra_look_or_retry(tmp_path, monkeypatch):
+    monkeypatch.setenv("SCREEN_LOOK", "1")
+    calls, renders = [], []
+
+    async def model(system, user, images, look_png):
+        calls.append(look_png)
+        return "<h1>Delar</h1>" if look_png is None else "OK"
+
+    async def render(body, patch, w, h):
+        renders.append(body)
+        return b"PNG", []
+
+    delivered = {}
+    screen = make_screen(tmp_path, model_call=model, render_page=render)
+    screen.on_page = lambda p: delivered.setdefault("page", p)
+    screen.ask("En sida om bråk")
+    await screen.wait_idle()
+
+    assert len(calls) == 2 and len(renders) == 1  # page, one look, no retry
+    meta = job_meta(tmp_path)
+    assert meta["repair"]["retry"] is False and meta["residual_lint"] == []
+    await screen.aclose()
+
+
+async def test_advisory_lint_never_buys_a_retry(tmp_path, monkeypatch):
+    monkeypatch.setenv("SCREEN_LOOK", "1")
+    calls = []
+    advisory = [{"kind": "slow", "msg": "still loading libraries, map data and fonts"},
+                {"kind": "image", "msg": "image has no credit (källa)"}]
+
+    async def model(system, user, images, look_png):
+        calls.append(look_png)
+        return "<h1>Delar</h1>" if look_png is None else "OK"
+
+    screen = make_screen(tmp_path, model_call=model,
+                         render_page=AsyncMock(return_value=(b"PNG", advisory)))
+    screen.ask("En sida om bråk")
+    await screen.wait_idle()
+
+    assert len(calls) == 2  # no retry for slow loading or a missing image credit
+    assert job_meta(tmp_path)["residual_lint"] == []
+    await screen.aclose()
+
+
+async def test_a_short_job_delivers_with_residual_lint(tmp_path, monkeypatch, caplog):
+    monkeypatch.setenv("SCREEN_LOOK", "1")
+    calls = []
+
+    async def model(system, user, images, look_png):
+        calls.append(look_png)
+        return "<h1>Delar</h1>"
+
+    delivered = {}
+    screen = make_screen(tmp_path, model_call=model,
+                         render_page=AsyncMock(return_value=(b"PNG", [DENSE])),
+                         get_pane_size=lambda: (370, 610), timeout=4.0)
+    screen.on_page = lambda p: delivered.setdefault("page", p)
+    caplog.set_level("WARNING", logger="open-tutor")
+    screen.ask("En sida om bråk")
+    await screen.wait_idle()
+
+    assert len(calls) == 1  # no time for look or retry, so the page still ships
+    assert delivered["page"].body == "<h1>Delar</h1>"
+    assert delivered["page"].residual_issues == [f"dense: {DENSE['msg']}"]
+    meta = job_meta(tmp_path)
+    assert meta["residual_lint"] == [f"dense: {DENSE['msg']}"]
+    assert any("skipped: no time left" in note for note in meta["repair"]["notes"])
+    assert "delivered with residual lint" in caplog.text
+    await screen.aclose()
+
+
+async def test_a_failed_look_pass_still_delivers_the_page(tmp_path, monkeypatch):
+    monkeypatch.setenv("SCREEN_LOOK", "1")
+    delivered = {}
+
+    async def model(system, user, images, look_png):
+        if look_png is None:
+            return "<h1>Delar</h1>"
+        raise RuntimeError("look broke")
+
+    screen = make_screen(tmp_path, model_call=model)
+    screen.on_page = lambda p: delivered.setdefault("page", p)
+    screen.ask("En sida om bråk")
+    await screen.wait_idle()
+
+    assert delivered["page"].body == "<h1>Delar</h1>"
+    assert "look pass failed: RuntimeError" in job_meta(tmp_path)["repair"]["notes"]
+    await screen.aclose()
+
+
+async def test_a_slow_repair_render_keeps_the_page_before_the_job_deadline(tmp_path, monkeypatch):
+    monkeypatch.setenv("SCREEN_LOOK", "1")
+    monkeypatch.setattr("open_tutor.screen.MIN_OPTIONAL_STEP_S", 0)
+    monkeypatch.setattr("open_tutor.screen.FINAL_RENDER_RESERVE_S", 0.01)
+    delivered, failures = [], []
+
+    async def model(system, user, images, look_png):
+        return "<h1>Förbättrad</h1>" if look_png is not None else "<h1>Första sidan</h1>"
+
+    async def render(body, patch, w, h):
+        if "Förbättrad" in body:
+            await asyncio.sleep(30)
+        return b"PNG", []
+
+    screen = make_screen(tmp_path, model_call=model, render_page=render, timeout=0.5)
+    screen.on_page = delivered.append
+    screen.on_failure = failures.append
+    screen.ask("En sida om bråk")
+    await screen.wait_idle()
+
+    assert not failures
+    assert delivered[0].body == "<h1>Första sidan</h1>"
+    assert any("render timed out" in note for note in job_meta(tmp_path)["repair"]["notes"])
+    assert delivered[0].total_s < 0.5
+    await screen.aclose()
+
+
+async def test_a_timed_out_retry_still_delivers_the_page(tmp_path, monkeypatch):
+    monkeypatch.setenv("SCREEN_LOOK", "1")
+    delivered = {}
+
+    async def model(system, user, images, look_png):
+        if "still reports these problems" in user:
+            await asyncio.sleep(30)
+            return "<h1>För sent</h1>"
+        return "<h1>Delar</h1>" if look_png is None else "OK"
+
+    screen = make_screen(tmp_path, model_call=model,
+                         render_page=AsyncMock(return_value=(b"PNG", [HEADING])),
+                         timeout=7.0)
+    screen.on_page = lambda p: delivered.setdefault("page", p)
+    screen.ask("En sida om bråk")
+    await screen.wait_idle()
+
+    page = delivered["page"]
+    assert page.body == "<h1>Delar</h1>" and page.png == b"PNG"
+    assert page.residual_issues == [f"heading: {HEADING['msg']} ({HEADING['where']})"]
+    meta = job_meta(tmp_path)
+    assert "lint retry timed out" in meta["repair"]["notes"]
+    assert meta["repair"]["retry"] is True and meta["repair"]["retry_applied"] is False
+    await screen.aclose()
+
+
+async def test_a_retry_that_makes_lint_worse_is_dropped(tmp_path, monkeypatch):
+    monkeypatch.setenv("SCREEN_LOOK", "1")
+    renders = []
+
+    async def render(body, patch, w, h):
+        renders.append(body)
+        return (b"PNG1", [DENSE]) if len(renders) == 1 else (b"PNG2", [DENSE, HEADING])
+
+    async def model(system, user, images, look_png):
+        if look_png is not None:
+            return "OK"
+        return "<h1>Delar</h1>" if "still reports" not in user else "<h1>Mycket längre rubrik</h1>"
+
+    delivered = {}
+    screen = make_screen(tmp_path, model_call=model, render_page=render)
+    screen.on_page = lambda p: delivered.setdefault("page", p)
+    screen.ask("En sida om bråk")
+    await screen.wait_idle()
+
+    assert delivered["page"].body == "<h1>Delar</h1>" and delivered["page"].png == b"PNG1"
+    assert any("made lint worse" in note for note in job_meta(tmp_path)["repair"]["notes"])
+    await screen.aclose()
+
+
+@pytest.mark.parametrize("reply", ["OK", '<ot-patch target="steg">x</ot-patch>'])
+async def test_retry_does_not_replace_a_page_with_an_acknowledgement_or_patch(tmp_path, reply):
+    screen = make_screen(tmp_path, model_call=AsyncMock(return_value=reply))
+    assert await screen._retry_with_lint("En sida", "<h1>Bråk</h1>", ["dense: small"], 370, 610) is None
+    await screen.aclose()
+
+
+async def test_patch_jobs_never_use_the_lint_retry(tmp_path, monkeypatch):
+    screen = await ready_page(tmp_path, monkeypatch)
+    calls = []
+
+    async def model(system, user, images, look_png):
+        calls.append(user)
+        return '<ot-patch target="klocka">x</ot-patch>'
+
+    screen._model_call = model
+    screen._render_page = AsyncMock(return_value=(b"PATCHED", [DENSE]))
+    screen.ask("Visa halv sju")
+    await screen.wait_idle()
+
+    assert len(calls) == 1 and "still reports these problems" not in calls[0]
+    await screen.aclose()
+
+
 # ---- tool surface ----------------------------------------------------------
 
 

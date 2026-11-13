@@ -174,8 +174,10 @@ One `Screen` per session, owned by the worker next to the `Tutor`.
   homework (images and text), the child's answers from pages, and what is on screen.
 - **`ask(text) -> job id` returns at once.** A background task then:
   1. builds the request: static prefix from `screen/tools/prompt.py` (role, reference,
-     examples; identical every call so it stays cached), then the learner, the homework, the
-     conversation so far, the source of the visible page with its patches, and the tutor's ask;
+     examples; identical every call so it stays cached), then the learner, the pane size
+     (`Pane: 370×610 px, narrow. Write one reading column, a short title …` below 600 px wide),
+     the homework, the conversation so far, the source of the visible page with its patches,
+     and the tutor's ask;
   2. calls the screen model (default Muse Spark 1.3 Contributor on the Responses API, minimal
      reasoning; `SCREEN_MODEL` and `SCREEN_REASONING` override; DeepSeek uses Chat Completions);
   3. reads the answer as either `<ot-patch>` elements (a change to the visible page) or a new
@@ -183,11 +185,36 @@ One `Screen` per session, owned by the worker next to the `Tutor`.
   4. renders it with `screen/tools/screenkit.py` at the child's pane size and collects the
      shell's issues and a screenshot;
   5. for a new page, **looks once** (`SCREEN_LOOK=1`, default on): the model gets its own
-     screenshot and the issues and answers `OK` or a corrected body, which is rendered again;
+     screenshot, the page source, the pane and the issues, and answers `OK` or a corrected
+     body, which is rendered again (see below);
   6. saves source, screenshot, the ask and timings under the session's log folder (`pages/`);
   7. hands the result to the tutor.
 - One job at a time; a second ask while one runs is queued (latest wins). 45 s limit per job.
   A failure is told to the tutor quietly ("explain in words").
+
+### The look pass and one bounded lint retry (page jobs)
+
+- **The look pass sees what it repairs:** the screenshot, the page body it wrote, the ask, the
+  pane and the shell's exact issue lines. It checks readability at that pane size, whether the
+  page does what the tutor asked, and whether it gives the answer away. For the last one it
+  names the question the page actually asks and checks every visible number, mark, label and
+  picture step against it: a solved step, the result marked, or 6/8 printed under "Hur många
+  åttondelar är 3/4?" is a leak even when lint reports nothing. Lint only sees layout, tags,
+  maths and ids; it cannot see teaching leakage in words or pictures, and neither the prompt nor
+  the log claims it can.
+- **One retry, only for actionable lint.** If issues a body can fix remain after the look
+  (and the final render), the model gets exactly one more call with the ask, the pane, the
+  source of the page it is correcting and the exact lint text (e.g. `dense: text is only
+  14.75px on this screen (minimum 16px)…`, `heading: title takes more than two lines…`).
+  `SCREEN_LINT_RETRY=0` turns it off. Advisory issues never buy a retry: `slow` loading,
+  `load` failures and `image` credits stay in the log.
+- **Delivery wins over repair.** Optional steps start only while a final render still fits the
+  job's 45 s limit, and the look and retry calls are bounded by the time that is left. A
+  correction that fails, times out or comes back with more actionable lint than before is
+  dropped and the page in hand is delivered. Whatever actionable lint remains is written to the
+  job's `meta.json` (`residual_lint`, `repair`) and logged as `delivered with residual lint`;
+  a usable page is never dropped to avoid showing one. No model fallback, and patches are not
+  retried.
 
 ### Tutor tools (replace `commission_board` and `edit_board` in smart mode)
 
@@ -242,7 +269,8 @@ answer to tutor, point. Measured: new page 9–12 s (model 4–5 s, render 1 s, 
 
 Known and open:
 - The look pass is about half of a page's time; decide after real sessions whether it earns it.
-- A page can still give the answer away in a picture (seen: the sum marked on a number line).
+- A page can still give the answer away in a picture (seen: the sum marked on a number line);
+  the look pass now checks exactly that, but it is a model judgement, not lint.
 - The tutor says "jag fixar en sida" before carrying on; acceptable or not is Johan's call.
 - Page and patch HTML enters through an inert template and a shared sanitizer. Native
   `setHTML` is used when available, with DOMPurify for other browsers. Model scripts,
