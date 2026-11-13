@@ -1065,7 +1065,7 @@ async def entrypoint(ctx: JobContext) -> None:
         debug.record("browser_event", {"type": str(event.get("type", "?"))[:40]})
         if event.get("type") == "mic":
             # The child (or a parent) pressed the microphone button.
-            debug.record("mic", {"on": bool(event.get("on"))})
+            debug.record("mic", {"on": bool(event.get("on")), "why": str(event.get("why", ""))[:20]})
         elif event.get("type") == "end":
             ending.set()
         elif event.get("type") == "page-answer" and screen is not None:

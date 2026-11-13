@@ -715,10 +715,13 @@ export function useSession(mobile = false) {
         await room.localParticipant.setMicrophoneEnabled(true);
         setMicEnabled(true);
         setMicBlocked(false);
+        // The log needs the starting state, not only later button presses.
+        void sendToAgent(JSON.stringify({ type: 'mic', on: true, why: 'start' }), TOPIC_SESSION_EVENT);
       } catch {
         // Mic denied: stay connected, banner + text field instead.
         setMicEnabled(false);
         setMicBlocked(true);
+        void sendToAgent(JSON.stringify({ type: 'mic', on: false, why: 'blocked' }), TOPIC_SESSION_EVENT);
       }
       setPhase('live');
     },
@@ -756,7 +759,7 @@ export function useSession(mobile = false) {
       setMicEnabled(next);
       if (next) setMicBlocked(false);
       // Logged so a quiet stretch in a session can be told apart from a muted one.
-      void sendToAgent(JSON.stringify({ type: 'mic', on: next }), TOPIC_SESSION_EVENT);
+      void sendToAgent(JSON.stringify({ type: 'mic', on: next, why: 'button' }), TOPIC_SESSION_EVENT);
     } catch {
       setMicEnabled(false);
       setMicBlocked(true);
@@ -771,11 +774,12 @@ export function useSession(mobile = false) {
       await room.localParticipant.setMicrophoneEnabled(true);
       setMicEnabled(true);
       setMicBlocked(false);
+      void sendToAgent(JSON.stringify({ type: 'mic', on: true, why: 'retry' }), TOPIC_SESSION_EVENT);
     } catch {
       setMicEnabled(false);
       setMicBlocked(true);
     }
-  }, []);
+  }, [sendToAgent]);
 
   const resumeMedia = useCallback(async () => {
     const room = roomRef.current;
