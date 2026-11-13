@@ -46,6 +46,7 @@ from .config import AGENT_NAME, DEFAULT_TTS_MODEL, DEFAULT_TTS_VOICE, env_float
 from .debug_log import DebugLog, clear_active, record_active, set_active
 from .dialogue_tts import DialogueTTS, is_dialogue_model
 from .deepgram_tts import DeepgramFluxTTS, DEFAULT_MODEL as DEEPGRAM_DEFAULT_MODEL, parse_expressivity
+from .text_input import TOPIC_CHAT, TypedChat
 from .tutor_llm import build_llm, warm_up
 from .speech import speakable_stream, unspoken_stream
 
@@ -828,7 +829,13 @@ server.setup_fnc = prewarm
 @server.rtc_session(agent_name=AGENT_NAME)
 async def entrypoint(ctx: JobContext) -> None:
     await ctx.connect()
+    # Own the child's typed chat from the moment the room connects (see text_input.py):
+    # a message that arrives before the handler exists is dropped by the RTC layer with
+    # no record anywhere, and RoomIO only registers lk.chat when the session starts.
+    typed = TypedChat()
+    ctx.room.register_text_stream_handler(TOPIC_CHAT, typed.on_stream)
     child = await ctx.wait_for_participant()
+    typed.expect(child.identity)
     try:
         meta = json.loads(child.metadata or "{}")
         learner = meta.get("learner", {})
@@ -838,6 +845,7 @@ async def entrypoint(ctx: JobContext) -> None:
         board = {}
 
     debug = DebugLog.create(ctx.room.name, learner, getattr(getattr(ctx, "job", None), "id", "?"))
+    typed.attach_record(debug.record)
 
     smart = os.environ.get("TUTOR_SCREEN") == "smart"
     screen = None
@@ -871,6 +879,19 @@ async def entrypoint(ctx: JobContext) -> None:
         ),
         max_tool_steps=6,
     )
+    typed.attach_session(session)
+
+    @session.on("conversation_item_added")
+    def tutor_has_spoken(event) -> None:
+        # After the first spoken turn a typed message no longer has to carry the greeting.
+        item = getattr(event, "item", None)
+        if getattr(item, "type", None) == "message" and getattr(item, "role", "") == "assistant":
+            typed.mark_heard()
+
+    @session.on("agent_state_changed")
+    def tutor_speaking(event) -> None:
+        if getattr(event, "new_state", None) == "speaking":
+            typed.mark_heard()
 
     @session.on("function_tools_executed")
     def tools_executed(event) -> None:
@@ -1028,7 +1049,10 @@ async def entrypoint(ctx: JobContext) -> None:
         await session.start(
             agent=tutor,
             room=ctx.room,
-            room_options=room_io.RoomOptions(participant_identity=child.identity),
+            # text_input=False: the worker owns lk.chat from connect time (see
+            # text_input.py), so RoomIO must not take the topic over.
+            room_options=room_io.RoomOptions(participant_identity=child.identity,
+                                             text_input=False),
             # TUTOR_CLOUD_RECORDING=1 uploads session audio and transcripts to LiveKit
             # Cloud observability. Off by default; the local debug log (TUTOR_DEBUG_LOG=1)
             # is the reviewable trail when Cloud is off or unreachable.
@@ -1037,8 +1061,10 @@ async def entrypoint(ctx: JobContext) -> None:
         debug.record("worker_session_started", {
             "cloud_recording": os.environ.get("TUTOR_CLOUD_RECORDING") == "1"})
         await ctx.room.local_participant.set_attributes({"tutor.mode": "talking"})
-        debug.record("prompt", {"kind": "greeting"})
-        prompt_event(session, prompt.greeting_instruction(learner))
+        # Greets unless the child already typed: then that message is answered with a
+        # reply that greets too, instead of two overlapping replies.
+        await typed.start(prompt.greeting_instruction(learner),
+                          lambda text: prompt_event(session, text))
 
         outcome = await _run_until_done(ctx, session, tutor, debug, ending, provider_failed)
     except Exception as error:
