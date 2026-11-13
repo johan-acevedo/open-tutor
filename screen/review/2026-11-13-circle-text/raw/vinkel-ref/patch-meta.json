@@ -1,0 +1,41 @@
+{
+ "case": "vinkel-ref",
+ "ask": "Lägg Vinkelben utanför det sneda benets ände så att texten inte rör linjen, och flytta 60° närmare spetsen. Eleven ska kunna peka på vinkelspetsen. Ändra bara etiketternas läge.",
+ "pane": [
+  370,
+  610
+ ],
+ "wall_s": 6.46,
+ "spec": {
+  "model": "gemini-4-hydrogen",
+  "api": "chat",
+  "reasoning": "low"
+ },
+ "calls": [
+  {
+   "look": false,
+   "seconds": 5.2,
+   "system_chars": 19718,
+   "answer_chars": 163
+  }
+ ],
+ "failures": [],
+ "new_pages": 0,
+ "visible_ids": [
+  "graf",
+  "ben-1",
+  "ben-2",
+  "vinkelspets",
+  "gradtal",
+  "vinkelben"
+ ],
+ "model_s": 5.204791252035648,
+ "render_s": 1.2528409911319613,
+ "total_s": 6.457786604762077,
+ "issues": [],
+ "targets": [
+  "gradtal",
+  "vinkelben"
+ ],
+ "missing_targets": []
+}

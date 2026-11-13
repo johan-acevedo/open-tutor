@@ -1,0 +1,7 @@
+**Cirkel.** Det finns ingen cirkeltagg: rita bågen som två kurvor i en `ot-graph`, med samma färg.
+`<ot-point id="medelpunkt" x="0" y="0">`, `<ot-segment id="radie" from="0 0" to="4 0">4 cm</ot-segment>`,
+`<ot-fn color="cyan" domain="-4 4">sqrt(16 - x^2)</ot-fn>` och `<ot-fn color="cyan" domain="-4 4">-sqrt(16 - x^2)</ot-fn>`
+(16 är radien i kvadrat; flytta x och y för en annan medelpunkt). Givna mått skrivs ut, arean ritas inte.
+
+`<ot-text id="…" x="2" y="2">60°</ot-text>` skriver en text centrerad på punkten (x, y) i grafens
+koordinater. Den flyttas bara in i grafens ruta, aldrig undan från linjer: välj en punkt med luft runt.

@@ -1,5 +1,19 @@
 # Smart Screen: choices, tried and rejected
 
+## Circle and positioned text, 2026-11-13
+
+Two short reference blocks were compared against the current reference, one synthetic ask each,
+four page jobs plus one patch, Hydrogen low: a circle recipe and `ot-text`. On these pages the
+circle shape and its radius were already right without help (this baseline wrote the two-curve
+recipe itself); the candidate made one circle one colour instead of two. `ot-text` removed the
+anchor dots that `<ot-point>` labels leave in a figure and put the 60° label closer to the vertex,
+but a wide label centred on a point still crosses a slanted leg (9 px at 370, 14 px at 1000), and
+a sharper sentence made it worse (18/29 px). The reference therefore documents `ot-text` as centred
+with no offset and sends a wide label to `<ot-point label-pos="…">`, the form that stayed clear.
+`ot.point` on an `ot-text` id returns true and shows nothing; that is runtime, not reference.
+Bodies, screenshots, measurements, caveats and the rerun commands: `review/2026-11-13-circle-text/`.
+No timing claim is made from five jobs.
+
 ## Toolbox follow-up, 2026-11-13
 
 Fit correction: a visual's old absolute pixel positions must not size the next font

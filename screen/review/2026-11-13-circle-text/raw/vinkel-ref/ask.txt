@@ -1,0 +1,1 @@
+Visa en vinkel som är 60 grader. Det ena vinkelbenet går från spetsen till (5, 0), det andra till (2,5, 4,3). Skriv 60° strax innanför spetsen, inne i vinkeln, och skriv Vinkelben vid slutet av det sneda benet. Eleven ska kunna peka på vinkelspetsen. Rita ingen båge och räkna inte ut något.

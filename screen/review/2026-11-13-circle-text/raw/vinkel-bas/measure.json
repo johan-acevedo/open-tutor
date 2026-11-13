@@ -1,0 +1,395 @@
+{
+ "case": "vinkel-bas",
+ "base_ask": "vinkel",
+ "steered": false,
+ "sizes": {
+  "370x610": {
+   "fontPx": 17.5,
+   "flags": [
+    "the Vinkelben label sits 3.5 em from the leg end"
+   ],
+   "segments": [
+    {
+     "id": "ben1",
+     "from": "0 0",
+     "to": "5 0",
+     "text": "",
+     "px": [
+      {
+       "x": 49.7,
+       "y": 359.5
+      },
+      {
+       "x": 275.3,
+       "y": 359.5
+      }
+     ]
+    },
+    {
+     "id": "ben2",
+     "from": "0 0",
+     "to": "2.5 4.3",
+     "text": "",
+     "px": [
+      {
+       "x": 49.7,
+       "y": 359.5
+      },
+      {
+       "x": 162.5,
+       "y": 165.5
+      }
+     ]
+    }
+   ],
+   "angles": [
+    {
+     "vertex_px": {
+      "x": 49.7,
+      "y": 359.5
+     },
+     "deg": 59.83,
+     "legs": [
+      "ben1",
+      "ben2"
+     ],
+     "far": [
+      {
+       "x": 275.34722222222223,
+       "y": 359.54861111111114
+      },
+      {
+       "x": 162.5,
+       "y": 165.4513888888889
+      }
+     ]
+    }
+   ],
+   "angle_deg": 59.83,
+   "label_60": {
+    "text": "60∘",
+    "from_vertex_px": 74.4,
+    "from_vertex_em": 4.3,
+    "inside_wedge": true,
+    "legs": [
+     {
+      "edge_px": 41.6,
+      "overlap_px": -28.9
+     },
+     {
+      "edge_px": 32.4,
+      "overlap_px": -12.6
+     }
+    ]
+   },
+   "label_ben": {
+    "text": "Vinkelben",
+    "from_end_px": 61.6,
+    "from_end_em": 3.5,
+    "edge_px": 61.6,
+    "overlap_px": -18.7
+   },
+   "labels": [
+    {
+     "text": "60∘",
+     "x": 95.9,
+     "y": 305.2,
+     "w": 31.0,
+     "h": 25.4,
+     "segment": "ben2",
+     "edge_px": 32.4,
+     "overlap_px": -12.6
+    },
+    {
+     "text": "Vinkelben",
+     "x": 178.3,
+     "y": 141.4,
+     "w": 88,
+     "h": 19.2,
+     "segment": "ben2",
+     "edge_px": 61.6,
+     "overlap_px": -18.7
+    }
+   ],
+   "texts": [
+    "ot-segment",
+    "ot-segment",
+    "ot-point",
+    "ot-point",
+    "ot-point"
+   ],
+   "issues": [],
+   "ids": [
+    "ot-map-data",
+    "page",
+    "vinkel",
+    "ben1",
+    "ben2",
+    "spets",
+    "grader",
+    "ben-etikett"
+   ],
+   "point": {
+    "ot-map-data": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 1,
+      "strokeWidth": 0
+     }
+    },
+    "page": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 1,
+      "strokeWidth": 0
+     }
+    },
+    "vinkel": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 1,
+      "strokeWidth": 0
+     }
+    },
+    "ben1": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 0,
+      "strokeWidth": 2.31
+     }
+    },
+    "ben2": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 0,
+      "strokeWidth": 2.31
+     }
+    },
+    "spets": {
+     "ok": true,
+     "effect": {
+      "kids": 1,
+      "pointed": 0,
+      "strokeWidth": 2.5
+     }
+    },
+    "grader": {
+     "ok": true,
+     "effect": {
+      "kids": 1,
+      "pointed": 0,
+      "strokeWidth": 2.5
+     }
+    },
+    "ben-etikett": {
+     "ok": true,
+     "effect": {
+      "kids": 1,
+      "pointed": 0,
+      "strokeWidth": 2.5
+     }
+    }
+   },
+   "visible_text": "Vinkel och vinkelben\n60\n∘\nVinkelben"
+  },
+  "1000x700": {
+   "fontPx": 30.25,
+   "flags": [
+    "the Vinkelben label sits 3.5 em from the leg end"
+   ],
+   "segments": [
+    {
+     "id": "ben1",
+     "from": "0 0",
+     "to": "5 0",
+     "text": "",
+     "px": [
+      {
+       "x": 250.9,
+       "y": 452.8
+      },
+      {
+       "x": 670.1,
+       "y": 452.8
+      }
+     ]
+    },
+    {
+     "id": "ben2",
+     "from": "0 0",
+     "to": "2.5 4.3",
+     "text": "",
+     "px": [
+      {
+       "x": 250.9,
+       "y": 452.8
+      },
+      {
+       "x": 460.5,
+       "y": 92.2
+      }
+     ]
+    }
+   ],
+   "angles": [
+    {
+     "vertex_px": {
+      "x": 250.9,
+      "y": 452.8
+     },
+     "deg": 59.83,
+     "legs": [
+      "ben1",
+      "ben2"
+     ],
+     "far": [
+      {
+       "x": 670.1153846153845,
+       "y": 452.7692307692308
+      },
+      {
+       "x": 460.5,
+       "y": 92.23076923076928
+      }
+     ]
+    }
+   ],
+   "angle_deg": 59.83,
+   "label_60": {
+    "text": "60∘",
+    "from_vertex_px": 134.2,
+    "from_vertex_em": 4.4,
+    "inside_wedge": true,
+    "legs": [
+     {
+      "edge_px": 74.9,
+      "overlap_px": -52.9
+     },
+     {
+      "edge_px": 58.6,
+      "overlap_px": -24.8
+     }
+    ]
+   },
+   "label_ben": {
+    "text": "Vinkelben",
+    "from_end_px": 107.0,
+    "from_end_em": 3.5,
+    "edge_px": 107.0,
+    "overlap_px": -32.5
+   },
+   "labels": [
+    {
+     "text": "60∘",
+     "x": 335.9,
+     "y": 355.9,
+     "w": 52.8,
+     "h": 43.9,
+     "segment": "ben2",
+     "edge_px": 58.7,
+     "overlap_px": -24.8
+    },
+    {
+     "text": "Vinkelben",
+     "x": 488.0,
+     "y": 50.6,
+     "w": 153,
+     "h": 33.3,
+     "segment": "ben2",
+     "edge_px": 107.0,
+     "overlap_px": -32.5
+    }
+   ],
+   "texts": [
+    "ot-segment",
+    "ot-segment",
+    "ot-point",
+    "ot-point",
+    "ot-point"
+   ],
+   "issues": [],
+   "ids": [
+    "ot-map-data",
+    "page",
+    "vinkel",
+    "ben1",
+    "ben2",
+    "spets",
+    "grader",
+    "ben-etikett"
+   ],
+   "point": {
+    "ot-map-data": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 1,
+      "strokeWidth": 0
+     }
+    },
+    "page": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 1,
+      "strokeWidth": 0
+     }
+    },
+    "vinkel": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 1,
+      "strokeWidth": 0
+     }
+    },
+    "ben1": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 0,
+      "strokeWidth": 4
+     }
+    },
+    "ben2": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 0,
+      "strokeWidth": 4
+     }
+    },
+    "spets": {
+     "ok": true,
+     "effect": {
+      "kids": 1,
+      "pointed": 0,
+      "strokeWidth": 1.58
+     }
+    },
+    "grader": {
+     "ok": true,
+     "effect": {
+      "kids": 1,
+      "pointed": 0,
+      "strokeWidth": 1.58
+     }
+    },
+    "ben-etikett": {
+     "ok": true,
+     "effect": {
+      "kids": 1,
+      "pointed": 0,
+      "strokeWidth": 1.58
+     }
+    }
+   },
+   "visible_text": "Vinkel och vinkelben\n60\n∘\nVinkelben"
+  }
+ }
+}

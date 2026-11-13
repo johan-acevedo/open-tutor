@@ -1,0 +1,43 @@
+{
+ "case": "cirkel-ref",
+ "base_ask": "cirkel",
+ "steered": true,
+ "ask": "Rita en cirkel med radien 4 cm. Visa radien som ett streck från medelpunkten med måttet 4 cm, och eleven ska kunna peka på radien. Det givna måttet ska synas. Arean får inte synas.",
+ "pane": [
+  370,
+  610
+ ],
+ "wall_s": 6.73,
+ "spec": {
+  "model": "gemini-4-hydrogen",
+  "api": "chat",
+  "reasoning": "low"
+ },
+ "calls": [
+  {
+   "look": false,
+   "seconds": 3.5,
+   "system_chars": 19718,
+   "user_chars": 542,
+   "answer_chars": 419
+  },
+  {
+   "look": true,
+   "seconds": 2.06,
+   "system_chars": 19718,
+   "user_chars": 1155,
+   "answer_chars": 2
+  }
+ ],
+ "failures": [],
+ "system_chars": 19718,
+ "candidate_chars": 636,
+ "model_s": 3.5049865539185703,
+ "look_s": 2.06020932411775,
+ "retry_s": 0.0,
+ "render_s": 1.1589730600826442,
+ "total_s": 6.724299560766667,
+ "issues": [],
+ "residual_lint": [],
+ "repaired": false
+}
