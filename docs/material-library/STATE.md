@@ -102,3 +102,7 @@ DeepSeek delivered f3006af: original manifest-allowlisted visible-only image byt
 ## Step 4d review complete / isolated preview preparation
 
 Muse independently verified source digests, visible-only filtering, image budgets, serializer MIME and failure paths (277 tests pass, 1 skip). Parent fixed omission wording to distinguish unique image files from repeated page references; 22 focused show tests pass. Preparing a persistent elitebook preview under separate LiveKit agent name open-tutor-materials-preview and HTTPS port9443 so it cannot take family sessions. Existing credentials retrieved privately through farm SSH/Infisical (no values logged, no family config changed). Full-index worker remains independent; preview initially explicitly points to evaluation subset until full index is reviewed. Real model/browser/spoken proof is still outstanding.
+
+## Persistent isolated preview running
+
+Elitebook services open-tutor-materials-web and open-tutor-materials-agent now run from this feature worktree, separate dispatch name open-tutor-materials-preview. URL https://elitebook.tail2e1c4e.ts.net:9443/; native Tailscale Serve port9443 proxies localhost8720 without altering existing routes. Private env uses existing credentials only; separate ML-enabled venv is ~/.local/share/open-tutor/materials/preview-venv. Health and real circuit metadata over HTTPS verified. Search still explicitly uses the evaluation index pending full-index completion/review. Real voice/vision behavior is next to verify. Main remains675f334; no feature PR merged.
