@@ -1,0 +1,12 @@
+{
+ "shell": "worktree",
+ "failures": [],
+ "notes": [],
+ "prior_shell_unreported": [
+  "prior bad-4vs5 370x610: independent check finds 1 finding(s), shell reports 0: []",
+  "prior bad-4vs5 1000x700: independent check finds 1 finding(s), shell reports 0: []",
+  "prior joint-two 370x610: independent check finds 1 finding(s), shell reports 0: []",
+  "prior joint-two 1000x700: independent check finds 1 finding(s), shell reports 0: []"
+ ],
+ "prior_shell_broken": []
+}

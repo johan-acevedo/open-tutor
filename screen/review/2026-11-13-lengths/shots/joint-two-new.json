@@ -1,0 +1,44 @@
+{
+ "independent": {
+  "triangel": {
+   "known": [
+    {
+     "side": 1,
+     "text": "5 cm",
+     "scale": 0.08
+    },
+    {
+     "side": 2,
+     "text": "3 cm",
+     "scale": 0.16666666666666666
+    }
+   ],
+   "flags": [
+    {
+     "sides": [
+      1,
+      2
+     ],
+     "direction": "disagree"
+    }
+   ],
+   "skipped": null
+  }
+ },
+ "shell": {
+  "370x610": [
+   {
+    "kind": "length",
+    "msg": "<ot-polygon id=\"triangel\"> in <ot-graph id=\"tri\"> sides 1 (\"5 cm\") and 2 (\"3 cm\") disagree with the drawn lengths; check the labels or redraw the sides to match",
+    "where": "<ot-polygon id=\"triangel\">"
+   }
+  ],
+  "1000x700": [
+   {
+    "kind": "length",
+    "msg": "<ot-polygon id=\"triangel\"> in <ot-graph id=\"tri\"> sides 1 (\"5 cm\") and 2 (\"3 cm\") disagree with the drawn lengths; check the labels or redraw the sides to match",
+    "where": "<ot-polygon id=\"triangel\">"
+   }
+  ]
+ }
+}
