@@ -42,7 +42,7 @@ export function useWakeLock(active: boolean): void {
           const stale = sentinel;
           sentinel = null;
           stale.removeEventListener('release', onRelease);
-          await stale.release().catch(() => undefined);
+          void stale.release().catch(() => undefined);
         }
         sentinel = next;
         next.addEventListener('release', onRelease);

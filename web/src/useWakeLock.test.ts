@@ -164,4 +164,31 @@ describe('useWakeLock', () => {
     });
     expect(late.release).toHaveBeenCalledTimes(1);
   });
+
+  it('releases a replacement on end even if the old lock releases slowly', async () => {
+    let finishRelease: () => void = () => undefined;
+    const releasing = new Promise<void>((resolve) => { finishRelease = resolve; });
+    const old = fakeSentinel();
+    old.release = vi.fn(() => releasing);
+    const replacement = fakeSentinel();
+    const request = mockWakeLock(async () => old);
+    request.mockResolvedValueOnce(old).mockResolvedValueOnce(replacement);
+    mockVisibility('visible');
+    const { unmount } = renderHook(() => useWakeLock(true));
+    await act(async () => undefined);
+
+    // Foreground can precede delivery of the old sentinel's release event.
+    mockVisibility('hidden');
+    fireVisibility();
+    mockVisibility('visible');
+    fireVisibility();
+    await act(async () => undefined);
+    expect(old.release).toHaveBeenCalledTimes(1);
+    unmount();
+    await act(async () => {
+      finishRelease();
+      await releasing;
+    });
+    expect(replacement.release).toHaveBeenCalledTimes(1);
+  });
 });
