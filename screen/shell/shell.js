@@ -282,7 +282,8 @@
   function keepInside(host) {
     var lay = host._layer;
     if (!lay) return;
-    var box = lay.getBoundingClientRect();
+    // A map with a key in flow keeps its labels inside the drawing box, not over the key.
+    var box = (lay.querySelector(':scope > .ot-map-canvas') || lay).getBoundingClientRect();
     $$('.ot-lbl, .ot-place-label, .ot-map-label', lay).forEach(function (l) {
       var r = l.getBoundingClientRect();
       var dx = r.left < box.left ? box.left - r.left : r.right > box.right ? box.right - r.right : 0;
@@ -1679,87 +1680,91 @@
     var viewKey = (el.getAttribute('view') || '').trim().toLowerCase();
     var view = VIEWS[viewKey] || (nums(viewKey).length === 4 ? nums(viewKey) : null);
     // d3 reads a ring wound the other way as the rest of the globe, so the fit needs rewind()
-    if (allRegions && !view) { data.regions.forEach(function (r) { focus.push(rewind(regionFeature(data, r))); }); }
-    // A key under the map gets its own strip, so the map is fitted into what is left. On a wide
-    // pane the key moves beside the map instead: a tall, narrow map (Sweden) is fitted by the
-    // height it gets, so a short wide box wastes the width and shrinks the codes with it.
+    var regions = allRegions ? data.regions.map(function (r) { return rewind(regionFeature(data, r)); }) : null;
+    // A full län map is fitted to the 21 real region polygons, not to the `sverige` view box:
+    // that box keeps Norway, Finland and the Baltic as context, which left Sweden a small shape
+    // in a mostly empty frame. The neighbours are still drawn, as context at the edge of the box.
     var mode = regionLabelMode(el, allRegions);
     var lay = el.layer();
     lay.innerHTML = '';
+    lay.classList.remove('ot-map-split', 'ot-map-key-side');
     var credit = hist ? 'Gränser: historical-basemaps · Natural Earth' : 'Natural Earth';
-    var legend = null, keys = null, strip = 0;
+    // The key gets its own normal-flow box, never an overlay over sea or country: a strip under
+    // the drawing box on a phone, an upright column beside it on a wide pane. The map is drawn
+    // into what is left, so Sweden fills its box instead of sharing it with the key.
+    var legend = null, keys = null, draw = lay;
     if (allRegions && mode === 'kort') {
+      lay.classList.add('ot-map-split');
+      draw = document.createElement('div');
+      draw.className = 'ot-map-canvas';
+      lay.appendChild(draw);
       legend = document.createElement('div');
       legend.className = 'ot-map-legend';
       legend.innerHTML = '<div class="ot-map-keys">' + regionLegend(data, el) + '</div>' +
         '<span class="ot-map-legend-src">' + esc(credit) + '</span>';
       keys = legend.firstChild;
       lay.appendChild(legend);
-      strip = legend.offsetHeight + 0.3 * f;
     }
     var target;
-    if (view) target = bboxFeature(view);
+    if (regions) target = { type: 'FeatureCollection', features: regions };
+    else if (view) target = bboxFeature(view);
     else if (focus.length) target = { type: 'FeatureCollection', features: focus };
     else target = bboxFeature(VIEWS.europe);
     var b = d3.geoBounds(target);
     var lon0 = (b[0][0] + b[1][0]) / 2, lat0 = (b[0][1] + b[1][1]) / 2;
-    var wide = (b[1][0] - b[0][0]) > 150;
+    var wide = !regions && (b[1][0] - b[0][0]) > 150;
     function mapProj(areaW, areaH) {
       var p = wide ? d3.geoEqualEarth() : d3.geoAzimuthalEqualArea().rotate([-lon0, -lat0]);
-      var pad = view ? 0.4 * f : Math.min(areaW, areaH) * 0.08;
+      // A region map is padded by a few percent of its box, so edge codes keep a little air;
+      // the country still fills the box.
+      var pad = regions ? Math.min(areaW, areaH) * 0.045 : (view ? 0.4 * f : Math.min(areaW, areaH) * 0.08);
       p.fitExtent([[pad, pad], [areaW - pad, areaH - pad]], target);
       return p;
     }
-    // The map keeps the widest of the two layouts that gives the larger drawing, so a wide short
-    // box gets the map in full height and the key as a column beside it, and a phone (or a
-    // list too long for the height) keeps the key under the map.
-    var area = { w: w, h: Math.max(h * 0.4, h - strip) };
-    var proj = mapProj(area.w, area.h), side = false;
+    function boxOf(node) { var r = node.getBoundingClientRect(); return { w: r.width, h: r.height }; }
+    var area = boxOf(draw), proj = mapProj(area.w, area.h), side = false;
     if (legend) {
-      var count = data.regions.length;
+      var count = data.regions.length, layBox = boxOf(lay);
+      var sideFont = 0, sideRows = 0;
+      // Three key sizes, never below 10 px. Each is measured in the side layout and kept only if
+      // it draws the country bigger than the strip under the map does. A pane that is not clearly
+      // landscape keeps the key under the map: beside a 333 px map the key would be a third of
+      // the width and the drawing box a narrow, unusable column.
       var sizes = [0.68 * f, 0.6 * f, 0.52 * f].filter(function (px) { return px >= 10; });
-      for (var ti = 0; ti < sizes.length && !side; ti++) {
+      var canSide = layBox.w >= 480 && layBox.w > layBox.h * 1.3;
+      for (var ti = 0; ti < sizes.length && canSide; ti++) {
         legend.style.fontSize = sizes[ti].toFixed(1) + 'px';
-        var rowsFit = Math.max(1, Math.floor((h * 0.92) / (sizes[ti] * 1.35)));
+        var rowsFit = Math.max(1, Math.floor((layBox.h * 0.92) / (sizes[ti] * 1.35)));
         // As many columns as the height needs, with the rows shared out evenly between them.
         var rows = Math.ceil(count / Math.ceil(count / rowsFit));
-        legend.classList.add('ot-map-legend-side');
+        lay.classList.add('ot-map-key-side');
         keys.style.gridTemplateRows = 'repeat(' + rows + ', auto)';
-        var keyW = legend.offsetWidth, keyH = legend.offsetHeight, restW = w - keyW - 0.5 * f;
-        if (keyH <= h && keyW <= w * 0.4 && restW > w * 0.5) {
-          var p2 = mapProj(restW, h);
-          if (p2.scale() > proj.scale()) { proj = p2; area = { w: restW, h: h }; side = true; break; }
+        var keyBox = boxOf(legend), drawBox = boxOf(draw);
+        // The key may take at most 40 % of the width and must fit the height of the box.
+        if (keyBox.h <= layBox.h + 0.5 && keyBox.w <= layBox.w * 0.4 && drawBox.w > layBox.w * 0.5) {
+          var p2 = mapProj(drawBox.w, drawBox.h);
+          if (p2.scale() > proj.scale() * 1.02) {
+            proj = p2; area = drawBox; side = true;
+            sideFont = sizes[ti]; sideRows = rows;
+            break;
+          }
         }
-        legend.classList.remove('ot-map-legend-side');
+        lay.classList.remove('ot-map-key-side');
         keys.style.gridTemplateRows = '';
         legend.style.fontSize = '';
       }
+      lay.classList.toggle('ot-map-key-side', side);
+      if (side) {
+        legend.style.fontSize = sideFont.toFixed(1) + 'px';
+        keys.style.gridTemplateRows = 'repeat(' + sideRows + ', auto)';
+      }
+      // Measure the layout that won, so the projection matches the box it is drawn into.
+      area = boxOf(draw);
+      proj = mapProj(area.w, area.h);
     }
     var mapH = area.h, mapW = area.w;
-    if (legend && !side) {
-      // Just below the fitted map when there is room, otherwise along the bottom of the box.
-      var top = Math.min(area.h + 0.3 * f, h - legend.offsetHeight - 0.1 * f);
-      legend.style.top = Math.max(0, top) + 'px';
-      legend.style.bottom = 'auto';
-    }
     var path = d3.geoPath(proj);
-    // The view box that a region map is fitted to is wider than the country (it keeps Norway and
-    // Finland as context), so the shapes sit off to one side. Slide the whole map, without
-    // changing its scale, until Sweden is centred in the room the map has.
-    if (allRegions) {
-      var shapesBounds = path.bounds({ type: 'FeatureCollection', features: data.regions.map(function (r) {
-        return rewind(regionFeature(data, r));
-      }) });
-      var m = 0.5 * f;
-      var dx = area.w / 2 - (shapesBounds[0][0] + shapesBounds[1][0]) / 2;
-      var dy = area.h / 2 - (shapesBounds[0][1] + shapesBounds[1][1]) / 2;
-      var loX = m - shapesBounds[0][0], hiX = area.w - m - shapesBounds[1][0];
-      var loY = m - shapesBounds[0][1], hiY = area.h - m - shapesBounds[1][1];
-      dx = loX <= hiX ? Math.min(hiX, Math.max(loX, dx)) : 0;
-      dy = loY <= hiY ? Math.min(hiY, Math.max(loY, dy)) : 0;
-      if (dx || dy) { var t0 = proj.translate(); proj.translate([t0[0] + dx, t0[1] + dy]); }
-    }
-    var s = '<rect width="' + w + '" height="' + h + '" fill="' + ocean + '" rx="' + 0.6 * f + '"/>';
+    var s = '<rect width="' + mapW + '" height="' + mapH + '" fill="' + ocean + '" rx="' + 0.6 * f + '"/>';
     s += '<path d="' + path(d3.geoGraticule10()) + '" fill="none" stroke="#ffffff" stroke-opacity="0.05"/>';
     var bordersOn = hist ? el.hasAttribute('borders') : el.getAttribute('borders') !== 'off';
     var neighbourFill = allRegions ? '#242b39' : land;
@@ -1849,8 +1854,8 @@
       html += '<div class="ot-place-label' + (left ? ' left' : '') + '" style="left:' + p[0] + 'px;top:' + p[1] + 'px;color:' + col + '">' + rich(ch.textContent.trim()) + '</div>';
     });
     if (legend) {
-      legend.insertAdjacentHTML('beforebegin', svg(w, h, s));
-      lay.insertAdjacentHTML('beforeend', html);
+      draw.innerHTML = svg(mapW, mapH, s);
+      draw.insertAdjacentHTML('beforeend', html);
     } else {
       lay.innerHTML = svg(w, h, s) + html + '<div class="ot-map-credit">' + credit + '</div>';
     }
@@ -1878,7 +1883,7 @@
     // A map label stays as close to its own spot as it can: the least crowded free spot wins.
     // Region codes are two letters in a crowded country, so they search a fine spiral around
     // their own spot (measured, not re-laid out) and take the quietest place within reach.
-    var layer0 = lay.getBoundingClientRect();
+    var layer0 = (lay.querySelector(':scope > .ot-map-canvas') || lay).getBoundingClientRect();
     function overlap(a, b) {
       var w = Math.min(a.r, b.r) - Math.max(a.l, b.l);
       var h = Math.min(a.b, b.b) - Math.max(a.t, b.t);

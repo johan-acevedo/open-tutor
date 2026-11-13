@@ -374,25 +374,43 @@ ot-map .ot-map-legend {
   display: flex; flex-wrap: wrap; justify-content: center; gap: 0.05em 0.7em;
   font-size: 0.64em; line-height: 1.35; color: var(--muted); pointer-events: none;
 }
-/* Under the map the key rows wrap like one paragraph: the wrapper adds no box of its own,
-   so the strip keeps the height it had before the key could move beside the map. */
+/* Under the map the key rows wrap like one paragraph: the wrapper adds no box of its own. */
 ot-map .ot-map-keys { display: contents; }
 ot-map .ot-map-legend > span, ot-map .ot-map-keys > span { white-space: nowrap; }
 ot-map .ot-map-legend-src { color: var(--muted); opacity: 0.85; margin-top: 0.35em; }
-/* Wide pane: the key is a column (or two) beside the map, so the map keeps the full height. */
-ot-map .ot-map-legend-side {
-  left: auto; right: 0.4em; top: 0; bottom: 0; width: auto;
-  display: flex; flex-direction: column; justify-content: center; align-items: flex-start;
-  font-size: 0.68em;
-  /* the key column sits over the map: fade the ocean colour in behind it */
-  padding-left: 1.1em;
-  background: linear-gradient(90deg, rgba(22, 32, 45, 0), rgba(22, 32, 45, 0.92) 1.1em, rgba(22, 32, 45, 0.92));
+/* A län map is two boxes in normal flow: the drawing box and the key. The key never covers
+   the sea or the country; it is a strip under the map on a phone and a column beside it on a
+   wide pane (see .ot-map-key-side below). */
+ot-map > .ot-vis.ot-map-split { display: flex; flex-direction: column; gap: 0.4em; }
+ot-map > .ot-vis.ot-map-split.ot-map-key-side { flex-direction: row; gap: 0.55em; }
+ot-map .ot-map-canvas {
+  position: relative; flex: 1 1 auto; min-width: 0; min-height: 0;
+  overflow: hidden; border-radius: var(--radius);
 }
-ot-map .ot-map-legend-side .ot-map-keys {
+ot-map .ot-map-canvas svg { display: block; width: 100%; height: 100%; overflow: hidden; }
+ot-map .ot-map-split .ot-map-legend {
+  position: static; inset: auto; width: auto; flex: 0 0 auto;
+  padding: 0 0.1em; justify-content: center;
+}
+/* Wide pane: the key is a column (or two) beside the map, so the map keeps the full height.
+   The JS measures this column and rejects a layout where it takes more than 40 % of the width;
+   a max-width here would only clip the names while the measurement looked fine. */
+ot-map .ot-map-split.ot-map-key-side .ot-map-legend {
+  flex-direction: column; flex-wrap: nowrap; justify-content: center; align-items: flex-start;
+  width: max-content; font-size: 0.68em; padding: 0;
+}
+ot-map .ot-map-split.ot-map-key-side .ot-map-keys {
   display: grid; grid-auto-flow: column; align-content: center; justify-content: start;
   column-gap: 0.9em; row-gap: 0;
 }
-ot-map .ot-map-legend-side .ot-map-legend-src { text-align: left; margin-top: 0.4em; }
+ot-map .ot-map-split.ot-map-key-side .ot-map-legend-src { text-align: left; margin-top: 0.4em; }
+/* A län map on a phone: the country is tall and narrow, so the box gets a taller share of the
+   page than a plain visual would. Without this the drawing box is a short wide strip with a
+   small Sweden in it. A page this long then lands just under the 16 px text floor; the shell
+   reports `dense`, which is the honest reading (less text, or a taller phone, is the cure). */
+@media (max-width: 600px) {
+  ot-map[regions] { min-height: 16em; }
+}
 ot-map .ot-map-legend b { color: var(--text); font-weight: 750; margin-right: 0.28em; }
 ot-map .ot-map-legend .ot-region-key-on { color: var(--text); }
 ot-map .ot-map-legend .ot-region-key-off { opacity: 0.45; }

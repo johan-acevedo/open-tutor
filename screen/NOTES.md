@@ -40,30 +40,42 @@ alone did not solve either problem.
 `smalltest/run.py` accepts `--model`, `--requests` and `--sizes` so a targeted
 DeepSeek check need not call Muse or use yesterday's pane sizes.
 
-Map key layout (this change): a full län map put its 21-letter key in a strip under
-the map. Sweden is taller than wide, so the map was fitted by the height that was left:
-this pane was 940×319 in the page, the strip took 74 px of it, and the country came out
-97×220 px with 9 px letters and one code dropped.
+Map layout for a full län map (this change, on top of `fix/map-side-key`): the 21-letter key
+used to live inside the map box, over the sea, and the country was fitted to the `sverige` view
+box, which keeps Norway, Finland and the Baltic as context. On a 940×319 pane that left a
+97×220 px country with 9 px letters; on a phone the key covered Skåne and Götaland and Sweden
+was 45×104 px in a mostly empty 327×217 px box.
 
-The key is now measured, and the map keeps whichever layout draws the country bigger:
+Two boxes in normal flow, never an overlay:
 
-- **Beside the map** when the key fits a column (or two) on the right and the height it
-  frees up more than pays for the width it takes. Two key sizes are tried, 0.68 em and
-  0.6 em, so a narrow-ish pane still gets a readable key instead of none.
-- **Under the map** otherwise (phones, dense pages). The strip is now placed *below* the
-  fitted map instead of being anchored to the bottom of the box, which is why the key no
-  longer covers Skåne or Götaland.
+- **The drawing box** (`.ot-map-canvas`) holds the svg, the labels and the region shapes.
+- **The key** is its own flow box: a wrapped strip under the drawing box on a phone, an upright
+  column (or two) beside it on a wide pane. Nothing is drawn behind it, so no fade or gradient
+  is needed to hide the map under the letters.
 
-Same page, same pane: country 128×292 px, 21 codes at 12.3 px instead of 20 at 9.4, no
-`crowded` issue. On 760×900 the side key lifted the map from 173 to 292 px. Phones keep
-the key under the map; there the page still needs less content.
+The map is fitted to the 21 region polygons themselves, not to the `sverige` view, with 4.5 %
+padding. Sweden now covers 91 % of the drawing box height on every pane instead of ~48 % on a
+phone, and the neighbours stay as context at the edge of the box.
 
-The region map is also slid (never scaled) so Sweden is centred in the room it has: the
-view boxes include Norway and Finland as context and put the country off to one side.
+A pane keeps the key beside the map only when it is at least 480 px wide and clearly landscape
+(w > 1.3 h); otherwise the key goes under the map. On a phone the region map also asks for a
+taller share of the page (`min-height: 16em` below 600 px) so the box is not a short wide strip.
 
-Not done: on a small pane the codes hit the 7 px floor and the lint lists the regions
-left out; the cure is less page content, not a smaller map.
-`tools/check_map_key.py` pins the two layouts, the codes, pointing and marking.
+Same pages, same panes, before → after (`tools/check_map_key.py`):
+
+- 1000×700: country 138×314 in a 945×340 overlay box → 136×309 in a 682×340 drawing box with a
+  251 px key column; 20 → 21 codes at 13.1 px, no `crowded` issue.
+- 370×610: country 45×104 → 85×192 in a 330×211 drawing box; key moved out of the map; 12 → 20
+  codes on the map, still `crowded` (the 21st is dimmed in the key).
+- 760×900: 140×320 in 691×350 → 141×318 in 407×350; 21 codes, no `crowded`.
+
+Not done: a phone box stays landscape (330×211). A portrait box would need the page text at
+12–13 px on a 610-tall pane, so the honest cure is less page content; the shell reports
+`dense` (15.25 px) and `crowded` on these long pages instead of hiding it. The `dense` report is
+what makes the server offer one lint retry on a phone.
+`tools/check_map_key.py` pins the separate key box, the tight bounds, the codes, pointing and
+marking, and `tools/check_prior_shell.sh` shows the same checks failing on the shell from
+PR #41. Evidence: `review/2026-11-13-map-phone/`.
 
 Work package 1 of `docs/smart-screen.md` (example screens, shell and components), 2026-11-12.
 

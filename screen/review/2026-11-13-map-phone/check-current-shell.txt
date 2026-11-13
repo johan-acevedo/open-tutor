@@ -1,0 +1,15 @@
+| page | pane | key | codes | code size | country | drawing box | filled | crowded | text |
+|---|---|---|---|---|---|---|---|---|---|
+| page.html | 370x558 | under | 19/21 | 7 px | 67x151 | 331x165 | 91% h / 20% w | yes | 15 px (dense) |
+| page.html | 370x610 | under | 20/21 | 8.1 px | 85x192 | 330x211 | 91% h / 26% w | yes | 15.25 px (dense) |
+| page.html | 760x900 | beside | 21/21 | 13.5 px | 141x318 | 407x350 | 91% h / 35% w | no | 26.5 px |
+| page.html | 1000x700 | beside | 21/21 | 13.1 px | 136x309 | 682x340 | 91% h / 20% w | no | 21.25 px |
+| page-ref.html | 370x558 | under | 19/21 | 7 px | 67x153 | 331x169 | 91% h / 20% w | yes | 15 px (dense) |
+| page-ref.html | 370x610 | under | 18/21 | 7 px | 67x152 | 327x167 | 91% h / 20% w | yes | 16.5 px |
+| page-ref.html | 760x900 | beside | 21/21 | 13.3 px | 140x315 | 408x347 | 91% h / 34% w | no | 26.25 px |
+| page-ref.html | 1000x700 | beside | 20/21 | 11.2 px | 117x264 | 671x290 | 91% h / 17% w | yes | 22 px |
+| page-early.html | 370x558 | under | 18/21 | 7 px | 64x143 | 334x158 | 91% h / 19% w | yes | 14 px (dense) |
+| page-early.html | 370x610 | under | 18/21 | 7 px | 70x158 | 330x174 | 91% h / 21% w | yes | 15.25 px (dense) |
+| page-early.html | 760x900 | beside | 20/21 | 12.3 px | 129x291 | 430x319 | 91% h / 30% w | yes | 24.5 px |
+| page-early.html | 1000x700 | beside | 21/21 | 12.3 px | 128x291 | 658x319 | 91% h / 19% w | no | 23.25 px |
+Map checks passed: separate key box, tight country bounds, codes, pointing and patch.
