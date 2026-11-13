@@ -24,7 +24,7 @@ The key is measured at draw time, and the map keeps whichever of two layouts dra
 country bigger:
 
 - **Beside the map**: the key becomes one or two columns on the right and the map gets the
-  whole height. Two key sizes are tried (0.68 em, then 0.6 em) so a narrow-ish pane still
+  whole height. Three key sizes are tried (0.68 em, 0.6 em, then 0.52 em, never below 10 px) so a narrow-ish pane still
   gets a readable key. Rejected when the key would take more than 40 % of the width, when it
   is taller than the box, or when the taller map does not actually come out bigger.
 - **Under the map** otherwise, as on a phone. The strip is now placed below the fitted map
@@ -80,19 +80,19 @@ OPEN_TUTOR_ENV=~/.config/open-tutor-smart-dev/env server/bin/with-env \
   "Visa Sveriges 21 län på en tydlig karta med bokstavskoder och nyckel för en elev i årskurs 6. Eleven ska hitta Skåne och Norrbotten."
 ```
 
-`*-before-*.png` are the same bodies on `origin/feat/smart-screen` (8fa6de6).
+`*-before-*.png` are the same bodies on the base Smart Screen shell before this map change.
 `results.json` holds the shell's own lint for both pages on both shells.
 
 ## Still wrong
 
-- **The phone is unchanged.** At 370×610 the map box is only 217–234 px tall because the page
+- **Phone density remains.** At 370×610 the map box is only 217–245 px tall because the page
   holds a title, a paragraph, the map and the answer box; the key takes 92–113 px of it and the
   letters sit on the 7 px floor with 6–9 regions left out. The cure is less page content (the
   narrow-page and readability work), not a smaller map. A side key does not fit there: two
   columns of eleven names need about 160 px of a 325 px box, and the key type would drop below
   10 px.
-- **The key eats width on medium panes.** At 760×900 it takes 252 px of 691; the map still more
-  than doubled in height, but a shorter legend wording would help. `screen/REFERENCE.md` no
+- **The key eats width on medium panes.** At 760×900 it takes 252 px of 691; the map still grows
+  in height, but a shorter legend wording would help. `screen/REFERENCE.md` no
   longer says the key is under the map, and `page-ref.html` (written after that) says only
   "Nyckeln visar vilken kod som hör till vilket län".
 - **A marked region's name is drawn at page size** and can cover its neighbours (`Stockholm`
