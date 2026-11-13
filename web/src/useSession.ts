@@ -25,6 +25,7 @@ import type { Profile } from './db';
 import { AgentGate } from './agentGate';
 import { isNoteLike, validateBoardFocus, validateBoardItem, validateBoardPageOp } from './validate';
 import { dataUrlToBytes, downscaleImage } from './image';
+import { useWakeLock } from './useWakeLock';
 import { audioElementBusy } from './audioTracks';
 import type { HomeworkDraft } from './components/HomeworkTray';
 
@@ -197,6 +198,9 @@ export function useSession(mobile = false) {
   const [homeworkSending, setHomeworkSending] = useState(false);
   const [audioBlocked, setAudioBlocked] = useState(false);
   const [resumeNeeded, setResumeNeeded] = useState(false);
+  // Keep the screen awake only while the lesson is live. Releases on end/unmount
+  // and re-requests on foreground return; denied or unsupported browsers run on.
+  useWakeLock(phase === 'live');
 
   const roomRef = useRef<Room | null>(null);
   const pageSendsRef = useRef(new Map<string, (msg: PageShellMessage) => void>());
