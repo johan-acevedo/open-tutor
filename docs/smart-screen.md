@@ -335,6 +335,17 @@ problems are in `screen/review/2026-11-13-readability/`. Map layout, safe page
 composition, and the server's bounded lint correction are separate changes.
 The lead deploys after review and merge. No dev services were restarted.
 
+Map key layout, 2026-11-13 (separate change on `fix/map-side-key`): `regions="län"`
+now measures its key and keeps whichever layout draws Sweden bigger — a column (or
+two) beside the map on a wide pane, a strip under it on a phone — and the strip sits
+below the fitted map instead of over it. Same real page, 1000×700 pane: the country
+grows from 97×220 to 128×292 px and the 21 codes from 9.4 to 12.3 px, with no
+`crowded` issue. The region map is also slid so Sweden is centred in the room it has.
+Phones keep today's key under the map and still need less page content. Evidence,
+screenshots and `screen/tools/check_map_key.py` are in
+`screen/review/2026-11-13-map-key/`. `screen/REFERENCE.md` no longer says the key is
+under the map, since the shell decides where it goes.
+
 1. **Example screens, shell and components.** Owner: a separate Opus 5.5 thread. Status: started
    2026-11-12. Draft delivered 2026-11-12 in PR #29 (`feat/screen-examples`); waits for review by the lead and
    Johan before anything else builds on it.

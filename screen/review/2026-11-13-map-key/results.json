@@ -1,0 +1,288 @@
+{
+ "shell": {
+  "before": "origin/feat/smart-screen (0ad5b71)",
+  "after": "fix/map-side-key"
+ },
+ "note": "lint as the shell reported it at ready; crowded counts the regions left without a letter",
+ "pages": {
+  "page.html": {
+   "before": {
+    "370x610": {
+     "ready_ms": 1332,
+     "fontPx": 16.5,
+     "issues": [
+      {
+       "kind": "crowded",
+       "msg": "9 of 21 regions have no letter on the map at this size (their rows in the key are dimmed): give the map more height or show fewer regions",
+       "where": "<ot-map id=\"karta\">"
+      }
+     ]
+    },
+    "760x900": {
+     "ready_ms": 1310,
+     "fontPx": 26.5,
+     "issues": [
+      {
+       "kind": "crowded",
+       "msg": "3 of 21 regions have no letter on the map at this size (their rows in the key are dimmed): give the map more height or show fewer regions",
+       "where": "<ot-map id=\"karta\">"
+      }
+     ]
+    },
+    "1000x700": {
+     "ready_ms": 1290,
+     "fontPx": 21.25,
+     "issues": [
+      {
+       "kind": "crowded",
+       "msg": "1 of 21 regions have no letter on the map at this size (their rows in the key are dimmed): give the map more height or show fewer regions",
+       "where": "<ot-map id=\"karta\">"
+      }
+     ]
+    }
+   },
+   "after": {
+    "370x610": {
+     "ready_ms": 1392,
+     "fontPx": 16.5,
+     "issues": [
+      {
+       "kind": "crowded",
+       "msg": "9 of 21 regions have no letter on the map at this size (their rows in the key are dimmed): give the map more height or show fewer regions",
+       "where": "<ot-map id=\"karta\">"
+      }
+     ],
+     "patch_issues": [
+      {
+       "kind": "crowded",
+       "msg": "13 of 18 regions have no letter on the map at this size (their rows in the key are dimmed): give the map more height or show fewer regions",
+       "where": "<ot-map id=\"karta\">"
+      },
+      {
+       "kind": "crowded",
+       "msg": "the regions are too small for letter codes on this map (13 of 18 did not fit): the key names them. Give the map more height or show fewer regions",
+       "where": "<ot-map id=\"karta\">"
+      }
+     ]
+    },
+    "760x900": {
+     "ready_ms": 1375,
+     "fontPx": 26.5,
+     "issues": [],
+     "patch_issues": [
+      {
+       "kind": "crowded",
+       "msg": "5 of 18 regions have no letter on the map at this size (their rows in the key are dimmed): give the map more height or show fewer regions",
+       "where": "<ot-map id=\"karta\">"
+      }
+     ]
+    },
+    "1000x700": {
+     "ready_ms": 1440,
+     "fontPx": 21.25,
+     "issues": [],
+     "patch_issues": [
+      {
+       "kind": "crowded",
+       "msg": "4 of 18 regions have no letter on the map at this size (their rows in the key are dimmed): give the map more height or show fewer regions",
+       "where": "<ot-map id=\"karta\">"
+      }
+     ]
+    }
+   }
+  },
+  "page-ref.html": {
+   "before": {
+    "370x610": {
+     "ready_ms": 1338,
+     "fontPx": 17.5,
+     "issues": [
+      {
+       "kind": "crowded",
+       "msg": "6 of 21 regions have no letter on the map at this size (their rows in the key are dimmed): give the map more height or show fewer regions",
+       "where": "<ot-map id=\"karta\">"
+      }
+     ]
+    },
+    "760x900": {
+     "ready_ms": 1384,
+     "fontPx": 26.25,
+     "issues": [
+      {
+       "kind": "crowded",
+       "msg": "3 of 21 regions have no letter on the map at this size (their rows in the key are dimmed): give the map more height or show fewer regions",
+       "where": "<ot-map id=\"karta\">"
+      }
+     ]
+    },
+    "1000x700": {
+     "ready_ms": 1365,
+     "fontPx": 22,
+     "issues": [
+      {
+       "kind": "crowded",
+       "msg": "3 of 21 regions have no letter on the map at this size (their rows in the key are dimmed): give the map more height or show fewer regions",
+       "where": "<ot-map id=\"karta\">"
+      }
+     ]
+    }
+   },
+   "after": {
+    "370x610": {
+     "ready_ms": 1305,
+     "fontPx": 17.5,
+     "issues": [
+      {
+       "kind": "crowded",
+       "msg": "7 of 21 regions have no letter on the map at this size (their rows in the key are dimmed): give the map more height or show fewer regions",
+       "where": "<ot-map id=\"karta\">"
+      }
+     ],
+     "patch_issues": [
+      {
+       "kind": "crowded",
+       "msg": "13 of 18 regions have no letter on the map at this size (their rows in the key are dimmed): give the map more height or show fewer regions",
+       "where": "<ot-map id=\"karta\">"
+      },
+      {
+       "kind": "crowded",
+       "msg": "the regions are too small for letter codes on this map (13 of 18 did not fit): the key names them. Give the map more height or show fewer regions",
+       "where": "<ot-map id=\"karta\">"
+      }
+     ]
+    },
+    "760x900": {
+     "ready_ms": 1383,
+     "fontPx": 26.25,
+     "issues": [],
+     "patch_issues": [
+      {
+       "kind": "crowded",
+       "msg": "5 of 18 regions have no letter on the map at this size (their rows in the key are dimmed): give the map more height or show fewer regions",
+       "where": "<ot-map id=\"karta\">"
+      }
+     ]
+    },
+    "1000x700": {
+     "ready_ms": 1414,
+     "fontPx": 22,
+     "issues": [
+      {
+       "kind": "crowded",
+       "msg": "1 of 21 regions have no letter on the map at this size (their rows in the key are dimmed): give the map more height or show fewer regions",
+       "where": "<ot-map id=\"karta\">"
+      }
+     ],
+     "patch_issues": [
+      {
+       "kind": "crowded",
+       "msg": "5 of 18 regions have no letter on the map at this size (their rows in the key are dimmed): give the map more height or show fewer regions",
+       "where": "<ot-map id=\"karta\">"
+      }
+     ]
+    }
+   }
+  },
+  "page-early.html": {
+   "before": {
+    "370x610": {
+     "ready_ms": 1308,
+     "fontPx": 16,
+     "issues": [
+      {
+       "kind": "crowded",
+       "msg": "6 of 21 regions have no letter on the map at this size (their rows in the key are dimmed): give the map more height or show fewer regions",
+       "where": "<ot-map id=\"karta\">"
+      }
+     ]
+    },
+    "760x900": {
+     "ready_ms": 1292,
+     "fontPx": 24.5,
+     "issues": [
+      {
+       "kind": "crowded",
+       "msg": "3 of 21 regions have no letter on the map at this size (their rows in the key are dimmed): give the map more height or show fewer regions",
+       "where": "<ot-map id=\"karta\">"
+      }
+     ]
+    },
+    "1000x700": {
+     "ready_ms": 1295,
+     "fontPx": 23.25,
+     "issues": [
+      {
+       "kind": "crowded",
+       "msg": "1 of 21 regions have no letter on the map at this size (their rows in the key are dimmed): give the map more height or show fewer regions",
+       "where": "<ot-map id=\"karta\">"
+      }
+     ]
+    }
+   },
+   "after": {
+    "370x610": {
+     "ready_ms": 1423,
+     "fontPx": 16,
+     "issues": [
+      {
+       "kind": "crowded",
+       "msg": "6 of 21 regions have no letter on the map at this size (their rows in the key are dimmed): give the map more height or show fewer regions",
+       "where": "<ot-map id=\"karta\">"
+      }
+     ],
+     "patch_issues": [
+      {
+       "kind": "crowded",
+       "msg": "13 of 18 regions have no letter on the map at this size (their rows in the key are dimmed): give the map more height or show fewer regions",
+       "where": "<ot-map id=\"karta\">"
+      },
+      {
+       "kind": "crowded",
+       "msg": "the regions are too small for letter codes on this map (13 of 18 did not fit): the key names them. Give the map more height or show fewer regions",
+       "where": "<ot-map id=\"karta\">"
+      }
+     ]
+    },
+    "760x900": {
+     "ready_ms": 1427,
+     "fontPx": 24.5,
+     "issues": [
+      {
+       "kind": "crowded",
+       "msg": "1 of 21 regions have no letter on the map at this size (their rows in the key are dimmed): give the map more height or show fewer regions",
+       "where": "<ot-map id=\"karta\">"
+      }
+     ],
+     "patch_issues": [
+      {
+       "kind": "crowded",
+       "msg": "5 of 18 regions have no letter on the map at this size (their rows in the key are dimmed): give the map more height or show fewer regions",
+       "where": "<ot-map id=\"karta\">"
+      }
+     ]
+    },
+    "1000x700": {
+     "ready_ms": 1471,
+     "fontPx": 23.25,
+     "issues": [],
+     "patch_issues": [
+      {
+       "kind": "crowded",
+       "msg": "5 of 18 regions have no letter on the map at this size (their rows in the key are dimmed): give the map more height or show fewer regions",
+       "where": "<ot-map id=\"karta\">"
+      }
+     ]
+    }
+   }
+  }
+ },
+ "panes": [
+  "370x610",
+  "760x900",
+  "1000x700"
+ ],
+ "commands": [
+  "uv run --project server python screen/tools/check_map_key.py",
+  "uv run --project server python screen/tools/screenkit.py render screen/review/2026-11-13-map-key/page.html --out screen/review/2026-11-13-map-key --sizes 370x610,760x900,1000x700 --patch screen/review/2026-11-13-map-key/mark.patch.html"
+ ]
+}

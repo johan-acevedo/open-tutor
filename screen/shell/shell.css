@@ -374,8 +374,25 @@ ot-map .ot-map-legend {
   display: flex; flex-wrap: wrap; justify-content: center; gap: 0.05em 0.7em;
   font-size: 0.64em; line-height: 1.35; color: var(--muted); pointer-events: none;
 }
-ot-map .ot-map-legend > span { white-space: nowrap; }
+/* Under the map the key rows wrap like one paragraph: the wrapper adds no box of its own,
+   so the strip keeps the height it had before the key could move beside the map. */
+ot-map .ot-map-keys { display: contents; }
+ot-map .ot-map-legend > span, ot-map .ot-map-keys > span { white-space: nowrap; }
 ot-map .ot-map-legend-src { color: var(--muted); opacity: 0.85; margin-top: 0.35em; }
+/* Wide pane: the key is a column (or two) beside the map, so the map keeps the full height. */
+ot-map .ot-map-legend-side {
+  left: auto; right: 0.4em; top: 0; bottom: 0; width: auto;
+  display: flex; flex-direction: column; justify-content: center; align-items: flex-start;
+  font-size: 0.68em;
+  /* the key column sits over the map: fade the ocean colour in behind it */
+  padding-left: 1.1em;
+  background: linear-gradient(90deg, rgba(22, 32, 45, 0), rgba(22, 32, 45, 0.92) 1.1em, rgba(22, 32, 45, 0.92));
+}
+ot-map .ot-map-legend-side .ot-map-keys {
+  display: grid; grid-auto-flow: column; align-content: center; justify-content: start;
+  column-gap: 0.9em; row-gap: 0;
+}
+ot-map .ot-map-legend-side .ot-map-legend-src { text-align: left; margin-top: 0.4em; }
 ot-map .ot-map-legend b { color: var(--text); font-weight: 750; margin-right: 0.28em; }
 ot-map .ot-map-legend .ot-region-key-on { color: var(--text); }
 ot-map .ot-map-legend .ot-region-key-off { opacity: 0.45; }

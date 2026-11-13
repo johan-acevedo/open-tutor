@@ -98,7 +98,8 @@ A step without `$` is a short explanation line. `result` on a step makes it gree
   <ot-area name="Roman Empire" color="amber">Romarriket</ot-area>      <!-- English name of the realm -->
 </ot-map>
 ```
-Sweden's 21 regions (län): `regions="län"` draws all of them with letter codes and a key under the map; `ot-region`
+Sweden's 21 län (counties): `regions="län"` draws all of them with letter codes and a key beside the map (under it on a
+phone). Say that the key names the letters, not where the key sits: the shell places it. `ot-region`
 marks and names some of them (Swedish name, `Skåne län`, `Region Skåne` or the letter: `M`). Every region of a full map
 can be pointed at by id `lan-<bokstav>`: `lan-M` is Skåne, `lan-BD` is Norrbotten.
 ```html
