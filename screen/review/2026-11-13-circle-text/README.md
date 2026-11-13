@@ -3,8 +3,10 @@
 One synthetic ask per subject, each run **baseline** (the reference on `main` at `848f8c1`) and
 **candidate** (the same reference plus two short blocks, injected into the static system prompt
 for that job only), with **Gemini 4 Hydrogen, reasoning low**. Every unedited body rendered at
-370×610 and 1000×700 and measured; one real patch on the candidate page. Four page jobs plus one
-patch job, four provider answers plus one cut look pass, no lint retry, no failure.
+370×610 and 1000×700 and measured; one real patch on the candidate page. Five page jobs plus one
+patch job, six page/patch answers plus two optional look calls (one answered OK, one cut by the
+budget) — eight provider calls in all, no lint retry, no failure. Five jobs is a small sample: it is
+enough to see a placement defect, not to estimate its rate.
 
 | # | Ask (Swedish, one teaching step) | Arm | Model | Look | Total | Lint on the unedited body | Repaired? |
 |---|---|---|---|---|---|---|---|
