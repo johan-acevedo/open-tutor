@@ -7,6 +7,9 @@ existing handler untouched.
 """
 
 import json
+import math
+
+import pytest
 
 from open_tutor.debug_log import DebugLog
 from open_tutor.diag import MAX_EVENTS_PER_BATCH, parse_diag
@@ -102,6 +105,17 @@ def test_existing_session_events_pass_through_untouched():
     assert parse_diag({"type": "page-answer", "page": "p1", "part": "a", "value": "42", "kind": "gap"}) is None
     assert parse_diag({"type": "board-size", "w": 800, "h": 600, "device": "mobile"}) is None
     assert parse_diag({"type": "resource-closed", "id": "abc"}) is None
+
+
+@pytest.mark.parametrize("kind", [[], {}])
+def test_malformed_event_kind_is_rejected_without_throwing(kind):
+    assert parse_diag(batch({"k": kind, "seq": 1, "t": 1.0})) is None
+
+
+@pytest.mark.parametrize("clock", [math.nan, math.inf, -math.inf])
+def test_nonfinite_client_clocks_are_rejected(clock):
+    assert parse_diag(batch({"k": "resume", "seq": 1, "t": clock})) is None
+    assert parse_diag(batch({"k": "resume", "seq": 1, "t": 1.0}, tClient=clock)) is None
 
 
 def test_diag_round_trip_into_debug_log(tmp_path):

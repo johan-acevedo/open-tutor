@@ -1,31 +1,12 @@
-"""Validation for browser call-diagnostic batches (session-event type ``diag``).
+"""Allowlist and bound diagnostic events before writing them to the session journal.
 
-The browser's ``callDiagnostics`` module reports what the server cannot see:
-page visibility transitions, connection reconnect/reconnect/disconnect, the
-actual local microphone track state vs the wanted mic state, playback
-permission, and resume outcomes. Batches arrive on the existing ``session-event``
-text stream; this module is the only thing that decides what is kept.
-
-Rules, mirroring the rest of the session intake:
-- strict allowlist: unknown event kinds, unknown fields and wrong-typed values
-  are dropped, never passed through. Strings are truncated to their cap.
-- bounded: at most ``MAX_EVENTS_PER_BATCH`` events per batch, sequence and
-  clock numbers range-checked. An oversized or shapeless batch is rejected
-  whole (returns ``None``); a batch with some bad events keeps the good ones.
-- no raw payload passthrough: the caller records only the normalized dict
-  returned here. Nothing free-text from the browser reaches the journal except
-  through these caps — no exception text, tokens, names or utterances exist in
-  the schema at all.
-
-A batch that survives still only proves what arrived: per-event ``seq`` plus
-the cumulative ``dropped`` counter make queue-overflow loss explicit, and the
-debug log stamps its own receive time on every record, so a gap in ``seq``
-across ``diag`` records means evidence never made it off the page (tab kill,
-reload, or a room that stayed down).
+Sequence numbers identify gaps among received events. Missing tail events
+cannot be detected when a tab or its connection never recovers.
 """
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 DIAG_VERSION = 1
@@ -39,7 +20,10 @@ _MAX_DROPPED = 10**9
 _EVENT_FIELDS: dict[str, dict[str, tuple[type, int]]] = {
     "visibility": {"state": (str, 16), "via": (str, 24), "precise": (bool, 0)},
     "connection": {"kind": (str, 16), "state": (str, 32), "reason": (str, 48)},
-    "mic-track": {"change": (str, 16), "wanted": (bool, 0), "via": (str, 24)},
+    "mic-track": {
+        "change": (str, 16), "wanted": (bool, 0), "via": (str, 24),
+        "ready": (str, 16), "muted": (bool, 0), "enabled": (bool, 0),
+    },
     "playback": {"allowed": (bool, 0), "ctx": (str, 16), "via": (str, 16)},
     "resume": {"ok": (bool, 0), "step": (str, 16), "code": (str, 24)},
     # Hook point for the parallel wake-lock PR; no wake-lock code depends on it.
@@ -52,17 +36,18 @@ def _is_int(value: Any) -> bool:
 
 
 def _is_num(value: Any) -> bool:
-    return isinstance(value, (int, float)) and not isinstance(value, bool)
+    return (isinstance(value, (int, float)) and not isinstance(value, bool)
+            and (not isinstance(value, float) or math.isfinite(value)))
 
 
 def _clean_event(raw: Any) -> dict[str, Any] | None:
     if not isinstance(raw, dict):
         return None
     kind = raw.get("k")
-    if kind not in _EVENT_FIELDS:
+    if not isinstance(kind, str) or kind not in _EVENT_FIELDS:
         return None
     seq, t = raw.get("seq"), raw.get("t")
-    if not _is_int(seq) or seq < 0 or seq > _MAX_SEQ:
+    if not _is_int(seq) or seq < 1 or seq > _MAX_SEQ:
         return None
     if not _is_num(t) or t < 0 or t > _MAX_T_CLIENT_MS:
         return None

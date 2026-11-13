@@ -1,44 +1,8 @@
-/**
- * Bounded, sequenced call diagnostics over the existing session-event channel.
- *
- * Problem: when a call goes quiet on a mobile browser (screen sleep, app
- * switch, playback block, network drop), today's server log cannot tell a
- * capture interruption apart from blocked playback, a room/network loss, or a
- * quiet child. This module records the browser-side half of that story as
- * small structured events and delivers them on the already-authenticated
- * `session-event` text stream the page uses for everything else.
- *
- * What is recorded (all from native browser / upstream LiveKit events, never
- * inferred): page visibility transitions, connection
- * reconnect/reconnect/disconnect (with the LiveKit reason), the actual local
- * microphone MediaStreamTrack mute/unmute/ended plus publication changes
- * alongside the *wanted* mic state, playback permission/AudioContext state,
- * and resumeMedia attempt/result codes. No exception messages, tokens, names,
- * utterances or audio ever enter these events.
- *
- * Delivery limits (read before diagnosing from a journal):
- * - Events are queued in memory (bounded, oldest dropped first with an
- *   explicit counter) and sent while the room is connected — never only at
- *   session end. A flush is attempted on every note, on agent presence, and
- *   on reconnect; a failed send is requeued and retried on recovery.
- * - Sequencing is explicit: every event carries a per-session `seq` and the
- *   client monotonic clock (`t`, `performance.now()`); the server stamps its
- *   own receive time on arrival. A gap in `seq` or a nonzero `dropped` count
- *   means evidence was lost — the journal shows what arrived, not everything
- *   that happened.
- * - The queue is in-memory only: a tab kill, reload or crash loses whatever
- *   was not yet delivered. Nothing here implies survival past the page.
- * - A `hidden` page is reported as hidden, never as a diagnosed cause: it
- *   cannot distinguish lock-screen from app-switch, and silence (or a
- *   `playbackAllowed` flag) is never treated as proof of audibility.
- * - LiveKit SDK internals (`setLogExtension` log forwarding) are deliberately
- *   not wired: only the allowlisted event shapes below are ever sent.
- *
- * Wake-lock note: the parallel wake-lock PR owns acquisition; if it wants its
- * status in this trail it can call `wakeLock(status)` on the log — this module
- * takes no dependency on the Wake Lock API itself.
+/** Browser call events, sent through the existing authenticated session stream.
+ * The outbox retries on recovery and reports overflow. It lives in memory:
+ * a closed tab or permanently broken connection can lose its entire tail.
+ * Hidden does not identify screen lock; playback permission does not prove audibility.
  */
-
 export type DiagKind =
   | 'visibility'
   | 'connection'
@@ -74,7 +38,10 @@ type FieldType = 'str' | 'num' | 'bool';
 const KNOWN_FIELDS: Record<DiagKind, Record<string, [FieldType, number]>> = {
   visibility: { state: ['str', 16], via: ['str', 24], precise: ['bool', 0] },
   connection: { kind: ['str', 16], state: ['str', 32], reason: ['str', 48] },
-  'mic-track': { change: ['str', 16], wanted: ['bool', 0], via: ['str', 24] },
+  'mic-track': {
+    change: ['str', 16], wanted: ['bool', 0], via: ['str', 24],
+    ready: ['str', 16], muted: ['bool', 0], enabled: ['bool', 0],
+  },
   playback: { allowed: ['bool', 0], ctx: ['str', 16], via: ['str', 16] },
   resume: { ok: ['bool', 0], step: ['str', 16], code: ['str', 24] },
   wakelock: { status: ['str', 24] },
@@ -106,6 +73,25 @@ export interface DiagLog {
   dropped: () => number;
 }
 
+type ObservedMicTrack = EventTarget & Pick<MediaStreamTrack, 'readyState' | 'muted' | 'enabled'>;
+
+export function observeMicTrack(media: ObservedMicTrack, log: DiagLog, wanted: () => boolean): () => void {
+  const record = (change: string) => log.note('mic-track', {
+    change, wanted: wanted(), via: 'track', ready: media.readyState,
+    muted: media.muted, enabled: media.enabled,
+  });
+  const changes: Array<[string, () => void]> = [
+    ['mute', () => record('muted')],
+    ['unmute', () => record('unmuted')],
+    ['ended', () => record('ended')],
+  ];
+  for (const [name, fn] of changes) media.addEventListener(name, fn);
+  record('observed');
+  return () => {
+    for (const [name, fn] of changes) media.removeEventListener(name, fn);
+  };
+}
+
 function safeString(value: unknown, max: number): string | null {
   if (typeof value !== 'string') return null;
   return value.length > max ? value.slice(0, max) : value;
@@ -130,18 +116,15 @@ function sanitize(kind: DiagKind, fields: Record<string, unknown> | undefined, t
 }
 
 /**
- * Initial page visibility, preferring the performance timeline where the
- * browser keeps one. `document.visibilityState` alone can lie when the script
- * runs after the user already foregrounded the page; only Chromium keeps
- * `visibility-state` entries (Safari does not), so `precise` tells the reader
- * how much to trust the initial state.
+ * Visibility when this lesson starts, using the latest timeline entry where
+ * supported and a current synchronous read on Safari.
  */
 export function initialVisibilityState(): { state: string; precise: boolean } {
   try {
     if (typeof performance !== 'undefined' && typeof performance.getEntriesByType === 'function') {
-      const entries = performance.getEntriesByType('visibility-state') as Array<{ name?: unknown }>;
+      const entries = performance.getEntriesByType('visibility-state');
       if (entries && entries.length > 0) {
-        const name = entries[0]?.name;
+        const name = entries[entries.length - 1]?.name;
         if (name === 'visible' || name === 'hidden' || name === 'prerender') {
           return { state: name, precise: true };
         }

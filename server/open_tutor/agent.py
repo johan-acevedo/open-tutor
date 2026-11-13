@@ -1391,6 +1391,8 @@ async def entrypoint(ctx: JobContext) -> None:
             event = json.loads(await reader.read_all())
         except json.JSONDecodeError:
             return
+        if not isinstance(event, dict):
+            return
         if event.get("type") == "diag":
             # Sequenced browser diagnostics: keep only the normalized batch.
             # The debug log stamps server receive time; seq/dropped expose

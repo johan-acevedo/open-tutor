@@ -26,7 +26,7 @@ import { AgentGate } from './agentGate';
 import { isNoteLike, validateBoardFocus, validateBoardItem, validateBoardPageOp } from './validate';
 import { dataUrlToBytes, downscaleImage } from './image';
 import { audioElementBusy } from './audioTracks';
-import { createDiagLog, initialVisibilityState, type DiagLog } from './callDiagnostics';
+import { createDiagLog, initialVisibilityState, observeMicTrack, type DiagLog } from './callDiagnostics';
 import type { HomeworkDraft } from './components/HomeworkTray';
 
 export type Phase = 'profiles' | 'connecting' | 'live' | 'ending' | 'ended';
@@ -346,9 +346,8 @@ export function useSession(mobile = false) {
         /* ignore */
       }
     }
-    // Undelivered in-memory diagnostics die with the session; only the
-    // server journal (events already sent) survives. That is the documented
-    // delivery limit, not a silent loss: drops are counted on the wire.
+    // Only delivered events survive session cleanup. Overflow is counted,
+    // but a lost final tail cannot be detected by sequence gaps.
     diagRef.current = null;
     const room = roomRef.current;
     roomRef.current = null;
@@ -442,13 +441,9 @@ export function useSession(mobile = false) {
       agentGateRef.current.reset();
       // Fresh per-session diagnostics: seq/dropped restart so journals never mix rooms.
       const diag = createDiagLog({
-        send: (text) => {
-          const live = roomRef.current;
-          if (!live) return Promise.reject(new Error('no room'));
-          return live.localParticipant.sendText(text, { topic: TOPIC_SESSION_EVENT });
-        },
+        send: (text) => room.localParticipant.sendText(text, { topic: TOPIC_SESSION_EVENT }),
         isReady: () =>
-          agentGateRef.current.isReady() && roomRef.current?.state === ConnectionState.Connected,
+          roomRef.current === room && agentGateRef.current.isReady() && room.state === ConnectionState.Connected,
       });
       diagRef.current = diag;
       {
@@ -570,27 +565,23 @@ export function useSession(mobile = false) {
         }
       });
       const diagCleanups: Array<() => void> = [];
-      const watchedMedia = new Set<MediaStreamTrack>();
+      let watchedMedia: MediaStreamTrack | null = null;
+      let stopMicMedia: (() => void) | null = null;
+      diagCleanups.push(() => stopMicMedia?.());
       const watchMicMediaTrack = (media: MediaStreamTrack | undefined) => {
-        if (!media || watchedMedia.has(media)) return;
-        if (typeof media.addEventListener !== 'function') return;
-        watchedMedia.add(media);
-        const changes: Array<[string, () => void]> = [
-          ['muted', () => diag.note('mic-track', { change: 'muted', wanted: micWantedRef.current, via: 'track' })],
-          ['unmuted', () => diag.note('mic-track', { change: 'unmuted', wanted: micWantedRef.current, via: 'track' })],
-          ['ended', () => diag.note('mic-track', { change: 'ended', wanted: micWantedRef.current, via: 'track' })],
-        ];
-        for (const [name, fn] of changes) media.addEventListener(name, fn);
-        diagCleanups.push(() => {
-          for (const [name, fn] of changes) {
-            try {
-              media.removeEventListener(name, fn);
-            } catch {
-              /* ignore */
-            }
-          }
-        });
+        if (!media || watchedMedia === media) return;
+        stopMicMedia?.();
+        watchedMedia = media;
+        stopMicMedia = observeMicTrack(media, diag, () => micWantedRef.current);
       };
+      const context = audioContextRef.current;
+      if (context) {
+        const onContextState = () => diag.note('playback', {
+          allowed: room.canPlaybackAudio, ctx: context.state, via: 'context',
+        });
+        context.addEventListener('statechange', onContextState);
+        diagCleanups.push(() => context.removeEventListener('statechange', onContextState));
+      }
       room.on(RoomEvent.LocalTrackPublished, (pub) => {
         if (pub.kind !== Track.Kind.Audio) return;
         diag.note('mic-track', { change: 'published', wanted: micWantedRef.current, via: 'publication' });
@@ -963,7 +954,7 @@ export function useSession(mobile = false) {
   }, [resumeNeeded]);
 
   useEffect(() => {
-    if (phase !== 'live' || !mobile) return;
+    if (phase !== 'live') return;
     let hidden = false;
     const onVisibility = () => {
       if (document.hidden) {
@@ -971,7 +962,7 @@ export function useSession(mobile = false) {
         diagRef.current?.note('visibility', { state: 'hidden', via: 'visibilitychange' });
       } else if (hidden) {
         hidden = false;
-        setResumeNeeded(true);
+        if (mobile) setResumeNeeded(true);
         diagRef.current?.note('visibility', { state: 'visible', via: 'visibilitychange' });
       }
     };

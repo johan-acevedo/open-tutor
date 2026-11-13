@@ -3,6 +3,7 @@ import {
   createDiagLog,
   DIAG_MAX_BATCH,
   initialVisibilityState,
+  observeMicTrack,
   type DiagBatch,
   type DiagTransport,
 } from './callDiagnostics';
@@ -30,6 +31,31 @@ function batches(sent: string[]): DiagBatch[] {
 }
 
 describe('callDiagnostics', () => {
+  it('records native capture interruption and recovery, and detaches old track listeners', async () => {
+    class Mic extends EventTarget {
+      readyState: MediaStreamTrackState = 'live';
+      muted = false;
+      enabled = true;
+    }
+    const media = new Mic();
+    const { log, sent, setReady } = harness();
+    const stop = observeMicTrack(media, log, () => true);
+    media.muted = true;
+    media.dispatchEvent(new Event('mute'));
+    media.muted = false;
+    media.dispatchEvent(new Event('unmute'));
+    media.readyState = 'ended';
+    media.dispatchEvent(new Event('ended'));
+    stop();
+    media.dispatchEvent(new Event('mute'));
+    setReady(true);
+    await log.flush();
+    const events = batches(sent).flatMap((b) => b.events);
+    expect(events.map((e) => e.change)).toEqual(['observed', 'muted', 'unmuted', 'ended']);
+    expect(events[0]).toMatchObject({ ready: 'live', muted: false, enabled: true, wanted: true });
+    expect(events[1]).toMatchObject({ ready: 'live', muted: true });
+    expect(events[3]).toMatchObject({ ready: 'ended', muted: false });
+  });
   it('sends immediately while the room is up', async () => {
     const { log, sent, setReady } = harness();
     setReady(true);
@@ -179,6 +205,16 @@ describe('callDiagnostics', () => {
 });
 
 describe('initialVisibilityState', () => {
+  it('reads the latest state when a lesson starts after page load', () => {
+    const spy = vi.spyOn(performance, 'getEntriesByType').mockReturnValue([
+      { name: 'hidden' }, { name: 'visible' },
+    ] as never);
+    try {
+      expect(initialVisibilityState()).toEqual({ state: 'visible', precise: true });
+    } finally {
+      spy.mockRestore();
+    }
+  });
   it('prefers the performance timeline when the browser keeps one', () => {
     const spy = vi.spyOn(performance, 'getEntriesByType').mockReturnValue([{ name: 'hidden' }] as never);
     try {
