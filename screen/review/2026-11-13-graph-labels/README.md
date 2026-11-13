@@ -77,3 +77,19 @@ crowding disappears from the real server preview.
 - Growable fit/resizing, readability, native/library/blocked sanitizer, patch
   history and map-key checks pass. Full configured server suite: 429 passed,
   18 skipped. Evidence was rendered locally on dell5500; nothing was deployed.
+
+## Merge with image review
+
+Updated with main through `950b3b0` (including #52 and #49). The renderer keeps
+the 5 s patch-image wait, then reads final frame lint. Renderer exceptions and
+image-wait timeout advisories remain separate so refreshing lint cannot erase
+them. Stub tests cover late image failures plus repaired label warnings, image
+timeouts, and patch exceptions. The real renderer integration probe repairs a
+crowded label and adds a recorded Commons bitmap in the same patch. At both
+panes the screenshot sees a loaded 960 px bitmap and no stale crowding; both
+screenshots inspected. It makes no model call and intercepts the image URL,
+while the shell's public CDN assets still need network access.
+
+```sh
+uv run --project server python screen/review/2026-11-13-graph-labels/check_preview_merge.py /tmp/preview-merge
+```
