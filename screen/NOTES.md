@@ -1,5 +1,18 @@
 # Smart Screen: choices, tried and rejected
 
+## Graph label placement + overlap lint, 2026-11-13
+
+Side/segment labels in `ot-graph` are placed from the polygon winding with a
+measured two-axis clearance, and what is still crowded becomes `crowded: label …`
+lint with the fix direction instead of a silent overlap. Auto ranges widen for
+the longest side label; author-set ranges win and leftovers are flagged honestly.
+The bounded retry repairs from that wording (fresh Hydrogen-low plan job: first
+attempt crowded the notch, retry dropped one label, zero residual lint). Point
+anchors, ticks and hidden labels are never flagged; no length lint. Repeatable
+before/after: `tools/check_graph_labels.py` fails on the prior shell and passes
+here; renders in `review/2026-11-13-graph-labels/`. Genuinely tight notches stay
+flagged, not silently clean.
+
 ## Toolbox follow-up, 2026-11-13
 
 Fit correction: a visual's old absolute pixel positions must not size the next font

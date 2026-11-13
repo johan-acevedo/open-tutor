@@ -285,6 +285,7 @@
     // A map with a key in flow keeps its labels inside the drawing box, not over the key.
     var box = (lay.querySelector(':scope > .ot-map-canvas') || lay).getBoundingClientRect();
     $$('.ot-lbl, .ot-place-label, .ot-map-label', lay).forEach(function (l) {
+      if (l.classList.contains('ot-side-lbl')) return; // the graph pass already kept these clear without pushing them back across their edge
       var r = l.getBoundingClientRect();
       var dx = r.left < box.left ? box.left - r.left : r.right > box.right ? box.right - r.right : 0;
       var dy = r.top < box.top ? box.top - r.top : r.bottom > box.bottom ? box.bottom - r.bottom : 0;
@@ -1124,6 +1125,30 @@
     var axes = el.getAttribute('axes') !== 'off';
     var grid = el.hasAttribute('grid') ? el.getAttribute('grid') !== 'off' : axes;
     var r = graphRanges(el, w, h);
+    // Room for side labels. Ranges from points alone leave labels hanging past
+    // the pane edge, where no clamp can keep them without pushing them back
+    // across their stroke. Widen auto axes by the longest label's half-width.
+    // Axes the author set explicitly are respected; leftovers become honest lint.
+    var lblLen = 0;
+    $$(':scope > *', el).forEach(function (ch) {
+      var tg = ch.tagName.toLowerCase();
+      if (tg === 'ot-segment' && ch.textContent.trim()) lblLen = Math.max(lblLen, ch.textContent.trim().length);
+      else if (tg === 'ot-polygon') (ch.getAttribute('sides') || '').split('|').forEach(function (s) { lblLen = Math.max(lblLen, s.trim().length); });
+    });
+    if (lblLen) {
+      var xAuto = nums(el.getAttribute('x')).length < 2, yAuto = nums(el.getAttribute('y')).length < 2;
+      if (xAuto || yAuto) {
+        var upu = Math.min((r.x[1] - r.x[0]) / w, (r.y[1] - r.y[0]) / h);
+        var padU = (lblLen * 0.32 + 0.9) * f * upu;
+        if (xAuto) r.x = [r.x[0] - padU, r.x[1] + padU];
+        if (yAuto) r.y = [r.y[0] - padU, r.y[1] + padU];
+        if (!el.hasAttribute('free')) {
+          var ux2 = (r.x[1] - r.x[0]) / w, uy2 = (r.y[1] - r.y[0]) / h;
+          if (ux2 > uy2) { var cy2 = (r.y[0] + r.y[1]) / 2, hy2 = ux2 * h / 2; r.y = [cy2 - hy2, cy2 + hy2]; }
+          else { var cx2 = (r.x[0] + r.x[1]) / 2, hx2 = uy2 * w / 2; r.x = [cx2 - hx2, cx2 + hx2]; }
+        }
+      }
+    }
     var c = { text: css('--text'), muted: css('--muted'), border: css('--border-2'), bg: css('--bg') };
     var sx = niceStep(r.x[1] - r.x[0], w, f), sy = niceStep(r.y[1] - r.y[0], h, f);
     if (!el.hasAttribute('free')) { sx = sy = Math.max(sx, sy); }
@@ -1176,6 +1201,8 @@
       if (ch.tagName === 'OT-POINT') taken.push(px(num(ch.getAttribute('x')), num(ch.getAttribute('y'))));
       if (ch.tagName === 'OT-POLYGON' || ch.tagName === 'OT-SEGMENT') points(ch.getAttribute('points') || ((ch.getAttribute('from') || '') + ', ' + (ch.getAttribute('to') || ''))).forEach(function (p) { taken.push(px(p[0], p[1])); });
     });
+    // Side/segment labels in creation order, each tied to its actual source edge.
+    var sideMeta = el._sideMeta = [];
     children.forEach(function (ch) {
       var tag = ch.tagName.toLowerCase();
       var col = color(ch.getAttribute('color'), SERIES[idx % SERIES.length]);
@@ -1220,7 +1247,17 @@
           if (tag === 'ot-segment') {
             ch._jxg.push(board.create('segment', pts, { strokeColor: scol, strokeWidth: sw * 1.5, dash: dash, fixed: true, highlight: false }));
             var t2 = ch.textContent.trim();
-            if (t2) html += sideLabel(px(pts[0][0], pts[0][1]), px(pts[1][0], pts[1][1]), null, rich(t2), scol, f, c.bg);
+            if (t2) {
+              var pa = px(pts[0][0], pts[0][1]), pb = px(pts[1][0], pts[1][1]);
+              // Above the line by default; the fix-up pass may flip a segment label
+              // to the clearer side. Metadata ties the label to this edge.
+              var ex2 = pb.x - pa.x, ey2 = pb.y - pa.y, el2 = Math.hypot(ex2, ey2) || 1;
+              var sx = -ey2 / el2, sy = ex2 / el2;
+              if (sy > 0) { sx = -sx; sy = -sy; }
+              sideMeta.push({ for: ch.id || '', kind: 'seg', edge: 0, ax: pa.x, ay: pa.y, bx: pb.x, by: pb.y,
+                mx: (pa.x + pb.x) / 2, my: (pa.y + pb.y) / 2, nx: sx, ny: sy, poly: null });
+              html += sideLabel(pa, pb, sideMeta[sideMeta.length - 1], rich(t2), scol, f, c.bg);
+            }
           } else {
             var fill = ch.getAttribute('fill');
             ch._jxg.push(board.create('polygon', pts, {
@@ -1231,9 +1268,22 @@
             var names = (ch.getAttribute('vertices') || '').split(/\s+/).filter(Boolean);
             var spx = pts.map(function (p2) { return px(p2[0], p2[1]); });
             var cen = spx.reduce(function (a2, p2) { return { x: a2.x + p2.x / spx.length, y: a2.y + p2.y / spx.length }; }, { x: 0, y: 0 });
+            // Local outward per edge from the polygon's winding: the vertex mean sits
+            // in the notch of a concave shape, so it cannot decide the side. The sign
+            // rule holds for both vertex orders; spx is screen pixels either way.
+            var area2 = 0;
+            spx.forEach(function (p2, k) { var q2 = spx[(k + 1) % spx.length]; area2 += p2.x * q2.y - q2.x * p2.y; });
+            var wind = area2 < 0 ? 1 : -1;
             spx.forEach(function (p2, k) {
               var nx = spx[(k + 1) % spx.length];
-              if (sides[k]) html += sideLabel(p2, nx, cen, rich(sides[k]), c.text, f, c.bg);
+              if (sides[k]) {
+                var ex = nx.x - p2.x, ey = nx.y - p2.y, elen = Math.hypot(ex, ey) || 1;
+                sideMeta.push({ for: ch.id || '', kind: 'side', edge: k, ax: p2.x, ay: p2.y, bx: nx.x, by: nx.y,
+                  mx: (p2.x + nx.x) / 2, my: (p2.y + nx.y) / 2,
+                  nx: -ey / elen * wind, ny: ex / elen * wind, poly: spx.map(function (q2) { return { x: q2.x, y: q2.y }; }) });
+                var m = sideMeta[sideMeta.length - 1];
+                html += sideLabel(p2, nx, m, rich(sides[k]), c.text, f, c.bg);
+              }
               if (names[k]) {
                 var dx = p2.x - cen.x, dy = p2.y - cen.y, dl = Math.hypot(dx, dy) || 1;
                 html += '<div class="ot-lbl" style="left:' + (p2.x + dx / dl * 1.0 * f) + 'px;top:' + (p2.y + dy / dl * 1.0 * f) + 'px;font-weight:750;font-style:italic">' + esc(names[k]) + '</div>';
@@ -1266,16 +1316,157 @@
     over.style.cssText = 'position:absolute;inset:0;pointer-events:none';
     over.innerHTML = html;
     lay.appendChild(over);
+    try { settleSideLabels(el, over, w, h, f, sw); } catch (e) { el._graphCrowding = []; /* labels stay where the first pass put them */ }
     el._px = px;
   }
-  function sideLabel(a, b, cen, html, col, f, bg) {
+  function sideLabel(a, b, out, html, col, f, bg) {
+    // `out` is the unit outward normal decided by the caller (winding for polygons,
+    // above-the-line default for segments). The first pass centres the label a fixed
+    // distance out; settleSideLabels measures the real box and pushes it clear.
     var mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-    var nx = -(b.y - a.y), ny = b.x - a.x, nl = Math.hypot(nx, ny) || 1;
-    nx /= nl; ny /= nl;
-    if (cen && ((mx - cen.x) * nx + (my - cen.y) * ny) < 0) { nx = -nx; ny = -ny; }
-    if (!cen && ny > 0) { nx = -nx; ny = -ny; }
+    var nx = out.nx, ny = out.ny;
     var d = 1.05 * f;
-    return '<div class="ot-lbl" style="left:' + (mx + nx * d) + 'px;top:' + (my + ny * d) + 'px;color:' + col + ';font-weight:700;text-shadow:0 0 0.3em ' + bg + ',0 0 0.3em ' + bg + '">' + html + '</div>';
+    return '<div class="ot-lbl ot-side-lbl" data-for="' + esc(out.for || '') + '" data-edge="' + out.edge + '"' +
+      ' data-kind="' + out.kind + '" style="left:' + (mx + nx * d) + 'px;top:' + (my + ny * d) + 'px;color:' + col + ';font-weight:700;text-shadow:0 0 0.3em ' + bg + ',0 0 0.3em ' + bg + '">' + html + '</div>';
+  }
+  function inPoly(x, y, poly) {
+    var inside = false;
+    for (var i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      var xi = poly[i].x, yi = poly[i].y, xj = poly[j].x, yj = poly[j].y;
+      if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside;
+    }
+    return inside;
+  }
+  // Reach-aware side-label placement from the real boxes. Runs once per graph draw
+  // at its final size: offset each label along its outward normal by the half-extent
+  // of its own box along that normal (|nx|*w + |ny|*h)/2 plus a line/margin gap,
+  // resolve neighbour collisions where cheap, keep labels inside the pane without
+  // pushing them back across their own edge, and record what is still crowded in
+  // el._graphCrowding for lint. Never shrinks text.
+  function settleSideLabels(el, over, w, h, f, sw) {
+    var metas = el._sideMeta || [];
+    el._graphCrowding = [];
+    if (!metas.length || over.offsetWidth < 2) return;
+    var nodes = $$('.ot-side-lbl', over);
+    function box(i) {
+      var nd = nodes[i];
+      var cx = parseFloat(nd.style.left) || 0, cy = parseFloat(nd.style.top) || 0;
+      var bw = nd.offsetWidth || 0, bh = nd.offsetHeight || 0;
+      return { cx: cx, cy: cy, w: bw, h: bh, l: cx - bw / 2, t: cy - bh / 2, r: cx + bw / 2, b: cy + bh / 2 };
+    }
+    function place(i, cx, cy) { nodes[i].style.left = cx + 'px'; nodes[i].style.top = cy + 'px'; }
+    var gap = 0.25 * f + 1.5 * sw;
+    function reach(m, b) { return (Math.abs(m.nx) * b.w + Math.abs(m.ny) * b.h) / 2 + gap; }
+    function distPtSeg(x, y, m) {
+      var dx = m.bx - m.ax, dy = m.by - m.ay;
+      var len2 = dx * dx + dy * dy || 1;
+      var t = Math.max(0, Math.min(1, ((x - m.ax) * dx + (y - m.ay) * dy) / len2));
+      return Math.hypot(x - (m.ax + t * dx), y - (m.ay + t * dy));
+    }
+    function ownOverlap(m, b) { return reach(m, b) - distPtSeg(b.cx, b.cy, m); }
+    function rectOverlap(b1, b2, pad) {
+      var ox = Math.min(b1.r, b2.r) - Math.max(b1.l, b2.l) + pad;
+      var oy = Math.min(b1.b, b2.b) - Math.max(b1.t, b2.t) + pad;
+      return (ox > 0 && oy > 0) ? Math.min(ox, oy) : 0;
+    }
+    function clearOfOthers(i, b) {
+      for (var k = 0; k < metas.length; k++) {
+        if (k === i || !nodes[k]) continue;
+        if (rectOverlap(b, box(k), 1) > 0) return false;
+      }
+      return true;
+    }
+    // 1) clear each label's own stroke
+    metas.forEach(function (m, i) {
+      if (!nodes[i]) return;
+      var b = box(i);
+      if (!b.w || !b.h) return;
+      var push = ownOverlap(m, b);
+      if (push > 0) place(i, b.cx + m.nx * push, b.cy + m.ny * push);
+    });
+    // 2) neighbours: nudge along the edge tangent, or flip a segment label
+    for (var pass = 0; pass < 2; pass++) {
+      var moved = false;
+      for (var i = 0; i < metas.length; i++) {
+        for (var j = i + 1; j < metas.length; j++) {
+          if (!nodes[i] || !nodes[j]) continue;
+          var bi = box(i), bj = box(j);
+          if (!bj.w || !bj.h || !rectOverlap(bi, bj, 1)) continue;
+          if (tryNudge(j, bi, bj) || (metas[j].kind === 'seg' && tryFlip(j, bi)) || (metas[i].kind === 'seg' && tryNudge(i, bj, bi))) { moved = true; }
+        }
+      }
+      if (!moved) break;
+    }
+    function tryNudge(j, other, bj) {
+      var m = metas[j];
+      var tx = -m.ny, ty = m.nx;
+      var away = ((bj.cx - other.cx) * tx + (bj.cy - other.cy) * ty) >= 0 ? 1 : -1;
+      var dirs = [[tx * away, ty * away], [-tx * away, -ty * away], [m.nx, m.ny]];
+      for (var dd = 0; dd < dirs.length; dd++) {
+        for (var step = 0.5 * f; step <= 1.5 * f + 0.01; step += 0.5 * f) {
+          var cand = { cx: bj.cx + dirs[dd][0] * step, cy: bj.cy + dirs[dd][1] * step, w: bj.w, h: bj.h };
+          cand.l = cand.cx - cand.w / 2; cand.t = cand.cy - cand.h / 2;
+          cand.r = cand.cx + cand.w / 2; cand.b = cand.cy + cand.h / 2;
+          // a nudge that lands inside the outlined shape trades one defect for another
+          if (m.poly && inPoly(cand.cx, cand.cy, m.poly)) continue;
+          if (ownOverlap(m, cand) <= 0 && !rectOverlap(other, cand, 1) && clearOfOthers(j, cand)) {
+            place(j, cand.cx, cand.cy);
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+    function tryFlip(j, other) {
+      var m = metas[j];
+      var bj = box(j);
+      // mirror the centre across the edge line onto the other side
+      var dx = m.bx - m.ax, dy = m.by - m.ay;
+      var len2 = dx * dx + dy * dy || 1;
+      var t = Math.max(0, Math.min(1, ((bj.cx - m.ax) * dx + (bj.cy - m.ay) * dy) / len2));
+      var qx = m.ax + t * dx, qy = m.ay + t * dy;
+      var cand = { cx: 2 * qx - bj.cx, cy: 2 * qy - bj.cy, w: bj.w, h: bj.h };
+      cand.l = cand.cx - cand.w / 2; cand.t = cand.cy - cand.h / 2;
+      cand.r = cand.cx + cand.w / 2; cand.b = cand.cy + cand.h / 2;
+      var fm = { nx: -m.nx, ny: -m.ny, bx: m.bx, by: m.by, ax: m.ax, ay: m.ay };
+      if (ownOverlap(fm, cand) <= 0 && !rectOverlap(other, cand, 1) && clearOfOthers(j, cand)) {
+        m.nx = -m.nx; m.ny = -m.ny;
+        place(j, cand.cx, cand.cy);
+        return true;
+      }
+      return false;
+    }
+    // 3) inside the pane, but never back across the label's own edge
+    metas.forEach(function (m, i) {
+      if (!nodes[i]) return;
+      var b = box(i);
+      var dx = b.l < 0 ? -b.l : b.r > w ? w - b.r : 0;
+      var dy = b.t < 0 ? -b.t : b.b > h ? h - b.b : 0;
+      if (!dx && !dy) return;
+      var inw = dx * m.nx + dy * m.ny;
+      if (inw < 0) { dx -= inw * m.nx; dy -= inw * m.ny; }
+      if (dx || dy) place(i, b.cx + dx, b.cy + dy);
+    });
+    // 4) what is still crowded becomes lint; placement never pretends to be clean
+    var HELP = '; use a shorter label, fewer figures or more room';
+    function nm(i) { return (nodes[i].textContent || '').trim().slice(0, 24) || ('edge ' + (metas[i].edge + 1)); }
+    metas.forEach(function (m, i) {
+      if (!nodes[i]) return;
+      var b = box(i);
+      if (!b.w || !b.h) return;
+      var ov = ownOverlap(m, b);
+      if (ov > 1) el._graphCrowding.push('label \'' + nm(i) + '\' crosses its own line by ' + Math.round(ov) + ' px' + HELP);
+      else if (m.poly && inPoly(b.cx, b.cy, m.poly)) el._graphCrowding.push('label \'' + nm(i) + '\' is inside the outlined shape' + HELP);
+      if (b.l < -0.5 || b.t < -0.5 || b.r > w + 0.5 || b.b > h + 0.5)
+        el._graphCrowding.push('label \'' + nm(i) + '\' does not fit inside the pane' + HELP);
+    });
+    for (var a = 0; a < metas.length; a++) {
+      for (var c = a + 1; c < metas.length; c++) {
+        if (!nodes[a] || !nodes[c]) continue;
+        var ov2 = rectOverlap(box(a), box(c), 1);
+        if (ov2 > 0) el._graphCrowding.push('labels \'' + nm(a) + '\' and \'' + nm(c) + '\' overlap by ' + Math.round(ov2) + ' px' + HELP);
+      }
+    }
   }
   // Where to put a function's label: on the curve, inside the view, as far as possible
   // from the axes, the points and the labels already placed. Returns [x, y, rising].
@@ -2261,6 +2452,7 @@
       bad = drawVisuals();
     }
     bad.forEach(function (b) { issue('crowded', b.r.msg || 'does not fit', b.el); });
+    lintGraphs();
     var scale = page.offsetWidth ? page.getBoundingClientRect().width / page.offsetWidth : 1;
     var readable = window.innerWidth <= 600 ? 16 : SMALL_FONT;
     var textPx = Math.floor(px * scale * 100) / 100;
@@ -2272,6 +2464,18 @@
     return px;
   }
 
+  // Graph label overlap, measured from the delivered placement: last round's
+  // findings go first so lint describes what is on screen now, never a stale
+  // or intermediate fit pass. drawGraph records per-graph findings; the crowded
+  // kind already earns the existing bounded retry, whose wording names the fix.
+  function lintGraphs() {
+    ot.issues = ot.issues.filter(function (i) {
+      return !(i.kind === 'crowded' && i.where && i.where.indexOf('<ot-graph') === 0 && /^labels? /.test(i.msg));
+    });
+    $$('ot-graph', page).forEach(function (el) {
+      (el._graphCrowding || []).forEach(function (msg) { issue('crowded', msg, el); });
+    });
+  }
   // ---------------------------------------------------------------- lint
   function lint() {
     var seen = {};
