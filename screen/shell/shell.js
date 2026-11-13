@@ -1277,6 +1277,89 @@
     var d = 1.05 * f;
     return '<div class="ot-lbl" style="left:' + (mx + nx * d) + 'px;top:' + (my + ny * d) + 'px;color:' + col + ';font-weight:700;text-shadow:0 0 0.3em ' + bg + ',0 0 0.3em ' + bg + '">' + html + '</div>';
   }
+  // ---- qualified length lint: drawn polygon sides vs their labels ----
+  // Educational side claims only: ot-polygon sides on an explicitly to-scale
+  // plane figure. Never segments (foreshortened 3D edges live there), never
+  // functions, points or free text. Ratios only: the absolute drawing scale
+  // is free, so consistent scaled copies stay quiet. A side the parser does
+  // not recognise ("?", "x", angles, areas, bare numbers, TeX) is an
+  // unknown, not a claim, and stays quiet too.
+  var LENGTH_UNITS = { mm: 1, cm: 10, dm: 100, m: 1000 };
+  // A side is flagged past 15% off the figure's own scale: above worst plausible
+  // coordinate rounding (1-decimal coords on a labelled edge of at least one
+  // graph unit stay within ~10%; a label must fit beside its edge, so shorter
+  // labelled edges are crowded first), below the smallest genuine label slip
+  // (one unit off on a school figure of a few units is 17-25%; 4-vs-5 is 20%).
+  var LENGTH_TOLERANCE = 0.15;
+  function parseLengthLabel(s) {
+    var m = /^\s*(\d+(?:[.,]\d+)?)\s*(mm|cm|dm|m)\s*$/i.exec(String(s || ''));
+    if (!m) return null;
+    var v = Number(m[1].replace(',', '.'));
+    if (!isFinite(v) || v <= 0) return null;
+    return v * LENGTH_UNITS[m[2].toLowerCase()];
+  }
+  function lintLengths() {
+    // Recompute from scratch so repaired figures clear: stale length findings
+    // describe a figure that is no longer on screen. Same pattern as patch
+    // previews, which report final lint.
+    var removedReported = 0;
+    ot.issues = ot.issues.filter(function (i, index) {
+      var remove = i.kind === 'length';
+      if (remove && index < reported) removedReported++;
+      return !remove;
+    });
+    reported = Math.max(0, reported - removedReported);
+    $$('ot-polygon', page).forEach(function (poly) {
+      try {
+        var graph = poly.closest('ot-graph');
+        if (!graph || graph.hasAttribute('free')) return; // unequal units: ratios mean nothing
+        if (poly.hasAttribute('schematic') || graph.hasAttribute('schematic')) return; // deliberately not to scale
+        if (poly.closest('[later], [hidden], ot-hidden:not([data-revealed]) .ot-hidden-body')) return; // invisible answers stay quiet
+        var raw = String(poly.getAttribute('sides') || '');
+        if (!raw.trim()) return;
+        if (/[°²³%]|(?:mm|cm|dm|m)\s*\d/i.test(raw)) return; // mixed dimensions (area, angle, ...): not a length claim
+        var labels = raw.split('|').map(function (s) { return s.trim(); });
+        // Strict pairing: every coordinate must be a finite number, in order.
+        // points() drops bad values silently, which would shift the pairing.
+        var toks = String(poly.getAttribute('points') || '').replace(/[()]/g, ' ').replace(/−/g, '-').split(/[\s;]+|,\s+|,(?=-?\d+,)/).filter(function (t) { return t !== ''; });
+        if (toks.length < 6 || toks.length % 2) return;
+        var coords = toks.map(num);
+        if (coords.some(function (n) { return !isFinite(n); })) return;
+        var edges = [];
+        for (var k = 0; k < coords.length; k += 2) {
+          var ax = coords[k], ay = coords[k + 1];
+          var bx = coords[(k + 2) % coords.length], by = coords[(k + 3) % coords.length];
+          edges.push(Math.hypot(bx - ax, by - ay));
+        }
+        if (edges.some(function (e) { return !(e > 1e-9); })) return; // degenerate: a draw issue, not a length claim
+        var known = [];
+        labels.forEach(function (text, i) {
+          if (i >= edges.length) return;
+          var mm = parseLengthLabel(text);
+          if (mm != null) known.push({ side: i + 1, text: text, scale: edges[i] / mm });
+        });
+        if (known.length < 2) return; // one measure cannot fix the drawing scale
+        if (!known.every(function (r) { return isFinite(r.scale) && r.scale > 0; })) return;
+        var gid = graph.id ? ' id="' + graph.id + '"' : '';
+        var pid = '<ot-polygon' + (poly.id ? ' id="' + poly.id + '"' : '') + '>';
+        var scales = known.map(function (r) { return r.scale; }).sort(function (x, y) { return x - y; });
+        if (known.length === 2) {
+          // No majority to point at one side: name both, direct nothing.
+          if (scales[0] / scales[1] < 1 - LENGTH_TOLERANCE)
+            issue('length', pid + ' in <ot-graph' + gid + '> sides ' + known[0].side + ' ("' + esc(known[0].text) + '") and ' + known[1].side + ' ("' + esc(known[1].text) + '") disagree with the drawn lengths; check the labels or redraw the sides to match', poly);
+          return;
+        }
+        var mid = scales.length >> 1;
+        var med = scales.length % 2 ? scales[mid] : (scales[mid - 1] + scales[mid]) / 2;
+        if (!(med > 0)) return;
+        known.forEach(function (r) {
+          var dev = r.scale / med - 1;
+          if (Math.abs(dev) > LENGTH_TOLERANCE)
+            issue('length', pid + ' in <ot-graph' + gid + '> side ' + r.side + ' ("' + esc(r.text) + '") is drawn about ' + Math.round(Math.abs(dev) * 100) + '% ' + (dev < 0 ? 'shorter' : 'longer') + ' than the other labelled sides imply; check the label or redraw the side to match', poly);
+        });
+      } catch (e) { /* a length check never breaks the page */ }
+    });
+  }
   // Where to put a function's label: on the curve, inside the view, as far as possible
   // from the axes, the points and the labels already placed. Returns [x, y, rising].
   function fnLabelSpot(fn, r, dom, px, taken, axisPx, f) {
@@ -2285,6 +2368,7 @@
       if (t === 'ot-patch') issue('tag', '<ot-patch> belongs in a patch, not in the page body', el);
     });
     $$('.katex-error', page).forEach(function (el) { issue('math', 'KaTeX error: ' + (el.getAttribute('title') || el.textContent), el); });
+    lintLengths();
   }
 
   // ---------------------------------------------------------------- change effects
@@ -2371,6 +2455,8 @@
     else if (el.reveal) { shown = el.reveal() || el; fadeIn(shown, 0); }
     else if ($$('[later]', el).length) $$('[later]', el).forEach(function (k) { k.removeAttribute('later'); fadeIn(k, 0); });
     else issue('reveal', '"' + id + '" has nothing hidden to reveal', el);
+    // Newly visible figures get their length check; invisible ones stayed quiet.
+    lintLengths();
     flash(shown);
     return true;
   };

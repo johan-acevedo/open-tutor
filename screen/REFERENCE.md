@@ -75,6 +75,7 @@ A step without `$` is a short explanation line. `result` on a step makes it gree
 </ot-graph>
 ```
 `sides` labels each side in turn (A→B, B→C, C→A). Right angles are marked by themselves.
+Draw labelled sides to scale; if a sketch is deliberately not to scale, mark that ot-polygon (or ot-graph) `schematic`.
 
 **Chart** from a plain table. `type` is `bar`, `hbar`, `line` or `pie`; more columns give more series.
 ```html
