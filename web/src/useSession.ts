@@ -25,6 +25,7 @@ import type { Profile } from './db';
 import { AgentGate } from './agentGate';
 import { isNoteLike, validateBoardFocus, validateBoardItem, validateBoardPageOp } from './validate';
 import { dataUrlToBytes, downscaleImage } from './image';
+import { audioElementBusy } from './audioTracks';
 import type { HomeworkDraft } from './components/HomeworkTray';
 
 export type Phase = 'profiles' | 'connecting' | 'live' | 'ending' | 'ended';
@@ -204,6 +205,8 @@ export function useSession(mobile = false) {
   const intentionalEndRef = useRef(false);
   const mountResolvers = useRef(new Map<string, Array<() => void>>());
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  // Extra elements for a second agent audio track (the fox's filler sounds).
+  const extraAudioRef = useRef<HTMLAudioElement[]>([]);
   const audioContextRef = useRef<AudioContext | null>(null);
   const micWantedRef = useRef(true);
   const toastTimer = useRef<number>(0);
@@ -310,6 +313,10 @@ export function useSession(mobile = false) {
     const room = roomRef.current;
     roomRef.current = null;
     preparedRoomRef.current = null;
+    for (const extra of extraAudioRef.current) {
+      extra.srcObject = null;
+    }
+    extraAudioRef.current = [];
     const context = audioContextRef.current;
     audioContextRef.current = null;
     if (context) void context.close().catch(() => undefined);
@@ -432,10 +439,17 @@ export function useSession(mobile = false) {
       room.on(RoomEvent.TrackSubscribed, (track, _pub, participant) => {
         if (track.kind === Track.Kind.Audio && participant.identity !== room.localParticipant.identity) {
           const el = audioRef.current;
-          if (el) {
+          if (el && !audioElementBusy(el)) {
             track.attach(el);
             void el.play().catch(() => setAudioBlocked(true));
+            return;
           }
+          // The agent already publishes speech on one track; its filler sounds arrive
+          // on a second one, and one element carries one stream. Give it its own.
+          const extra = track.attach() as HTMLAudioElement;
+          extra.setAttribute('aria-hidden', 'true');
+          extraAudioRef.current.push(extra);
+          void extra.play().catch(() => undefined);
         }
       });
       room.on(RoomEvent.TrackUnsubscribed, (track) => {

@@ -277,6 +277,24 @@ Known and open:
   event handlers and styles are removed before insertion; the shell's own code still runs.
 - Image search still runs in the page (unfiltered Commons result).
 
+### Filler sounds (2026-11-13)
+
+A short sound from the fox while the reply is still on its way, so the wait does
+not read as "nobody heard me". Off by default; `TUTOR_FILLERS=1` turns it on and
+`TUTOR_FILLER_AFTER_S` (default 0.7) sets how long the reply may be silent first.
+Made by a Muse worker in `feat/fox-fillers`; the code is `server/open_tutor/fillers.py`
+and the details are in `server/README.md` ("Filler sounds").
+
+- Played through LiveKit's `BackgroundAudioPlayer`, which publishes its own track:
+  nothing reaches the chat context, the transcript, the caption or the debug
+  `chat_item` records. No TTS call at that moment either: the clips are made once
+  with the session's voice and cached per provider+model+voice.
+- One filler per child turn at most, none for the greeting or any other session
+  event, none in quiet-work or resource mode, none while the child speaks, and it
+  stops at once when the child speaks or the reply audio starts.
+- The web app now gives a second agent audio track its own `<audio>` element; one
+  element per stream was enough before only because the agent had one track.
+
 ### Tutor model routes (2026-11-13)
 
 `gemini` joins `go`/`go-deepseek`: Gemini 4 Hydrogen with thinking level `low` on

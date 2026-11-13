@@ -88,6 +88,9 @@ The worker logs the route at the start of each session (`tutor TTS route elevenl
 | `TUTOR_DEBUG_LOG` | `1` writes a per-session debug trail to a private local directory (see below). Off by default |
 | `TUTOR_DEBUG_LOG_DIR` | Override the debug trail directory (default `~/.local/state/open-tutor/sessions`) |
 | `TUTOR_STT_MAX_ENDPOINT_MS`, `TUTOR_MIN_ENDPOINT` | Turn-taking tuning for pauses while a child thinks |
+| `TUTOR_FILLERS` | `1` lets the fox make one short pre-made sound when a reply to the child's turn is late. Off by default |
+| `TUTOR_FILLER_AFTER_S` | How long the child may wait for the reply before the sound (default `0.7`) |
+| `TUTOR_FILLER_CLIPS_DIR` | Parent directory for the cached clips (default `~/.cache/open-tutor/fillers`) |
 
 ### Password-free Sweden testing
 
@@ -101,6 +104,50 @@ Geolocation and keep the origin private behind its tunnel; a publicly reachable
 origin would allow clients to forge that header. The current origin binds to
 ThinkCentre's tailnet address, with public requests arriving through the Mini's
 Cloudflare tunnel. Health checks are exempt to preserve local monitoring.
+
+## Filler sounds
+
+A child who has stopped talking expects an answer. When the tutor model takes
+longer than `TUTOR_FILLER_AFTER_S` (default 0.7 s), the fox makes one small sound
+("Mm", "Hmm", "Aha", rarely "Ska vi se…") instead of leaving the room silent.
+`TUTOR_FILLERS=1` switches it on; it is off by default.
+
+- **The clips are made once, in the configured voice.** `fillers.py` synthesizes
+  them with the same TTS the session uses and caches WAV files under
+  `~/.cache/open-tutor/fillers/<provider>-<voice>-<hash>/`, keyed by a
+  fingerprint of TTS provider, model, voice and expressivity, so a voice change
+  regenerates them. They are made in the background on first use (never during a
+  turn); if generation fails, the feature stays off and says so once in the log.
+- **Playback is LiveKit's `BackgroundAudioPlayer`**, on its own audio track. That
+  keeps the sound out of the speech pipeline entirely: no TTS call at that
+  moment, nothing in the chat context or the transcript, no caption, no
+  `chat_item` in the debug trail, and no speech handle that could queue the real
+  reply behind the filler. `PlayHandle.stop()` plus `AudioSource.clear_queue()`
+  cuts it the moment the child speaks or the reply starts.
+- **When it plays, and when it must not.** Only for a turn the child started
+  (speech or typed) and only while a reply is pending; never for the greeting or
+  any other session event, never twice in a turn, never the same clip twice in a
+  row, nothing in quiet-work or resource mode, and nothing while the child is
+  speaking. A reply that arrives sooner cancels it.
+- **In the session log** it is its own event: `filler` with the clip name, the
+  turn and the delay, `filler_stopped` with why and how much played, and
+  `filler_skipped` with the reason when it decided not to play.
+
+Generate the clips ahead of time or listen to them:
+
+```bash
+OPEN_TUTOR_ENV=~/.config/open-tutor-smart-dev/env \
+  server/bin/with-env uv run --project server python server/scripts/filler_clips.py \
+  --out /tmp/filler-clips            # --force regenerates
+```
+
+The script prints each clip's trimmed duration, level and the number of energy
+parts (one hum, two for "a-ha", one per word for a phrase); nothing here is a
+substitute for listening once after a voice change.
+
+The web app gives a second agent audio track its own `<audio>` element
+(`web/src/audioTracks.ts`); with one element per stream, the filler and the
+speech cannot replace each other.
 
 ## Family-testing debug trail
 

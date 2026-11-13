@@ -47,6 +47,7 @@ from .debug_log import DebugLog, clear_active, record_active, set_active
 from .dialogue_tts import DialogueTTS, is_dialogue_model
 from .deepgram_tts import DeepgramFluxTTS, DEFAULT_MODEL as DEEPGRAM_DEFAULT_MODEL, parse_expressivity
 from .text_input import TOPIC_CHAT, TypedChat
+from .fillers import DEFAULT_DELAY_S as DEFAULT_FILLER_DELAY, build_fillers
 from .tutor_llm import build_llm, warm_up
 from .speech import speakable_stream, unspoken_stream
 
@@ -867,6 +868,8 @@ async def entrypoint(ctx: JobContext) -> None:
 
     voice = build_tts()
     log.info("tutor TTS route %s", tts_route(voice))
+    # TUTOR_FILLERS=1: a short fox sound when the reply is late (fillers.py). None when off.
+    fillers = build_fillers(voice, delay=env_float("TUTOR_FILLER_AFTER_S", DEFAULT_FILLER_DELAY))
     session = AgentSession(
         stt=build_stt(),
         llm=build_llm(ctx.room.name),
@@ -913,6 +916,11 @@ async def entrypoint(ctx: JobContext) -> None:
         "error",
     ):
         session.on(sdk_event, debug.record_sdk)
+
+    if fillers is not None:
+        # Follows child turns and agent state; plays on its own track, never in the
+        # chat context, the transcript or the caption.
+        fillers.attach(session, lambda: tutor.mode)
 
     provider_failed = asyncio.Event()
 
@@ -1060,6 +1068,10 @@ async def entrypoint(ctx: JobContext) -> None:
         )
         debug.record("worker_session_started", {
             "cloud_recording": os.environ.get("TUTOR_CLOUD_RECORDING") == "1"})
+        if fillers is not None:
+            # Publishes the filler track and starts making the clips in the background;
+            # a failure here leaves the feature off and never breaks the session.
+            await fillers.start(ctx.room)
         await ctx.room.local_participant.set_attributes({"tutor.mode": "talking"})
         # Greets unless the child already typed: then that message is answered with a
         # reply that greets too, instead of two overlapping replies.
@@ -1072,6 +1084,8 @@ async def entrypoint(ctx: JobContext) -> None:
         log.exception("session failed")
         raise
     finally:
+        if fillers is not None:
+            await fillers.aclose()
         report_path = debug.finalize(outcome)
         if report_path is not None:
             log.info("debug session report: %s", report_path)
