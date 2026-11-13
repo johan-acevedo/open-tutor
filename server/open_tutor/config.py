@@ -26,6 +26,19 @@ AGENT_NAME = os.environ.get("TUTOR_AGENT_NAME", "open-tutor")
 # OpenAI-compatible Chat Completions). It is kept only to reproduce the board/voice bug
 # it caused: it often writes board content into its spoken reply instead of calling a
 # board tool. Do not deploy it.
+#
+# "gemini" is Gemini 4 Hydrogen (released 2026-11-12) on the same OpenAI-compatible Chat
+# Completions endpoint. Hydrogen rejects `minimal` (and `thinking_budget`) with a 400; its
+# thinking levels are `low`, `medium`, `high` (default) and `xhigh`
+# (https://ai.google.dev/gemini-api/docs/thinking#thinking-levels). This endpoint takes
+# the level as `reasoning_effort`, so `low` is the fast setting: median 2.0-2.8 s to
+# first token with the real tutor prompt and tools (three e2e runs, 2026-11-13).
+#
+# `thought_signatures` marks a route whose provider enforces thought signatures on
+# replayed function calls. Gemini 4's compat stream puts `index: null` on every function
+# call; LiveKit's chat stream assembler uses that index to tell calls apart, so without
+# the workaround in tutor_llm.py a multi-call reply keeps only its last call (the one with
+# no signature) and the next request fails with 400 "missing a thought_signature".
 LLM_ROUTES = {
     "go": {
         "api": "responses",
@@ -50,6 +63,14 @@ LLM_ROUTES = {
         "key": "GEMINI_API_KEY",
         "reasoning_effort": None,
     },
+    "gemini": {
+        "api": "chat",
+        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
+        "model": "gemini-4-hydrogen",
+        "key": "GEMINI_API_KEY",
+        "reasoning_effort": "low",
+        "thought_signatures": True,
+    },
 }
 
 # Voice. Eleven v4 Turbo (ElevenLabs, released September 2026) is the v4 model for
@@ -71,6 +92,7 @@ class LLMRoute:
     model: str
     api_key: str
     reasoning_effort: str | None
+    thought_signatures: bool = False
 
 
 def llm_route(environ: dict[str, str] | None = None) -> LLMRoute:
@@ -89,6 +111,7 @@ def llm_route(environ: dict[str, str] | None = None) -> LLMRoute:
         model=env.get("TUTOR_LLM_MODEL", spec["model"]),
         api_key=key,
         reasoning_effort=env.get("TUTOR_LLM_REASONING", spec["reasoning_effort"]) or None,
+        thought_signatures=bool(spec.get("thought_signatures")),
     )
 
 

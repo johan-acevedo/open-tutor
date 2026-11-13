@@ -510,6 +510,9 @@ class Tutor(Agent):
     ) -> str:
         """Save a short learning note in this browser for next time.
 
+        Only after some teaching has happened, never at the greeting or before the
+        child has worked on anything.
+
         Args:
             topic: What they worked on, e.g. "Ekvationer med x på ena sidan".
             clicked: Evidence of what became clearer; empty is normal when unclear.
@@ -762,6 +765,39 @@ def prompt_event(session: AgentSession, text: str):
     return session.generate_reply(user_input=f"[Session event, not the child's words: {text}]")
 
 
+def is_fatal_llm_error(event: Any) -> bool:
+    """A provider error LiveKit will not retry (for example an HTTP 400).
+
+    LiveKit emits these as an LLMError with `recoverable=False` and leaves the turn
+    unanswered. The turn's user message stays in history, so the child waits in
+    silence and every later request may fail the same way.
+    """
+    error = getattr(event, "error", None)
+    return getattr(error, "type", None) == "llm_error" and getattr(
+        error, "recoverable", None
+    ) is False
+
+
+# Spoken without the LLM, because the LLM is what failed. One short sentence; the room
+# is deleted afterwards, so the browser shows its disconnected notice with a restart button.
+PROVIDER_FAILED_APOLOGY = (
+    "Förlåt, jag fick ett tekniskt problem och kan inte fortsätta just nu. "
+    "Stäng fönstret och starta en ny session, så försöker vi igen."
+)
+
+
+async def say_provider_failed(session: AgentSession) -> None:
+    """Speak the apology through TTS only; never let this path raise."""
+    record_active("provider_failed", {"apology": True})
+    try:
+        handle = session.say(PROVIDER_FAILED_APOLOGY, allow_interruptions=False)
+        await asyncio.wait_for(handle.wait_for_playout(), timeout=20)
+    except Exception as error:  # closing session, TTS down, or interrupted
+        log.warning("could not say the provider-failure apology: %s", error)
+        record_active("provider_failed", {"apology": False,
+                                            "error": f"{type(error).__name__}"})
+
+
 def safe_interrupt(session: AgentSession, where: str) -> None:
     """Interrupt, tolerating a session that already closed.
 
@@ -856,6 +892,17 @@ async def entrypoint(ctx: JobContext) -> None:
         "error",
     ):
         session.on(sdk_event, debug.record_sdk)
+
+    provider_failed = asyncio.Event()
+
+    @session.on("error")
+    def session_error(event) -> None:
+        # Recorded by debug.record_sdk above (with the provider's message, see
+        # debug_log._dump_error). A non-retryable one also ends the session below
+        # instead of leaving the child waiting for a reply that cannot come.
+        if is_fatal_llm_error(event):
+            log.error("LLM error is not retryable; ending the session with an apology")
+            provider_failed.set()
 
     if screen is not None:
         assert isinstance(tutor, SmartTutor)
@@ -993,7 +1040,7 @@ async def entrypoint(ctx: JobContext) -> None:
         debug.record("prompt", {"kind": "greeting"})
         prompt_event(session, prompt.greeting_instruction(learner))
 
-        outcome = await _run_until_done(ctx, session, tutor, debug, ending)
+        outcome = await _run_until_done(ctx, session, tutor, debug, ending, provider_failed)
     except Exception as error:
         outcome = f"error: {type(error).__name__}: {error}"[:300]
         log.exception("session failed")
@@ -1007,7 +1054,7 @@ async def entrypoint(ctx: JobContext) -> None:
 
 async def _run_until_done(
     ctx: JobContext, session: AgentSession, tutor: Tutor, debug: DebugLog,
-    ending: asyncio.Event,
+    ending: asyncio.Event, provider_failed: asyncio.Event | None = None,
 ) -> str:
 
     left = asyncio.Event()
@@ -1022,12 +1069,18 @@ async def _run_until_done(
         debug.record_sdk(event)
         closed.set()
 
-    await asyncio.wait(
-        [asyncio.create_task(ending.wait()), asyncio.create_task(left.wait()),
-         asyncio.create_task(closed.wait())],
-        return_when=asyncio.FIRST_COMPLETED,
-    )
-    if closed.is_set() and not ending.is_set() and not left.is_set():
+    waits = [asyncio.create_task(ending.wait()), asyncio.create_task(left.wait()),
+             asyncio.create_task(closed.wait())]
+    if provider_failed is not None:
+        waits.append(asyncio.create_task(provider_failed.wait()))
+    await asyncio.wait(waits, return_when=asyncio.FIRST_COMPLETED)
+    if provider_failed is not None and provider_failed.is_set() and not left.is_set():
+        # The provider refused the turn and will not retry it. Say why without the LLM
+        # and end; the 2026-11-06 note in safe_interrupt is the same lesson: a dead
+        # provider must not leave the browser sitting in a silent room.
+        outcome = "provider_error"
+        await say_provider_failed(session)
+    elif closed.is_set() and not ending.is_set() and not left.is_set():
         log.error("agent session closed before the child left or ended the session")
         outcome = "sdk_closed_early"
     elif ending.is_set():
