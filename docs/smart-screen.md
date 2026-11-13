@@ -331,7 +331,15 @@ Known and open:
 - Page and patch HTML enters through an inert template and a shared sanitizer. Native
   `setHTML` is used when available, with DOMPurify for other browsers. Model scripts,
   event handlers and styles are removed before insertion; the shell's own code still runs.
-- Image search still runs in the page (unfiltered Commons result).
+- Images are resolved on the server, not in the page (2026-11-13): a `query` searches
+  Commons, a supplied `src` is re-looked-up, the bitmap is downloaded bounded (2 MiB,
+  JPEG/PNG/WebP from Wikimedia hosts only) and the page writer judges the actual
+  picture with the full lesson context before it is shown. Only a reviewed image ships,
+  with its canonical Commons URL and author/licence credit; anything else becomes a
+  text fallback. Image work stops inside the 12 s soft target; pages without images
+  pay nothing. Live Hydrogen-low evidence (accepted Colosseum/Forum Romanum photos,
+  a flower-lesson rejection, patch-image load fix) is in
+  `screen/review/2026-11-13-screen-images/`.
 
 ### Filler sounds (2026-11-13)
 
