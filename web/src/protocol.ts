@@ -30,6 +30,7 @@ export type BoardItem =
   | { id: string; kind: 'svg'; title?: string; svg: string }
   | { id: string; kind: 'html'; title?: string; html: string; height?: number; width?: number }
   | { id: string; kind: 'image'; title?: string; url: string; alt: string }
+  | { id: string; kind: 'page'; title: string; body: string }
   | { id: string; kind: 'material'; title: string; section_id: string }
   | { id: string; kind: 'pending'; title: string; height?: number }
   | {
@@ -71,7 +72,8 @@ export type SessionEvent =
   | { type: 'end' }
   | { type: 'resource-closed'; id: string }
   | { type: 'board-size'; w: number; h: number; device: string }
-  | { type: 'quiet'; on: boolean };
+  | { type: 'quiet'; on: boolean }
+  | { type: 'page-answer'; page: string; part: string; value: string; kind: string };
 
 /** Byte-stream attributes for topic 'homework'. */
 export type HomeworkAttributes = {
@@ -90,6 +92,9 @@ export const BOARD_RPC_SHOW = 'board.show';
 export const BOARD_RPC_UPDATE = 'board.update';
 export const BOARD_RPC_FOCUS = 'board.focus';
 export const BOARD_RPC_REMOVE = 'board.remove';
+export const BOARD_RPC_PATCH = 'board.patch';
+export const BOARD_RPC_REVEAL = 'board.reveal';
+export const BOARD_RPC_POINT = 'board.point';
 
 export const TOPIC_CHAT = 'lk.chat';
 export const TOPIC_TRANSCRIPTION = 'lk.transcription';

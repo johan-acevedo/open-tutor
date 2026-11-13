@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { validateBoardFocus, validateBoardItem } from './validate';
+import { validateBoardFocus, validateBoardItem, validateBoardPageOp } from './validate';
 
 describe('validateBoardItem', () => {
   it('accepts a minimal text item', () => {
@@ -118,6 +118,47 @@ describe('validateBoardItem', () => {
     expect(validateBoardItem({ id: 'm1', kind: 'material', section_id: 'sec-ecd16baf9e4fee44' }).ok).toBe(
       false,
     );
+  });
+});
+
+describe('validateBoardItem page kind', () => {
+  it('accepts a page item with title and body', () => {
+    const r = validateBoardItem({ id: 'p1', kind: 'page', title: 'Klockan', body: '<h1>Hej</h1>' });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.item).toEqual({ id: 'p1', kind: 'page', title: 'Klockan', body: '<h1>Hej</h1>' });
+  });
+
+  it('rejects pages without title, without body or with too long a body', () => {
+    expect(validateBoardItem({ id: 'p1', kind: 'page', body: 'x' }).ok).toBe(false);
+    expect(validateBoardItem({ id: 'p1', kind: 'page', title: 'T', body: 42 }).ok).toBe(false);
+    expect(validateBoardItem({ id: 'p1', kind: 'page', title: 'T', body: 'x'.repeat(20001) }).ok).toBe(
+      false,
+    );
+    expect(validateBoardItem({ id: 'p1', kind: 'page', title: 'T', body: 'x'.repeat(20000) }).ok).toBe(
+      true,
+    );
+  });
+});
+
+describe('validateBoardPageOp', () => {
+  it('accepts patch and part payloads', () => {
+    expect(validateBoardPageOp({ id: 'p1', patch: '<ot-patch/>' }, 'patch')).toEqual({
+      ok: true,
+      id: 'p1',
+      arg: '<ot-patch/>',
+    });
+    expect(validateBoardPageOp({ id: 'p1', part: 'val' }, 'part')).toEqual({
+      ok: true,
+      id: 'p1',
+      arg: 'val',
+    });
+  });
+
+  it('rejects bad shapes', () => {
+    expect(validateBoardPageOp({ id: 'p1' }, 'patch').ok).toBe(false);
+    expect(validateBoardPageOp({ id: 'p1', part: 42 }, 'part').ok).toBe(false);
+    expect(validateBoardPageOp({ id: '', patch: 'x' }, 'patch').ok).toBe(false);
+    expect(validateBoardPageOp(null, 'patch').ok).toBe(false);
   });
 });
 

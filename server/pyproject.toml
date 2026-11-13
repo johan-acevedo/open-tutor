@@ -17,10 +17,16 @@ dependencies = [
   "aiohttp>=3.10,<4",
   "livekit-plugins-deepgram~=1.8.10",
   "playwright>=1.55,<2",
+  "livekit-plugins-noise-cancellation~=0.3",
 ]
 
 [dependency-groups]
-dev = ["pytest>=8,<9", "pytest-asyncio>=1,<2", "httpx>=0.28,<1"]
+dev = [
+    "pytest>=8,<9",
+    "pytest-asyncio>=1,<2",
+    "httpx>=0.28,<1",
+    "playwright>=1.65.1",
+]
 # Optional embedding proof (`scripts/search_materials.py`). Ordinary server runtime and
 # `uv sync` do not install it: use `uv sync --group ml`. CPU-only torch on purpose.
 ml = ["sentence-transformers>=6.1,<7", "torch>=2.6,<3", "torchvision>=0.20,<1"]
@@ -43,5 +49,5 @@ packages = ["open_tutor"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["tests"]
+testpaths = ["tests", "../screen/tests"]
 pythonpath = ["."]

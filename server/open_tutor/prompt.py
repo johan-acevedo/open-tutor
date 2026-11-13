@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import random
 from typing import Any
 
 BASE = """\
@@ -111,6 +112,8 @@ the budget were not read, so never claim the whole example.
 Memory
 - At natural milestones, and always when the session ends, call `save_note` with the topic, what \
 clicked, what is still tricky and what to try next. Keep each part to a short phrase in Swedish.
+- Never call `save_note` at the greeting or before any teaching has happened: a greeting is not a \
+milestone, and there is nothing to save yet.
 - `clicked` is optional: empty is normal when unclear or when the work was mostly guided. Describe \
 helped versus independent plainly in the existing text. Do not force a success story. A prior \
 `clicked` is what was written then, not diagnosed mastery; check with a fresh small step next time.
@@ -165,6 +168,99 @@ def greeting_instruction(learner: dict[str, Any]) -> str:
         "Greet the child by name, warmly and briefly in Swedish. Introduce yourself as Räven, say "
         "briefly that you help with homework, and ask what they are working on today. Two short sentences."
     )
+
+
+# The greeting is spoken by TTS alone, before the model has said anything: on 2026-11-14 the
+# first LLM call timed out three times at 10 s each and the child waited about 50 s for a
+# greeting. Each variant is two short spoken sentences: who it is, that it helps with
+# homework and schoolwork, and what the child is working on today. No emoji, no lists.
+GREETING_VARIANTS = (
+    "Hej {name}, jag heter Räven och hjälper dig med läxor och skolarbete. Vad jobbar du med idag?",
+    "Hej hej {name}, Räven här! Jag hjälper dig med läxor och skoluppgifter, så vad jobbar du med idag?",
+    "Hej {name}, kul att du är här! Jag är Räven och hjälper dig med läxor och skolan, vad jobbar du med idag?",
+    "Hej {name}, det är Räven! Jag hjälper dig med läxor och skolarbete, så vad jobbar du med idag?",
+)
+
+
+def learner_name(learner: dict[str, Any]) -> str:
+    return str(learner.get("name") or "").strip()[:40]
+
+
+def greeting_line(learner: dict[str, Any], index: int | None = None) -> tuple[str, int]:
+    """The fixed greeting and the variant it came from (chosen at random by default)."""
+    name = learner_name(learner)
+    if index is None:
+        index = random.randrange(len(GREETING_VARIANTS))
+    line = GREETING_VARIANTS[index % len(GREETING_VARIANTS)].format(name=name or "du")
+    return line, index % len(GREETING_VARIANTS)
+
+
+def greeting_note(learner: dict[str, Any], line: str) -> str:
+    """What the greeting used to tell the model in `greeting_instruction`.
+
+    The greeting is now fixed text, so the hints it carried (return to what you worked
+    on last time, do not greet twice) move here, into the instructions. The line itself
+    is in the chat history as the assistant's turn as well.
+    """
+    lines = [
+        "The greeting is already said",
+        f'- The child has already heard this from you, word for word: "{line}"',
+        "- Do not greet again and do not repeat it. Answer what they say next and carry on with "
+        "the lesson.",
+    ]
+    if learner.get("notes"):
+        lines.append(
+            "- Their notes from earlier sessions are above. When it fits, say in a few words what "
+            "you worked on last time and offer to continue."
+        )
+    return "\n".join(lines)
+
+
+SMART_SCREEN = """\
+The screen beside you
+- You share a screen with the child. A screen model writes it; it hears the whole \
+lesson, so one short ask is enough. Ask with `ask_screen` in terms of what the child \
+needs right now, e.g. "En sida om klockan halv sju för åk 1". Keep talking with the \
+child while it works: explain, ask, or react to what they just said. Never announce a \
+wait or describe the unseen page.
+- A finished page is invisible until you call `show_page` with its id. When it is \
+ready you get its source and a screenshot plus a line saying it is ready. Bring it in \
+when it fits the lesson, with `show_page` in the same turn.
+- Teach from the screenshot, as the page's author ("jag skriver upp det åt dig…"). \
+Never describe tool calls or read out ids; equations and lists go on the screen, your \
+words talk about them.
+- Use `reveal` with an id from the page source to uncover a hidden answer or a \
+`later` part, and `point` with an id to highlight one part. Never read out a hidden \
+answer before revealing it.
+- A change to the visible page also goes through `ask_screen`; the patch is applied \
+at once and you get its source and a fresh screenshot without a prompt.
+- The child's answers from answer boxes reach you with page id, part id and value; \
+respond to what they wrote.
+- If the screen fails, explain in words instead.
+- You see every finished page as a screenshot before you teach from it. You otherwise only \
+see what the child shares in this session: homework photos, PDF pages, pasted screenshots and \
+text, and what they say or type. You cannot see their screen, other tabs or camera. \
+- When homework arrives, first say briefly what you see (for example "Jag ser uppgift 3 och 4 om \
+ekvationer") and ask where they want to start. Read their handwriting carefully; if unsure in a \
+way that matters, ask.
+"""
+
+
+def smart_instructions(learner: dict[str, Any]) -> str:
+    """The smart-screen worker prompt: BASE with the board-commissioning
+    guidance replaced by the four screen tools. The classic prompt is untouched."""
+    head, sep, rest = BASE.partition("\nThe board ")
+    assert sep, "board section anchor missing from BASE"
+    _, sep2, tail = rest.partition("\n\nCapabilities")
+    assert sep2, "capabilities anchor missing from BASE"
+    # Smart mode does not offer the school-book tools yet (see SmartTutor), so their
+    # guidance must not be in its prompt either.
+    before, sep3, after = tail.partition("\nSource material\n")
+    if sep3:
+        _, sep4, memory = after.partition("\nMemory\n")
+        assert sep4, "memory anchor missing from BASE"
+        tail = before + "\nMemory\n" + memory
+    return head + "\n" + SMART_SCREEN + "\n\nCapabilities" + tail + "\nAbout this learner\n" + learner_context(learner)
 
 
 END_INSTRUCTION = (

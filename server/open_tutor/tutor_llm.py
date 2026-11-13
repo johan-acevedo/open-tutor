@@ -13,8 +13,9 @@ from livekit.plugins.openai.responses import llm as responses
 from openai import AsyncOpenAI
 from openai.types import Reasoning
 
-from .config import USER_AGENT, llm_route
+from .config import LLMRoute, USER_AGENT, env_float, llm_fallback_route, llm_route
 from .debug_log import record_active
+from .session_llm import SessionLLM
 
 log = logging.getLogger("open-tutor")
 
@@ -105,6 +106,58 @@ class GoResponsesLLM(responses.LLM):
         return stream
 
 
+class _GeminiChatStream(openai.LLMStream):
+    """Number the function calls in a Gemini 4 stream.
+
+    Gemini 4 Hydrogen's OpenAI-compatible stream sends every streamed function call
+    with ``index: null`` (captured on the real API 2026-11-13; a two-call reply had
+    ``index: null`` on both). LiveKit's chat stream assembler treats a changed index
+    as the start of a new call, so with every index null the second call overwrote
+    the first. Only the last call reached the tool runner and the retained history,
+    and the last call is the one Gemini did *not* sign (it signs the first part of
+    the turn). The follow-up request then carried one unsigned function call and
+    Gemini rejected it: ``400 Function call is missing a thought_signature in
+    functionCall parts ... function call `save_note`, position 3``.
+
+    Giving each call id a stable synthetic index makes LiveKit complete and keep
+    every call, with the signature on the first one intact. Calls that already
+    carry an index (other providers) are left untouched.
+    """
+
+    def _parse_choice(self, id: str, choice: Any, thinking_filter: Any) -> llm.ChatChunk | None:
+        delta = getattr(choice, "delta", None)
+        if delta is not None:
+            for tool in getattr(delta, "tool_calls", None) or []:
+                if getattr(tool, "index", None) is not None:
+                    continue
+                call_id = getattr(tool, "id", None)
+                if call_id:
+                    index = self._gemini_call_indexes.get(call_id)
+                    if index is None:
+                        index = self._gemini_next_index
+                        self._gemini_call_indexes[call_id] = index
+                        self._gemini_next_index += 1
+                else:
+                    # An arguments-only delta: it belongs to the call already open.
+                    index = getattr(self, "_tool_index", None) or 0
+                tool.index = index
+        return super()._parse_choice(id, choice, thinking_filter)
+
+
+class GeminiChatLLM(openai.LLM):
+    """Chat Completions for Gemini, keeping every parallel function call and its
+    thought signature (see _GeminiChatStream)."""
+
+    def chat(self, **kwargs: Any) -> openai.LLMStream:
+        stream = super().chat(**kwargs)
+        # The plugin builds its stream class directly; swap in the subclass before the
+        # stream's task first runs (it starts on the next loop iteration).
+        stream.__class__ = _GeminiChatStream
+        stream._gemini_call_indexes = {}
+        stream._gemini_next_index = 0
+        return stream
+
+
 def warm_up() -> None:
     """Build the OpenAI SDK's Responses event models now. Built lazily, the first reply
     of every session blocked the audio loop for about 0.8 s."""
@@ -135,11 +188,9 @@ def warm_up() -> None:
         construct_type(type_=ResponseStreamEvent, value=event)
 
 
-def build_llm(session_id: str, http_client: Any = None) -> llm.LLM:
-    """`session_id` is the room name: Go asks for a stable id per conversation.
-    `http_client` is for tests (a recorded provider stream)."""
-    route = llm_route()
-    log.info("tutor LLM route %s model %s api %s", route.name, route.model, route.api)
+def build_route_llm(route: LLMRoute, session_id: str, http_client: Any = None) -> llm.LLM:
+    """The LiveKit LLM for one route. ``session_id`` is the room name: Go asks for a
+    stable id per conversation. ``http_client`` is for tests (a recorded stream)."""
     if route.api == "responses":
         client = AsyncOpenAI(
             api_key=route.api_key,
@@ -159,6 +210,58 @@ def build_llm(session_id: str, http_client: Any = None) -> llm.LLM:
     extra: dict[str, Any] = {}
     if route.reasoning_effort:
         extra["reasoning_effort"] = route.reasoning_effort
-    return openai.LLM(
+    if route.name.startswith("go"):
+        extra["client"] = AsyncOpenAI(
+            api_key=route.api_key,
+            base_url=route.base_url,
+            max_retries=0,
+            default_headers={"User-Agent": USER_AGENT, "x-opencode-session": session_id},
+        )
+    elif http_client is not None:
+        # Tests record the provider stream; production lets the plugin build its client.
+        extra["client"] = AsyncOpenAI(
+            api_key=route.api_key,
+            base_url=route.base_url,
+            max_retries=0,
+            http_client=http_client,
+            default_headers={"User-Agent": USER_AGENT},
+        )
+    model_cls = GeminiChatLLM if route.thought_signatures else openai.LLM
+    return model_cls(
         model=route.model, base_url=route.base_url, api_key=route.api_key, temperature=0.6, **extra
+    )
+
+
+def build_llm(session_id: str, http_client: Any = None) -> llm.LLM:
+    """The LLM for the route ``TUTOR_LLM`` names (no warm-up, no fallback)."""
+    route = llm_route()
+    log.info("tutor LLM route %s model %s api %s", route.name, route.model, route.api)
+    return build_route_llm(route, session_id, http_client)
+
+
+def build_session_llm(session_id: str, http_client: Any = None) -> llm.LLM:
+    """The session's LLM: the preferred route, wrapped when a fallback is configured.
+
+    With no ``TUTOR_LLM_FALLBACK`` this is exactly ``build_llm`` (today's single-route
+    behaviour). With one, a ``SessionLLM`` races the two during the greeting and keeps
+    the winner for the whole session (see session_llm.py).
+    """
+    route = llm_route()
+    preferred = build_route_llm(route, session_id, http_client)
+    fallback_route = llm_fallback_route()
+    if fallback_route is None:
+        log.info("tutor LLM route %s model %s api %s", route.name, route.model, route.api)
+        return preferred
+    fallback = build_route_llm(fallback_route, session_id, http_client)
+    log.info(
+        "tutor LLM candidates %s (%s) and %s (%s); prefer %s within %s s",
+        route.name, route.model, fallback_route.name, fallback_route.model,
+        route.name, env_float("TUTOR_LLM_PREFER_WITHIN_S", 1.5),
+    )
+    return SessionLLM(
+        preferred,
+        route,
+        fallback,
+        fallback_route,
+        prefer_within=env_float("TUTOR_LLM_PREFER_WITHIN_S", 1.5),
     )

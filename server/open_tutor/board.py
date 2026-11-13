@@ -57,6 +57,14 @@ class ImageItem(_Item):
     alt: str = Field(max_length=300)
 
 
+class PageItem(_Item):
+    """One Smart Screen page: only the body travels (LiveKit RPC payloads are
+    limited to about 15 kB); the web app holds the shell and composes the frame."""
+    kind: Literal["page"] = "page"
+    title: str = Field(max_length=120)
+    body: str = Field(max_length=15000)
+
+
 class PendingItem(_Item):
     kind: Literal["pending"] = "pending"
     title: str = Field(max_length=120)
@@ -93,6 +101,7 @@ BoardItem = Annotated[
         PendingItem,
         ResourceItem,
         MaterialItem,
+        PageItem,
     ],
     Field(discriminator="kind"),
 ]

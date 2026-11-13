@@ -17,8 +17,12 @@ const KNOWN_KINDS = new Set([
   'pending',
   'resource',
   'homework',
+  'page',
   'material',
 ]);
+
+// LiveKit RPC payloads stay small; only the body travels, the web app holds the shell.
+const PAGE_BODY_MAX = 20000;
 
 // Stable catalogue section IDs only (sec- + 16 lowercase hex). The browser
 // derives the page URL from this ID; the agent can never supply a URL.
@@ -161,6 +165,14 @@ export function validateBoardItem(raw: unknown): ValidateResult {
         },
       };
     }
+    case 'page': {
+      if (typeof raw.title !== 'string') return { ok: false, error: 'page item needs title string' };
+      if (typeof raw.body !== 'string') return { ok: false, error: 'page item needs body string' };
+      if (raw.body.length > PAGE_BODY_MAX) {
+        return { ok: false, error: `page body must be at most ${PAGE_BODY_MAX} characters` };
+      }
+      return { ok: true, item: { id, kind: 'page', title: raw.title, body: raw.body } };
+    }
     case 'material': {
       if (typeof raw.title !== 'string' || !raw.title) {
         return { ok: false, error: 'material item needs a non-empty title string' };
@@ -208,6 +220,18 @@ export function validateBoardFocus(raw: unknown): FocusOk | FocusErr {
     ok: true,
     focus: { id: raw.id, ...(typeof raw.step === 'number' ? { step: raw.step } : {}) },
   };
+}
+
+export type PageOpOk = { ok: true; id: string; arg: string };
+export type PageOpErr = { ok: false; error: string };
+
+/** Parse + validate a board.patch / board.reveal / board.point payload: { id, patch|part }. */
+export function validateBoardPageOp(raw: unknown, field: 'patch' | 'part'): PageOpOk | PageOpErr {
+  if (!isRecord(raw)) return { ok: false, error: 'page op payload must be an object' };
+  if (!isNonEmptyString(raw.id)) return { ok: false, error: 'page op payload needs id string' };
+  const arg = raw[field];
+  if (!isNonEmptyString(arg)) return { ok: false, error: `page op payload needs ${field} string` };
+  return { ok: true, id: raw.id, arg };
 }
 
 /** Loose check for incoming note payloads (topic 'note'). */

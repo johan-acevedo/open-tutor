@@ -2,11 +2,15 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ConnectionState, Room, RoomEvent, RpcError, Track } from 'livekit-client';
 import type { RpcInvocationData } from 'livekit-client';
 import type { BoardFocusPayload, BoardItem, HomeworkAttributes, Note, SessionResponse } from './protocol';
+import type { PageShellMessage } from './components/PageCard';
 import {
   ATTR_AGENT_STATE,
   ATTR_TUTOR_MODE,
   BOARD_RPC_FOCUS,
+  BOARD_RPC_PATCH,
+  BOARD_RPC_POINT,
   BOARD_RPC_REMOVE,
+  BOARD_RPC_REVEAL,
   BOARD_RPC_SHOW,
   BOARD_RPC_UPDATE,
   TOPIC_CHAT,
@@ -18,8 +22,10 @@ import {
 } from './protocol';
 import { appendNote } from './db';
 import type { Profile } from './db';
-import { isNoteLike, validateBoardFocus, validateBoardItem } from './validate';
+import { AgentGate } from './agentGate';
+import { isNoteLike, validateBoardFocus, validateBoardItem, validateBoardPageOp } from './validate';
 import { dataUrlToBytes, downscaleImage } from './image';
+import { audioElementBusy } from './audioTracks';
 import type { HomeworkDraft } from './components/HomeworkTray';
 
 export type Phase = 'profiles' | 'connecting' | 'live' | 'ending' | 'ended';
@@ -31,6 +37,9 @@ const MOUNT_TIMEOUT_MS = 4500;
 const BOARD_MIN = 320;
 const BOARD_MAX = 3840;
 const BOARD_RESIZE_DEBOUNCE_MS = 400;
+// How long a typed message waits for the agent participant before we send anyway
+// (the worker queues anything that arrives before its session can answer).
+const AGENT_WAIT_MS = 15000;
 
 function boardDevice(): string {
   try {
@@ -180,12 +189,17 @@ export function useSession(mobile = false) {
   const [dragOver, setDragOver] = useState(false);
   const [sending, setSending] = useState(false);
   const [activeItemId, setActiveItemId] = useState<string | null>(null);
+  // Bumped whenever the tutor puts something in front of the child (a new
+  // item, a focus, or a patch to the visible page). The phone turns from the
+  // fox to the item on every bump, so the child never misses what was shown.
+  const [boardSignal, setBoardSignal] = useState(0);
   const [homeworkDraft, setHomeworkDraft] = useState<HomeworkDraft | null>(null);
   const [homeworkSending, setHomeworkSending] = useState(false);
   const [audioBlocked, setAudioBlocked] = useState(false);
   const [resumeNeeded, setResumeNeeded] = useState(false);
 
   const roomRef = useRef<Room | null>(null);
+  const pageSendsRef = useRef(new Map<string, (msg: PageShellMessage) => void>());
   const preparedRoomRef = useRef<Room | null>(null);
   const profileRef = useRef<Profile | null>(null);
   const intentionalEndRef = useRef(false);
@@ -193,6 +207,8 @@ export function useSession(mobile = false) {
     new Map<string, Array<{ resolve: () => void; reject: (err: unknown) => void; timer: number }>>(),
   );
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  // Extra elements for a second agent audio track (the fox's filler sounds).
+  const extraAudioRef = useRef<HTMLAudioElement[]>([]);
   const audioContextRef = useRef<AudioContext | null>(null);
   const micWantedRef = useRef(true);
   const toastTimer = useRef<number>(0);
@@ -200,12 +216,53 @@ export function useSession(mobile = false) {
   const captionTimer = useRef<number>(0);
   const boardWatchStopRef = useRef<(() => void) | null>(null);
   const boardLastSentRef = useRef<string>('');
+  // A data message published before the agent participant is in the room is dropped
+  // by the room, so everything the page sends to the tutor waits for the agent first.
+  const agentGateRef = useRef<AgentGate>(new AgentGate());
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
     window.clearTimeout(toastTimer.current);
     toastTimer.current = window.setTimeout(() => setToast(null), 4000);
   }, []);
+
+  const noteAgentPresent = useCallback(() => {
+    agentGateRef.current.markPresent();
+  }, []);
+
+  /** Send one text stream message to the tutor, waiting for the agent to be there. */
+  const sendToAgent = useCallback(
+    async (text: string, topic: string, attributes?: Record<string, string>) => {
+      await agentGateRef.current.wait(AGENT_WAIT_MS);
+      const room = roomRef.current;
+      if (!room) return;
+      await room.localParticipant.sendText(text, { topic, ...(attributes ? { attributes } : {}) });
+    },
+    [],
+  );
+
+  // Page frames register their shell mailbox here; patch/reveal/point RPCs
+  // deliver through it. A frame that is mounted but not ready yet holds the
+  // message and passes it to the shell on ready (see PageCard).
+  const registerPageFrame = useCallback(
+    (id: string, send: ((msg: PageShellMessage) => void) | null) => {
+      if (send) pageSendsRef.current.set(id, send);
+      else pageSendsRef.current.delete(id);
+    },
+    [],
+  );
+
+  // A submitted answer from ot-answer, ot-choice or ot-gap reaches the tutor
+  // on the session-event text stream.
+  const sendPageAnswer = useCallback(
+    (answer: { page: string; part: string; value: string; kind: string }) => {
+      const room = roomRef.current;
+      if (!room) return;
+      void sendToAgent(JSON.stringify({ type: 'page-answer', ...answer }), TOPIC_SESSION_EVENT)
+        .catch(() => undefined);
+    },
+    [sendToAgent],
+  );
 
   const resolveMounted = useCallback((id: string) => {
     const list = mountResolvers.current.get(id);
@@ -276,11 +333,23 @@ export function useSession(mobile = false) {
     const room = roomRef.current;
     roomRef.current = null;
     preparedRoomRef.current = null;
+    for (const extra of extraAudioRef.current) {
+      extra.srcObject = null;
+    }
+    extraAudioRef.current = [];
     const context = audioContextRef.current;
     audioContextRef.current = null;
     if (context) void context.close().catch(() => undefined);
     if (!room) return;
-    for (const m of [BOARD_RPC_SHOW, BOARD_RPC_UPDATE, BOARD_RPC_FOCUS, BOARD_RPC_REMOVE])
+    for (const m of [
+      BOARD_RPC_SHOW,
+      BOARD_RPC_UPDATE,
+      BOARD_RPC_FOCUS,
+      BOARD_RPC_REMOVE,
+      BOARD_RPC_PATCH,
+      BOARD_RPC_REVEAL,
+      BOARD_RPC_POINT,
+    ])
       unregisterRpc(room, m);
     try {
       room.unregisterTextStreamHandler(TOPIC_TRANSCRIPTION);
@@ -350,6 +419,7 @@ export function useSession(mobile = false) {
       setDragOver(false);
       mountResolvers.current.clear();
       setPhase('connecting');
+      agentGateRef.current.reset();
 
       const notes = p.notes.slice(-5).reverse(); // newest first
       let session: SessionResponse;
@@ -389,10 +459,17 @@ export function useSession(mobile = false) {
       room.on(RoomEvent.TrackSubscribed, (track, _pub, participant) => {
         if (track.kind === Track.Kind.Audio && participant.identity !== room.localParticipant.identity) {
           const el = audioRef.current;
-          if (el) {
+          if (el && !audioElementBusy(el)) {
             track.attach(el);
             void el.play().catch(() => setAudioBlocked(true));
+            return;
           }
+          // The agent already publishes speech on one track; its filler sounds arrive
+          // on a second one, and one element carries one stream. Give it its own.
+          const extra = track.attach() as HTMLAudioElement;
+          extra.setAttribute('aria-hidden', 'true');
+          extraAudioRef.current.push(extra);
+          void extra.play().catch(() => undefined);
         }
       });
       room.on(RoomEvent.TrackUnsubscribed, (track) => {
@@ -411,7 +488,10 @@ export function useSession(mobile = false) {
         }
         if (typeof mode === 'string' && mode) setTutorMode(mode);
       });
-      room.on(RoomEvent.ParticipantConnected, () => readParticipantStates(room));
+      room.on(RoomEvent.ParticipantConnected, () => {
+        noteAgentPresent();
+        readParticipantStates(room);
+      });
       room.on(RoomEvent.Reconnecting, () => {
         if (!intentionalEndRef.current) setConnBanner('reconnecting');
       });
@@ -446,6 +526,7 @@ export function useSession(mobile = false) {
         });
         setFocused(null);
         setActiveItemId(v.item.id);
+        setBoardSignal((n) => n + 1);
         await waitForMounted(v.item.id, v.item.kind === 'material' ? 10000 : MOUNT_TIMEOUT_MS);
         // For the first pending item this mount flips arrival->teaching:
         // report the size only once that transition has settled, so the
@@ -473,6 +554,7 @@ export function useSession(mobile = false) {
           return [...prev, v.item];
         });
         setActiveItemId(v.item.id);
+        setBoardSignal((n) => n + 1);
         await waitForMounted(v.item.id, v.item.kind === 'material' ? 10000 : MOUNT_TIMEOUT_MS);
         await waitForBoardLayout();
         return JSON.stringify({ ok: true, board: readBoardSize() });
@@ -494,6 +576,28 @@ export function useSession(mobile = false) {
         return '{"ok":true}';
       });
 
+      const pageOp = (field: 'patch' | 'part', method: string) => async (data: RpcInvocationData) => {
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(data.payload);
+        } catch {
+          throw new RpcError(1500, `${method} payload is not JSON`);
+        }
+        const v = validateBoardPageOp(parsed, field);
+        if (!v.ok) throw new RpcError(1500, v.error);
+        const send = pageSendsRef.current.get(v.id);
+        if (!send) throw new RpcError(1501, `no page frame is mounted for id ${v.id}`);
+        if (field === 'patch') send({ ot: 'patch', html: v.arg });
+        else if (method === BOARD_RPC_REVEAL) send({ ot: 'reveal', id: v.arg });
+        else send({ ot: 'point', id: v.arg });
+        // A patch changes what is on the page; the phone shows the page again.
+        if (field === 'patch') setBoardSignal((n) => n + 1);
+        return '{"ok":true}';
+      };
+      registerRpc(room, BOARD_RPC_PATCH, pageOp('patch', BOARD_RPC_PATCH));
+      registerRpc(room, BOARD_RPC_REVEAL, pageOp('part', BOARD_RPC_REVEAL));
+      registerRpc(room, BOARD_RPC_POINT, pageOp('part', BOARD_RPC_POINT));
+
       registerRpc(room, BOARD_RPC_FOCUS, async (data) => {
         let parsed: unknown;
         try {
@@ -505,6 +609,7 @@ export function useSession(mobile = false) {
         if (!v.ok) throw new RpcError(1500, v.error);
         setFocused(v.focus);
         setActiveItemId(v.focus.id);
+        setBoardSignal((n) => n + 1);
         return '{"ok":true}';
       });
 
@@ -560,6 +665,7 @@ export function useSession(mobile = false) {
         return;
       }
       readParticipantStates(room);
+      if (room.remoteParticipants.size > 0) noteAgentPresent();
       // The session request only knew the window size (the board pane is not
       // mounted until we go live). Watch the real pane and report resizes,
       // rotation and layout changes over the existing session-event channel;
@@ -573,8 +679,7 @@ export function useSession(mobile = false) {
           const key = `${b.w}x${b.h}:${b.device}`;
           if (key === boardLastSentRef.current) return;
           boardLastSentRef.current = key;
-          void cur.localParticipant
-            .sendText(JSON.stringify({ type: 'board-size', ...b }), { topic: TOPIC_SESSION_EVENT })
+          void sendToAgent(JSON.stringify({ type: 'board-size', ...b }), TOPIC_SESSION_EVENT)
             .catch(() => undefined);
         };
         let debounce = 0;
@@ -630,10 +735,13 @@ export function useSession(mobile = false) {
         await room.localParticipant.setMicrophoneEnabled(true);
         setMicEnabled(true);
         setMicBlocked(false);
+        // The log needs the starting state, not only later button presses.
+        void sendToAgent(JSON.stringify({ type: 'mic', on: true, why: 'start' }), TOPIC_SESSION_EVENT);
       } catch {
         // Mic denied: stay connected, banner + text field instead.
         setMicEnabled(false);
         setMicBlocked(true);
+        void sendToAgent(JSON.stringify({ type: 'mic', on: false, why: 'blocked' }), TOPIC_SESSION_EVENT);
       }
       setPhase('live');
     },
@@ -645,18 +753,20 @@ export function useSession(mobile = false) {
       const room = roomRef.current;
       if (!room || phase !== 'live') return;
       setSending(true);
+      // Say it at once: delivering it is ours to do, even if the tutor joins late.
+      setLastSent(text);
       try {
-        await room.localParticipant.sendText(text, { topic: TOPIC_CHAT });
-        setLastSent(text);
+        await sendToAgent(text, TOPIC_CHAT);
         window.clearTimeout(sentTimer.current);
         sentTimer.current = window.setTimeout(() => setLastSent(null), 4000);
       } catch {
+        setLastSent(null);
         showToast('Kunde inte skicka meddelandet. Försök igen.');
       } finally {
         setSending(false);
       }
     },
-    [phase, showToast],
+    [phase, sendToAgent, showToast],
   );
 
   const toggleMic = useCallback(async () => {
@@ -668,11 +778,13 @@ export function useSession(mobile = false) {
       await room.localParticipant.setMicrophoneEnabled(next);
       setMicEnabled(next);
       if (next) setMicBlocked(false);
+      // Logged so a quiet stretch in a session can be told apart from a muted one.
+      void sendToAgent(JSON.stringify({ type: 'mic', on: next, why: 'button' }), TOPIC_SESSION_EVENT);
     } catch {
       setMicEnabled(false);
       setMicBlocked(true);
     }
-  }, [micEnabled]);
+  }, [micEnabled, sendToAgent]);
 
   const retryMic = useCallback(async () => {
     const room = roomRef.current;
@@ -682,11 +794,12 @@ export function useSession(mobile = false) {
       await room.localParticipant.setMicrophoneEnabled(true);
       setMicEnabled(true);
       setMicBlocked(false);
+      void sendToAgent(JSON.stringify({ type: 'mic', on: true, why: 'retry' }), TOPIC_SESSION_EVENT);
     } catch {
       setMicEnabled(false);
       setMicBlocked(true);
     }
-  }, []);
+  }, [sendToAgent]);
 
   const resumeMedia = useCallback(async () => {
     const room = roomRef.current;
@@ -734,9 +847,7 @@ export function useSession(mobile = false) {
       const room = roomRef.current;
       if (!room) return;
       try {
-        await room.localParticipant.sendText(JSON.stringify({ type: 'resource-closed', id }), {
-          topic: TOPIC_SESSION_EVENT,
-        });
+        await sendToAgent(JSON.stringify({ type: 'resource-closed', id }), TOPIC_SESSION_EVENT);
       } catch {
         showToast('Kunde inte meddela tutorn. Försök igen.');
       }
@@ -759,7 +870,7 @@ export function useSession(mobile = false) {
       window.setTimeout(resolve, END_WAIT_MS);
     });
     try {
-      await room.localParticipant.sendText(JSON.stringify({ type: 'end' }), { topic: TOPIC_SESSION_EVENT });
+      await sendToAgent(JSON.stringify({ type: 'end' }), TOPIC_SESSION_EVENT);
     } catch {
       /* agent may already be gone; still show the end card */
     }
@@ -846,10 +957,7 @@ export function useSession(mobile = false) {
       setActiveItemId(itemId);
       if (room) {
         try {
-          await room.localParticipant.sendText(trimmed, {
-            topic: TOPIC_HOMEWORK_TEXT,
-            attributes: { itemId },
-          });
+          await sendToAgent(trimmed, TOPIC_HOMEWORK_TEXT, { itemId });
         } catch {
           showToast('Kunde inte skicka texten. Försök igen.');
           return false;
@@ -857,7 +965,7 @@ export function useSession(mobile = false) {
       }
       return true;
     },
-    [showToast],
+    [sendToAgent, showToast],
   );
 
   const addFiles = useCallback(
@@ -992,6 +1100,7 @@ export function useSession(mobile = false) {
     profile,
     items,
     activeItemId,
+    boardSignal,
     homeworkDraft,
     homeworkSending,
     queueFiles,
@@ -1026,6 +1135,8 @@ export function useSession(mobile = false) {
     addFiles,
     addText,
     onItemMounted: resolveMounted,
+    registerPageFrame,
+    sendPageAnswer,
     onItemFailed: rejectMounted,
   };
 }

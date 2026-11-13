@@ -1,0 +1,98 @@
+[
+ {
+  "name": "narrow",
+  "size": [
+   370,
+   610
+  ],
+  "job": "s1",
+  "page": "p1",
+  "title": "Olika nämnare",
+  "body": "<h1>Olika nämnare</h1>\n<div class=\"card\">\n  <ot-fraction id=\"tre\" value=\"3/4\"></ot-fraction>\n  <ot-fraction id=\"atta\" value=\"1/8\" color=\"violet\"></ot-fraction>\n</div>\n<div class=\"card\">\n  <ot-steps id=\"steg\">\n    <ot-step note=\"· 2\">$\\frac{3}{4} = \\frac{6}{8}$</ot-step>\n    <ot-step note=\"åttondelar\" result>$\\frac{6}{8} + \\frac{1}{8} = \\frac{7}{8}$</ot-step>\n  </ot-steps>\n</div>\n<h2>Prova själv</h2>\n<ot-choice id=\"val\" class=\"column\">\n  <button>$\\frac{1}{2} + \\frac{1}{8} = \\frac{5}{8}$</button>\n  <button>$\\frac{1}{2} + \\frac{1}{8} = \\frac{2}{10}$</button>\n  <button>$\\frac{1}{2} + \\frac{1}{8} = \\frac{2}{8}$</button>\n</ot-choice>",
+  "body_path": "/tmp/screen-evidence/narrow/s1/page.html",
+  "shot": "/tmp/screen-evidence/narrow/s1/shot.png",
+  "model_s": 18.01,
+  "render_s": 2.46,
+  "look_s": 9.88,
+  "retry_s": 0.0,
+  "total_s": 30.35,
+  "issues": [],
+  "issue_texts": [],
+  "residual_lint": [],
+  "repair": {
+   "look": true,
+   "look_fix": true,
+   "retry": false,
+   "retry_applied": false,
+   "notes": []
+  },
+  "deadline_ok": true,
+  "re_render": {
+   "370x610": {
+    "issues": [],
+    "fontPx": 17.5
+   },
+   "370x558": {
+    "issues": [],
+    "fontPx": 17
+   },
+   "1000x700": {
+    "issues": [],
+    "fontPx": 21
+   }
+  }
+ },
+ {
+  "name": "wide",
+  "size": [
+   1000,
+   700
+  ],
+  "job": "s1",
+  "page": "p1",
+  "title": "$\\frac{3}{4} + \\frac{1}{8}$",
+  "body": "<h1>$\\frac{3}{4} + \\frac{1}{8}$</h1>\n<div class=\"row\">\n  <div class=\"card\">\n    <h2>Dela i åttondelar</h2>\n    <ot-fraction id=\"tre-fjardedelar\" value=\"3/4\"></ot-fraction>\n    <ot-fraction id=\"sex-attondelar\" value=\"6/8\" color=\"cyan\"></ot-fraction>\n    <ot-fraction id=\"en-attondel\" value=\"1/8\" color=\"violet\"></ot-fraction>\n    <p class=\"small muted\">$\\frac{3}{4}$ är samma sak som $\\frac{6}{8}$.</p>\n  </div>\n  <div class=\"stack\">\n    <ot-steps id=\"steg\">\n      <ot-step>$\\frac{3}{4} + \\frac{1}{8}$</ot-step>\n      <ot-step note=\"förläng $\\frac{3}{4}$ med 2\">$\\frac{6}{8} + \\frac{1}{8}$</ot-step>\n      <ot-step note=\"7 åttondelar\" result later>$\\frac{7}{8}$</ot-step>\n    </ot-steps>\n    <p class=\"tip\">Samma nämnare först – sedan lägger du ihop täljarna.</p>\n  </div>\n</div>\n<div class=\"card green\">\n  <h2>Prova själv</h2>\n  <p class=\"big\">$\\frac{1}{2} + \\frac{1}{6} =$</p>\n  <ot-answer id=\"svar\" label=\"Svar\" kind=\"text\"></ot-answer>\n</div>",
+  "body_path": "/tmp/screen-evidence/wide/s1/page.html",
+  "shot": "/tmp/screen-evidence/wide/s1/shot.png",
+  "model_s": 14.11,
+  "render_s": 1.43,
+  "look_s": 16.61,
+  "retry_s": 0.0,
+  "total_s": 32.16,
+  "issues": [],
+  "issue_texts": [],
+  "residual_lint": [],
+  "repair": {
+   "look": true,
+   "look_fix": false,
+   "retry": false,
+   "retry_applied": false,
+   "notes": []
+  },
+  "deadline_ok": true,
+  "re_render": {
+   "370x610": {
+    "issues": [
+     {
+      "kind": "dense",
+      "msg": "text is only 13px on this screen (minimum 16px). Keep one teaching step and one main visual; cut text or split the page."
+     }
+    ],
+    "fontPx": 13
+   },
+   "370x558": {
+    "issues": [
+     {
+      "kind": "dense",
+      "msg": "text is only 12.75px on this screen (minimum 16px). Keep one teaching step and one main visual; cut text or split the page."
+     }
+    ],
+    "fontPx": 12.75
+   },
+   "1000x700": {
+    "issues": [],
+    "fontPx": 22.25
+   }
+  }
+ }
+]

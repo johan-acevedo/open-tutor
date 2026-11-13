@@ -50,6 +50,7 @@ SAFE_CONFIG_KEYS = (
     "TUTOR_STT_MODEL",
     "TUTOR_STT_MAX_ENDPOINT_MS",
     "TUTOR_MIN_ENDPOINT",
+    "TUTOR_NOISE_CANCELLATION",
     "TUTOR_AGENT_NAME",
     "TUTOR_CLOUD_RECORDING",
     "TUTOR_DEBUG_LOG",
@@ -397,6 +398,17 @@ def _dump_error(event: Any) -> dict[str, Any]:
         "error": _dump(error),
         "source": _dump(source),
     }
+    # LLMError marks its underlying exception `exclude=True`, so model_dump drops the
+    # one thing that explains the failure (a 400 body names the rejected field). Keep
+    # the provider's own message, type and status in the same provider_error record.
+    cause = getattr(error, "error", None)
+    if cause is not None:
+        entry["cause"] = {
+            "error_type": type(cause).__name__,
+            "message": str(cause)[:600],
+            "status_code": getattr(cause, "status_code", None),
+            "body": str(getattr(cause, "body", ""))[:1200],
+        }
     return entry
 
 
@@ -444,4 +456,37 @@ def _summarize(events: list[dict[str, Any]]) -> dict[str, Any]:
         ),
         "mode_changes": [(e["t_rel_s"], e.get("mode")) for e in events if e["event"] == "mode"],
         "healed_tool_arguments": sum(e.get("count", 0) for e in events if e["event"] == "healed_arguments"),
+        # Which model was the fox, and both warm-up times, at a glance (session_llm.py).
+        "llm": next(
+            (
+                {
+                    "route": e.get("route"),
+                    "model": e.get("model"),
+                    "choice": e.get("choice"),
+                    "reason": e.get("reason"),
+                    "preferred_s": e.get("preferred_s"),
+                    "fallback_s": e.get("fallback_s"),
+                }
+                for e in reversed(events)
+                if e["event"] == "llm_chosen"
+            ),
+            {"route": None, "reason": "no warm-up (single route)"},
+        ),
+        "llm_failovers": [
+            {"at_s": e["t_rel_s"], "from": e.get("from"), "to": e.get("to"), "error": e.get("error")}
+            for e in events
+            if e["event"] == "llm_failover"
+        ],
+        "greeting_said": next(
+            (e["t_rel_s"] for e in events if e["event"] == "greeting"), None
+        ),
+        # Which audio filter the child's microphone went through (noise.py).
+        "noise_cancellation": next(
+            (
+                e.get("noise_cancellation")
+                for e in events
+                if e["event"] == "worker_session_started"
+            ),
+            None,
+        ),
     }

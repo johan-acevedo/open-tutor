@@ -37,6 +37,24 @@ Go serves Muse Spark 1.3 Contributor only on its OpenAI Responses endpoint, `htt
 - Reasoning `minimal`: board tool called in 24 of 24 first requests, median 1.4 s to first output (`low`: 4.2 s median, up to 11.6 s).
 - Go's documentation says Muse Spark Contributor prompts and completions are used to train Meta models (not zero data retention), and the workspace must allow paid endpoints that train on request data.
 
+## The Gemini route
+
+`TUTOR_LLM=gemini` runs Gemini 4 Hydrogen (`gemini-4-hydrogen`, released 2026-11-12) on
+Google's OpenAI-compatible Chat Completions endpoint with `GEMINI_API_KEY`. Hydrogen
+rejects `minimal` and `thinking_budget` with a 400; its thinking levels are `low`,
+`medium`, `high` (default) and `xhigh`, sent as `reasoning_effort` on this endpoint.
+The route uses `low`: median 2.0-2.8 s to first token with the real prompt and tools
+(three e2e runs, 2026-11-13).
+
+Gemini 4 enforces thought signatures on replayed function calls. Its compatible stream
+puts `index: null` on every function call, while LiveKit's chat stream assembler uses a
+changed index to tell parallel calls apart. A reply calling two tools therefore kept only
+the last (unsigned) call, and the next request failed with `400 Function call is missing
+a thought_signature`. `tutor_llm.GeminiChatLLM` numbers the calls by id, so every call
+and the signature on the first one survive; pinned by
+tests/test_gemini_route.py against a recorded stream. The native Google plugin was not
+needed.
+
 ## The voice route
 
 Production uses Deepgram Swedish speech with `TUTOR_TTS=deepgram`, `TUTOR_TTS_MODEL=flux-ludvig-sv`, and `TUTOR_TTS_EXPRESSIVITY=1`. The backend loads `DEEPGRAM_API_KEY` from Infisical. A narrow adapter adds expressivity to LiveKit's TTSv2 requests. Cartesia remains selectable, but production no longer depends on its credits.
@@ -66,7 +84,11 @@ The worker logs the route at the start of each session (`tutor TTS route elevenl
 | `TUTOR_TTS` | `elevenlabs` (default) or `cartesia` |
 | `TUTOR_TTS_VOICE`, `TUTOR_TTS_MODEL` | Voice id and model for that provider. ElevenLabs default: `eleven_v4_turbo` with Bella (`hpp4J3VqNfWAUOO0d1Us`), see [the voice route](#the-voice-route). `eleven_v3*`/`eleven_v4*` models use the text-to-dialogue adapter; earlier models such as `eleven_flash_v2_5` use LiveKit's plugin |
 | `ELEVENLABS_API_KEY` / `CARTESIA_API_KEY` | Voice provider key |
-| `TUTOR_LLM` | `go` (default): Muse Spark 1.3 Contributor (`muse-spark-1.3-contributor`) on OpenCode Go, Responses API over HTTP streaming, `OPENCODE_GO_API_KEY`. `gemini-dev` only reproduces the board/voice bug of the earlier development route (`GEMINI_API_KEY`); do not deploy it. There is no silent fallback. |
+| `TUTOR_LLM` | `go` (default): Muse Spark 1.3 Contributor (`muse-spark-1.3-contributor`) on OpenCode Go, Responses API over HTTP streaming, `OPENCODE_GO_API_KEY`. `go-deepseek`: DeepSeek V4.1 Flash on the same subscription. `gemini`: Gemini 4 Hydrogen (`gemini-4-hydrogen`) on Google's OpenAI-compatible Chat Completions, thinking level `low`, `GEMINI_API_KEY`. `gemini-dev` only reproduces the board/voice bug of the earlier development route; do not deploy it. This is the preferred route; there is no silent fallback to a route the operator did not name. |
+| `TUTOR_LLM_FALLBACK` | Optional second candidate route (`go`, `go-deepseek`, `gemini`). Empty (default): one route for the whole session, no warm-up race. Set: both routes answer a warm-up request while the greeting plays and the winner serves the session; see [the greeting and the session's voice](#the-greeting-and-the-sessions-voice) |
+| `TUTOR_LLM_PREFER_WITHIN_S` | Default `1.5`. The preferred route keeps the session if its warm-up answered within this many seconds, or if it was the faster of the two |
+| `TUTOR_LLM_TIMEOUT_S` | Default `5`. Timeout per LLM attempt (the framework default is 10 s), with one retry on the same route; then the failover or the spoken apology |
+| `TUTOR_LLM_FALLBACK_BASE_URL` | Override only the fallback route's endpoint (for example a second provider in a test). `TUTOR_LLM_BASE_URL` keeps overriding the preferred route |
 | `OPENCODE_GO_API_KEY` | OpenCode Go API key (from the OpenCode console). Backend only |
 | `TUTOR_LLM_MODEL`, `TUTOR_LLM_BASE_URL`, `TUTOR_LLM_REASONING` | Override the route's model, endpoint or reasoning effort (Go default `minimal`) |
 | `TUTOR_AGENT_NAME` | Dispatch name, default `open-tutor`. Give a test worker and its web service another name so it never takes a family session |
@@ -81,6 +103,9 @@ The worker logs the route at the start of each session (`tutor TTS route elevenl
 | `TUTOR_DEBUG_LOG` | `1` writes a per-session debug trail to a private local directory (see below). Off by default |
 | `TUTOR_DEBUG_LOG_DIR` | Override the debug trail directory (default `~/.local/state/open-tutor/sessions`) |
 | `TUTOR_STT_MAX_ENDPOINT_MS`, `TUTOR_MIN_ENDPOINT` | Turn-taking tuning for pauses while a child thinks |
+| `TUTOR_FILLERS` | `1` lets the fox make one short pre-made sound when a reply to the child's turn is late. Off by default |
+| `TUTOR_FILLER_AFTER_S` | How long the child may wait for the reply before the sound (default `0.7`) |
+| `TUTOR_FILLER_CLIPS_DIR` | Parent directory for the cached clips (default `~/.cache/open-tutor/fillers`) |
 
 ### Password-free Sweden testing
 
@@ -94,6 +119,50 @@ Geolocation and keep the origin private behind its tunnel; a publicly reachable
 origin would allow clients to forge that header. The current origin binds to
 ThinkCentre's tailnet address, with public requests arriving through the Mini's
 Cloudflare tunnel. Health checks are exempt to preserve local monitoring.
+
+## Filler sounds
+
+A child who has stopped talking expects an answer. When the tutor model takes
+longer than `TUTOR_FILLER_AFTER_S` (default 0.7 s), the fox makes one small sound
+("Mm", "Hmm", "Aha", rarely "Ska vi se…") instead of leaving the room silent.
+`TUTOR_FILLERS=1` switches it on; it is off by default.
+
+- **The clips are made once, in the configured voice.** `fillers.py` synthesizes
+  them with the same TTS the session uses and caches WAV files under
+  `~/.cache/open-tutor/fillers/<provider>-<voice>-<hash>/`, keyed by a
+  fingerprint of TTS provider, model, voice and expressivity, so a voice change
+  regenerates them. They are made in the background on first use (never during a
+  turn); if generation fails, the feature stays off and says so once in the log.
+- **Playback is LiveKit's `BackgroundAudioPlayer`**, on its own audio track. That
+  keeps the sound out of the speech pipeline entirely: no TTS call at that
+  moment, nothing in the chat context or the transcript, no caption, no
+  `chat_item` in the debug trail, and no speech handle that could queue the real
+  reply behind the filler. `PlayHandle.stop()` plus `AudioSource.clear_queue()`
+  cuts it the moment the child speaks or the reply starts.
+- **When it plays, and when it must not.** Only for a turn the child started
+  (speech or typed) and only while a reply is pending; never for the greeting or
+  any other session event, never twice in a turn, never the same clip twice in a
+  row, nothing in quiet-work or resource mode, and nothing while the child is
+  speaking. A reply that arrives sooner cancels it.
+- **In the session log** it is its own event: `filler` with the clip name, the
+  turn and the delay, `filler_stopped` with why and how much played, and
+  `filler_skipped` with the reason when it decided not to play.
+
+Generate the clips ahead of time or listen to them:
+
+```bash
+OPEN_TUTOR_ENV=~/.config/open-tutor-smart-dev/env \
+  server/bin/with-env uv run --project server python server/scripts/filler_clips.py \
+  --out /tmp/filler-clips            # --force regenerates
+```
+
+The script prints each clip's trimmed duration, level and the number of energy
+parts (one hum, two for "a-ha", one per word for a phrase); nothing here is a
+substitute for listening once after a voice change.
+
+The web app gives a second agent audio track its own `<audio>` element
+(`web/src/audioTracks.ts`); with one element per stream, the filler and the
+speech cannot replace each other.
 
 ## Family-testing debug trail
 
@@ -154,6 +223,55 @@ Default off, so open-source adopters get no behaviour or file change.
   `{ok:true, board:{w,h,device}}` once the pane has settled; the worker uses those
   dims for the frozen design box. Plain `{ok:true}` peers still work.
 
+## The greeting and the session's voice
+
+The child hears the fox immediately, and the model that serves the session is picked
+while that greeting plays (2026-11-13/14).
+
+**The greeting is fixed text, spoken by TTS.** `session.say` speaks one of four variants
+(`prompt.GREETING_VARIANTS`) with the child's name: who it is, that it helps with
+homework and schoolwork, and what they are working on today. No LLM is involved, so the
+greeting lands within about a second whatever the provider is doing. `say` puts the line
+in the chat history as the assistant's turn, and `prompt.greeting_note` moves what
+`greeting_instruction` used to carry into the instructions (do not greet again, and for
+a returning learner, when it fits, say in a few words what you worked on last time). The
+greeting is interruptible: speech or typing stops it and the turn is answered as usual,
+and a message typed before it plays replaces it (`text_input.TypedChat.start`). The
+debug trail records `greeting` (variant and line) and `greeting_done` (interrupted?).
+
+**The route is chosen once, by a warm-up race.** With `TUTOR_LLM_FALLBACK` set,
+`session_llm.SessionLLM` sends a short warm-up request to both candidates while the
+greeting plays: the real system prompt and the real tool list, one word to say, aborted at
+the first token. So the provider does the prompt work the real reply needs and can cache
+the prefix, and the whole warm-up costs a handful of output tokens. Time to first token
+decides.
+
+The rules:
+
+- the preferred route keeps the session if it answered within `TUTOR_LLM_PREFER_WITHIN_S`,
+  or was the faster of the two;
+- a route that errors or has not answered within 5 s loses;
+- if neither answered, the preferred route stays and normal error handling applies;
+- the choice is for the **whole session**. Per-turn switching is unsafe: Gemini rejects a
+  retained history that holds function calls it did not sign, so a request is never
+  replayed on another route mid-conversation. A first turn that arrives before the race
+  decided waits for it, bounded by the 5 s cap.
+
+The choice and both timings are recorded as an `llm_chosen` event and in the report's
+summary (`llm`). `AgentSession` takes its LLM at construction and `Agent.update_options`
+only swaps for the next turn, so a thin `llm.LLM` wrapper delegates `chat()` to the chosen
+route. LiveKit's own `FallbackAdapter` is per-request failover, which is exactly the
+per-turn switch described above.
+
+**Shorter leash, one failover.** `TUTOR_LLM_TIMEOUT_S` (5 s) with one retry on the same
+route replaces the framework's 10 s with three retries. If the chosen route then fails
+before it has said anything, and the other candidate does not need thought signatures,
+the session fails over to it for the rest of the run (`llm_failover` in the log). Failing
+over to a signature-checking route is not safe, and a failure after the child has heard
+words is not repeated; both fall to the existing apology path, which speaks one sentence
+without the LLM and ends the session instead of leaving silence with no event. 5 s fits a
+warm text prompt (2-3 s to first token here); a turn carrying a screenshot, or a provider
+under load, can need more, so raise `TUTOR_LLM_TIMEOUT_S` if sessions end with the apology.
 ## Material search proof
 
 `open_tutor/materials/search.py` builds an exact cosine index from passage records and

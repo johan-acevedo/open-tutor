@@ -1,0 +1,37 @@
+{
+  "first_text_s": 10.535617251880467,
+  "total_s": 12.18583110999316,
+  "output_chars": 484,
+  "usage": {
+    "completion_tokens": 706,
+    "prompt_tokens": 6799,
+    "total_tokens": 7505,
+    "completion_tokens_details": {
+      "accepted_prediction_tokens": null,
+      "audio_tokens": null,
+      "reasoning_tokens": 510,
+      "rejected_prediction_tokens": null,
+      "text_tokens": null
+    },
+    "prompt_tokens_details": {
+      "audio_tokens": null,
+      "cache_write_tokens": null,
+      "cached_tokens": 6528,
+      "image_tokens": null,
+      "text_tokens": null
+    },
+    "cost": 0.00048383,
+    "opencode": {
+      "billing_source": "balance",
+      "list_cost": 0.00048383,
+      "tokens": {
+        "input": 271,
+        "output": 706,
+        "reasoning": 510,
+        "cache_read": 6528,
+        "cache_write_5m": 0,
+        "cache_write_1h": 0
+      }
+    }
+  }
+}

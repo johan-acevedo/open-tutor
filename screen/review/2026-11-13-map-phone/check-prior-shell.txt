@@ -1,0 +1,34 @@
+Measured on the prior shell (7c2cbfec370bbdf5b91431b0a2605cc811ccfe99), table only:
+| page | pane | key | codes | code size | country | drawing box | filled | crowded | text |
+|---|---|---|---|---|---|---|---|---|---|
+| page.html | 370x558 | under (overlay) | 18/21 | 7 px | 64x144 | 330x236 | 61% h / 19% w | yes | 15.25 px (dense) |
+| page.html | 370x610 | under (overlay) | 12/21 | 7 px | 45x104 | 327x217 | 48% h / 14% w | yes | 16.5 px |
+| page.html | 760x900 | under (overlay) | 21/21 | 13.5 px | 140x320 | 691x350 | 91% h / 20% w | no | 26.5 px |
+| page.html | 1000x700 | under (overlay) | 21/21 | 13.1 px | 138x314 | 945x340 | 92% h / 15% w | no | 21.25 px |
+| page-ref.html | 370x558 | under (overlay) | 13/21 | 7 px | 48x108 | 328x219 | 49% h / 15% w | yes | 16.25 px |
+| page-ref.html | 370x610 | under (overlay) | 14/21 | 7 px | 49x110 | 324x245 | 45% h / 15% w | yes | 17.5 px |
+| page-ref.html | 760x900 | under (overlay) | 21/21 | 13.3 px | 140x317 | 692x347 | 91% h / 20% w | no | 26.25 px |
+| page-ref.html | 1000x700 | under (overlay) | 20/21 | 11.2 px | 116x266 | 943x290 | 92% h / 12% w | yes | 22 px |
+| page-early.html | 370x558 | under (overlay) | 12/21 | 7 px | 48x109 | 330x199 | 55% h / 15% w | yes | 15.25 px (dense) |
+| page-early.html | 370x610 | under (overlay) | 15/21 | 7 px | 54x124 | 328x234 | 53% h / 16% w | yes | 16 px |
+| page-early.html | 760x900 | under (overlay) | 20/21 | 12.3 px | 128x291 | 696x319 | 91% h / 18% w | yes | 24.5 px |
+| page-early.html | 1000x700 | under (overlay) | 21/21 | 12.3 px | 128x293 | 940x319 | 92% h / 14% w | no | 23.25 px |
+
+The same checks, with their assertions:
+| page | pane | key | codes | code size | country | drawing box | filled | crowded | text |
+|---|---|---|---|---|---|---|---|---|---|
+Traceback (most recent call last):
+  File "/home/johan/.t3/worktrees/open-tutor/t3-e9ed3e43-147c77e66212c886/screen/tools/check_map_key.py", line 233, in <module>
+    raise SystemExit(main())
+                     ~~~~^^
+  File "/home/johan/.t3/worktrees/open-tutor/t3-e9ed3e43-147c77e66212c886/screen/tools/check_map_key.py", line 207, in main
+    check_phone(g, where)
+    ~~~~~~~~~~~^^^^^^^^^^
+  File "/home/johan/.t3/worktrees/open-tutor/t3-e9ed3e43-147c77e66212c886/screen/tools/check_map_key.py", line 140, in check_phone
+    check_box(g, where, "under")
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/home/johan/.t3/worktrees/open-tutor/t3-e9ed3e43-147c77e66212c886/screen/tools/check_map_key.py", line 107, in check_box
+    assert g["separate"], f"{where}: the key has no box of its own (.ot-map-canvas missing); it overlays the map"
+           ~^^^^^^^^^^^^
+AssertionError: page.html 370x558: the key has no box of its own (.ot-map-canvas missing); it overlays the map
+OK: the checks fail on the prior shell (7c2cbfec370bbdf5b91431b0a2605cc811ccfe99), as they should.

@@ -19,25 +19,27 @@ from livekit.agents import (
     Agent,
     AgentServer,
     AgentSession,
+    APIConnectOptions,
     JobContext,
     JobProcess,
     RunContext,
+    SessionConnectOptions,
     StopResponse,
     TurnHandlingOptions,
     cli,
     function_tool,
     llm,
-    room_io,
 )
 from livekit.plugins import cartesia, elevenlabs, silero, soniox
 from pydantic import ValidationError
 
-from . import prompt
+from . import noise, prompt
 from .board import (
     HtmlItem,
     Ids,
     MaterialItem,
     Note,
+    PageItem,
     PendingItem,
     ResourceItem,
     youtube_embed,
@@ -55,13 +57,21 @@ from .materials.serving import (
     load_material_display,
     normalize_section_id,
 )
-from .tutor_llm import build_llm, warm_up
+from .session_llm import SessionLLM
+from .page_answers import PageAnswers
+from .text_input import TOPIC_CHAT, TypedChat
+from .fillers import DEFAULT_DELAY_S as DEFAULT_FILLER_DELAY, build_fillers
+from .tutor_llm import build_session_llm, warm_up
 from .speech import speakable_stream, unspoken_stream
 
 log = logging.getLogger("open-tutor")
 
 BOARD_RPC_TIMEOUT = 6.0
 HOMEWORK_SETTLE = 1.2  # seconds to wait for more PDF pages before responding
+# Per LLM attempt. The default (10 s, three retries) is what made a slow provider keep a
+# child waiting about 50 s for a greeting on 2026-11-14. One retry, then the failover in
+# session_llm.py or the spoken apology at the end of this file.
+LLM_RETRY_INTERVAL_S = 0.5
 BOARD_IN_PROGRESS = (
     "A drawing is already in progress. No additional drawing was started. "
     "Continue teaching in words and respond to the child. "
@@ -266,8 +276,18 @@ def tts_route(engine) -> str:
 
 
 class Tutor(Agent):
-    def __init__(self, learner: dict[str, Any], room: rtc.Room, board: dict[str, Any] | None = None) -> None:
-        super().__init__(instructions=prompt.instructions(learner))
+    @staticmethod
+    def _instructions(learner: dict[str, Any]) -> str:
+        return prompt.instructions(learner)
+
+    def __init__(self, learner: dict[str, Any], room: rtc.Room, board: dict[str, Any] | None = None,
+                 greeting_note: str = "") -> None:
+        # The greeting itself is fixed TTS spoken before the model's first turn; the note
+        # tells the model it has greeted and carries the hints `greeting_instruction` gave.
+        instructions = self._instructions(learner)
+        if greeting_note:
+            instructions += "\n\n" + greeting_note
+        super().__init__(instructions=instructions)
         self.learner = learner
         board = board or {}
         self.board_w, self.board_h = clamp_board_size(board.get("w", DEFAULT_BOARD_W),
@@ -810,6 +830,9 @@ class Tutor(Agent):
     ) -> str:
         """Save a short learning note in this browser for next time.
 
+        Only after some teaching has happened, never at the greeting or before the
+        child has worked on anything.
+
         Args:
             topic: What they worked on, e.g. "Ekvationer med x på ena sidan".
             clicked: Evidence of what became clearer; empty is normal when unclear.
@@ -888,6 +911,176 @@ class Tutor(Agent):
         await self.update_chat_ctx(ctx)
 
 
+class SmartTutor(Tutor):
+    """The tutor in smart-screen mode (``TUTOR_SCREEN=smart``).
+
+    The Screen agent next to it renders pages in the background; this tutor
+    asks for them with ``ask_screen`` and brings them in with ``show_page``,
+    ``reveal`` and ``point``. ``commission_board``/``edit_board`` are gone.
+    """
+
+    commission_board = None
+    edit_board = None
+    # Textbook material (search_materials/show_material, PR #33) is not offered in smart
+    # mode yet: the two have not been tried together in a call, and the material is in
+    # English. Set back to the inherited tools once that has been tested.
+    search_materials = None
+    show_material = None
+
+    @staticmethod
+    def _instructions(learner: dict[str, Any]) -> str:
+        return prompt.smart_instructions(learner)
+
+    def __init__(self, learner: dict[str, Any], room: rtc.Room,
+                 board: dict[str, Any] | None = None, screen: Any = None,
+                 greeting_note: str = "") -> None:
+        if screen is None:
+            raise ValueError("SmartTutor needs a Screen")
+        self.screen = screen
+        super().__init__(learner, room, board=board, greeting_note=greeting_note)
+        # The Screen renders at the pane size the tutor keeps current.
+        screen.set_pane_source(lambda: (self.board_w, self.board_h))
+
+    @function_tool()
+    async def ask_screen(self, context: RunContext, ask: str) -> str:
+        """Ask the screen for a new page or a change to the visible one.
+
+        Ask in terms of what the child needs right now (who they are, what was
+        just said, what should land); the screen hears the whole lesson, so one
+        short ask is enough. Returns at once: keep talking with the child in
+        words while it works. Never announce a wait or describe the unseen page.
+        A finished page stays invisible until you call show_page; a change to
+        the visible page applies by itself and arrives with a note.
+
+        Args:
+            ask: What the child needs, e.g. "En sida om klockan halv sju för åk 1".
+        """
+        job = self.screen.ask(ask)
+        return ("The screen is working on it now "
+                f"(job {job}). Keep talking with the child in words: explain, ask, "
+                "or react to what they just said. Do not announce a wait. "
+                "A finished page stays invisible until you call show_page with its id; "
+                "a change to the visible page applies by itself.")
+
+    @function_tool()
+    async def show_page(self, context: RunContext, page_id: str) -> str:
+        """Put a finished screen page in front of the child.
+
+        Args:
+            page_id: Which finished page, e.g. "p1" (from the ready note).
+        """
+        page = self.screen.page((page_id or "").strip())
+        if page is None:
+            known = ", ".join(sorted(self.screen.pages)) or "none yet"
+            return (f"Unknown page id '{page_id}'. Finished pages: {known}. "
+                    "No page was shown. Explain in words instead, briefly.")
+        try:
+            item = PageItem(id=page.page_id, title=page.title, body=page.body)
+        except ValidationError:
+            return (f"Page {page.page_id} is too large to show. "
+                    "Explain in words instead, briefly.")
+        shown = await self._rpc("board.show", item.model_dump(exclude_none=True))
+        if not shown:
+            return (f"Page {page.page_id} could not be shown. "
+                    "Explain in words instead, briefly.")
+        self.screen.mark_visible(page.page_id)
+        return (f"Page {page.page_id} is now visible. "
+                "Teach from what it actually shows, as its author.")
+
+    @function_tool()
+    async def reveal(self, context: RunContext, part_id: str) -> str:
+        """Uncover a hidden answer or a `later` part on the visible page.
+
+        Args:
+            part_id: The part's id from the page source, e.g. "facit".
+        """
+        part = (part_id or "").strip()
+        if not part:
+            return "No part given. Nothing was revealed."
+        if self.screen.visible_id is None:
+            return "No page is on screen yet. Nothing was revealed."
+        ok = await self._rpc("board.reveal", {"id": self.screen.visible_id, "part": part})
+        if not ok:
+            return f"Part {part} could not be revealed. Explain in words instead, briefly."
+        return f"Part {part} is now visible. Talk about what it shows."
+
+    @function_tool()
+    async def point(self, context: RunContext, part_id: str) -> str:
+        """Highlight one part of the visible page.
+
+        Args:
+            part_id: The part's id from the page source, e.g. "steg-2".
+        """
+        part = (part_id or "").strip()
+        if not part:
+            return "No part given. Nothing was highlighted."
+        if self.screen.visible_id is None:
+            return "No page is on screen yet. Nothing was highlighted."
+        ok = await self._rpc("board.point", {"id": self.screen.visible_id, "part": part})
+        if not ok:
+            return f"Part {part} could not be highlighted. Explain in words instead, briefly."
+        return f"Part {part} is highlighted. Talk about it."
+
+    async def _prompt_when_free(self, session: AgentSession, text: str) -> None:
+        """Prompt the tutor once it is not speaking; while it (or the child)
+        is speaking, wait for that speech to finish first (bounded)."""
+        try:
+            for _ in range(100):
+                if session.agent_state != "speaking" and session.user_state != "speaking":
+                    break
+                await asyncio.sleep(0.3)
+        except Exception:
+            pass
+        prompt_event(session, text)
+
+    async def screen_page_ready(self, session: AgentSession, page: Any) -> None:
+        """A new page finished: add it to the context invisible, then prompt once."""
+        parts: list[Any] = []
+        if getattr(page, "png", None):
+            parts.append(llm.ImageContent(
+                image=f"data:image/png;base64,{base64.b64encode(page.png).decode()}",
+                inference_detail="high"))
+        text = (f"[Screen page {page.page_id} ('{page.title}') is ready but NOT visible. "
+                f"Source:\n{page.body}\nCall show_page('{page.page_id}') when it fits "
+                f"the lesson.]")
+        record_active("screen_ready", {"page": page.page_id, "title": page.title,
+                                           "image": bool(getattr(page, 'png', None))})
+        ctx = self.chat_ctx.copy()
+        ctx.add_message(role="user", content=[text, *parts])
+        await self.update_chat_ctx(ctx)
+        asyncio.create_task(self._prompt_when_free(
+            session, f"Screen page {page.page_id} ('{page.title}') is ready but not visible. "
+                      f"If it fits the lesson now, call show_page('{page.page_id}'); "
+                      f"otherwise keep teaching and bring it in later."))
+
+    async def screen_patch_ready(self, session: AgentSession, patch: Any) -> None:
+        """A change finished: apply it at once, add it to the context, no prompt."""
+        ok = await self._rpc("board.patch", {"id": patch.page_id, "patch": patch.patch})
+        parts: list[Any] = []
+        if getattr(patch, "png", None):
+            parts.append(llm.ImageContent(
+                image=f"data:image/png;base64,{base64.b64encode(patch.png).decode()}",
+                inference_detail="high"))
+        applied = "applied on the visible page" if ok else "could NOT be applied"
+        text = (f"[Screen change {applied} (page {patch.page_id}). "
+                f"Patch source:\n{patch.patch}\nThe screenshot shows the page now.]")
+        record_active("screen_patched", {"page": patch.page_id, "ok": ok})
+        ctx = self.chat_ctx.copy()
+        ctx.add_message(role="user", content=[text, *parts])
+        await self.update_chat_ctx(ctx)
+
+    async def screen_failed(self, session: AgentSession, message: str) -> None:
+        """A screen job failed: tell the tutor and let it say so once it is free.
+
+        Quiet failure left the child waiting in silence (2026-11-13: 26 s until
+        the child asked "Hur går det?")."""
+        record_active("screen_failed", {"message": message[:200]})
+        await self._prompt_when_free(
+            session,
+            f"The screen failed: {message} Tell the child in one short sentence that "
+            "the picture did not work, and carry on teaching in words.")
+
+
 def prompt_event(session: AgentSession, text: str):
     """Ask for a reply to something that happened in the session (not speech).
 
@@ -896,6 +1089,47 @@ def prompt_event(session: AgentSession, text: str):
     model's own turn.
     """
     return session.generate_reply(user_input=f"[Session event, not the child's words: {text}]")
+
+
+def is_fatal_llm_error(event: Any) -> bool:
+    """A provider error LiveKit will not retry (for example an HTTP 400).
+
+    LiveKit emits these as an LLMError with `recoverable=False` and leaves the turn
+    unanswered. The turn's user message stays in history, so the child waits in
+    silence and every later request may fail the same way.
+    """
+    error = getattr(event, "error", None)
+    return getattr(error, "type", None) == "llm_error" and getattr(
+        error, "recoverable", None
+    ) is False
+
+
+# Spoken without the LLM, because the LLM is what failed. One short sentence; the room
+# is deleted afterwards, so the browser shows its disconnected notice with a restart button.
+PROVIDER_FAILED_APOLOGY = (
+    "Förlåt, jag fick ett tekniskt problem och kan inte fortsätta just nu. "
+    "Stäng fönstret och starta en ny session, så försöker vi igen."
+)
+
+# The child typed before the fixed greeting could play (see text_input.TypedChat): their
+# message is answered with the greeting folded in, so the line is not spoken twice.
+TYPED_BEFORE_GREETING = (
+    'The child typed this before they heard you. Greet them by name in one short sentence, '
+    'then answer what they wrote, in one reply. Your opening line was "{line}"; do not say '
+    "all of it."
+)
+
+
+async def say_provider_failed(session: AgentSession) -> None:
+    """Speak the apology through TTS only; never let this path raise."""
+    record_active("provider_failed", {"apology": True})
+    try:
+        handle = session.say(PROVIDER_FAILED_APOLOGY, allow_interruptions=False)
+        await asyncio.wait_for(handle.wait_for_playout(), timeout=20)
+    except Exception as error:  # closing session, TTS down, or interrupted
+        log.warning("could not say the provider-failure apology: %s", error)
+        record_active("provider_failed", {"apology": False,
+                                            "error": f"{type(error).__name__}"})
 
 
 def safe_interrupt(session: AgentSession, where: str) -> None:
@@ -918,6 +1152,9 @@ server = AgentServer()
 
 
 def prewarm(proc: JobProcess) -> None:
+    # A misspelt TUTOR_NOISE_CANCELLATION must stop the worker at boot, not silently run
+    # unfiltered while the operator believes the room is being cleaned.
+    noise.noise_cancellation_mode()
     proc.userdata["vad"] = silero.VAD.load(min_silence_duration=0.5)
     warm_up()
 
@@ -928,7 +1165,13 @@ server.setup_fnc = prewarm
 @server.rtc_session(agent_name=AGENT_NAME)
 async def entrypoint(ctx: JobContext) -> None:
     await ctx.connect()
+    # Own the child's typed chat from the moment the room connects (see text_input.py):
+    # a message that arrives before the handler exists is dropped by the RTC layer with
+    # no record anywhere, and RoomIO only registers lk.chat when the session starts.
+    typed = TypedChat()
+    ctx.room.register_text_stream_handler(TOPIC_CHAT, typed.on_stream)
     child = await ctx.wait_for_participant()
+    typed.expect(child.identity)
     try:
         meta = json.loads(child.metadata or "{}")
         learner = meta.get("learner", {})
@@ -937,26 +1180,78 @@ async def entrypoint(ctx: JobContext) -> None:
         learner = {}
         board = {}
 
-    tutor = Tutor(learner, ctx.room, board=board)
-    tutor.child_identity = child.identity
-
     debug = DebugLog.create(ctx.room.name, learner, getattr(getattr(ctx, "job", None), "id", "?"))
+    typed.attach_record(debug.record)
+
+    # The greeting is fixed text through TTS, so the child hears the fox within about a
+    # second no matter what the provider is doing. The model gets the line and the hints
+    # `greeting_instruction` used to carry, so it does not greet again.
+    greeting, greeting_variant = prompt.greeting_line(learner)
+    note = prompt.greeting_note(learner, greeting)
+
+    smart = os.environ.get("TUTOR_SCREEN") == "smart"
+    screen = None
+    if smart:
+        from .screen import Screen, session_pages_dir
+        screen = Screen(
+            learner=learner,
+            pages_dir=session_pages_dir(ctx.room.name, getattr(debug, "directory", None)),
+            session_id=ctx.room.name,
+        )
+        tutor: Tutor = SmartTutor(learner, ctx.room, board=board, screen=screen, greeting_note=note)
+        # The first screen job must not pay for the browser launch: start it
+        # while the greeting still runs. The job path keeps its own fallback.
+        asyncio.create_task(screen.warmup())
+    else:
+        tutor = Tutor(learner, ctx.room, board=board, greeting_note=note)
+    tutor.child_identity = child.identity
     set_active(debug)
 
     voice = build_tts()
     log.info("tutor TTS route %s", tts_route(voice))
+    # TUTOR_NOISE_CANCELLATION: off (default) | nc | bvc, applied to the child's inbound
+    # audio before the VAD and the recogniser (noise.py).
+    noise_mode = noise.noise_cancellation_mode()
+    log.info("tutor noise cancellation %s", noise_mode)
+    # TUTOR_FILLERS=1: a short fox sound when the reply is late (fillers.py). None when off.
+    fillers = build_fillers(voice, delay=env_float("TUTOR_FILLER_AFTER_S", DEFAULT_FILLER_DELAY))
+    llm_timeout = env_float("TUTOR_LLM_TIMEOUT_S", 5.0)
+    session_llm = build_session_llm(ctx.room.name)
     session = AgentSession(
         stt=build_stt(),
-        llm=build_llm(ctx.room.name),
+        llm=session_llm,
         tts=voice,
         vad=ctx.proc.userdata["vad"],
         turn_handling=TurnHandlingOptions(
             turn_detection="stt",
             endpointing={"min_delay": env_float("TUTOR_MIN_ENDPOINT", 0.6), "max_delay": 4.0},
-            interruption={"enabled": True, "mode": "vad", "min_duration": 0.4},
+            # TUTOR_INTERRUPT_MIN_S: how long sound must last before it stops the fox.
+            # 0.4 s let room noise cut it off; the dev setup tries 2.0 (2026-11-13).
+            interruption={"enabled": True, "mode": "vad",
+                          "min_duration": env_float("TUTOR_INTERRUPT_MIN_S", 0.4)},
+        ),
+        # One retry on the same route, 5 s each: the child should not wait a minute for a
+        # slow provider. A route that still fails is the failover's or the apology's job.
+        conn_options=SessionConnectOptions(
+            llm_conn_options=APIConnectOptions(
+                timeout=llm_timeout, max_retry=1, retry_interval=LLM_RETRY_INTERVAL_S
+            )
         ),
         max_tool_steps=6,
     )
+    typed.attach_session(session)
+
+    @session.on("conversation_item_added")
+    def tutor_has_spoken(event) -> None:
+        # After the first spoken turn a typed message no longer has to carry the greeting.
+        item = getattr(event, "item", None)
+        if getattr(item, "type", None) == "message" and getattr(item, "role", "") == "assistant":
+            typed.mark_heard()
+
+    @session.on("agent_state_changed")
+    def tutor_speaking(event) -> None:
+        if getattr(event, "new_state", None) == "speaking":
+            typed.mark_heard()
 
     @session.on("function_tools_executed")
     def tools_executed(event) -> None:
@@ -979,6 +1274,61 @@ async def entrypoint(ctx: JobContext) -> None:
     ):
         session.on(sdk_event, debug.record_sdk)
 
+    if fillers is not None:
+        # Follows child turns and agent state; plays on its own track, never in the
+        # chat context, the transcript or the caption.
+        fillers.attach(session, lambda: tutor.mode)
+
+    provider_failed = asyncio.Event()
+
+    @session.on("error")
+    def session_error(event) -> None:
+        # Recorded by debug.record_sdk above (with the provider's message, see
+        # debug_log._dump_error). A non-retryable one also ends the session below
+        # instead of leaving the child waiting for a reply that cannot come.
+        if is_fatal_llm_error(event):
+            log.error("LLM error is not retryable; ending the session with an apology")
+            provider_failed.set()
+
+    if screen is not None:
+        assert isinstance(tutor, SmartTutor)
+        smart_tutor = tutor
+        screen.on_page = lambda page: asyncio.create_task(
+            smart_tutor.screen_page_ready(session, page))
+        screen.on_patch = lambda patch: asyncio.create_task(
+            smart_tutor.screen_patch_ready(session, patch))
+        screen.on_failure = lambda message: asyncio.create_task(
+            smart_tutor.screen_failed(session, message))
+
+        async def note_page_answer(text: str) -> None:
+            ctx_ = tutor.chat_ctx.copy()
+            ctx_.add_message(role="user", content=[text])
+            await tutor.update_chat_ctx(ctx_)
+
+        page_answers = PageAnswers(
+            prompt=lambda text: prompt_event(session, text),
+            note=note_page_answer, record=debug.record)
+
+        @session.on("conversation_item_added")
+        def forward_screen_turn(event) -> None:
+            # Every conversation turn also goes to the Screen; worker-injected
+            # session events ([Session event ...]) are not the child's words.
+            item = getattr(event, "item", None)
+            if getattr(item, "type", None) != "message":
+                return
+            role = getattr(item, "role", "")
+            if role not in ("user", "assistant"):
+                return
+            try:
+                text = item.text_content  # a property, not a method
+            except Exception:
+                return
+            if not text or (role == "user" and text.startswith("[Session event")):
+                return
+            if role == "user":
+                page_answers.child_spoke()
+            screen.add_turn("child" if role == "user" else "tutor", text)
+
     # ---- homework intake ----------------------------------------------------------
     pending: list[tuple[list[Any], str]] = []
     settle: asyncio.Task | None = None
@@ -989,6 +1339,9 @@ async def entrypoint(ctx: JobContext) -> None:
         pending.clear()
         for parts, description in batch:
             await tutor.add_homework(parts, description)
+            if screen is not None:
+                screen.add_homework(description, [getattr(p, "image", None)
+                                                  for p in parts if getattr(p, "image", None)])
         await tutor.set_mode("talking")
         safe_interrupt(session, "homework")
         debug.record("prompt", {"kind": "homework_shared", "items": len(batch)})
@@ -1038,8 +1391,17 @@ async def entrypoint(ctx: JobContext) -> None:
         except json.JSONDecodeError:
             return
         debug.record("browser_event", {"type": str(event.get("type", "?"))[:40]})
-        if event.get("type") == "end":
+        if event.get("type") == "mic":
+            # The child (or a parent) pressed the microphone button.
+            debug.record("mic", {"on": bool(event.get("on")), "why": str(event.get("why", ""))[:20]})
+        elif event.get("type") == "end":
             ending.set()
+        elif event.get("type") == "page-answer" and screen is not None:
+            # Smart-screen mode: the child's answer from an answer box prompts a reply.
+            page, part = str(event.get("page", ""))[:40], str(event.get("part", ""))[:40]
+            value = str(event.get("value", ""))
+            screen.record_answer(page, part, value, str(event.get("kind", "")))
+            page_answers.add(page, part, value)
         elif event.get("type") == "board-size":
             # The browser measures the real board pane (ResizeObserver) and
             # reports resizes/rotation mid-session; commission_board picks
@@ -1060,37 +1422,110 @@ async def entrypoint(ctx: JobContext) -> None:
     ctx.room.register_text_stream_handler("session-event", spawn(on_session_event))
 
     outcome = "unknown"
+    warm_up_task: asyncio.Task | None = None
+
+    def opening(_instruction: str) -> None:
+        """The session is ready and nothing was typed before it: greet in fixed text.
+
+        Synchronous on purpose. `TypedChat.start` calls this where it would otherwise
+        prompt the LLM, so marking the greeting as heard here (rather than inside the
+        task) closes the window in which a typed message would try to greet as well.
+        """
+        typed.mark_heard()
+        asyncio.create_task(greet(session, debug, greeting, greeting_variant, learner))
+
     try:
+        # The warm-up race runs during the greeting, so the choice is usually ready
+        # before the child's first turn. It only exists when a second route is configured.
+        if isinstance(session_llm, SessionLLM):
+            warm_up_task = asyncio.create_task(
+                session_llm.warm_up(instructions=tutor.instructions, tools=list(tutor.tools)),
+                name="tutor-llm-warm-up",
+            )
         await session.start(
             agent=tutor,
             room=ctx.room,
-            room_options=room_io.RoomOptions(participant_identity=child.identity),
+            # text_input=False: the worker owns lk.chat from connect time (see
+            # text_input.py), so RoomIO must not take the topic over. audio_input carries
+            # the noise-cancellation filter when one is configured.
+            room_options=noise.room_options(child.identity, noise_mode),
             # TUTOR_CLOUD_RECORDING=1 uploads session audio and transcripts to LiveKit
             # Cloud observability. Off by default; the local debug log (TUTOR_DEBUG_LOG=1)
             # is the reviewable trail when Cloud is off or unreachable.
             record=os.environ.get("TUTOR_CLOUD_RECORDING") == "1",
         )
         debug.record("worker_session_started", {
-            "cloud_recording": os.environ.get("TUTOR_CLOUD_RECORDING") == "1"})
+            "cloud_recording": os.environ.get("TUTOR_CLOUD_RECORDING") == "1",
+            "noise_cancellation": noise_mode})
+        if fillers is not None:
+            # Publishes the filler track and starts making the clips in the background;
+            # a failure here leaves the feature off and never breaks the session.
+            await fillers.start(ctx.room)
         await ctx.room.local_participant.set_attributes({"tutor.mode": "talking"})
-        debug.record("prompt", {"kind": "greeting"})
-        prompt_event(session, prompt.greeting_instruction(learner))
+        # TypedChat opens the session so a message typed before the room was ready is
+        # answered instead of lost. With nothing queued it calls `opening`, which speaks
+        # the fixed greeting through TTS alone; with a queued message that message is
+        # answered with the greeting folded into one reply, so the line is not repeated.
+        await typed.start(
+            prompt.greeting_instruction(learner),
+            opening,
+            greet_instruction=TYPED_BEFORE_GREETING.format(line=greeting),
+        )
 
-        outcome = await _run_until_done(ctx, session, tutor, debug, ending)
+        outcome = await _run_until_done(ctx, session, tutor, debug, ending, provider_failed)
     except Exception as error:
         outcome = f"error: {type(error).__name__}: {error}"[:300]
         log.exception("session failed")
         raise
     finally:
+        if fillers is not None:
+            await fillers.aclose()
+        if warm_up_task is not None and not warm_up_task.done():
+            warm_up_task.cancel()
         report_path = debug.finalize(outcome)
         if report_path is not None:
             log.info("debug session report: %s", report_path)
         clear_active()
 
 
+async def greet(
+    session: AgentSession, debug: DebugLog, greeting: str, variant: int, learner: dict[str, Any]
+) -> None:
+    """Speak the fixed greeting through TTS only; the LLM is not involved.
+
+    `session.say` puts the line in the chat history as the assistant's turn, so the model
+    knows it has greeted. The speech is interruptible as before: if the child talks or
+    types during it, the greeting stops and their turn is answered as usual.
+    """
+    debug.record("greeting", {"kind": "fixed", "variant": variant, "text": greeting})
+    try:
+        # Not interruptible: on 2026-11-13 the microphone picked up room sound within a
+        # second of joining in both of the owner's calls, which cancelled the greeting
+        # before any audio and left about 11 s of silence. The line is short; speech
+        # during it is answered when it ends.
+        handle = session.say(greeting, allow_interruptions=False)
+    except RuntimeError as error:
+        # The session closed before the first word. Fall back to a generated greeting so
+        # the child is never left in silence without an event in the log.
+        log.warning("fixed greeting could not be spoken: %s", error)
+        debug.record("greeting", {"kind": "generated", "why": "session not running"})
+        debug.record("prompt", {"kind": "greeting"})
+        prompt_event(session, prompt.greeting_instruction(learner))
+        return
+
+    async def wait_for_end() -> None:
+        try:
+            await handle.wait_for_playout()
+            debug.record("greeting_done", {"interrupted": handle.interrupted})
+        except Exception as error:  # closing session, TTS down, cancelled
+            debug.record("greeting_done", {"ok": False, "error": type(error).__name__})
+
+    asyncio.create_task(wait_for_end(), name="tutor-greeting")
+
+
 async def _run_until_done(
     ctx: JobContext, session: AgentSession, tutor: Tutor, debug: DebugLog,
-    ending: asyncio.Event,
+    ending: asyncio.Event, provider_failed: asyncio.Event | None = None,
 ) -> str:
 
     left = asyncio.Event()
@@ -1105,12 +1540,18 @@ async def _run_until_done(
         debug.record_sdk(event)
         closed.set()
 
-    await asyncio.wait(
-        [asyncio.create_task(ending.wait()), asyncio.create_task(left.wait()),
-         asyncio.create_task(closed.wait())],
-        return_when=asyncio.FIRST_COMPLETED,
-    )
-    if closed.is_set() and not ending.is_set() and not left.is_set():
+    waits = [asyncio.create_task(ending.wait()), asyncio.create_task(left.wait()),
+             asyncio.create_task(closed.wait())]
+    if provider_failed is not None:
+        waits.append(asyncio.create_task(provider_failed.wait()))
+    await asyncio.wait(waits, return_when=asyncio.FIRST_COMPLETED)
+    if provider_failed is not None and provider_failed.is_set() and not left.is_set():
+        # The provider refused the turn and will not retry it. Say why without the LLM
+        # and end; the 2026-11-06 note in safe_interrupt is the same lesson: a dead
+        # provider must not leave the browser sitting in a silent room.
+        outcome = "provider_error"
+        await say_provider_failed(session)
+    elif closed.is_set() and not ending.is_set() and not left.is_set():
         log.error("agent session closed before the child left or ended the session")
         outcome = "sdk_closed_early"
     elif ending.is_set():

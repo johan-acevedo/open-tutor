@@ -1,0 +1,182 @@
+[
+  {
+    "run": 1,
+    "calls": [
+      {
+        "kind": "page",
+        "seconds": 17.414,
+        "input_chars": 524,
+        "output_chars": 426,
+        "image_bytes": 0
+      },
+      {
+        "kind": "look",
+        "seconds": 5.832,
+        "input_chars": 1701,
+        "output_chars": 2,
+        "image_bytes": 30573
+      },
+      {
+        "kind": "look",
+        "seconds": 4.966,
+        "input_chars": 385,
+        "output_chars": 2,
+        "image_bytes": 30573
+      }
+    ],
+    "failures": [],
+    "model_s": 17.41431645816192,
+    "look_s": 5.832194900140166,
+    "retry_s": 0.0,
+    "render_s": 1.414949167985469,
+    "total_s": 24.662888632155955,
+    "issues": [],
+    "legacy_look_s": 4.965929003898054,
+    "legacy_chars": 2,
+    "legacy_input_chars": 385
+  },
+  {
+    "run": 2,
+    "calls": [
+      {
+        "kind": "page",
+        "seconds": 9.749,
+        "input_chars": 524,
+        "output_chars": 500,
+        "image_bytes": 0
+      },
+      {
+        "kind": "look",
+        "seconds": 7.888,
+        "input_chars": 1775,
+        "output_chars": 2,
+        "image_bytes": 35336
+      },
+      {
+        "kind": "look",
+        "seconds": 6.545,
+        "input_chars": 385,
+        "output_chars": 2,
+        "image_bytes": 35336
+      }
+    ],
+    "failures": [],
+    "model_s": 9.748724088072777,
+    "look_s": 7.888530624564737,
+    "retry_s": 0.0,
+    "render_s": 1.2417613631114364,
+    "total_s": 18.881172019056976,
+    "issues": [],
+    "legacy_look_s": 6.545492866076529,
+    "legacy_chars": 2,
+    "legacy_input_chars": 385
+  },
+  {
+    "run": 3,
+    "calls": [
+      {
+        "kind": "page",
+        "seconds": 8.531,
+        "input_chars": 524,
+        "output_chars": 474,
+        "image_bytes": 0
+      },
+      {
+        "kind": "look",
+        "seconds": 13.106,
+        "input_chars": 1749,
+        "output_chars": 2,
+        "image_bytes": 34647
+      },
+      {
+        "kind": "look",
+        "seconds": 7.566,
+        "input_chars": 385,
+        "output_chars": 2,
+        "image_bytes": 34647
+      }
+    ],
+    "failures": [],
+    "model_s": 8.530589872971177,
+    "look_s": 13.105583766940981,
+    "retry_s": 0.0,
+    "render_s": 1.1858894107863307,
+    "total_s": 22.823367462027818,
+    "issues": [],
+    "legacy_look_s": 7.565911149140447,
+    "legacy_chars": 2,
+    "legacy_input_chars": 385
+  },
+  {
+    "run": 4,
+    "calls": [
+      {
+        "kind": "page",
+        "seconds": 14.354,
+        "input_chars": 524,
+        "output_chars": 539,
+        "image_bytes": 0
+      },
+      {
+        "kind": "look",
+        "seconds": 13.721,
+        "input_chars": 1814,
+        "output_chars": 2,
+        "image_bytes": 33560
+      },
+      {
+        "kind": "look",
+        "seconds": 6.225,
+        "input_chars": 385,
+        "output_chars": 2,
+        "image_bytes": 33560
+      }
+    ],
+    "failures": [],
+    "model_s": 14.353669887874275,
+    "look_s": 13.720936513040215,
+    "retry_s": 0.0,
+    "render_s": 1.2644059620797634,
+    "total_s": 29.34030220936984,
+    "issues": [],
+    "legacy_look_s": 6.224872747901827,
+    "legacy_chars": 2,
+    "legacy_input_chars": 385
+  },
+  {
+    "run": 5,
+    "calls": [
+      {
+        "kind": "page",
+        "seconds": 10.079,
+        "input_chars": 524,
+        "output_chars": 597,
+        "image_bytes": 0
+      },
+      {
+        "kind": "look",
+        "seconds": 8.132,
+        "input_chars": 1872,
+        "output_chars": 2,
+        "image_bytes": 32382
+      },
+      {
+        "kind": "look",
+        "seconds": 5.16,
+        "input_chars": 385,
+        "output_chars": 2,
+        "image_bytes": 32382
+      }
+    ],
+    "failures": [],
+    "model_s": 10.078659910708666,
+    "look_s": 8.132021667901427,
+    "retry_s": 0.0,
+    "render_s": 1.23869434511289,
+    "total_s": 19.450972244143486,
+    "issues": [],
+    "legacy_look_s": 5.160051764920354,
+    "legacy_chars": 2,
+    "legacy_input_chars": 385
+  }
+]

@@ -1,0 +1,173 @@
+{
+ "timeline": [
+  {
+   "t": "2026-11-13T09:26:39.036+00:00",
+   "event": "goto",
+   "url": "https://dell5500.tail2e1c4e.ts.net:9444/"
+  },
+  {
+   "t": "2026-11-13T09:26:39.559+00:00",
+   "event": "screenshot",
+   "label": "profiles",
+   "path": "/tmp/screen-toolbox-round/sanitizer-e2e/00-profiles.png"
+  },
+  {
+   "t": "2026-11-13T09:26:39.777+00:00",
+   "event": "start_clicked"
+  },
+  {
+   "t": "2026-11-13T09:26:40.613+00:00",
+   "event": "live_chat_visible"
+  },
+  {
+   "t": "2026-11-13T09:26:40.618+00:00",
+   "event": "board_empty_visible"
+  },
+  {
+   "t": "2026-11-13T09:26:40.759+00:00",
+   "event": "screenshot",
+   "label": "live-empty",
+   "path": "/tmp/screen-toolbox-round/sanitizer-e2e/01-live-empty.png"
+  },
+  {
+   "t": "2026-11-13T09:26:40.789+00:00",
+   "event": "chat_sent",
+   "text": "Hej! Jag ska räkna 3/4 + 1/8 men jag fattar inte. Kan du visa på skärmen?"
+  },
+  {
+   "t": "2026-11-13T09:26:46.940+00:00",
+   "event": "caption_after_a",
+   "caption": "Hej! Jag heter Räven och hjälper till med"
+  },
+  {
+   "t": "2026-11-13T09:26:47.138+00:00",
+   "event": "screenshot",
+   "label": "after-a-sent",
+   "path": "/tmp/screen-toolbox-round/sanitizer-e2e/02-after-a-sent.png"
+  },
+  {
+   "t": "2026-11-13T09:27:06.253+00:00",
+   "event": "page_visible",
+   "page": "p1"
+  },
+  {
+   "t": "2026-11-13T09:27:06.256+00:00",
+   "event": "page_ready_class",
+   "page": "p1",
+   "ready": true
+  },
+  {
+   "t": "2026-11-13T09:27:08.264+00:00",
+   "event": "page_dom",
+   "page": "p1",
+   "info": {
+    "ok": true,
+    "frame_url": "about:srcdoc",
+    "len": 15937,
+    "hasH1": true,
+    "hasAnswer": true,
+    "rawTags": 0,
+    "text": "4\n3\n\t​\n\n+\n8\n1\n\t​\n\nSamma nämnare först\n4\n3\n\t​\n\n8\n1\n\t​\n\n\nFjärdedelarna kan delas i två — då blir de åttondelar.\n\n4\n3\n\t​\n\n+\n8\n1\n\t​\n\n8\n6\n\t​\n\n+\n8\n1\n\t​\n\n4\n3\n\t​\n\n=\n8\n6\n\t​\n\nSvar:\nSkicka"
+   }
+  },
+  {
+   "t": "2026-11-13T09:27:08.385+00:00",
+   "event": "screenshot",
+   "label": "page-visible",
+   "path": "/tmp/screen-toolbox-round/sanitizer-e2e/03-page-visible.png"
+  },
+  {
+   "t": "2026-11-13T09:27:08.401+00:00",
+   "event": "chat_sent",
+   "text": "Okej, så 3/4 är samma som 6/8?"
+  },
+  {
+   "t": "2026-11-13T09:27:16.431+00:00",
+   "event": "caption_after_b",
+   "caption": "Ja, precis! Om man delar varje fjärdedel i två lika stora bitar får man"
+  },
+  {
+   "t": "2026-11-13T09:28:46.682+00:00",
+   "event": "no_second_page_assume_patch",
+   "page": "p1"
+  },
+  {
+   "t": "2026-11-13T09:28:46.806+00:00",
+   "event": "screenshot",
+   "label": "after-b",
+   "path": "/tmp/screen-toolbox-round/sanitizer-e2e/04-after-b.png"
+  },
+  {
+   "t": "2026-11-13T09:28:46.820+00:00",
+   "event": "chat_sent",
+   "text": "Kan du lägga till svaret på skärmen?"
+  },
+  {
+   "t": "2026-11-13T09:28:56.859+00:00",
+   "event": "caption_after_c",
+   "caption": "Vad blir 6/8 + 1/8 då? Skriv gärna ditt svar i rutan!"
+  },
+  {
+   "t": "2026-11-13T09:28:56.962+00:00",
+   "event": "screenshot",
+   "label": "after-c",
+   "path": "/tmp/screen-toolbox-round/sanitizer-e2e/05-after-c.png"
+  },
+  {
+   "t": "2026-11-13T09:28:57.104+00:00",
+   "event": "page_answer_typed",
+   "page": "p1",
+   "part": "ot-answer",
+   "value": "7/8"
+  },
+  {
+   "t": "2026-11-13T09:28:57.241+00:00",
+   "event": "page_answer_sent",
+   "page": "p1",
+   "value": "7/8"
+  },
+  {
+   "t": "2026-11-13T09:29:07.267+00:00",
+   "event": "caption_after_answer",
+   "caption": "Helt rätt! Sex åttondelar plus en åttondel blir sju åttondelar,"
+  },
+  {
+   "t": "2026-11-13T09:29:07.457+00:00",
+   "event": "screenshot",
+   "label": "after-answer",
+   "path": "/tmp/screen-toolbox-round/sanitizer-e2e/06-after-answer.png"
+  },
+  {
+   "t": "2026-11-13T09:29:07.470+00:00",
+   "event": "chat_sent",
+   "text": "Kan du peka på svaret?"
+  },
+  {
+   "t": "2026-11-13T09:29:17.500+00:00",
+   "event": "caption_after_point",
+   "caption": "Helt rätt! Sex åttondelar plus en åttondel blir sju åttondelar, och"
+  },
+  {
+   "t": "2026-11-13T09:29:17.631+00:00",
+   "event": "screenshot",
+   "label": "after-point",
+   "path": "/tmp/screen-toolbox-round/sanitizer-e2e/065-after-point.png"
+  },
+  {
+   "t": "2026-11-13T09:29:17.666+00:00",
+   "event": "end_clicked"
+  },
+  {
+   "t": "2026-11-13T09:29:43.087+00:00",
+   "event": "endcard_visible"
+  },
+  {
+   "t": "2026-11-13T09:29:43.153+00:00",
+   "event": "screenshot",
+   "label": "ended",
+   "path": "/tmp/screen-toolbox-round/sanitizer-e2e/07-ended.png"
+  }
+ ],
+ "console_errors": [],
+ "url": "https://dell5500.tail2e1c4e.ts.net:9444/"
+}
