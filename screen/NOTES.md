@@ -2,6 +2,13 @@
 
 ## Toolbox follow-up, 2026-11-13
 
+Successive patch previews now replay earlier patches before the candidate. This fixes
+false missing-id lint for ids inserted by a previous patch; the model already received
+that source/history. Genuine patch errors are saved and sent to the tutor as a failure
+before any RPC, preserving the visible page. Preview animations finish immediately
+instead of a fixed one-second pause; child animations are unchanged. Synthetic real
+Chromium evidence and checks: `review/2026-11-13-patch-history/`.
+
 Timing now takes priority. New jobs stop at 20 s and aim for 12 s. Clean pages
 use a look only while that soft budget has room; known lint buys one capped
 correction directly. Each optional model call is at most 6 s, and a look never
