@@ -1,6 +1,6 @@
 # Geometry pages: what the writer draws, and the smallest fixes
 
-Six real **Gemini 4 Hydrogen, reasoning low** jobs (the deployed page writer), each rendered
+Five page jobs and one patch with **Gemini 4 Hydrogen, reasoning low** (the dev model), rendered
 unedited at 370×610 and 1000×700 and measured. Answers "what does the current writer do with
 circles, angles, solids and labelled outlines", "where is the side-label defect", and "which
 tag or check is worth building" — as a proposal, not code.
@@ -20,9 +20,9 @@ commands: `provenance.json`. Raw bodies, delivered bodies, patches, screenshots,
 (with the Screen's own `repair` record) and `measure.json` per case: `raw/<case>/`.
 
 **Latency is reported apart from quality.** Generation alone was 6.8–12.8 s, so the look pass
-never ran on any of the six jobs: page 1 went straight to the lint retry ("look pass skipped:
-correct lint directly"), the other five had "look pass skipped: page target budget". Lint was
-clean on the five pages whose labels are visibly wrong (below). CI-time checks are not evidence
+never ran on these jobs: page 1 went straight to the lint retry ("look pass skipped:
+correct lint directly"), the other four page jobs skipped it for the target budget, and patches
+do not have a look pass. Lint was clean on four new pages whose labels are visibly wrong (below). CI-time checks are not evidence
 for this work; every quality claim here is from a screenshot I inspected.
 
 ## What the writer actually wrote
@@ -36,7 +36,7 @@ for this work; every quality claim here is from a screenshot I inspected.
   line proposed below. Minor: a hairline seam where the two halves meet at 1000×700.
 - **Angle (2).** Two `ot-segment` rays at 60.0° (`atan(3.46/2) = 59.99°`), and `60°` as the
   *vertex point's* label. No arc. Both rays carry the text "Vinkelben", and the slanted one's
-  label crosses its own line by 26 px at 370×610 and 45 px at 1000×700.
+  label's box overlaps its own line by approximately 25 px at 370×610 and 43 px at 1000×700.
 - **Cuboid (3).** Oblique projection from three `ot-polygon fill="none"` faces plus three labelled
   `ot-segment`s. Dimensions are right: height 2.0 units ↔ 2 cm, length 4.0 ↔ 4 cm, depth 1.803 ↔
   3 cm (a deliberate foreshortening — see the check below). The height label "2 cm" crosses its
@@ -50,10 +50,11 @@ for this work; every quality claim here is from a screenshot I inspected.
 - **Patch (6).** Two patches against real ids: `target="hojd"` (the height segment) and
   `target="ratblock" do="append"` (a new point `hojd-punkt` with the "2 cm" label). Both targets
   exist, nothing is missing, `patch_issues` is empty, the new point is pointable, and the label
-  now sits outside the figure (`ratblock-patch/*-patched.png`). After the patch the whole page
-  measures with no flags.
+  now sits outside the figure (`ratblock-patch/*-patched.png`). Parent remeasurement with a
+  corrected two-axis clearance formula still finds the other depth label (`3 cm`) overlapping
+  its line by about 2 px. The requested height was improved; the whole page was not fixed.
 
-## The two measured defects share one cause
+## Two defects in side-label placement
 
 `measure.json` per case; "edge_px" is the label centre's distance from its own line, "overlap" =
 the label's half-extent along that line's normal minus that distance (positive = the text reaches
@@ -63,8 +64,8 @@ back over the stroke).
 |---|---|
 | plan, 370×610 | 4 labels cross their own outline by 3 px; 1 label **inside** the L |
 | plan, 1000×700 | 4 labels cross by 4–5 px; 2 labels **inside** the L |
-| vinkel, both | "Vinkelben" on the slanted ray crosses its line by 26 px / 45 px |
-| ratblock, both | "2 cm" on the height edge crosses by 3 px / 4 px |
+| vinkel, both | "Vinkelben" on the slanted ray overlaps its line by about 25 px / 43 px |
+| ratblock, both | "2 cm" on the height edge overlaps by 3 px / 4 px; depth label by about 2 px |
 | cylinder, both | "5 cm" on the height edge crosses by 3 px / 5 px |
 
 Why (in `drawGraph`, `screen/shell/shell.js`):
@@ -80,7 +81,7 @@ Why (in `drawGraph`, `screen/shell/shell.js`):
    lands *below* the edge, inside the bottom bar; the notch's vertical edge label flips *left*,
    inside the upright. Two of six labels inside the figure, on a page Hydrogen wrote unprompted.
 
-**Smallest fix (recommended, not implemented — ~12 lines in `shell.js`, no reference change):**
+**Proposed fix direction (not implemented; validate on these pages before estimating size):**
 
 - Replace `cen` with the polygon's winding: compute the signed area from `spx` once and pass
   `area < 0 ? 1 : -1` into `sideLabel`, which multiplies its normal by it. Outward is then
@@ -88,8 +89,14 @@ Why (in `drawGraph`, `screen/shell/shell.js`):
   today's rule.
 - Make the offset reach-aware: tag each side label with its normal (`data-nx`/`data-ny`) and, in
   the existing `keepInside()` pass that already walks `.ot-lbl`, shift it out by
-  `max(0, reach + 0.25 * f - 1.05 * f)` with `reach = |nx| > |ny| ? w/2 : h/2`. That is where
-  the same class of bug is already handled, and it needs no second layout pass.
+  `max(0, reach + 0.25 * f - 1.05 * f)` with `reach = (|nx| * w + |ny| * h) / 2`.
+  This uses both dimensions for slanted edges. Keep the result inside the pane without pushing
+  it back over its own edge, and check neighboring labels and narrow concave notches too.
+  The existing clamp alone does not solve those constraints.
+
+The probe's label association is heuristic (text and proximity); the clearance is a bounding-box
+estimate, not pixel detection of glyphs intersecting a stroke. Parent review corrected its
+dominant-axis shortcut and reran all saved bodies plus the patch, with no new model calls.
 
 ## Can a check catch a wrong length? (prototype, in `screen/tools/probe_geometry.py`)
 
@@ -103,7 +110,10 @@ edge length in graph units and the number in its label, then the *spread of the 
   units per labelled cm (spread 20%)" — caught.
 - Deliberate perspective is not a mismatch: the cuboid's depth is 1.803 units for "3 cm"
   (implied 0.601), but it is an `ot-segment`, not a `sides` label. **Apply the check to
-  `ot-polygon sides` only**, never to segments or to a figure drawn in perspective.
+  `ot-polygon sides` on an explicitly to-scale plane figure**, never blindly to perspective
+  drawings. The current prototype does not recognize units or perspective; a production lint
+  needs same-unit validation/conversion, at least two known lengths, rounding tolerance and a
+  clear way to mark a schematic drawing. ±5% is an uncalibrated prototype threshold.
 
 ## Pointing and answer leaks
 
@@ -115,35 +125,40 @@ edge length in graph units and the number in its label, then the *spread of the 
   value. The per-case `forbid` scans (area 50,2; volume 24/141; cm³; "omkrets =") found nothing.
   Caveat: that was my reading, not the pipeline's — the look pass never ran on these jobs.
 
-## Ranked proposal
+## Ranked proposal after parent review
 
-1. **Three reference lines, no code.** (a) The circle recipe the writer itself produced after one
-   lint line: two `ot-fn` halves plus a centre point and a labelled radius segment — it removes an
-   invented tag and a 2.6 s retry on every circle page. (b) A solids convention: visible faces as
-   `ot-polygon fill="none"`, each measure as its own labelled `ot-segment`, and the ask-named part
-   given the id (`hojd`, `radie`). All three solids pages already did this unprompted; saying it
-   costs a paragraph and makes it reliable. (c) Document `ot-text`, which the shell implements but
-   the reference omits, so a label can sit anywhere in a graph (an angle label off the vertex).
-2. **The `sideLabel` fix above.** Highest quality gain per line: it removes the reported
-   outline-label defect, the labels inside an L, and the ray label lying across its own line — all
-   measured on real output. No reference change, no new tag.
-3. **The scale-free side-length lint** (item "Can a check catch…"), reported through the existing
-   lint-retry path with a message that names the side. Only `ot-polygon sides`; ±5 % spread.
-   Justified because nothing checks this today and the retry path already exists and works.
-4. **`ot-circle`** (`center`, `r`, optional radius label; ~15 lines in `drawGraph`, one reference
-   row, pointable). Worth it if circle pages are frequent — the workaround works, but the model
-   reaches for `ot-circle` first, so the name is what it expects.
-5. **An angle arc** (`arc` on a segment pair, or `ot-arc`). Lowest value: one 60° angle with a
-   vertex label reads fine, and `ot-text` covers the label placement.
-6. **A solids tag: not yet.** No evidence it earns its cost: 3/3 solids pages were readable with
-   two existing tags, dimensions were right, and the only defect was label placement (item 2).
-   A `rätblock/cylinder/prisma/pyramid/kon/klot` tag must own projection, hidden edges, six
-   labels and its own reference/examples — a large surface for the part that already works. If a
-   real lesson later misses, build **one** tag, not six, with the fewest attributes that cover the
-   approved family:
-   `<ot-solid kind="rätblock|cylinder|prisma|pyramid|kon|klot" a="4" b="3" c="2" hidden="dashed">`
-   with pointable dimension ids `hojd`, `radie`, `bas`, `sida` (so `reveal`/`point` work), and a
-   later `net` attribute for nets. Prism, pyramid, cone, sphere and nets are **untested** here.
+1. **Fix label placement in the existing graph first.** The outline overlaps, concave L
+   inward labels and ray-label overlap are visible defects in pages the model wrote.
+   Use winding for local outward direction and measured two-axis clearance, then handle
+   pane bounds and neighboring labels together. No new plane-figure component or reference
+   syntax is needed. These are the regression pages; not an estimate of a twelve-line fix.
+2. **Test brief reference guidance before publishing it.** `ot-text` already exists but is
+   undocumented, and the circle retry demonstrates a two-curve recipe. Candidate lines
+   for those plus a solids convention are hypotheses, not free or proven reliability gains:
+   every reference line is read on every page. Run a small baseline/steered comparison
+   before claiming they prevent an invented tag or eliminate retries. No such comparison
+   ran in this evidence batch.
+3. **Develop a qualified length lint, rather than shipping the prototype as-is.** On
+   explicitly to-scale plane polygons with at least two numeric measures, check consistent
+   units and relative scale. Skip unknown lengths and marked schematic/perspective cases;
+   tolerate rounded measurements. The real rectangle/L and synthetic 4-versus-5 mismatch
+   show feasibility, not a calibrated false-positive rate. Keep the diagnostic actionable
+   so the existing bounded retry can repair the figure.
+4. **Consider a circle primitive inside `ot-graph` if guidance is insufficient.** A circle
+   was a real gap: the writer invented `ot-circle`, then needed a retry and two equations.
+   A declarative center/radius primitive, with pointable radius and hidden/absent result,
+   may be more reliable and shorter. This is a lead decision, not implemented here.
+5. **Judge an angle-arc primitive with obtuse/reflex cases too.** The single 60° example
+   has correct rays but no arc; that does not prove the existing tools can unambiguously
+   mark which angle is intended in every lesson. `ot-text` can place a label but cannot
+   supply the missing arc by itself. No angle tag is built here.
+6. **Defer a solids tag on the evidence so far; keep the wider family open.** One cuboid
+   page, one cylinder page and one patch of that same cuboid were usable. They are two
+   tested solid types, not three independent solids successes. Fixing labels helps these
+   now. Prism, pyramid, cone, sphere and nets remain untested, so this batch cannot rule
+   out a component for the approved family. If those expose a gap, prefer one declarative
+   solid tag with dimensions, units and pointable parts over many narrow tags. Its exact
+   attributes and net behavior need evidence before design.
 
 ## What I did not do, and what is untested
 
@@ -172,7 +187,9 @@ uv run --project server python screen/tools/probe_geometry.py measure \
   --dir screen/review/2026-11-13-geometry/raw
 ```
 
-`probe_geometry.py measure` is the CI-shaped artifact: per case folder it writes `measure.json`
+`probe_geometry.py measure` is the repeatable measurement tool: per case folder it writes `measure.json`
 (per size: font, lint, every side's drawn length vs its label, every label's distance to its own
 outline, ids and whether each is pointable, visible text and any forbidden string) and the
-screenshots at both sizes. No network. Full server suite: 429 passed, 18 skipped (no runtime code changed).
+screenshots at both sizes. It makes no model calls and needs no key; Chromium still fetches
+public CDN libraries/fonts. It is not a network-free CI test. Worker server suite: 429 passed,
+18 skipped on this base (no runtime code changed).

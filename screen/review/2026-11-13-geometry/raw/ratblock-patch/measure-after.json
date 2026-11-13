@@ -6,7 +6,9 @@
    "issues": [],
    "graphs": [
     {
-     "flags": [],
+     "flags": [
+      "label '3 cm' on segment bredd crosses its own line by 2 px"
+     ],
      "lengths": [
       {
        "side": 0,
@@ -117,7 +119,7 @@
        "segment": "bredd",
        "edge_px": 18.4,
        "inside": false,
-       "overlap_px": -8.8
+       "overlap_px": 1.5
       }
      ],
      "kinds": [
@@ -131,7 +133,9 @@
      ]
     }
    ],
-   "flags": [],
+   "flags": [
+    "label '3 cm' on segment bredd crosses its own line by 2 px"
+   ],
    "ids": [
     "ot-map-data",
     "page",
@@ -161,7 +165,9 @@
    "issues": [],
    "graphs": [
     {
-     "flags": [],
+     "flags": [
+      "label '3 cm' on segment bredd crosses its own line by 2 px"
+     ],
      "lengths": [
       {
        "side": 0,
@@ -272,7 +278,7 @@
        "segment": "bredd",
        "edge_px": 31.8,
        "inside": false,
-       "overlap_px": -15.1
+       "overlap_px": 2.3
       }
      ],
      "kinds": [
@@ -286,7 +292,9 @@
      ]
     }
    ],
-   "flags": [],
+   "flags": [
+    "label '3 cm' on segment bredd crosses its own line by 2 px"
+   ],
    "ids": [
     "ot-map-data",
     "page",

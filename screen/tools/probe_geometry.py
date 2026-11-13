@@ -6,8 +6,8 @@ Two jobs, kept apart on purpose:
            Saves the model's unedited first answer (``raw.html``), the delivered
            page (``delivered.html``, after any look/lint repair), its meta and
            timings, then measures ``raw.html`` at 370x610 and 1000x700.
-  measure  Offline only: re-render saved bodies and measure them. No provider
-           call, so it is safe to run anywhere (this is the CI-shaped check).
+  measure  Re-render saved bodies and measure them, without provider calls or
+           keys. Chromium still fetches the usual public shell CDN assets.
 
 A case is a small fictional lesson ask. Baseline cases use only what
 ``screen/REFERENCE.md`` documents. Steered cases append candidate reference
@@ -109,7 +109,7 @@ STEERED: dict[str, dict] = {
     "vinkel-styrd": {
         "base": "vinkel",
         "steer": ("Om du ritar en vinkel: två `<ot-segment>` från spetsen, till exempel "
-                  "`from=\"0 0\" to=\"4 0\"` och `from=\"0 0\" to=\"2 3.5\"`, och etiketten "
+                  "`from=\"0 0\" to=\"4 0\"` och `from=\"0 0\" to=\"2 3.464\"`, och etiketten "
                   "`<ot-text x=\"1,4\" y=\"0,9\">60°</ot-text>` vid spetsen."),
     },
 }
@@ -308,7 +308,7 @@ def analyse_graph(graph: dict, f: float) -> dict:
                     # vertical side reaches back over the line.
                     nx, ny = -(b["y"] - a["y"]), b["x"] - a["x"]
                     nl = math.hypot(nx, ny) or 1
-                    reach = lb["w"] / 2 if abs(nx / nl) > abs(ny / nl) else lb["h"] / 2
+                    reach = (abs(nx / nl) * lb["w"] + abs(ny / nl) * lb["h"]) / 2
                     overlap = reach - dist
                     found["labels"].append({"text": lb["text"],
                                             "edge_px": round(dist, 1), "inside": inside,
@@ -327,15 +327,16 @@ def analyse_graph(graph: dict, f: float) -> dict:
                 row["implied_scale"] = round(length / number, 3)
             found["lengths"].append(row)
             # Its own label: the one nearest the segment's middle.
-            if shape["text"] and graph["labels"]:
+            matching = [lb for lb in graph["labels"] if lb["text"] == shape["text"]]
+            if shape["text"] and matching:
                 mid = {"x": (px[0]["x"] + px[1]["x"]) / 2, "y": (px[0]["y"] + px[1]["y"]) / 2}
-                lb = min(graph["labels"], key=lambda l: math.hypot(
+                lb = min(matching, key=lambda l: math.hypot(
                     l["x"] + l["w"] / 2 - mid["x"], l["y"] + l["h"] / 2 - mid["y"]))
                 centre = {"x": lb["x"] + lb["w"] / 2, "y": lb["y"] + lb["h"] / 2}
                 dist, _ = seg_dist(centre, px[0], px[1])
                 nx, ny = -(px[1]["y"] - px[0]["y"]), px[1]["x"] - px[0]["x"]
                 nl = math.hypot(nx, ny) or 1
-                reach = lb["w"] / 2 if abs(nx / nl) > abs(ny / nl) else lb["h"] / 2
+                reach = (abs(nx / nl) * lb["w"] + abs(ny / nl) * lb["h"]) / 2
                 overlap = reach - dist
                 found["labels"].append({"text": lb["text"], "segment": shape["id"],
                                         "edge_px": round(dist, 1), "inside": False,

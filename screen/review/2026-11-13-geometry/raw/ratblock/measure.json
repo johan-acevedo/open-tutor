@@ -7,7 +7,8 @@
    "graphs": [
     {
      "flags": [
-      "label '2 cm' on segment hojd crosses its own line by 3 px"
+      "label '2 cm' on segment hojd crosses its own line by 3 px",
+      "label '3 cm' on segment bredd crosses its own line by 2 px"
      ],
      "lengths": [
       {
@@ -127,7 +128,7 @@
        "segment": "bredd",
        "edge_px": 18.4,
        "inside": false,
-       "overlap_px": -8.8
+       "overlap_px": 1.5
       }
      ],
      "kinds": [
@@ -141,7 +142,8 @@
     }
    ],
    "flags": [
-    "label '2 cm' on segment hojd crosses its own line by 3 px"
+    "label '2 cm' on segment hojd crosses its own line by 3 px",
+    "label '3 cm' on segment bredd crosses its own line by 2 px"
    ],
    "ids": [
     "ot-map-data",
@@ -170,7 +172,8 @@
    "graphs": [
     {
      "flags": [
-      "label '2 cm' on segment hojd crosses its own line by 4 px"
+      "label '2 cm' on segment hojd crosses its own line by 4 px",
+      "label '3 cm' on segment bredd crosses its own line by 2 px"
      ],
      "lengths": [
       {
@@ -290,7 +293,7 @@
        "segment": "bredd",
        "edge_px": 31.8,
        "inside": false,
-       "overlap_px": -15.1
+       "overlap_px": 2.3
       }
      ],
      "kinds": [
@@ -304,7 +307,8 @@
     }
    ],
    "flags": [
-    "label '2 cm' on segment hojd crosses its own line by 4 px"
+    "label '2 cm' on segment hojd crosses its own line by 4 px",
+    "label '3 cm' on segment bredd crosses its own line by 2 px"
    ],
    "ids": [
     "ot-map-data",

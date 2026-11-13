@@ -7,7 +7,7 @@
    "graphs": [
     {
      "flags": [
-      "label 'Vinkelben' on segment ben-2 crosses its own line by 26 px"
+      "label 'Vinkelben' on segment ben-2 crosses its own line by 25 px"
      ],
      "lengths": [
       {
@@ -38,7 +38,7 @@
        "segment": "ben-2",
        "edge_px": 18.4,
        "inside": false,
-       "overlap_px": 25.6
+       "overlap_px": 24.5
       }
      ],
      "kinds": [
@@ -49,7 +49,7 @@
     }
    ],
    "flags": [
-    "label 'Vinkelben' on segment ben-2 crosses its own line by 26 px"
+    "label 'Vinkelben' on segment ben-2 crosses its own line by 25 px"
    ],
    "ids": [
     "ot-map-data",
@@ -78,7 +78,7 @@
    "graphs": [
     {
      "flags": [
-      "label 'Vinkelben' on segment ben-2 crosses its own line by 45 px"
+      "label 'Vinkelben' on segment ben-2 crosses its own line by 43 px"
      ],
      "lengths": [
       {
@@ -109,7 +109,7 @@
        "segment": "ben-2",
        "edge_px": 31.8,
        "inside": false,
-       "overlap_px": 44.7
+       "overlap_px": 42.8
       }
      ],
      "kinds": [
@@ -120,7 +120,7 @@
     }
    ],
    "flags": [
-    "label 'Vinkelben' on segment ben-2 crosses its own line by 45 px"
+    "label 'Vinkelben' on segment ben-2 crosses its own line by 43 px"
    ],
    "ids": [
     "ot-map-data",
