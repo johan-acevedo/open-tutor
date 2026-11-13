@@ -30,5 +30,9 @@
   {"name": "vattnet", "title": "Vattnets kretslopp", "grade": "åk 4", "subject": "NO",
    "request": "Visa vattnets kretslopp i fyra steg och ett diagram över hur mycket det regnar i Göteborg under året.",
    "patch_request": "Förklara molnsteget lite tydligare.",
-   "shows": ["ot-cycle", "ot-chart", "replace"]}
+   "shows": ["ot-cycle", "ot-chart", "replace"]},
+  {"name": "regioner", "title": "Sveriges län", "grade": "åk 4", "subject": "geografi",
+   "request": "Ella ska lära sig Sveriges län. Visa alla 21 län på en karta med länsbokstäverna och förklara vad ett län är.",
+   "patch_request": "Ella undrar var hon bor. Markera Skåne, Stockholm och Norrbotten.",
+   "shows": ["ot-map regions=län", "ot-region", "append"]}
 ]

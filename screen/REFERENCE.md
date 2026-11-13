@@ -98,6 +98,15 @@ A step without `$` is a short explanation line. `result` on a step makes it gree
   <ot-area name="Roman Empire" color="amber">Romarriket</ot-area>      <!-- English name of the realm -->
 </ot-map>
 ```
+Sweden's 21 regions (län): `regions="län"` draws all of them with letter codes and a key under the map; `ot-region`
+marks and names some of them (Swedish name, `Skåne län`, `Region Skåne` or the letter: `M`). Every region of a full map
+can be pointed at by id `lan-<bokstav>`: `lan-M` is Skåne, `lan-BD` is Norrbotten.
+```html
+<ot-map id="karta" view="sverige" regions="län"></ot-map>
+<ot-map id="karta" view="sverige" regions="län">
+  <ot-region id="skane" name="Skåne" color="cyan">Skåne</ot-region>
+</ot-map>
+```
 
 **Image** with its source. `query` finds a photo on Wikimedia Commons; `src` + `credit` if you have one.
 `ot-label` marks a part: `at` is x and y in percent of the image.
