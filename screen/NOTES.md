@@ -202,3 +202,44 @@ names what was still loading (`libraries`, `map data and fonts` and/or `images`)
 the target's id whatever id the replacement arrived with. Replaced graphs and charts free their
 JSXGraph board / Chart.js instance, and a map added by a patch draws from its own data before anything
 is reported or shown.
+
+## Pane context, look repair and one lint retry (2026-11-13)
+
+Server side of the readability work (parent's PR #38 brought the shell lint: `dense` below 16 px under
+600 px wide, `heading` for a title over two lines). Files: `server/open_tutor/screen.py`,
+`server/tests/test_screen.py`.
+
+- The page request now states the pane: `Pane: 370×610 px, narrow. Write one reading column, a short
+  title (two to four words) and one teaching step or one visual. No second column, no side panel,
+  nothing that needs scrolling.` At 1000×700 it only states the size and "fill it without scrolling".
+  The size was already in `meta.json`; the writer never saw it.
+- The look pass now gets the page source it is repairing, the ask, the pane and the shell's exact
+  issue lines, and checks three things: readability at this pane, faithfulness to the ask, and
+  whether the page gives the answer away. For the last one it names the question the page asks and
+  checks every visible number, mark, label and picture step against it. Lint only sees layout, tags,
+  maths and ids; the prompt says so instead of pretending lint finds leaks.
+- One corrective retry after the look when actionable lint remains: ask + pane + the source it is
+  correcting + the exact lint text. Advisory issues (`slow`, `load`, `image` credit) never retry, and
+  `SCREEN_LINT_RETRY=0` turns it off. A retry that fails, times out or comes back with more actionable
+  lint is dropped and the page in hand ships.
+- Delivery comes first: optional steps start only while a full-size model call (roughly the first
+  answer's time) plus the final render still fit the 45 s job limit, and the look/retry calls are
+  wrapped in a timeout for the time that is left. Remaining actionable lint goes to `meta.json`
+  (`residual_lint`, `repair`) and the log line `delivered with residual lint`. No model fallback, and
+  patches are not retried.
+
+Real DeepSeek V4.1 Flash low, 2026-11-13, one page each (`Screen` with `get_pane_size`, default model
+call and renderer, pages in `/tmp`; ask: 3/4 + 1/8 for the two pane sizes):
+
+| Case | Pane | Total | Look | Retry | Deliverable |
+|---|---|---|---|---|---|
+| fractions 3/4 + 1/8 | 370×610 | 30.35 s | fixed the body | not needed | lint clean; 370×610 17.5 px, 370×558 17 px, 1000×700 21 px |
+| fractions 3/4 + 1/8 | 1000×700 | 32.16 s | OK | not needed | clean at 1000×700; dense (13 px) when re-rendered at 370 wide, as expected from the wide ask |
+| leak check, "how many eighths is 3/4" | 370×610 | 19.57 s | OK | not needed | no answer shown: 3/4 bar plus an empty eighths bar and a "2 per quarter" hint |
+| short division, question + answer steps | 370×558 | 37.69 s | hid `2 och 4` behind `later` | not needed | real leak catch: the first body printed the answer digits as a visible step |
+| pq-form, graph + four steps | 370×430 | 33.35 s | rewrote the steps, still dense | **skipped: no time left** | page delivered at 33 s with `residual_lint: dense 12.75px`, logged and in `meta.json` |
+
+What this does not fix: the model's own judgement still decides a leak (the hint "2 åttondelar på varje
+fjärdedel" passed, and it is a hint rather than the answer); and the step-note column can overflow the
+card at 370×558 without the shell reporting `overflow` (seen in the division page), so that page still
+needed a human glance.

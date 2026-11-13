@@ -25,7 +25,7 @@ import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Awaitable, Callable
+from typing import Any, Awaitable, Callable, Iterable
 
 log = logging.getLogger("open-tutor")
 
@@ -43,6 +43,13 @@ JOB_TIMEOUT_S = 45.0
 # the model itself is never changed by the timing work (see docs/smart-screen.md).
 MAX_TURNS = 40  # conversation turns kept per request; sessions run long
 MAX_HOMEWORK_IMAGES = 4
+# Optional repair work (the look pass, the one lint retry) may not eat the
+# delivery: a step only starts while a final render still fits the job limit.
+FINAL_RENDER_RESERVE_S = 3.0
+MIN_OPTIONAL_STEP_S = 3.0
+# The shell's `dense` minimum is 16 px below 600 px wide (screen/shell/shell.js).
+NARROW_PANE_WIDTH = 600
+NARROW_PANE_HEIGHT = 640
 
 
 def session_pages_dir(room: str, debug_dir: Path | str | None = None) -> Path:
@@ -91,6 +98,67 @@ def page_title(body: str, fallback: str) -> str:
     return fallback
 
 
+# ---- pane -------------------------------------------------------------------
+
+def pane_is_narrow(width: int, height: int) -> bool:
+    """A phone or a small split window: readable without scrolling is the rule."""
+    return int(width) <= NARROW_PANE_WIDTH or int(height) <= NARROW_PANE_HEIGHT
+
+
+def pane_context(width: int, height: int) -> str:
+    """The pane facts the page writer needs; narrow panes get the layout rule."""
+    if pane_is_narrow(width, height):
+        return (f"Pane: {width}×{height} px, narrow. Write one reading column, a short title "
+                f"(two to four words) and one teaching step or one visual. No second column, "
+                f"no side panel, nothing that needs scrolling.")
+    return f"Pane: {width}×{height} px. Fill it without scrolling; scale the content to the pane."
+
+
+# ---- lint -------------------------------------------------------------------
+
+# Issues arrive as {"kind", "msg", "where"} dicts from the shell. A retry only
+# earns its time on problems a page body can fix; slow loading and image
+# credits are advisory and stay in the log instead.
+ADVISORY_LINT_KINDS = frozenset({"slow", "load", "image"})
+_ADVISORY_IMAGE_WORDS = ("credit", "källa", "search failed", "failed to load")
+
+
+def issue_kind(issue: Any) -> str:
+    """The shell kind of one issue; a plain string may carry it as a prefix."""
+    if isinstance(issue, dict):
+        return str(issue.get("kind") or "").strip().lower()
+    match = re.match(r"\s*([A-Za-z_-]+)\s*:", str(issue or ""))
+    return match.group(1).lower() if match else ""
+
+
+def issue_text(issue: Any) -> str:
+    """One issue as the model and the log see it: kind, message and element."""
+    if isinstance(issue, dict):
+        kind = issue_kind(issue)
+        msg = str(issue.get("msg") or issue.get("message") or "").strip()
+        where = str(issue.get("where") or "").strip()
+        text = f"{kind}: {msg}" if kind and msg else (kind or msg)
+        return f"{text} ({where})" if where else text
+    return str(issue or "").strip()
+
+
+def is_actionable(issue: Any) -> bool:
+    """True when a rewritten page body can fix it in one bounded step."""
+    kind = issue_kind(issue)
+    if kind not in ADVISORY_LINT_KINDS:
+        return True
+    if kind == "image":
+        text = issue_text(issue).lower()
+        return not any(word in text for word in _ADVISORY_IMAGE_WORDS)
+    return False
+
+
+def actionable_issues(issues: Iterable[Any] | None) -> list[str]:
+    """The exact lint lines worth one correction, in the shell's order."""
+    return [issue_text(issue) for issue in (issues or [])
+            if issue_text(issue) and is_actionable(issue)]
+
+
 # ---- results ----------------------------------------------------------------
 
 @dataclass
@@ -104,8 +172,10 @@ class PageResult:
     model_s: float = 0.0
     render_s: float = 0.0
     look_s: float = 0.0
+    retry_s: float = 0.0
     total_s: float = 0.0
     directory: Path | None = None
+    residual_issues: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -290,7 +360,8 @@ class Screen:
         return f"Child: {name}."
 
     def _build_user_text(self, ask: str) -> str:
-        parts = [self._learner_line()]
+        width, height = self._pane_size()
+        parts = [self._learner_line(), pane_context(width, height)]
         for i, (description, _) in enumerate(self.homework, 1):
             parts.append(f"Shared homework {i}: {description}")
         if self.turns:
@@ -424,55 +495,168 @@ class Screen:
 
         self._page_counter += 1
         page_id = f"p{self._page_counter}"
+        width, height = self._pane_size()
         png, issues, render_s = await self._render(body, None)
-        look_s = 0.0
+        reserve_s = max(render_s, FINAL_RENDER_RESERVE_S)
+        step_s = max(MIN_OPTIONAL_STEP_S, min(model_s, 20.0))
+        look_s = retry_s = 0.0
+        repair: dict[str, Any] = {"look": False, "look_fix": False, "retry": False,
+                                  "retry_applied": False, "notes": []}
+
+        # One look at its own render (default on). It is optional work, so it
+        # starts only while a final render still fits the job limit.
         if _screen_env("SCREEN_LOOK", "1") != "0":
-            fixed, look_s = await self._look_once(ask, body, png, issues)
-            if fixed and fixed != body:
-                body = fixed
-                png, issues, extra_s = await self._render(body, None)
-                render_s += extra_s
+            if self._time_left(t0) >= step_s + reserve_s:
+                repair["look"] = True
+                fixed, look_s, why = await self._bounded(
+                    t0, reserve_s, self._look_once(ask, body, png, issues, width, height))
+                if why:
+                    repair["notes"].append(f"look pass {why}")
+                elif fixed and fixed != body:
+                    if self._time_left(t0) < reserve_s:
+                        repair["notes"].append("look fix not rendered: no time left")
+                    else:
+                        rendered, why = await self._render_optional(fixed)
+                        if rendered is None:
+                            repair["notes"].append(f"look fix dropped: {why}")
+                        else:
+                            body, png, issues = fixed, rendered[0], rendered[1]
+                            render_s += rendered[2]
+                            reserve_s = max(reserve_s, rendered[2])
+                            repair["look_fix"] = True
+            else:
+                repair["notes"].append("look pass skipped: no time left")
+
+        # One corrective retry when actionable lint is still there: the page
+        # source, the ask, the pane and the exact lint text. Advisory issues
+        # (slow loading, image credits) never buy a retry.
+        leftover = actionable_issues(issues)
+        if leftover and _screen_env("SCREEN_LINT_RETRY", "1") != "0":
+            if self._time_left(t0) >= step_s + reserve_s:
+                repair["retry"] = True
+                corrected, retry_s, why = await self._bounded(
+                    t0, reserve_s, self._retry_with_lint(ask, body, leftover, width, height))
+                if why:
+                    repair["notes"].append(f"lint retry {why}")
+                elif corrected and corrected != body:
+                    rendered, why = await self._render_optional(corrected)
+                    if rendered is None:
+                        repair["notes"].append(f"lint retry dropped: {why}")
+                    elif len(actionable_issues(rendered[1])) > len(leftover):
+                        repair["notes"].append("lint retry made lint worse; kept the first page")
+                    else:
+                        body, png, issues = corrected, rendered[0], rendered[1]
+                        render_s += rendered[2]
+                        reserve_s = max(reserve_s, rendered[2])
+                        repair["retry_applied"] = True
+            else:
+                repair["notes"].append("lint retry skipped: no time left")
+
+        # Whatever is still reported ships with the page, in the log and in
+        # meta.json: a usable page is never dropped for optional repair work.
+        residual = actionable_issues(issues)
+        if residual:
+            log.warning("screen page %s delivered with residual lint: %s",
+                        page_id, "; ".join(residual))
         total_s = time.monotonic() - t0
         spec = self.model_spec()
-        w, h = self._pane_size()
         job_dir = self._save(job_id, ask,
                              {"page.html": body, "shot.png": png},
                              {"job": job_id, "kind": "page", "page": page_id,
                               "title": page_title(body, page_id),
                               "model": spec["model"], "reasoning": spec["reasoning"],
-                              "pane": [w, h],
+                              "pane": [width, height],
                               "model_s": round(model_s, 2), "render_s": round(render_s, 2),
-                              "look_s": round(look_s, 2), "total_s": round(total_s, 2),
-                              "issues": issues})
+                              "look_s": round(look_s, 2), "retry_s": round(retry_s, 2),
+                              "total_s": round(total_s, 2), "issues": issues,
+                              "residual_lint": residual, "repair": repair})
         record_active("screen_page", {"job": job_id, "page": page_id,
-                                      "total_s": round(total_s, 2), "issues": issues})
+                                      "total_s": round(total_s, 2), "issues": issues,
+                                      "residual_lint": residual,
+                                      "retry": repair["retry"],
+                                      "retry_applied": repair["retry_applied"]})
         result = PageResult(job_id=job_id, page_id=page_id,
                             title=page_title(body, page_id), body=body, png=png,
                             issues=issues, model_s=model_s, render_s=render_s,
-                            look_s=look_s, total_s=total_s, directory=job_dir)
+                            look_s=look_s, retry_s=retry_s, total_s=total_s,
+                            directory=job_dir, residual_issues=residual)
         self.pages[page_id] = result
         if self.on_page is not None:
             outcome = self.on_page(result)
             if inspect.isawaitable(outcome):
                 await outcome
 
-    async def _look_once(self, ask: str, body: str, png: bytes,
-                         issues: list) -> tuple[str | None, float]:
-        """Show the model its own render; it answers OK or a corrected body."""
+    def _time_left(self, t0: float) -> float:
+        """Seconds until the job limit; optional work is spent from this."""
+        return self.timeout - (time.monotonic() - t0)
+
+    async def _bounded(self, t0: float, reserve_s: float,
+                       call: Awaitable[Any]) -> tuple[Any, float, str]:
+        """Run one optional model step inside the job budget; it never raises.
+        Returns (result, seconds, why-not), with why-not empty on success."""
+        started = time.monotonic()
+        try:
+            result = await asyncio.wait_for(call, timeout=max(0.05, self._time_left(t0) - reserve_s))
+        except asyncio.TimeoutError:
+            return None, time.monotonic() - started, "timed out"
+        except Exception as error:  # noqa: BLE001 - the page still ships
+            return None, time.monotonic() - started, f"failed: {type(error).__name__}"
+        return result, time.monotonic() - started, ""
+
+    async def _render_optional(self, body: str) -> tuple[tuple[bytes, list, float] | None, str]:
+        """Re-render a repair; a failure keeps the page already in hand."""
+        try:
+            png, issues, render_s = await self._render(body, None)
+        except Exception as error:  # noqa: BLE001 - a usable page is not dropped
+            return None, f"render failed: {type(error).__name__}"
+        return (png, issues, render_s), ""
+
+    async def _look_once(self, ask: str, body: str, png: bytes, issues: list,
+                         width: int, height: int) -> str | None:
+        """Show the model its own render and source; it answers OK or a body."""
         from .debug_log import record_active
 
-        system = self.system_prompt()
-        reported = ", ".join(str(i) for i in issues) if issues else "none"
-        user = (f"The tutor's ask was: {ask}\n\nYour page rendered like the screenshot. "
-                f"The shell reports these issues: {reported}.\n\n"
-                f"If the page looks good, answer with exactly: OK\n"
-                f"Otherwise answer with the corrected full page body only (no explanation).")
-        answer, look_s = await self._call_model(system, user, look_png=png)
+        reported = "\n".join(f"- {issue_text(issue)}" for issue in issues) or "- none"
+        user = (
+            f"The tutor's ask was: {ask}\n\n"
+            f"{pane_context(width, height)}\n\n"
+            f"Your page body (source):\n\n{body}\n\n"
+            f"Your page rendered like the screenshot. The shell reports these issues:\n{reported}\n\n"
+            "Read the screenshot and the source together, the way the child will:\n"
+            "1. Readability: is the text large enough and uncrowded at this pane size, and "
+            "does everything fit without scrolling?\n"
+            "2. The question and the visible clues: name the question the page actually asks, "
+            "then check every visible number, mark, label and picture step against it. Does the "
+            "page give the answer away before the child's turn (a solved step, the result marked "
+            "or written out, the answer inside a picture)? The shell's lint only sees layout and "
+            "tags; words and pictures that leak the answer are yours to catch.\n"
+            "3. Faithfulness: does it do what the tutor asked, and nothing extra?\n\n"
+            "Fix every problem you find, and answer with the corrected full page body only "
+            "(no explanation). If the page is right, answer with exactly: OK")
+        answer, _ = await self._call_model(self.system_prompt(), user, look_png=png)
         answer = strip_fences(answer)
         record_active("screen_look", {"fixed": bool(answer and answer != "OK")})
         if not answer or answer == "OK":
-            return None, look_s
-        return answer, look_s
+            return None
+        return answer
+
+    async def _retry_with_lint(self, ask: str, body: str, lint: list[str],
+                               width: int, height: int) -> str | None:
+        """One correction with the page source, the pane and the exact lint."""
+        from .debug_log import record_active
+
+        problems = "\n".join(f"- {text}" for text in lint)
+        user = (
+            f"The tutor's ask was: {ask}\n\n"
+            f"{pane_context(width, height)}\n\n"
+            f"Your page body (source):\n\n{body}\n\n"
+            f"It still reports these problems after the look pass:\n{problems}\n\n"
+            "Fix exactly these in the page and keep what already works. "
+            "Answer with the corrected full page body only (no explanation).")
+        answer, _ = await self._call_model(self.system_prompt(), user)
+        answer = strip_fences(answer)
+        record_active("screen_lint_retry", {"fixed": bool(answer)})
+        return answer or None
 
     # ---- real model call -------------------------------------------------
 
