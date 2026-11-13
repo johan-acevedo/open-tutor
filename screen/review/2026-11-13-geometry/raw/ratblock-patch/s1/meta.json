@@ -1,0 +1,17 @@
+{
+ "job": "s1",
+ "kind": "patch",
+ "page": "sida-1",
+ "model": "gemini-4-hydrogen",
+ "api": "chat",
+ "reasoning": "low",
+ "pane": [
+  370,
+  610
+ ],
+ "model_s": 4.82,
+ "render_s": 1.29,
+ "total_s": 6.11,
+ "issues": [],
+ "delivered": true
+}

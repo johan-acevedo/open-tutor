@@ -524,6 +524,18 @@ table and the same checks failing on the PR #41 shell are in
 
 ## Open
 
+Geometry assessment (2026-11-13, proposal in PR #53): five Hydrogen-low pages and one
+cuboid patch confirm existing graphs can draw measured plane figures, a cuboid and a
+cylinder. The immediate defect is label placement: fixed offsets ignore text width,
+and vertex-mean normals place some concave L labels inside the shape. Parent review
+repeated the render measurements and corrected slanted-label clearance calculations.
+Proposed order: label placement first, test brief reference guidance, then develop a
+qualified plane-length lint; circle and angle primitives need a lead decision. No new
+plane-figure component. Defer a solids tag on the two tested types, without ruling out
+prism, pyramid, cone, sphere or nets (all untested). No runtime changes were made.
+Sources, inspected phone/wide renders, timings and limits:
+`screen/review/2026-11-13-geometry/`.
+
 - Which model and reasoning level the screen runs on (measure with the examples in place).
 - Image generation: whether, and with what.
 - How the tutor is told a page is ready without interrupting its own sentence.
