@@ -19,9 +19,11 @@ from livekit.agents import (
     Agent,
     AgentServer,
     AgentSession,
+    APIConnectOptions,
     JobContext,
     JobProcess,
     RunContext,
+    SessionConnectOptions,
     StopResponse,
     TurnHandlingOptions,
     cli,
@@ -46,15 +48,20 @@ from .config import AGENT_NAME, DEFAULT_TTS_MODEL, DEFAULT_TTS_VOICE, env_float
 from .debug_log import DebugLog, clear_active, record_active, set_active
 from .dialogue_tts import DialogueTTS, is_dialogue_model
 from .deepgram_tts import DeepgramFluxTTS, DEFAULT_MODEL as DEEPGRAM_DEFAULT_MODEL, parse_expressivity
+from .session_llm import SessionLLM
 from .text_input import TOPIC_CHAT, TypedChat
 from .fillers import DEFAULT_DELAY_S as DEFAULT_FILLER_DELAY, build_fillers
-from .tutor_llm import build_llm, warm_up
+from .tutor_llm import build_session_llm, warm_up
 from .speech import speakable_stream, unspoken_stream
 
 log = logging.getLogger("open-tutor")
 
 BOARD_RPC_TIMEOUT = 6.0
 HOMEWORK_SETTLE = 1.2  # seconds to wait for more PDF pages before responding
+# Per LLM attempt. The default (10 s, three retries) is what made a slow provider keep a
+# child waiting about 50 s for a greeting on 2026-11-14. One retry, then the failover in
+# session_llm.py or the spoken apology at the end of this file.
+LLM_RETRY_INTERVAL_S = 0.5
 BOARD_IN_PROGRESS = (
     "A drawing is already in progress. No additional drawing was started. "
     "Continue teaching in words and respond to the child. "
@@ -140,8 +147,14 @@ class Tutor(Agent):
     def _instructions(learner: dict[str, Any]) -> str:
         return prompt.instructions(learner)
 
-    def __init__(self, learner: dict[str, Any], room: rtc.Room, board: dict[str, Any] | None = None) -> None:
-        super().__init__(instructions=self._instructions(learner))
+    def __init__(self, learner: dict[str, Any], room: rtc.Room, board: dict[str, Any] | None = None,
+                 greeting_note: str = "") -> None:
+        # The greeting itself is fixed TTS spoken before the model's first turn; the note
+        # tells the model it has greeted and carries the hints `greeting_instruction` gave.
+        instructions = self._instructions(learner)
+        if greeting_note:
+            instructions += "\n\n" + greeting_note
+        super().__init__(instructions=instructions)
         self.learner = learner
         board = board or {}
         self.board_w, self.board_h = clamp_board_size(board.get("w", DEFAULT_BOARD_W),
@@ -609,11 +622,12 @@ class SmartTutor(Tutor):
         return prompt.smart_instructions(learner)
 
     def __init__(self, learner: dict[str, Any], room: rtc.Room,
-                 board: dict[str, Any] | None = None, screen: Any = None) -> None:
+                 board: dict[str, Any] | None = None, screen: Any = None,
+                 greeting_note: str = "") -> None:
         if screen is None:
             raise ValueError("SmartTutor needs a Screen")
         self.screen = screen
-        super().__init__(learner, room, board=board)
+        super().__init__(learner, room, board=board, greeting_note=greeting_note)
         # The Screen renders at the pane size the tutor keeps current.
         screen.set_pane_source(lambda: (self.board_w, self.board_h))
 
@@ -787,6 +801,14 @@ PROVIDER_FAILED_APOLOGY = (
     "Stäng fönstret och starta en ny session, så försöker vi igen."
 )
 
+# The child typed before the fixed greeting could play (see text_input.TypedChat): their
+# message is answered with the greeting folded in, so the line is not spoken twice.
+TYPED_BEFORE_GREETING = (
+    'The child typed this before they heard you. Greet them by name in one short sentence, '
+    'then answer what they wrote, in one reply. Your opening line was "{line}"; do not say '
+    "all of it."
+)
+
 
 async def say_provider_failed(session: AgentSession) -> None:
     """Speak the apology through TTS only; never let this path raise."""
@@ -848,6 +870,12 @@ async def entrypoint(ctx: JobContext) -> None:
     debug = DebugLog.create(ctx.room.name, learner, getattr(getattr(ctx, "job", None), "id", "?"))
     typed.attach_record(debug.record)
 
+    # The greeting is fixed text through TTS, so the child hears the fox within about a
+    # second no matter what the provider is doing. The model gets the line and the hints
+    # `greeting_instruction` used to carry, so it does not greet again.
+    greeting, greeting_variant = prompt.greeting_line(learner)
+    note = prompt.greeting_note(learner, greeting)
+
     smart = os.environ.get("TUTOR_SCREEN") == "smart"
     screen = None
     if smart:
@@ -857,12 +885,12 @@ async def entrypoint(ctx: JobContext) -> None:
             pages_dir=session_pages_dir(ctx.room.name, getattr(debug, "directory", None)),
             session_id=ctx.room.name,
         )
-        tutor: Tutor = SmartTutor(learner, ctx.room, board=board, screen=screen)
+        tutor: Tutor = SmartTutor(learner, ctx.room, board=board, screen=screen, greeting_note=note)
         # The first screen job must not pay for the browser launch: start it
         # while the greeting still runs. The job path keeps its own fallback.
         asyncio.create_task(screen.warmup())
     else:
-        tutor = Tutor(learner, ctx.room, board=board)
+        tutor = Tutor(learner, ctx.room, board=board, greeting_note=note)
     tutor.child_identity = child.identity
     set_active(debug)
 
@@ -870,15 +898,24 @@ async def entrypoint(ctx: JobContext) -> None:
     log.info("tutor TTS route %s", tts_route(voice))
     # TUTOR_FILLERS=1: a short fox sound when the reply is late (fillers.py). None when off.
     fillers = build_fillers(voice, delay=env_float("TUTOR_FILLER_AFTER_S", DEFAULT_FILLER_DELAY))
+    llm_timeout = env_float("TUTOR_LLM_TIMEOUT_S", 5.0)
+    session_llm = build_session_llm(ctx.room.name)
     session = AgentSession(
         stt=build_stt(),
-        llm=build_llm(ctx.room.name),
+        llm=session_llm,
         tts=voice,
         vad=ctx.proc.userdata["vad"],
         turn_handling=TurnHandlingOptions(
             turn_detection="stt",
             endpointing={"min_delay": env_float("TUTOR_MIN_ENDPOINT", 0.6), "max_delay": 4.0},
             interruption={"enabled": True, "mode": "vad", "min_duration": 0.4},
+        ),
+        # One retry on the same route, 5 s each: the child should not wait a minute for a
+        # slow provider. A route that still fails is the failover's or the apology's job.
+        conn_options=SessionConnectOptions(
+            llm_conn_options=APIConnectOptions(
+                timeout=llm_timeout, max_retry=1, retry_interval=LLM_RETRY_INTERVAL_S
+            )
         ),
         max_tool_steps=6,
     )
@@ -1053,7 +1090,26 @@ async def entrypoint(ctx: JobContext) -> None:
     ctx.room.register_text_stream_handler("session-event", spawn(on_session_event))
 
     outcome = "unknown"
+    warm_up_task: asyncio.Task | None = None
+
+    def opening(_instruction: str) -> None:
+        """The session is ready and nothing was typed before it: greet in fixed text.
+
+        Synchronous on purpose. `TypedChat.start` calls this where it would otherwise
+        prompt the LLM, so marking the greeting as heard here (rather than inside the
+        task) closes the window in which a typed message would try to greet as well.
+        """
+        typed.mark_heard()
+        asyncio.create_task(greet(session, debug, greeting, greeting_variant, learner))
+
     try:
+        # The warm-up race runs during the greeting, so the choice is usually ready
+        # before the child's first turn. It only exists when a second route is configured.
+        if isinstance(session_llm, SessionLLM):
+            warm_up_task = asyncio.create_task(
+                session_llm.warm_up(instructions=tutor.instructions, tools=list(tutor.tools)),
+                name="tutor-llm-warm-up",
+            )
         await session.start(
             agent=tutor,
             room=ctx.room,
@@ -1073,10 +1129,15 @@ async def entrypoint(ctx: JobContext) -> None:
             # a failure here leaves the feature off and never breaks the session.
             await fillers.start(ctx.room)
         await ctx.room.local_participant.set_attributes({"tutor.mode": "talking"})
-        # Greets unless the child already typed: then that message is answered with a
-        # reply that greets too, instead of two overlapping replies.
-        await typed.start(prompt.greeting_instruction(learner),
-                          lambda text: prompt_event(session, text))
+        # TypedChat opens the session so a message typed before the room was ready is
+        # answered instead of lost. With nothing queued it calls `opening`, which speaks
+        # the fixed greeting through TTS alone; with a queued message that message is
+        # answered with the greeting folded into one reply, so the line is not repeated.
+        await typed.start(
+            prompt.greeting_instruction(learner),
+            opening,
+            greet_instruction=TYPED_BEFORE_GREETING.format(line=greeting),
+        )
 
         outcome = await _run_until_done(ctx, session, tutor, debug, ending, provider_failed)
     except Exception as error:
@@ -1086,10 +1147,43 @@ async def entrypoint(ctx: JobContext) -> None:
     finally:
         if fillers is not None:
             await fillers.aclose()
+        if warm_up_task is not None and not warm_up_task.done():
+            warm_up_task.cancel()
         report_path = debug.finalize(outcome)
         if report_path is not None:
             log.info("debug session report: %s", report_path)
         clear_active()
+
+
+async def greet(
+    session: AgentSession, debug: DebugLog, greeting: str, variant: int, learner: dict[str, Any]
+) -> None:
+    """Speak the fixed greeting through TTS only; the LLM is not involved.
+
+    `session.say` puts the line in the chat history as the assistant's turn, so the model
+    knows it has greeted. The speech is interruptible as before: if the child talks or
+    types during it, the greeting stops and their turn is answered as usual.
+    """
+    debug.record("greeting", {"kind": "fixed", "variant": variant, "text": greeting})
+    try:
+        handle = session.say(greeting, allow_interruptions=True)
+    except RuntimeError as error:
+        # The session closed before the first word. Fall back to a generated greeting so
+        # the child is never left in silence without an event in the log.
+        log.warning("fixed greeting could not be spoken: %s", error)
+        debug.record("greeting", {"kind": "generated", "why": "session not running"})
+        debug.record("prompt", {"kind": "greeting"})
+        prompt_event(session, prompt.greeting_instruction(learner))
+        return
+
+    async def wait_for_end() -> None:
+        try:
+            await handle.wait_for_playout()
+            debug.record("greeting_done", {"interrupted": handle.interrupted})
+        except Exception as error:  # closing session, TTS down, cancelled
+            debug.record("greeting_done", {"ok": False, "error": type(error).__name__})
+
+    asyncio.create_task(wait_for_end(), name="tutor-greeting")
 
 
 async def _run_until_done(

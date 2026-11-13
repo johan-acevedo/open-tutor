@@ -267,6 +267,15 @@ async def main() -> int:
     ap.add_argument("--url", default="https://dell5500.tail2e1c4e.ts.net:9444/",
                     help="dev web URL")
     ap.add_argument("--shots-dir", default="/tmp/smart-screen-e2e")
+    ap.add_argument(
+        "--first-message-delay",
+        type=float,
+        default=0.0,
+        help="Seconds to listen after the page is live before sending the first message. "
+        "The fox greets in fixed text meanwhile, so a delay above ~3 s measures a child "
+        "who lets the greeting play (default 0 sends the first message at once, which the "
+        "worker answers with a greeting folded into that reply).",
+    )
     ap.add_argument("--headless", action="store_true", default=True)
     ap.add_argument("--no-headless", dest="headless", action="store_false")
     args = ap.parse_args()
@@ -317,6 +326,17 @@ async def main() -> int:
         await shot(page, shots / "01-live-empty.png", "live-empty", timeline)
 
         # (a) fractions ask -> tutor should call ask_screen, keep talking, show page.
+        if args.first_message_delay > 0:
+            # Let the fox speak its greeting first, as a child would.
+            timeline.append({"t": now_iso(), "event": "listen_before_first_message",
+                             "seconds": args.first_message_delay})
+            print(f"[greeting] listening {args.first_message_delay:g} s before the first "
+                  "message", flush=True)
+            await asyncio.sleep(args.first_message_delay)
+            cap = await caption_text(page)
+            timeline.append({"t": now_iso(), "event": "caption_after_greeting",
+                             "caption": cap[:200]})
+            await shot(page, shots / "015-after-greeting.png", "after-greeting", timeline)
         await send_chat(page, LINES["a"], timeline)
         # Give the tutor a moment to react in words before the screen finishes.
         await asyncio.sleep(6)

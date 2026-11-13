@@ -76,7 +76,11 @@ The worker logs the route at the start of each session (`tutor TTS route elevenl
 | `TUTOR_TTS` | `elevenlabs` (default) or `cartesia` |
 | `TUTOR_TTS_VOICE`, `TUTOR_TTS_MODEL` | Voice id and model for that provider. ElevenLabs default: `eleven_v4_turbo` with Bella (`hpp4J3VqNfWAUOO0d1Us`), see [the voice route](#the-voice-route). `eleven_v3*`/`eleven_v4*` models use the text-to-dialogue adapter; earlier models such as `eleven_flash_v2_5` use LiveKit's plugin |
 | `ELEVENLABS_API_KEY` / `CARTESIA_API_KEY` | Voice provider key |
-| `TUTOR_LLM` | `go` (default): Muse Spark 1.3 Contributor (`muse-spark-1.3-contributor`) on OpenCode Go, Responses API over HTTP streaming, `OPENCODE_GO_API_KEY`. `go-deepseek`: DeepSeek V4.1 Flash on the same subscription. `gemini`: Gemini 4 Hydrogen (`gemini-4-hydrogen`) on Google's OpenAI-compatible Chat Completions, thinking level `low`, `GEMINI_API_KEY`. `gemini-dev` only reproduces the board/voice bug of the earlier development route; do not deploy it. There is no silent fallback. |
+| `TUTOR_LLM` | `go` (default): Muse Spark 1.3 Contributor (`muse-spark-1.3-contributor`) on OpenCode Go, Responses API over HTTP streaming, `OPENCODE_GO_API_KEY`. `go-deepseek`: DeepSeek V4.1 Flash on the same subscription. `gemini`: Gemini 4 Hydrogen (`gemini-4-hydrogen`) on Google's OpenAI-compatible Chat Completions, thinking level `low`, `GEMINI_API_KEY`. `gemini-dev` only reproduces the board/voice bug of the earlier development route; do not deploy it. This is the preferred route; there is no silent fallback to a route the operator did not name. |
+| `TUTOR_LLM_FALLBACK` | Optional second candidate route (`go`, `go-deepseek`, `gemini`). Empty (default): one route for the whole session, no warm-up race. Set: both routes answer a warm-up request while the greeting plays and the winner serves the session; see [the greeting and the session's voice](#the-greeting-and-the-sessions-voice) |
+| `TUTOR_LLM_PREFER_WITHIN_S` | Default `1.5`. The preferred route keeps the session if its warm-up answered within this many seconds, or if it was the faster of the two |
+| `TUTOR_LLM_TIMEOUT_S` | Default `5`. Timeout per LLM attempt (the framework default is 10 s), with one retry on the same route; then the failover or the spoken apology |
+| `TUTOR_LLM_FALLBACK_BASE_URL` | Override only the fallback route's endpoint (for example a second provider in a test). `TUTOR_LLM_BASE_URL` keeps overriding the preferred route |
 | `OPENCODE_GO_API_KEY` | OpenCode Go API key (from the OpenCode console). Backend only |
 | `TUTOR_LLM_MODEL`, `TUTOR_LLM_BASE_URL`, `TUTOR_LLM_REASONING` | Override the route's model, endpoint or reasoning effort (Go default `minimal`) |
 | `TUTOR_AGENT_NAME` | Dispatch name, default `open-tutor`. Give a test worker and its web service another name so it never takes a family session |
@@ -207,6 +211,56 @@ Default off, so open-source adopters get no behaviour or file change.
 - Dimension handshake: `board.show`/`board.update` acks return
   `{ok:true, board:{w,h,device}}` once the pane has settled; the worker uses those
   dims for the frozen design box. Plain `{ok:true}` peers still work.
+
+## The greeting and the session's voice
+
+The child hears the fox immediately, and the model that serves the session is picked
+while that greeting plays (2026-11-13/14).
+
+**The greeting is fixed text, spoken by TTS.** `session.say` speaks one of four variants
+(`prompt.GREETING_VARIANTS`) with the child's name: who it is, that it helps with
+homework and schoolwork, and what they are working on today. No LLM is involved, so the
+greeting lands within about a second whatever the provider is doing. `say` puts the line
+in the chat history as the assistant's turn, and `prompt.greeting_note` moves what
+`greeting_instruction` used to carry into the instructions (do not greet again, and for
+a returning learner, when it fits, say in a few words what you worked on last time). The
+greeting is interruptible: speech or typing stops it and the turn is answered as usual,
+and a message typed before it plays replaces it (`text_input.TypedChat.start`). The
+debug trail records `greeting` (variant and line) and `greeting_done` (interrupted?).
+
+**The route is chosen once, by a warm-up race.** With `TUTOR_LLM_FALLBACK` set,
+`session_llm.SessionLLM` sends a short warm-up request to both candidates while the
+greeting plays: the real system prompt and the real tool list, one word to say, aborted at
+the first token. So the provider does the prompt work the real reply needs and can cache
+the prefix, and the whole warm-up costs a handful of output tokens. Time to first token
+decides.
+
+The rules:
+
+- the preferred route keeps the session if it answered within `TUTOR_LLM_PREFER_WITHIN_S`,
+  or was the faster of the two;
+- a route that errors or has not answered within 5 s loses;
+- if neither answered, the preferred route stays and normal error handling applies;
+- the choice is for the **whole session**. Per-turn switching is unsafe: Gemini rejects a
+  retained history that holds function calls it did not sign, so a request is never
+  replayed on another route mid-conversation. A first turn that arrives before the race
+  decided waits for it, bounded by the 5 s cap.
+
+The choice and both timings are recorded as an `llm_chosen` event and in the report's
+summary (`llm`). `AgentSession` takes its LLM at construction and `Agent.update_options`
+only swaps for the next turn, so a thin `llm.LLM` wrapper delegates `chat()` to the chosen
+route. LiveKit's own `FallbackAdapter` is per-request failover, which is exactly the
+per-turn switch described above.
+
+**Shorter leash, one failover.** `TUTOR_LLM_TIMEOUT_S` (5 s) with one retry on the same
+route replaces the framework's 10 s with three retries. If the chosen route then fails
+before it has said anything, and the other candidate does not need thought signatures,
+the session fails over to it for the rest of the run (`llm_failover` in the log). Failing
+over to a signature-checking route is not safe, and a failure after the child has heard
+words is not repeated; both fall to the existing apology path, which speaks one sentence
+without the LLM and ends the session instead of leaving silence with no event. 5 s fits a
+warm text prompt (2-3 s to first token here); a turn carrying a screenshot, or a provider
+under load, can need more, so raise `TUTOR_LLM_TIMEOUT_S` if sessions end with the apology.
 
 ## Tests
 

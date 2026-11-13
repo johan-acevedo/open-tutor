@@ -342,6 +342,65 @@ interrupt, the failure records and the 15 s read timeout;
 `server/scripts/typed_chat_probe.py` sends typed messages at chosen moments against a
 deliberately slow stub provider and reports what the worker's log recorded.
 
+### The greeting, the session's voice, and a shorter leash (2026-11-13)
+
+A real test with a child exposed the worst wait so far: the provider was slow, the
+first LLM call timed out three times at 10 s each, and the child waited about 50 s for
+a greeting. There was one provider per session and no backup. Three changes, all on
+the worker (`feat/session-voice`, branch `feat/session-voice`):
+
+- **The greeting is fixed text through TTS.** Four variants in
+  `prompt.GREETING_VARIANTS`, the child's name, two sentences: who it is, that it helps
+  with homework and schoolwork, and what they are working on today. `session.say`
+  speaks it about a second after the session is ready, whatever the provider does, and
+  the line is in the chat history as the assistant's turn. What
+  `greeting_instruction` carried (do not greet again; for a returning learner, refer to
+  last time) moved into `prompt.greeting_note`, in the instructions. Interruptible as
+  before; a message typed before it plays replaces it (`TypedChat.start` got a
+  `greet_instruction` override for that one reply).
+- **The session's voice is chosen by a warm-up.** `TUTOR_LLM` stays the preferred
+  route; `TUTOR_LLM_FALLBACK` adds an optional second one. While the greeting plays,
+  both answer a short warm-up request (real system prompt and tools, one word to say,
+  aborted at the first token) and the faster one serves the whole session, with the
+  preferred route favoured inside `TUTOR_LLM_PREFER_WITHIN_S` (1.5 s) and 5 s cap. The
+  choice never changes per turn: Gemini rejects history with function calls it did not
+  sign. `llm_chosen` records the route and both timings; the report summary shows them.
+- **A shorter leash.** `TUTOR_LLM_TIMEOUT_S` (5 s) per attempt with one retry, instead
+  of the framework's 10 s with three. A route that fails before saying anything fails
+  over to the other candidate when that one does not need thought signatures, for the
+  rest of the session (`llm_failover`); otherwise the existing spoken apology applies.
+
+Design note: `AgentSession` takes its LLM at construction and `Agent.update_options`
+only swaps for the next turn, so `session_llm.SessionLLM` is a thin `llm.LLM` wrapper
+that delegates `chat()` to the chosen route, waits for the decision if a first turn
+arrives early, and owns the single failover. LiveKit's `FallbackAdapter` was rejected:
+it is per-request failover, i.e. the per-turn switch thought signatures forbid.
+
+Measured on dell5500 with my own instance (`gemini` preferred, `go-deepseek`
+fallback, `TUTOR_SCREEN=smart`, real providers and voices), three passing e2e runs:
+
+- The greeting audio started **0.83-0.92 s** after the session began (greeting event at
+  0.38-0.43 s, TTS first audio 0.45 s later). It played even while the preferred route
+  was pointed at a provider that never answers.
+- The race chose gemini twice (warm-up 2.59/–, 1.72/4.46 s) and go-deepseek once
+  (gemini did not answer, 4.83 s), and `llm_node_ttft` was 1.8-14.9 s: the providers were
+  slow while several test sessions ran on the machine.
+- Two of the three runs also hit one failover each (`gemini` -> `go-deepseek`) after gemini
+  timed out twice at 5 s. The child still got an answer.
+- Two earlier attempts failed: both providers exceeded the 5 s wall on the same turn
+  (two attempts on one, one on the other, 15 s in total), and the existing apology ended
+  the session. With these providers `TUTOR_LLM_TIMEOUT_S=8` is the safer setting; 5 s fits
+  a warm prompt (2-3 s) but not a screenshot turn or a loaded provider.
+`server/scripts/smart_screen_e2e.py --first-message-delay 8` sends its first typed message
+only after the greeting, so a run measures the greeting path; the default sends at once
+and the worker then answers with the greeting folded into that reply.
+
+- A deliberately silent preferred route (a local socket that accepts and never answers)
+  showed both recovery paths: the greeting at 0.83 s, `llm_chosen` keeping the preferred
+  route because neither answered, then `llm_failover` to go-deepseek on the first turn.
+  When go-deepseek later failed, the failover back to gemini was refused
+  (`llm_failover_skipped`: it needs thought signatures) and the apology path took over.
+
 ## Work packages
 
 Toolbox follow-up, 2026-11-13: narrow-page layout and readability lint are in

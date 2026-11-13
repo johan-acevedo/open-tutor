@@ -95,9 +95,14 @@ class LLMRoute:
     thought_signatures: bool = False
 
 
-def llm_route(environ: dict[str, str] | None = None) -> LLMRoute:
+def llm_route(
+    environ: dict[str, str] | None = None,
+    name: str | None = None,
+    base_url_env: str = "TUTOR_LLM_BASE_URL",
+) -> LLMRoute:
+    """The route named by ``TUTOR_LLM`` (or by ``name`` for the fallback candidate)."""
     env = os.environ if environ is None else environ
-    name = env.get("TUTOR_LLM", "go")
+    name = name or env.get("TUTOR_LLM", "go")
     if name not in LLM_ROUTES:
         raise ValueError(f"TUTOR_LLM must be one of {', '.join(LLM_ROUTES)}")
     spec = LLM_ROUTES[name]
@@ -107,12 +112,30 @@ def llm_route(environ: dict[str, str] | None = None) -> LLMRoute:
     return LLMRoute(
         name=name,
         api=spec["api"],
-        base_url=env.get("TUTOR_LLM_BASE_URL", spec["base_url"]),
+        base_url=env.get(base_url_env, spec["base_url"]),
         model=env.get("TUTOR_LLM_MODEL", spec["model"]),
         api_key=key,
         reasoning_effort=env.get("TUTOR_LLM_REASONING", spec["reasoning_effort"]) or None,
         thought_signatures=bool(spec.get("thought_signatures")),
     )
+
+
+def llm_fallback_route(environ: dict[str, str] | None = None) -> LLMRoute | None:
+    """The optional second candidate, from ``TUTOR_LLM_FALLBACK`` (empty: none).
+
+    A second candidate turns on the warm-up race in ``session_llm.py``: both routes
+    answer a short warm-up request while the greeting plays, and the faster one (with
+    the preferred route favoured inside ``TUTOR_LLM_PREFER_WITHIN_S``) serves the whole
+    session. ``TUTOR_LLM_FALLBACK_BASE_URL`` overrides only the fallback's endpoint, so
+    a test can point the preferred route somewhere slow without moving both.
+    """
+    env = os.environ if environ is None else environ
+    name = (env.get("TUTOR_LLM_FALLBACK") or "").strip()
+    if not name:
+        return None
+    if name == env.get("TUTOR_LLM", "go"):
+        raise ValueError("TUTOR_LLM_FALLBACK must name a different route than TUTOR_LLM")
+    return llm_route(env, name=name, base_url_env="TUTOR_LLM_FALLBACK_BASE_URL")
 
 
 def env_float(name: str, default: float) -> float:
