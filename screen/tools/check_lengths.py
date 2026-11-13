@@ -8,7 +8,7 @@ the independent check finds is named by shell lint, and no consistent,
 unknown, hidden or opted-out case warns.
 
   uv run --project server python screen/tools/check_lengths.py --out /tmp/lengths
-  uv run --project server python screen/tools/check_lengths.py --out /tmp/lengths --prior-ref 950b3b0
+  uv run --project server python screen/tools/check_lengths.py --out /tmp/lengths --prior-ref 5ff811e
 
 --prior-ref exports that git ref's shell and renders the same bodies there:
 the inconsistent case must render fine but stay silent (the gap this lint
@@ -318,16 +318,6 @@ def issue_kind(issue) -> str:
     return m.group(1).lower() if m else ""
 
 
-def fixed_body(body: str, patch: str) -> str:
-    """Apply a single replace-patch to the source (test helper, not the shell)."""
-    m = re.search(r'<ot-patch\b[^>]*target="([^"]+)"[^>]*>(.*)</ot-patch>', patch, re.S)
-    assert m, f"cannot read patch: {patch[:80]}"
-    target, replacement = m.group(1), m.group(2)
-    full = re.compile(r'<ot-polygon\b[^>]*id="' + re.escape(target) + r'"[^>]*>.*?</ot-polygon>', re.S)
-    assert full.search(body), f"patch target {target} missing"
-    return full.sub(lambda _: replacement, body, count=1)
-
-
 def check_lifecycle(shell, out: Path) -> list[str]:
     """Hidden/reveal, patch replacement/repair and resizing; schematic survival."""
     from playwright.sync_api import sync_playwright
@@ -400,12 +390,10 @@ def check_lifecycle(shell, out: Path) -> list[str]:
         finally:
             browser.close()
 
-    # Real server preview: the repaired body passes the real server renderer.
-    # (Patch-job preview returns on main accumulate the first render's issues
-    # for every lint kind, pre-existing and owned by PR56's final-lint preview
-    # change; the frame-level repair above is what this lint owns. No
-    # length-side change is needed there: lintLengths() already keeps final
-    # lint current by dropping stale length findings before re-adding.)
+    # Real server preview: the repaired page clears. Previews return final
+    # lint (PR56), and lintLengths() drops stale length findings before
+    # re-adding, so a repaired figure comes back clean. The lint retry path
+    # renders the corrected full body fresh and was never affected.
     import asyncio
     import tempfile
     sys.path.insert(0, str(ROOT.parent / "server"))
@@ -415,10 +403,9 @@ def check_lifecycle(shell, out: Path) -> list[str]:
         with tempfile.TemporaryDirectory() as directory:
             screen = Screen({}, Path(directory))
             try:
-                _, issues = await screen._default_render_page(
-                    fixed_body(bad, fixed), None, 370, 610)
+                _, issues = await screen._default_render_page(bad, fixed, 370, 610)
                 if [i for i in issues if issue_kind(i) == "length"]:
-                    failures.append(f"server render of repaired body warns: {issues}")
+                    failures.append(f"server preview kept repaired length warnings: {issues}")
             finally:
                 await screen.aclose()
 

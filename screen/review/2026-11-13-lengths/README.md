@@ -41,9 +41,9 @@ renders the same bodies with that ref's shell: inconsistency must render fine
 but silent there. Chromium fetches the usual public shell CDN assets; CI
 coverage is `screen/tests/test_length_lint.py` (pure decision logic, no
 browser/key). Repeat: `uv run --project server python
-screen/tools/check_lengths.py --out /tmp/lengths [--prior-ref 950b3b0]`.
+screen/tools/check_lengths.py --out /tmp/lengths [--prior-ref 5ff811e]`.
 
-| Case | Independent verdict | Shell (new) | Prior shell 950b3b0 |
+| Case | Independent verdict | Shell (new) | Prior shell 5ff811e (main with PR56) |
 |---|---|---|---|
 | bad-4vs5 (4-unit side says 5 cm) | 1 finding: side 1, ~20% shorter | warns both sizes | renders fine, silent |
 | joint-two (two known sides disagree) | 1 joint finding, no direction | warns both sizes | renders fine, silent |
@@ -73,13 +73,15 @@ leak), corners pointable. No false positive on real output.
 - Foreshortened faces with numeric `sides` (a cuboid drawn with per-face
   measures) would warn; such sketches must carry `schematic`. The cuboid probe
   body uses segments and stays quiet. One REFERENCE.md line teaches the opt-out.
-- Server patch-preview returns on main accumulate the first render's issues
-  for every lint kind (pre-existing; PR56's preview change reads final lint).
-  No length-side change is needed there: `lintLengths()` drops stale length
-  findings before re-adding, so final lint is already correct, and the lint
-  retry renders the corrected full body fresh (unaffected).
-- PR56 owns side-label placement and the shared `lint()`/reveal hook points;
-  this change only reads attributes and adds kind `length` (actionable by
-  default, so the existing bounded retry applies with no server change).
-  Observed while inspecting: the live page's "3 cm" label sits very close to
-  its edge — placement, i.e. PR56's domain, reported not fixed here.
+- Server patch previews return final lint (PR56, now on main), so a repaired
+  figure comes back clean there too — the lifecycle check asserts exactly
+  this. `lintLengths()` drops stale length findings before re-adding, which
+  is what keeps final lint correct; the lint retry renders the corrected
+  full body fresh and was never affected.
+- Placement is PR56's (now on main): this change only reads attributes and
+  adds kind `length` (actionable by default, so the existing bounded retry
+  applies with no server change). It touches the same `lint()`/reveal hook
+  points by appending one call each; the two recomputes are kind-disjoint.
+- Model page re-rendered after the PR56 merge: the 3 cm label now sits clear
+  of its edge, so no remaining placement defect to report; corners pointable,
+  answer box empty, lint clean at boot and after the patch at both sizes.

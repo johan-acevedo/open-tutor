@@ -10,7 +10,7 @@ REFERENCE.md line draws sides to scale and teaches the `schematic` opt-out.
 A 4-vs-5 synthetic warns while consistent scaled/rounded/mixed-unit figures
 and real writer bodies stay quiet; hidden figures warn only after reveal and
 repaired warnings clear. Reproduce with `tools/check_lengths.py
-[--prior-ref 950b3b0]`; CI pins the decision logic in
+[--prior-ref 5ff811e]`; CI pins the decision logic in
 `tests/test_length_lint.py`. Evidence: `review/2026-11-13-lengths/`, incl. one
 fresh Hydrogen-low page plus patch (lint-clean, inspected at both sizes).
 No new tags, no server change (`length` is actionable by default).
