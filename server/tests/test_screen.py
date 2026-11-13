@@ -1157,7 +1157,8 @@ async def test_slow_patch_image_still_screenshots_instead_of_failing(tmp_path, m
     png, issues = await screen._default_render_page(
         "<h1>Rom</h1>", '<ot-patch target="x"><ot-image src="https://example.invalid/x.jpg"></ot-image></ot-patch>',
         370, 610)
-    assert png == b"PNG" and issues == []
+    assert png == b"PNG"
+    assert any(i["kind"] == "image" and "still loading" in i["msg"] for i in issues)
 
 
 async def test_plain_page_render_does_not_wait_for_patch_images(tmp_path, monkeypatch):

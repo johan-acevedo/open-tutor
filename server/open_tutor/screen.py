@@ -840,8 +840,8 @@ class Screen:
                         "() => ![...document.querySelectorAll('ot-image img')]"
                         ".some(i => i.src && !i.complete)",
                         timeout=5000)
-                except Exception:  # noqa: BLE001 - slow images stay an issue, not a failure
-                    pass
+                except Exception:  # noqa: BLE001 - preserve the page and report the incomplete preview
+                    issues.append({"kind": "image", "msg": "patch image still loading after 5 seconds"})
                 late = await frame.evaluate("(n) => ot.issues.slice(n)", seen)
                 issues.extend(item for item in late or [] if item not in issues)
             shot = await page.screenshot()

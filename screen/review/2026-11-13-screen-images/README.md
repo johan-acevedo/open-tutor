@@ -22,6 +22,27 @@ sha256, bytes), `rejection.json`, `results.json`.
 the fixed previewer; `patched-shot-370x610.png` is the pre-fix blank-image
 screenshot it replaces.
 
+Parent review correction: that fixed screenshot re-renders the first job's text
+fallback, rather than the accepted rerun saved as `page.html`. It is retained as the
+worker's original check. `accepted-page-patched-370x610.png` and
+`accepted-page-patched-1000x700.png` instead render exactly the committed `page.html`
+plus `patch.html`: both Colosseum and Forum Romanum are present, with both credits.
+I inspected these canonical page/patch renders; `canonical-patch-results.json` records
+clean lint at both sizes. This rerender uses no model calls. A patch-image wait timeout
+now adds an advisory `image` issue instead of silently producing a clean blank preview.
+
+`production-review/` is a separate parent-run pair with the actual production constants:
+6 s image cap, 12 s page target, 20 s job limit, Hydrogen low, look disabled to isolate
+the image path. The raw writer/vision replies and delivered sources are kept separately.
+The page used 3.67 s generation and 5.13 s image preparation, then delivered a text fallback
+in 9.92 s when its first review could not finish before the soft-target reserve. The next
+patch took 6.97 s total, including 2.81 s image preparation, and accepted Forum Romanum.
+Both were lint-clean and reported no failures. This confirms the production deadline and
+fallback behavior; image acceptance on a first page is not reliable when generation or
+vision is slow. The worker's accepted-page rerun above remains a separate sample.
+The parent reran the complete server-configured suite after these review fixes:
+466 passed, 18 skipped. The three patch-image preview cases passed independently.
+
 ## What the shots show
 
 - `page-shot-370x610.png` and `page-shot-1000x700.png`: the accepted Diliff

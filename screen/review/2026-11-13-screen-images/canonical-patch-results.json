@@ -1,0 +1,12 @@
+{
+ "370x610": {
+  "issues": [],
+  "body": "page.html",
+  "patch": "patch.html"
+ },
+ "1000x700": {
+  "issues": [],
+  "body": "page.html",
+  "patch": "patch.html"
+ }
+}
