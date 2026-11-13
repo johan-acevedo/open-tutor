@@ -214,6 +214,41 @@ so provider variation prevents a clean speedup claim. The under-12 s target is n
 this route: generation alone took 12.4–16.5 s in the second batch. Sources, timing data,
 screenshots and rerun commands are in `screen/review/2026-11-13-page-budget/`.
 
+### Page-writer model comparison controls (2026-11-13)
+
+Prepared on `feat/screen-model-controls`, without live inference calls. Setting
+`SCREEN_MODEL=gemini-4-hydrogen` selects Google's OpenAI-compatible endpoint and
+`GEMINI_API_KEY`; `SCREEN_REASONING=low` (default) or `medium` selects thinking depth.
+Other models keep the Go route. There is no fallback between providers.
+`SCREEN_THINKING=disabled` on a DeepSeek chat model sends
+`thinking: {type: disabled}` and omits `reasoning_effort`; empty keeps today's low
+reasoning request. Invalid combinations fail explicitly. Page/patch `meta.json`
+records the effective model, API, reasoning and any explicit thinking toggle.
+
+The controls follow [Google's compatibility API](https://ai.google.dev/gemini-api/docs/openai)
+and [DeepSeek's thinking toggle](https://api-docs.deepseek.com/guides/thinking_mode/).
+HTTP request tests use the real SDK with a local recorded-response transport;
+provider acceptance, speed and page quality remain untested. Go probes and new
+Go helpers are paused pending Johan's billing decision. The lead owns live comparisons.
+
+Ready commands, run from the repo root **only when the lead elects to compare**:
+
+```sh
+# Hydrogen low; change only low → medium for the second batch, using a fresh --out.
+OPEN_TUTOR_ENV=~/.config/open-tutor-smart-dev/env server/bin/with-env env \
+  SCREEN_MODEL=gemini-4-hydrogen SCREEN_API=chat SCREEN_REASONING=low SCREEN_THINKING= \
+  uv run --project server python screen/tools/bench_page_budget.py --count 5 --out /tmp/hydrogen-low
+
+# After Go billing is settled: change only the thinking toggle against a low baseline.
+OPEN_TUTOR_ENV=~/.config/open-tutor-smart-dev/env server/bin/with-env env \
+  SCREEN_MODEL=deepseek-v4.1-flash SCREEN_API=chat SCREEN_REASONING=low SCREEN_THINKING=disabled \
+  uv run --project server python screen/tools/bench_page_budget.py --count 5 --out /tmp/deepseek-thinking-disabled
+```
+
+Use the ordinary benchmark mode, not `--profile-only` (that older diagnostic pins
+the Go endpoint). Keep pane, ask and look settings equal between batches and judge
+the generated page and patch at phone and wide sizes before selecting a model.
+
 ### Tutor tools (replace `commission_board` and `edit_board` in smart mode)
 
 | Tool | Does | Speed |

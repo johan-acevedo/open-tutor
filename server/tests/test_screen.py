@@ -836,6 +836,88 @@ def test_model_spec_defaults_to_minimal_reasoning(tmp_path, monkeypatch):
     monkeypatch.delenv("SCREEN_MODEL", raising=False)
     monkeypatch.delenv("SCREEN_REASONING", raising=False)
     monkeypatch.delenv("SCREEN_API", raising=False)
+    monkeypatch.delenv("SCREEN_THINKING", raising=False)
     screen = make_screen(tmp_path)
     assert screen.model_spec() == {"model": "muse-spark-1.3-contributor",
                                    "api": "responses", "reasoning": "minimal"}
+
+
+@pytest.mark.parametrize("model,effort,thinking,host,path", [
+    ("deepseek-v4.1-flash", "low", "", "opencode.ai", "/inference/go/openai/v1/chat/completions"),
+    ("deepseek-v4.1-flash", "low", "disabled", "opencode.ai", "/inference/go/openai/v1/chat/completions"),
+    ("deepseek-v4.1-flash", "low", "enabled", "opencode.ai", "/inference/go/openai/v1/chat/completions"),
+    ("gemini-4-hydrogen", "low", "", "generativelanguage.googleapis.com", "/v1beta/openai/chat/completions"),
+    ("gemini-4-hydrogen", "medium", "", "generativelanguage.googleapis.com", "/v1beta/openai/chat/completions"),
+    ("muse-spark-1.3-contributor", "minimal", "", "opencode.ai", "/inference/go/openai/v1/responses"),
+])
+def test_page_model_wire_request(tmp_path, monkeypatch, model, effort, thinking, host, path):
+    """Exercise the real SDK serializer; the transport returns a recorded response shape."""
+    import httpx
+    import openai
+
+    for name, value in {"SCREEN_MODEL": model, "SCREEN_REASONING": effort,
+                        "SCREEN_THINKING": thinking, "SCREEN_API": "",
+                        "GEMINI_API_KEY": "test-google", "OPENCODE_GO_API_KEY": "test-go"}.items():
+        monkeypatch.setenv(name, value)
+    requests = []
+
+    def handle(request):
+        requests.append(request)
+        if path.endswith("responses"):
+            payload = {"id": "resp_test", "object": "response", "created_at": 0, "model": model,
+                       "output": [{"id": "msg_test", "type": "message", "role": "assistant",
+                                   "status": "completed", "content": [{"type": "output_text",
+                                       "text": "<h1>Hej</h1>", "annotations": []}]}]}
+        else:
+            payload = {"id": "chat_test", "object": "chat.completion", "created": 0, "model": model,
+                       "choices": [{"index": 0, "finish_reason": "stop", "message": {
+                           "role": "assistant", "content": "<h1>Hej</h1>"}}]}
+        return httpx.Response(200, json=payload)
+
+    real_client = openai.OpenAI
+    with httpx.Client(transport=httpx.MockTransport(handle)) as http:
+        monkeypatch.setattr(openai, "OpenAI", lambda **kw: real_client(**kw, http_client=http))
+        screen = make_screen(tmp_path)
+        assert screen._default_model_call("System", "Lesson", ["data:image/png;base64,AAA"], b"PNG") == "<h1>Hej</h1>"
+    assert len(requests) == 1
+    request = requests[0]
+    body = json.loads(request.content)
+    assert request.url.host == host and request.url.path == path
+    assert request.headers["authorization"] == ("Bearer test-google" if host.startswith("generative") else "Bearer test-go")
+    assert ("x-opencode-session" in request.headers) == (host == "opencode.ai")
+    assert body["model"] == model
+    if path.endswith("responses"):
+        assert body["reasoning"] == {"effort": "minimal"}
+        parts = body["input"][0]["content"]
+        assert [p["type"] for p in parts] == ["input_text", "input_image", "input_image"]
+    else:
+        assert body.get("thinking") == ({"type": thinking} if thinking else None)
+        assert body.get("reasoning_effort") == (None if thinking == "disabled" else effort)
+        parts = body["messages"][1]["content"]
+        assert [p["type"] for p in parts] == ["text", "image_url", "image_url"]
+
+
+@pytest.mark.parametrize("settings,error", [
+    ({"SCREEN_MODEL": "gemini-4-hydrogen", "SCREEN_REASONING": "minimal"}, "Gemini pages require"),
+    ({"SCREEN_MODEL": "gemini-4-hydrogen", "SCREEN_API": "responses"}, "Gemini pages require"),
+    ({"SCREEN_MODEL": "gemini-4-hydrogen", "SCREEN_THINKING": "disabled"}, "requires a DeepSeek"),
+    ({"SCREEN_MODEL": "deepseek-v4.1-flash", "SCREEN_THINKING": "off"}, "requires a DeepSeek"),
+])
+def test_page_model_rejects_incompatible_settings(tmp_path, monkeypatch, settings, error):
+    for name in ("SCREEN_MODEL", "SCREEN_REASONING", "SCREEN_API", "SCREEN_THINKING"):
+        monkeypatch.delenv(name, raising=False)
+    for name, value in settings.items():
+        monkeypatch.setenv(name, value)
+    with pytest.raises(ValueError, match=error):
+        make_screen(tmp_path).model_spec()
+
+
+def test_gemini_page_never_uses_go_key_as_fallback(tmp_path, monkeypatch):
+    monkeypatch.setenv("SCREEN_MODEL", "gemini-4-hydrogen")
+    monkeypatch.setenv("SCREEN_REASONING", "low")
+    monkeypatch.setenv("SCREEN_API", "")
+    monkeypatch.setenv("SCREEN_THINKING", "")
+    monkeypatch.setenv("OPENCODE_GO_API_KEY", "test-go")
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    with pytest.raises(RuntimeError, match="GEMINI_API_KEY is empty"):
+        make_screen(tmp_path)._default_model_call("system", "user", [], None)

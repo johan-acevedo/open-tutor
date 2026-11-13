@@ -10,6 +10,13 @@ Five real DeepSeek jobs now stayed below 20 s but did not meet 12 s; the first
 model call alone took 12.4–16.5 s. See `review/2026-11-13-page-budget/` for the
 evidence, separate-batch caveat and the old/new look comparison.
 
+Model comparison controls are prepared without live calls: `SCREEN_MODEL=gemini-4-hydrogen`
+uses Google and `GEMINI_API_KEY`, thinking `low` or `medium` via `SCREEN_REASONING`.
+DeepSeek accepts `SCREEN_THINKING=disabled` as a separate toggle, omitting effort.
+Recorded HTTP tests cover routes, keys, image inputs and incompatible settings;
+live acceptance and quality are still for the lead to verify. Commands are in
+`docs/smart-screen.md`. No Go probes/helpers until Johan settles billing.
+
 Pane/repair review: corrected-page renders are bounded too, with a short margin
 for saving and delivery. A renderer timeout keeps the already rendered page.
 Retry acknowledgements and patch responses are not accepted as page bodies.

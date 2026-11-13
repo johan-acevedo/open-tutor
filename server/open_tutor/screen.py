@@ -37,6 +37,7 @@ from screen.tools import prompt as screen_prompt  # noqa: E402
 from screen.tools import screenkit as screenkit  # noqa: E402
 
 SCREEN_BASE_URL = "https://opencode.ai/inference/go/openai/v1"
+GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 JOB_TIMEOUT_S = 20.0
 PAGE_TARGET_S = 12.0
 OPTIONAL_STEP_LIMIT_S = 6.0
@@ -437,9 +438,19 @@ class Screen:
     def model_spec(self) -> dict[str, str]:
         """Which screen model and reasoning level this session uses."""
         model = _screen_env("SCREEN_MODEL", "muse-spark-1.3-contributor")
-        api = _screen_env("SCREEN_API", "") or ("chat" if "deepseek" in model.lower() else "responses")
+        gemini = model.lower().startswith("gemini-")
+        deepseek = "deepseek" in model.lower()
+        api = _screen_env("SCREEN_API", "") or ("chat" if deepseek or gemini else "responses")
         effort = _screen_env("SCREEN_REASONING", "") or ("low" if api == "chat" else "minimal")
-        return {"model": model, "api": api, "reasoning": effort}
+        thinking = _screen_env("SCREEN_THINKING", "")
+        if gemini and (api != "chat" or effort not in {"low", "medium", "high"}):
+            raise ValueError("Gemini pages require SCREEN_API=chat and SCREEN_REASONING=low, medium or high")
+        if thinking and (not deepseek or api != "chat" or thinking not in {"enabled", "disabled"}):
+            raise ValueError("SCREEN_THINKING=enabled|disabled requires a DeepSeek chat model")
+        spec = {"model": model, "api": api, "reasoning": effort}
+        if thinking:
+            spec["thinking"] = thinking
+        return spec
 
     async def _run_job(self, job_id: str, ask: str) -> None:
         from .debug_log import record_active
@@ -478,7 +489,7 @@ class Screen:
         job_dir = self._save(job_id, ask,
                              {"patch.html": patch, "patched.png": png},
                              {"job": job_id, "kind": "patch", "page": visible.page_id,
-                              "model": spec["model"], "reasoning": spec["reasoning"],
+                              **spec,
                               "pane": [w, h],
                               "model_s": round(model_s, 2), "render_s": round(render_s, 2),
                               "total_s": round(total_s, 2), "issues": issues})
@@ -575,7 +586,7 @@ class Screen:
                              {"page.html": body, "shot.png": png},
                              {"job": job_id, "kind": "page", "page": page_id,
                               "title": page_title(body, page_id),
-                              "model": spec["model"], "reasoning": spec["reasoning"],
+                              **spec,
                               "pane": [width, height],
                               "model_s": round(model_s, 2), "render_s": round(render_s, 2),
                               "look_s": round(look_s, 2), "retry_s": round(retry_s, 2),
@@ -674,24 +685,26 @@ class Screen:
 
     def _default_model_call(self, system: str, user: str,
                             images: list[str], look_png: bytes | None) -> str:
-        """Call the screen model on the Go OpenAI-compatible endpoint (blocking;
-        the job runs it in a thread). ``SCREEN_MODEL`` and ``SCREEN_REASONING``
-        override the defaults; DeepSeek models use Chat Completions."""
+        """Blocking call, run in a thread. Gemini uses Google; other models use Go.
+        There is no provider fallback. SCREEN_THINKING controls DeepSeek's toggle."""
         from openai import OpenAI
 
         from .config import USER_AGENT
 
-        key = os.environ.get("OPENCODE_GO_API_KEY", "")
+        spec = self.model_spec()
+        model, api, effort = spec["model"], spec["api"], spec["reasoning"]
+        gemini = model.lower().startswith("gemini-")
+        key_name = "GEMINI_API_KEY" if gemini else "OPENCODE_GO_API_KEY"
+        key = os.environ.get(key_name, "")
         if not key:
-            raise RuntimeError("OPENCODE_GO_API_KEY is empty: run through server/bin/with-env")
-        model = _screen_env("SCREEN_MODEL", "muse-spark-1.3-contributor")
-        api = _screen_env("SCREEN_API", "") or ("chat" if "deepseek" in model.lower() else "responses")
-        client = OpenAI(api_key=key, base_url=SCREEN_BASE_URL,
-                        default_headers={"User-Agent": USER_AGENT,
-                                         "x-opencode-session": self.session_id},
+            raise RuntimeError(f"{key_name} is empty: run through server/bin/with-env")
+        headers = {"User-Agent": USER_AGENT}
+        if not gemini:
+            headers["x-opencode-session"] = self.session_id
+        client = OpenAI(api_key=key, base_url=GEMINI_BASE_URL if gemini else SCREEN_BASE_URL,
+                        default_headers=headers,
                         timeout=40.0, max_retries=0)
         if api == "chat":
-            effort = _screen_env("SCREEN_REASONING", "") or "low"
             content: list[dict[str, Any]] = [{"type": "text", "text": user}]
             for url in images:
                 content.append({"type": "image_url", "image_url": {"url": url}})
@@ -701,16 +714,20 @@ class Screen:
                 data = base64.b64encode(look_png).decode()
                 content.append({"type": "image_url",
                                 "image_url": {"url": f"data:image/png;base64,{data}"}})
+            reasoning: dict[str, Any] = {}
+            if spec.get("thinking"):
+                reasoning["extra_body"] = {"thinking": {"type": spec["thinking"]}}
+            if spec.get("thinking") != "disabled":
+                reasoning["reasoning_effort"] = effort
             response = client.chat.completions.create(
                 model=model,
                 messages=[{"role": "system", "content": system},
                           {"role": "user", "content": content}],  # type: ignore[arg-type]
-                reasoning_effort=effort,  # type: ignore[call-arg]
+                **reasoning,
             )
             return (response.choices[0].message.content or "").strip()
         from openai.types import Reasoning
 
-        effort = _screen_env("SCREEN_REASONING", "") or "minimal"
         if images or look_png:
             import base64
 
