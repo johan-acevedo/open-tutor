@@ -32,18 +32,6 @@
   min-width: 0;
   flex: 0 0 auto;
 }
-.ot-size-btn {
-  position: absolute;
-  right: 0;
-  top: 0;
-  border-radius: 50%;
-  width: 44px;
-  height: 44px;
-  border: 1px solid var(--ot-border);
-  background: #14171dcc;
-  color: var(--ot-text-dim);
-  font-size: 24px;
-}
 .ot-board-nav,
 .ot-tray-actions,
 .ot-arrival-actions {
@@ -391,10 +379,6 @@
   max-width: calc(100% - 24px);
   overflow-wrap: anywhere;
 }
-.ot-phone.ot-small-companion .ot-main {
-  --companion-w: 76px;
-  --companion-h: 108px;
-}
 .ot-phone.ot-keyboard .ot-main {
   --companion-w: 120px;
   --companion-h: 156px;
@@ -415,6 +399,273 @@
 }
 .ot-phone.ot-keyboard .ot-homework-tray {
   top: 0;
+}
+
+/* ---------- Phone portrait: the fox, or the item with a fox strip ---------- */
+/* One thing at a time. The item takes the height between the top bar and a
+   fixed fox strip; otherwise the fox takes the screen and the item is hidden
+   but keeps its size, so the pane the server hears is the pane a page gets. */
+.ot-phone.ot-phone-portrait .ot-main {
+  --ot-fox-strip-h: 72px;
+  grid-template-rows: minmax(0, 1fr) var(--ot-fox-strip-h);
+  gap: 6px;
+  padding: 0;
+}
+.ot-phone.ot-phone-portrait .ot-main .ot-board {
+  grid-column: 1;
+  grid-row: 1;
+}
+.ot-phone.ot-phone-portrait .ot-main .ot-avatar-col {
+  grid-column: 1;
+  grid-row: 2;
+  width: 100%;
+  max-width: none;
+  min-height: 0;
+  padding: 0 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  overflow: hidden;
+}
+.ot-phone.ot-phone-portrait .ot-main.ot-fox-view .ot-board {
+  visibility: hidden;
+  pointer-events: none;
+}
+.ot-phone.ot-phone-portrait .ot-main.ot-fox-view .ot-avatar-col {
+  grid-row: 1 / span 2;
+  padding: 0 10px;
+}
+
+/* The big fox: most of the screen, its line in a bubble by its head. */
+.ot-fox-hero {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  animation: ot-fox-in 0.22s ease-out;
+}
+.ot-fox-hero-head {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+}
+.ot-fox-hero-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.ot-fox-hero-figure {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+}
+.ot-fox-hero-figure .ot-avatar-img {
+  width: 100%;
+  height: 100%;
+  max-height: 100%;
+  min-height: 0;
+  object-fit: contain;
+  object-position: center center;
+}
+.ot-fox-hero-figure .ot-avatar-fallback {
+  width: 100%;
+  height: 100%;
+}
+.ot-fox-hero .ot-pill {
+  font-size: 14px;
+  padding: 5px 12px;
+}
+.ot-show-page {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--ot-cyan);
+  background: var(--ot-cyan-fill);
+  color: var(--ot-cyan);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* The fox strip under a shown item: round head on the left, latest line right. */
+.ot-fox-strip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  animation: ot-fox-in 0.22s ease-out;
+}
+.ot-fox-head {
+  flex: 0 0 56px;
+  width: 56px;
+  height: 56px;
+  min-width: 56px;
+  min-height: 56px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid var(--ot-border);
+  background: var(--ot-elevated);
+  overflow: hidden;
+  cursor: pointer;
+}
+.ot-fox-head .ot-avatar-img {
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  object-fit: cover;
+  /* Crop to the head: the pose images are head-and-shoulders portraits. */
+  object-position: 50% 24%;
+}
+.ot-fox-head .ot-avatar-fallback {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 50%;
+  aspect-ratio: auto;
+}
+.ot-fox-head-cyan {
+  border-color: var(--ot-cyan);
+}
+.ot-fox-head-violet {
+  border-color: var(--ot-violet);
+}
+.ot-fox-head-grey {
+  border-color: var(--ot-border);
+}
+.ot-fox-head-speaking {
+  animation: ot-fox-ring 1.8s ease-in-out infinite;
+}
+.ot-fox-strip-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  max-height: 100%;
+}
+
+/* Speech bubble: light, dark text, trimmed to the latest lines. */
+.ot-fox-bubble {
+  flex: 0 0 auto;
+  background: #eef0f7;
+  color: #171a24;
+  border-radius: 14px;
+  padding: 9px 12px;
+  font-size: 16px;
+  line-height: 1.4;
+  text-align: left;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+  transition: opacity 0.6s ease;
+}
+/* Kept in the DOM while empty so the live region is there when speech starts. */
+.ot-fox-bubble:empty {
+  padding: 0;
+  min-height: 0;
+  background: transparent;
+}
+.ot-fox-bubble-strip {
+  font-size: 14px;
+  line-height: 1.35;
+  /* Three lines plus padding must stay inside the strip, or text is cut. */
+  padding: 6px 11px;
+  border-radius: 12px;
+  -webkit-line-clamp: 3;
+}
+.ot-fox-bubble-state {
+  color: #4a5068;
+}
+
+/* Turning from the fox to the item fades the page in, calmly. */
+.ot-phone.ot-phone-portrait .ot-main:not(.ot-fox-view) .ot-board-scroll {
+  animation: ot-page-in 0.22s ease-out;
+}
+@keyframes ot-fox-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes ot-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes ot-fox-ring {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 #22d3ee55;
+  }
+  50% {
+    box-shadow: 0 0 0 5px #22d3ee00;
+  }
+}
+
+/* Phone keyboard open: keep the strip and the bubble short. */
+.ot-phone.ot-phone-portrait.ot-keyboard .ot-main {
+  --ot-fox-strip-h: 64px;
+}
+.ot-phone.ot-phone-portrait.ot-keyboard .ot-fox-bubble {
+  -webkit-line-clamp: 2;
+}
+.ot-phone.ot-phone-portrait.ot-keyboard .ot-fox-hero-head {
+  padding-bottom: 0;
+}
+
+/* The demo bar stands in for the top bar on a phone, same 44 px. */
+.ot-phone.ot-phone-portrait .ot-demo-bar-phone {
+  flex: 0 0 44px;
+  height: 44px;
+  gap: 6px;
+  padding: 0 8px;
+  overflow-x: auto;
+}
+.ot-phone.ot-phone-portrait .ot-demo-bar-phone strong {
+  font-size: 13px;
+  white-space: nowrap;
+}
+.ot-phone.ot-phone-portrait .ot-demo-bar-phone button {
+  min-height: 32px;
+  min-width: 0;
+  padding: 0 8px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ot-fox-hero,
+  .ot-fox-strip,
+  .ot-fox-head-speaking,
+  .ot-phone.ot-phone-portrait .ot-main:not(.ot-fox-view) .ot-board-scroll {
+    animation: none;
+  }
+  .ot-fox-bubble {
+    transition: none;
+  }
 }
 @media (orientation: landscape) {
   .ot-phone .ot-main {
@@ -466,8 +717,5 @@
   }
   .ot-phone.ot-keyboard .ot-caption {
     display: none;
-  }
-  .ot-phone.ot-small-companion .ot-main {
-    --companion-w: 120px;
   }
 }

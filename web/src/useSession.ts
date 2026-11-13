@@ -184,6 +184,10 @@ export function useSession(mobile = false) {
   const [dragOver, setDragOver] = useState(false);
   const [sending, setSending] = useState(false);
   const [activeItemId, setActiveItemId] = useState<string | null>(null);
+  // Bumped whenever the tutor puts something in front of the child (a new
+  // item, a focus, or a patch to the visible page). The phone turns from the
+  // fox to the item on every bump, so the child never misses what was shown.
+  const [boardSignal, setBoardSignal] = useState(0);
   const [homeworkDraft, setHomeworkDraft] = useState<HomeworkDraft | null>(null);
   const [homeworkSending, setHomeworkSending] = useState(false);
   const [audioBlocked, setAudioBlocked] = useState(false);
@@ -465,6 +469,7 @@ export function useSession(mobile = false) {
         });
         setFocused(null);
         setActiveItemId(v.item.id);
+        setBoardSignal((n) => n + 1);
         await waitForMounted(v.item.id);
         // For the first pending item this mount flips arrival->teaching:
         // report the size only once that transition has settled, so the
@@ -492,6 +497,7 @@ export function useSession(mobile = false) {
           return [...prev, v.item];
         });
         setActiveItemId(v.item.id);
+        setBoardSignal((n) => n + 1);
         await waitForMounted(v.item.id);
         await waitForBoardLayout();
         return JSON.stringify({ ok: true, board: readBoardSize() });
@@ -527,6 +533,8 @@ export function useSession(mobile = false) {
         if (field === 'patch') send({ ot: 'patch', html: v.arg });
         else if (method === BOARD_RPC_REVEAL) send({ ot: 'reveal', id: v.arg });
         else send({ ot: 'point', id: v.arg });
+        // A patch changes what is on the page; the phone shows the page again.
+        if (field === 'patch') setBoardSignal((n) => n + 1);
         return '{"ok":true}';
       };
       registerRpc(room, BOARD_RPC_PATCH, pageOp('patch', BOARD_RPC_PATCH));
@@ -544,6 +552,7 @@ export function useSession(mobile = false) {
         if (!v.ok) throw new RpcError(1500, v.error);
         setFocused(v.focus);
         setActiveItemId(v.focus.id);
+        setBoardSignal((n) => n + 1);
         return '{"ok":true}';
       });
 
@@ -1031,6 +1040,7 @@ export function useSession(mobile = false) {
     profile,
     items,
     activeItemId,
+    boardSignal,
     homeworkDraft,
     homeworkSending,
     queueFiles,

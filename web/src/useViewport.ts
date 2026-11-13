@@ -2,11 +2,16 @@ import { useEffect, useState } from 'react';
 
 export const PHONE_QUERY = '(max-width: 600px), (max-width: 950px) and (max-height: 500px) and (pointer: coarse)';
 
+/** The phone layout has a portrait-only variant (big fox / fox strip). */
+export const PORTRAIT_QUERY = '(orientation: portrait)';
+
 export function useViewport() {
   const [mobile, setMobile] = useState(() => window.matchMedia(PHONE_QUERY).matches);
+  const [portrait, setPortrait] = useState(() => window.matchMedia(PORTRAIT_QUERY).matches);
   const [keyboard, setKeyboard] = useState(false);
   useEffect(() => {
     const media = window.matchMedia(PHONE_QUERY);
+    const portraitMedia = window.matchMedia(PORTRAIT_QUERY);
     const viewport = window.visualViewport;
     let baseline = window.innerHeight;
     let width = window.innerWidth;
@@ -16,6 +21,7 @@ export function useViewport() {
       raf = requestAnimationFrame(() => {
         const phone = media.matches;
         setMobile(phone);
+        setPortrait(portraitMedia.matches);
         // Zoom is an accessibility action, not the keyboard. Leave its viewport alone.
         if (viewport && Math.abs(viewport.scale - 1) > 0.05) return;
         const el = document.activeElement;
@@ -36,6 +42,7 @@ export function useViewport() {
     const events = ['resize', 'focusin', 'focusout'] as const;
     events.forEach((event) => window.addEventListener(event, update));
     media.addEventListener('change', update);
+    portraitMedia.addEventListener('change', update);
     viewport?.addEventListener('resize', update);
     viewport?.addEventListener('scroll', update);
     update();
@@ -43,11 +50,12 @@ export function useViewport() {
       cancelAnimationFrame(raf);
       events.forEach((event) => window.removeEventListener(event, update));
       media.removeEventListener('change', update);
+      portraitMedia.removeEventListener('change', update);
       viewport?.removeEventListener('resize', update);
       viewport?.removeEventListener('scroll', update);
       document.documentElement.style.removeProperty('--ot-view-height');
       document.documentElement.style.removeProperty('--ot-view-top');
     };
   }, []);
-  return { mobile, keyboard };
+  return { mobile, portrait, keyboard };
 }
