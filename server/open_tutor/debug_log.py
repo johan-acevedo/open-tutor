@@ -397,6 +397,17 @@ def _dump_error(event: Any) -> dict[str, Any]:
         "error": _dump(error),
         "source": _dump(source),
     }
+    # LLMError marks its underlying exception `exclude=True`, so model_dump drops the
+    # one thing that explains the failure (a 400 body names the rejected field). Keep
+    # the provider's own message, type and status in the same provider_error record.
+    cause = getattr(error, "error", None)
+    if cause is not None:
+        entry["cause"] = {
+            "error_type": type(cause).__name__,
+            "message": str(cause)[:600],
+            "status_code": getattr(cause, "status_code", None),
+            "body": str(getattr(cause, "body", ""))[:1200],
+        }
     return entry
 
 

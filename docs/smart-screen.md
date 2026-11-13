@@ -247,6 +247,25 @@ Known and open:
 - Scripts written by the page model would run inside the sandboxed frame; not stripped yet.
 - Image search still runs in the page (unfiltered Commons result).
 
+### Tutor model routes (2026-11-13)
+
+`gemini` joins `go`/`go-deepseek`: Gemini 4 Hydrogen with thinking level `low` on
+Google's OpenAI-compatible Chat Completions. A live session first exposed two
+provider-specific failures; both are fixed in our code.
+
+- Gemini 4 sends every function call with `index: null`. LiveKit tells parallel calls
+  apart by that index, so the second call overwrote the first and only the last
+  (unsigned) call survived; the next request failed with `400 Function call is missing
+  a thought_signature`. `tutor_llm.GeminiChatLLM` numbers the calls, keeping all of them
+  and the signature on the first.
+- The greeting turn called `save_note` when the child's typed message raced it. The
+  memory instructions and the tool description now say not to save a note at the
+  greeting; five pure and five racing greeting runs called no `save_note`.
+
+Provider-independent: a non-retryable LLM error is recorded as `provider_error` with the
+provider's own message, and the worker says one short apology through TTS (no LLM) and
+ends the session instead of leaving the child in silence.
+
 ## Work packages
 
 1. **Example screens, shell and components.** Owner: a separate Opus 5.5 thread. Status: started

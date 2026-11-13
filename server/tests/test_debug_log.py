@@ -7,7 +7,7 @@ import json
 import os
 import stat
 
-from livekit.agents import llm
+from livekit.agents import APIStatusError, llm
 from livekit.agents.metrics import AgentSessionUsage, LLMMetrics, LLMModelUsage
 from livekit.agents.voice import events
 from livekit.agents.voice.events import ToolCallEnded, ToolCallStarted, ToolExecutionUpdatedEvent
@@ -194,6 +194,28 @@ def test_error_event_never_crashes_recorder(tmp_path):
     body = json.loads(debug.finalize("ended_by_child").read_text(encoding="utf-8"))
     errors = [e for e in body["events"] if e["event"] == "provider_error"]
     assert errors and errors[0]["error_type"] == "ValueError"
+    assert body["summary"]["provider_errors"] == 1
+
+
+def test_provider_error_keeps_the_provider_message(tmp_path):
+    """LLMError excludes its cause from model_dump; a 400 body must still reach the trail."""
+    env, base = enabled_env(tmp_path)
+    debug = DebugLog.create("tutor-room9", LEARNER, "AJ_x", environ=env, base_dir=base)
+    cause = APIStatusError(
+        "Error code: 400",
+        status_code=400,
+        body=[{"error": {"message": "Function call is missing a thought_signature"}}],
+        retryable=False,
+    )
+    error = llm.LLMError(timestamp=0.0, label="livekit.plugins.openai.llm.LLM",
+                         error=cause, recoverable=False)
+    debug.record_sdk(events.ErrorEvent(error=error, source="probe"))
+    body = json.loads(debug.finalize("provider_error").read_text(encoding="utf-8"))
+    recorded = next(e for e in body["events"] if e["event"] == "provider_error")
+    assert recorded["cause"]["status_code"] == 400
+    assert "thought_signature" in recorded["cause"]["body"]
+    assert recorded["cause"]["error_type"] == "APIStatusError"
+    # Still the same summary count the timeout path uses.
     assert body["summary"]["provider_errors"] == 1
 
 

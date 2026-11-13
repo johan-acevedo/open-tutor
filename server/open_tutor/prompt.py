@@ -97,6 +97,8 @@ talk about what they saw.
 Memory
 - At natural milestones, and always when the session ends, call `save_note` with the topic, what \
 clicked, what is still tricky and what to try next. Keep each part to a short phrase in Swedish.
+- Never call `save_note` at the greeting or before any teaching has happened: a greeting is not a \
+milestone, and there is nothing to save yet.
 - `clicked` is optional: empty is normal when unclear or when the work was mostly guided. Describe \
 helped versus independent plainly in the existing text. Do not force a success story. A prior \
 `clicked` is what was written then, not diagnosed mastery; check with a fresh small step next time.

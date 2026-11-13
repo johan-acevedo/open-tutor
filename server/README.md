@@ -29,6 +29,24 @@ Go serves Muse Spark 1.3 Contributor only on its OpenAI Responses endpoint, `htt
 - Reasoning `minimal`: board tool called in 24 of 24 first requests, median 1.4 s to first output (`low`: 4.2 s median, up to 11.6 s).
 - Go's documentation says Muse Spark Contributor prompts and completions are used to train Meta models (not zero data retention), and the workspace must allow paid endpoints that train on request data.
 
+## The Gemini route
+
+`TUTOR_LLM=gemini` runs Gemini 4 Hydrogen (`gemini-4-hydrogen`, released 2026-11-12) on
+Google's OpenAI-compatible Chat Completions endpoint with `GEMINI_API_KEY`. Hydrogen
+rejects `minimal` and `thinking_budget` with a 400; its thinking levels are `low`,
+`medium`, `high` (default) and `xhigh`, sent as `reasoning_effort` on this endpoint.
+The route uses `low`: median 2.0-2.8 s to first token with the real prompt and tools
+(three e2e runs, 2026-11-13).
+
+Gemini 4 enforces thought signatures on replayed function calls. Its compatible stream
+puts `index: null` on every function call, while LiveKit's chat stream assembler uses a
+changed index to tell parallel calls apart. A reply calling two tools therefore kept only
+the last (unsigned) call, and the next request failed with `400 Function call is missing
+a thought_signature`. `tutor_llm.GeminiChatLLM` numbers the calls by id, so every call
+and the signature on the first one survive; pinned by
+tests/test_gemini_route.py against a recorded stream. The native Google plugin was not
+needed.
+
 ## The voice route
 
 Production uses Deepgram Swedish speech with `TUTOR_TTS=deepgram`, `TUTOR_TTS_MODEL=flux-ludvig-sv`, and `TUTOR_TTS_EXPRESSIVITY=1`. The backend loads `DEEPGRAM_API_KEY` from Infisical. A narrow adapter adds expressivity to LiveKit's TTSv2 requests. Cartesia remains selectable, but production no longer depends on its credits.
@@ -58,7 +76,7 @@ The worker logs the route at the start of each session (`tutor TTS route elevenl
 | `TUTOR_TTS` | `elevenlabs` (default) or `cartesia` |
 | `TUTOR_TTS_VOICE`, `TUTOR_TTS_MODEL` | Voice id and model for that provider. ElevenLabs default: `eleven_v4_turbo` with Bella (`hpp4J3VqNfWAUOO0d1Us`), see [the voice route](#the-voice-route). `eleven_v3*`/`eleven_v4*` models use the text-to-dialogue adapter; earlier models such as `eleven_flash_v2_5` use LiveKit's plugin |
 | `ELEVENLABS_API_KEY` / `CARTESIA_API_KEY` | Voice provider key |
-| `TUTOR_LLM` | `go` (default): Muse Spark 1.3 Contributor (`muse-spark-1.3-contributor`) on OpenCode Go, Responses API over HTTP streaming, `OPENCODE_GO_API_KEY`. `gemini-dev` only reproduces the board/voice bug of the earlier development route (`GEMINI_API_KEY`); do not deploy it. There is no silent fallback. |
+| `TUTOR_LLM` | `go` (default): Muse Spark 1.3 Contributor (`muse-spark-1.3-contributor`) on OpenCode Go, Responses API over HTTP streaming, `OPENCODE_GO_API_KEY`. `go-deepseek`: DeepSeek V4.1 Flash on the same subscription. `gemini`: Gemini 4 Hydrogen (`gemini-4-hydrogen`) on Google's OpenAI-compatible Chat Completions, thinking level `low`, `GEMINI_API_KEY`. `gemini-dev` only reproduces the board/voice bug of the earlier development route; do not deploy it. There is no silent fallback. |
 | `OPENCODE_GO_API_KEY` | OpenCode Go API key (from the OpenCode console). Backend only |
 | `TUTOR_LLM_MODEL`, `TUTOR_LLM_BASE_URL`, `TUTOR_LLM_REASONING` | Override the route's model, endpoint or reasoning effort (Go default `minimal`) |
 | `TUTOR_AGENT_NAME` | Dispatch name, default `open-tutor`. Give a test worker and its web service another name so it never takes a family session |

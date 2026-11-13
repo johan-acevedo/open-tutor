@@ -1,0 +1,7 @@
+data: {"choices":[{"delta":{"role":"assistant","tool_calls":[{"extra_content":{"google":{"thought_signature":"sig-one"}},"function":{"arguments":"{\"page_id\":\"p1\"}","name":"show_page"},"id":"call_934187836289450629","type":"function"}]},"index":0}],"created":1794552649,"id":"RrP2as-cFbLOvdIPxN272Ag","model":"gemini-4-hydrogen","object":"chat.completion.chunk"}
+
+data: {"choices":[{"delta":{"role":"assistant","tool_calls":[{"function":{"arguments":"{}","name":"start_quiet_work"},"id":"call_934187836289454054","type":"function"}]},"index":0}],"created":1794552649,"id":"RrP2as-cFbLOvdIPxN272Ag","model":"gemini-4-hydrogen","object":"chat.completion.chunk"}
+
+data: {"choices":[{"delta":{"role":"assistant"},"finish_reason":"stop","index":0}],"created":1794552649,"id":"RrP2as-cFbLOvdIPxN272Ag","model":"gemini-4-hydrogen","object":"chat.completion.chunk"}
+
+data: [DONE]
