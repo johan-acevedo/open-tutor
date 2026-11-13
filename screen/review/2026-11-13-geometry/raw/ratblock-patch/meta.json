@@ -1,0 +1,41 @@
+{
+ "case": "ratblock-patch",
+ "base_case": "ratblock",
+ "ask": "Gör höjden tydlig: lägg en punkt på höjdkannten och skriv måttet 2 cm utanför figuren, så att etiketten inte ligger på linjen.",
+ "pane": [
+  370,
+  610
+ ],
+ "wall_s": 6.12,
+ "spec": {
+  "model": "gemini-4-hydrogen",
+  "api": "chat",
+  "reasoning": "low"
+ },
+ "calls": [
+  {
+   "look": false,
+   "seconds": 4.82,
+   "chars": 225
+  }
+ ],
+ "failures": [],
+ "new_pages": 0,
+ "model_s": 4.823410094249994,
+ "render_s": 1.289266873151064,
+ "total_s": 6.113993629347533,
+ "issues": [],
+ "visible_ids": [
+  "ratblock",
+  "hojd",
+  "langd",
+  "bredd"
+ ],
+ "targets": [
+  "hojd",
+  "ratblock"
+ ],
+ "missing_targets": [],
+ "screen_repair": null,
+ "residual_lint": null
+}

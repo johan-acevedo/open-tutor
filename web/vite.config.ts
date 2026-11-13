@@ -48,6 +48,7 @@ export default defineConfig({
   plugins: [react(), screenTextPlugin()],
   server: {
     proxy: {
+      '/materials': 'http://127.0.0.1:8710',
       '/api': 'http://127.0.0.1:8710',
     },
   },

@@ -1,0 +1,195 @@
+{
+ "what": "Six real Screen jobs from the deployed page writer, plus the offline measure of each unedited body",
+ "date": "2026-11-13",
+ "branch": "t3/research-smart-screen-geometry",
+ "base": {
+  "branch": "feat/smart-screen",
+  "sha": "2b4e2447b3d2392070c47903c7813254d94b841e"
+ },
+ "writer": {
+  "model": "gemini-4-hydrogen",
+  "api": "chat",
+  "reasoning": "low",
+  "thinking": "",
+  "provider": "https://generativelanguage.googleapis.com/v1beta/openai/"
+ },
+ "harness": "server/open_tutor/screen.Screen (real prompt via screen/tools/prompt.py, real renderer via screenkit)",
+ "render_sizes": [
+  "370x610",
+  "1000x700"
+ ],
+ "jobs": [
+  {
+   "case": "cirkel",
+   "pane": [
+    370,
+    610
+   ],
+   "wall_s": 17.16,
+   "model_s": 12.75,
+   "look_s": 0.0,
+   "retry_s": 2.6138309077359736,
+   "render_s": 1.78,
+   "total_s": 17.15,
+   "issues": [],
+   "screen_repair": {
+    "look": false,
+    "look_fix": false,
+    "retry": true,
+    "retry_applied": true,
+    "notes": [
+     "look pass skipped: correct lint directly"
+    ]
+   },
+   "kind": "page",
+   "targets": null,
+   "missing_targets": null
+  },
+  {
+   "case": "cylinder",
+   "pane": [
+    370,
+    610
+   ],
+   "wall_s": 8.04,
+   "model_s": 6.84,
+   "look_s": 0.0,
+   "retry_s": 0.0,
+   "render_s": 1.2,
+   "total_s": 8.04,
+   "issues": [],
+   "screen_repair": {
+    "look": false,
+    "look_fix": false,
+    "retry": false,
+    "retry_applied": false,
+    "notes": [
+     "look pass skipped: page target budget"
+    ]
+   },
+   "kind": "page",
+   "targets": null,
+   "missing_targets": null
+  },
+  {
+   "case": "plan",
+   "pane": [
+    370,
+    610
+   ],
+   "wall_s": 8.48,
+   "model_s": 7.25,
+   "look_s": 0.0,
+   "retry_s": 0.0,
+   "render_s": 1.22,
+   "total_s": 8.48,
+   "issues": [],
+   "screen_repair": {
+    "look": false,
+    "look_fix": false,
+    "retry": false,
+    "retry_applied": false,
+    "notes": [
+     "look pass skipped: page target budget"
+    ]
+   },
+   "kind": "page",
+   "targets": null,
+   "missing_targets": null
+  },
+  {
+   "case": "ratblock",
+   "pane": [
+    370,
+    610
+   ],
+   "wall_s": 12.68,
+   "model_s": 11.56,
+   "look_s": 0.0,
+   "retry_s": 0.0,
+   "render_s": 1.12,
+   "total_s": 12.68,
+   "issues": [],
+   "screen_repair": {
+    "look": false,
+    "look_fix": false,
+    "retry": false,
+    "retry_applied": false,
+    "notes": [
+     "look pass skipped: page target budget"
+    ]
+   },
+   "kind": "page",
+   "targets": null,
+   "missing_targets": null
+  },
+  {
+   "case": "ratblock-patch",
+   "pane": [
+    370,
+    610
+   ],
+   "wall_s": 6.12,
+   "model_s": 4.82,
+   "look_s": null,
+   "retry_s": null,
+   "render_s": 1.29,
+   "total_s": 6.11,
+   "issues": [],
+   "screen_repair": null,
+   "kind": "patch on the delivered rätblock page",
+   "targets": [
+    "hojd",
+    "ratblock"
+   ],
+   "missing_targets": []
+  },
+  {
+   "case": "vinkel",
+   "pane": [
+    370,
+    610
+   ],
+   "wall_s": 11.73,
+   "model_s": 10.59,
+   "look_s": 0.0,
+   "retry_s": 0.0,
+   "render_s": 1.14,
+   "total_s": 11.73,
+   "issues": [],
+   "screen_repair": {
+    "look": false,
+    "look_fix": false,
+    "retry": false,
+    "retry_applied": false,
+    "notes": [
+     "look pass skipped: page target budget"
+    ]
+   },
+   "kind": "page",
+   "targets": null,
+   "missing_targets": null
+  }
+ ],
+ "not_run": [
+  "the STEERED candidate reference lines in probe_geometry.py (no steered job was needed; see README)",
+  "prism, pyramid, cone, sphere and nets (no pages written)",
+  "any fixture or check inside CI: probe_geometry.py makes no provider call in `measure`"
+ ],
+ "commands": [
+  "OPEN_TUTOR_ENV=~/.config/open-tutor-smart-dev/env server/bin/with-env env \\",
+  "  SCREEN_MODEL=gemini-4-hydrogen SCREEN_API=chat SCREEN_REASONING=low SCREEN_THINKING= \\",
+  "  uv run --project server python screen/tools/probe_geometry.py run \\",
+  "    --out screen/review/2026-11-13-geometry/raw --cases cirkel,vinkel,ratblock,cylinder",
+  "",
+  "OPEN_TUTOR_ENV=~/.config/open-tutor-smart-dev/env server/bin/with-env env \\",
+  "  SCREEN_MODEL=gemini-4-hydrogen SCREEN_API=chat SCREEN_REASONING=low SCREEN_THINKING= \\",
+  "  uv run --project server python screen/tools/probe_geometry.py run \\",
+  "    --out screen/review/2026-11-13-geometry/raw --cases plan,ratblock-patch",
+  "",
+  "uv run --project server python screen/tools/probe_geometry.py measure \\",
+  "  --dir screen/review/2026-11-13-geometry/raw",
+  "",
+  "uv run --project server python -m pytest server/tests -q   # 429 passed, 18 skipped"
+ ]
+}

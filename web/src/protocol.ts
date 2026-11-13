@@ -31,6 +31,7 @@ export type BoardItem =
   | { id: string; kind: 'html'; title?: string; html: string; height?: number; width?: number }
   | { id: string; kind: 'image'; title?: string; url: string; alt: string }
   | { id: string; kind: 'page'; title: string; body: string }
+  | { id: string; kind: 'material'; title: string; section_id: string }
   | { id: string; kind: 'pending'; title: string; height?: number }
   | {
       id: string;
@@ -67,12 +68,21 @@ export type SessionResponse = {
   room: string;
 };
 
+/** One browser-side diagnostic event: allowlisted kind + client seq/time. */
+export type DiagWireEvent = {
+  k: 'visibility' | 'connection' | 'mic-track' | 'playback' | 'resume' | 'wakelock';
+  t: number;
+  seq: number;
+  [field: string]: string | number | boolean;
+};
+
 export type SessionEvent =
   | { type: 'end' }
   | { type: 'resource-closed'; id: string }
   | { type: 'board-size'; w: number; h: number; device: string }
   | { type: 'quiet'; on: boolean }
-  | { type: 'page-answer'; page: string; part: string; value: string; kind: string };
+  | { type: 'page-answer'; page: string; part: string; value: string; kind: string }
+  | { type: 'diag'; v: 1; seq: number; tClient: number; dropped: number; events: DiagWireEvent[] };
 
 /** Byte-stream attributes for topic 'homework'. */
 export type HomeworkAttributes = {

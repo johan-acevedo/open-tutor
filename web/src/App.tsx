@@ -131,6 +131,7 @@ export default function App() {
           activeItemId={session.activeItemId}
           onItemMounted={session.onItemMounted}
           onResourceClosed={(id) => void session.resourceClosed(id)}
+          onItemFailed={session.onItemFailed}
           registerPageFrame={session.registerPageFrame}
           onPageAnswer={session.sendPageAnswer}
           overlay={homeworkTray}
@@ -145,6 +146,7 @@ export default function App() {
               items={session.items}
               focused={session.focused}
               onItemMounted={session.onItemMounted}
+              onItemFailed={session.onItemFailed}
               onResourceClosed={(id) => void session.resourceClosed(id)}
               mobile={mobile}
               activeItemId={session.activeItemId}

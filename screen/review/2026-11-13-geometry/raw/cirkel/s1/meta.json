@@ -1,0 +1,29 @@
+{
+ "job": "s1",
+ "kind": "page",
+ "page": "p1",
+ "title": "Cirkelns radie",
+ "model": "gemini-4-hydrogen",
+ "api": "chat",
+ "reasoning": "low",
+ "pane": [
+  370,
+  610
+ ],
+ "model_s": 12.75,
+ "render_s": 1.78,
+ "look_s": 0.0,
+ "retry_s": 2.61,
+ "total_s": 17.15,
+ "issues": [],
+ "residual_lint": [],
+ "repair": {
+  "look": false,
+  "look_fix": false,
+  "retry": true,
+  "retry_applied": true,
+  "notes": [
+   "look pass skipped: correct lint directly"
+  ]
+ }
+}

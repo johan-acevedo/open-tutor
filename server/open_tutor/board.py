@@ -73,6 +73,14 @@ class PendingItem(_Item):
     height: int | None = Field(default=None, ge=80, le=3840)
 
 
+class MaterialItem(_Item):
+    kind: Literal["material"] = "material"
+    title: str = Field(min_length=1, max_length=200)
+    # Stable catalogue section ID only. The browser derives the page URL from
+    # this ID; the model can never supply a material URL.
+    section_id: str = Field(pattern=r"^sec-[0-9a-f]{16}$")
+
+
 class ResourceItem(_Item):
     kind: Literal["resource"] = "resource"
     title: str = Field(max_length=200)
@@ -83,7 +91,18 @@ class ResourceItem(_Item):
 
 
 BoardItem = Annotated[
-    Union[TextItem, StepsItem, MindmapItem, SvgItem, HtmlItem, ImageItem, PendingItem, ResourceItem, PageItem],
+    Union[
+        TextItem,
+        StepsItem,
+        MindmapItem,
+        SvgItem,
+        HtmlItem,
+        ImageItem,
+        PendingItem,
+        ResourceItem,
+        MaterialItem,
+        PageItem,
+    ],
     Field(discriminator="kind"),
 ]
 board_item = TypeAdapter(BoardItem)

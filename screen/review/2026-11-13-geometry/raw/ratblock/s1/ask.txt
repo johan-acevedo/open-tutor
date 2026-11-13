@@ -1,0 +1,1 @@
+Visa ett rätblock som är 4 cm långt, 3 cm brett och 2 cm högt. Måtten ska stå vid sina kanter och eleven ska kunna peka på höjden. Volymen får inte synas.

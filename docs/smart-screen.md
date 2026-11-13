@@ -228,8 +228,10 @@ records the effective model, API, reasoning and any explicit thinking toggle.
 The controls follow [Google's compatibility API](https://ai.google.dev/gemini-api/docs/openai)
 and [DeepSeek's thinking toggle](https://api-docs.deepseek.com/guides/thinking_mode/).
 HTTP request tests use the real SDK with a local recorded-response transport;
-provider acceptance, speed and page quality remain untested. Go probes and new
-Go helpers are paused pending Johan's billing decision. The lead owns live comparisons.
+Hydrogen low subsequently passed the lead's five-job comparison (8.7–11.8 s total,
+clean lint) and live lessons, and is now the dev page writer. Johan approved Go balance
+billing for Muse Spark and DeepSeek, so their probes and helpers may run again. The
+DeepSeek thinking-disabled comparison remains unrun; the lead owns model selection.
 
 Ready commands, run from the repo root **only when the lead elects to compare**:
 
@@ -239,7 +241,7 @@ OPEN_TUTOR_ENV=~/.config/open-tutor-smart-dev/env server/bin/with-env env \
   SCREEN_MODEL=gemini-4-hydrogen SCREEN_API=chat SCREEN_REASONING=low SCREEN_THINKING= \
   uv run --project server python screen/tools/bench_page_budget.py --count 5 --out /tmp/hydrogen-low
 
-# After Go billing is settled: change only the thinking toggle against a low baseline.
+# Optional DeepSeek comparison: change only the thinking toggle against a low baseline.
 OPEN_TUTOR_ENV=~/.config/open-tutor-smart-dev/env server/bin/with-env env \
   SCREEN_MODEL=deepseek-v4.1-flash SCREEN_API=chat SCREEN_REASONING=low SCREEN_THINKING=disabled \
   uv run --project server python screen/tools/bench_page_budget.py --count 5 --out /tmp/deepseek-thinking-disabled
@@ -250,6 +252,29 @@ the Go endpoint). Keep pane, ask and look settings equal between batches and jud
 the generated page and patch at phone and wide sizes before selecting a model.
 
 ### Tutor tools (replace `commission_board` and `edit_board` in smart mode)
+
+Growable visual fit correction (2026-11-13, `fix/screen-growable-fit`): old drawing
+coordinates were counted as page overflow while choosing a new font size. A six-node
+mind map consequently fell to 11 px plus scaling, despite empty space. During
+measurement only, generated visual layers, chart canvases and image views are excluded;
+their em-sized host boxes still participate, and components redraw at the chosen size.
+The synthetic reproduction changes from 10.09 effective px to 20.5 px at 603×743.
+The reported session page was checked locally: 19 px, no lint after the fix; no session
+content is committed. A fresh Hydrogen low page took 9.19 s, with clean lint at 603×743
+and 1000×700; its longer text still gives an honest 15.75 px `dense` warning at 370×610.
+Evidence and repeatable checks covering ten visual kinds and resizing are in
+`screen/review/2026-11-13-growable-fit/` and `screen/tools/check_fit.py`.
+
+Patch preview correction (2026-11-13, `fix/screen-patch-history`): the request already
+carried the original page and applied changes, but the renderer forgot that history.
+An id inserted by one patch then appeared missing to the next preview. Preview now
+replays earlier patch batches in order before the candidate, including completed
+removals. Only the latest patch is sent to the child. A genuine `patch` error rejects
+the whole candidate before RPC, saves `delivered: false` and notifies the tutor through
+`on_failure`; there is no automatic model retry. Static preview uses reduced motion
+and completes finite animations, replacing the old one-second wait. The child's
+animations are unchanged. Synthetic browser evidence at both pane sizes is in
+`screen/review/2026-11-13-patch-history/`; no family session content is copied there.
 
 | Tool | Does | Speed |
 |---|---|---|
@@ -308,7 +333,15 @@ Known and open:
 - Page and patch HTML enters through an inert template and a shared sanitizer. Native
   `setHTML` is used when available, with DOMPurify for other browsers. Model scripts,
   event handlers and styles are removed before insertion; the shell's own code still runs.
-- Image search still runs in the page (unfiltered Commons result).
+- Images are resolved on the server, not in the page (2026-11-13): a `query` searches
+  Commons, a supplied `src` is re-looked-up, the bitmap is downloaded bounded (2 MiB,
+  JPEG/PNG/WebP from Wikimedia hosts only) and the page writer judges the actual
+  picture with the full lesson context before it is shown. Only a reviewed image ships,
+  with its canonical Commons URL and author/licence credit; anything else becomes a
+  text fallback. Image work stops inside the 12 s soft target; pages without images
+  pay nothing. Live Hydrogen-low evidence (accepted Colosseum/Forum Romanum photos,
+  a flower-lesson rejection, patch-image load fix) is in
+  `screen/review/2026-11-13-screen-images/`.
 
 ### Filler sounds (2026-11-13)
 
@@ -518,6 +551,25 @@ turn-taking problem, not a filter problem — a level or distance gate on the ch
 longer `TUTOR_INTERRUPT_MIN_S`, is where it would be solved. Changing interruption thresholds was
 explicitly out of scope here.
 
+### What Johan's test calls settled (2026-11-13)
+
+Three real calls on the dev setup (Johan alone, with Lucas, and alone again). Decisions:
+
+- **Filler sounds: off.** They played on every turn, because a reply never starts within
+  0.7 s, and "only hurt the experience". `TUTOR_FILLERS` stays unset; the code is dormant.
+- **Background voice cancellation: on** (`TUTOR_NOISE_CANCELLATION=bvc`) **and 2 s before
+  sound may interrupt the fox** (`TUTOR_INTERRUPT_MIN_S=2.0`). Johan: before, he had to
+  tense up to be understood and stay silent while the fox spoke; with both on he "could
+  be relaxed". Keep both when this goes to production. Not yet tried with the children
+  alone or with a quiet, distant voice.
+- **The greeting is fixed text and cannot be interrupted.** Room sound in the first second
+  had cancelled it before any audio in two calls.
+- **Fox and page writer: Gemini 4 Hydrogen, thinking low**, DeepSeek V4.1 Flash as the
+  fox's backup. Pages arrived in 6-10 s in the calls.
+- **The mic button is the backstop** for talk that is not meant for the fox; its state is
+  logged from the start of the session.
+- Dev settings live in `~/.config/open-tutor-smart-dev/env` on dell5500, not in the repo.
+
 ## Work packages
 
 Toolbox follow-up, 2026-11-13: narrow-page layout and readability lint are in
@@ -563,6 +615,18 @@ table and the same checks failing on the PR #41 shell are in
 4. **First session with a child.** The test that counts.
 
 ## Open
+
+Geometry assessment (2026-11-13, proposal in PR #53): five Hydrogen-low pages and one
+cuboid patch confirm existing graphs can draw measured plane figures, a cuboid and a
+cylinder. The immediate defect is label placement: fixed offsets ignore text width,
+and vertex-mean normals place some concave L labels inside the shape. Parent review
+repeated the render measurements and corrected slanted-label clearance calculations.
+Proposed order: label placement first, test brief reference guidance, then develop a
+qualified plane-length lint; circle and angle primitives need a lead decision. No new
+plane-figure component. Defer a solids tag on the two tested types, without ruling out
+prism, pyramid, cone, sphere or nets (all untested). No runtime changes were made.
+Sources, inspected phone/wide renders, timings and limits:
+`screen/review/2026-11-13-geometry/`.
 
 - Which model and reasoning level the screen runs on (measure with the examples in place).
 - Image generation: whether, and with what.

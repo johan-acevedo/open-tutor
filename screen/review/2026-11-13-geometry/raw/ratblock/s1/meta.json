@@ -1,0 +1,29 @@
+{
+ "job": "s1",
+ "kind": "page",
+ "page": "p1",
+ "title": "Rätblockets mått",
+ "model": "gemini-4-hydrogen",
+ "api": "chat",
+ "reasoning": "low",
+ "pane": [
+  370,
+  610
+ ],
+ "model_s": 11.56,
+ "render_s": 1.12,
+ "look_s": 0.0,
+ "retry_s": 0.0,
+ "total_s": 12.68,
+ "issues": [],
+ "residual_lint": [],
+ "repair": {
+  "look": false,
+  "look_fix": false,
+  "retry": false,
+  "retry_applied": false,
+  "notes": [
+   "look pass skipped: page target budget"
+  ]
+ }
+}

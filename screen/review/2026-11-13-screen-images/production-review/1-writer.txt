@@ -1,0 +1,3 @@
+<h1>Colosseum i Rom</h1>
+<ot-image id="byggnad" query="Colosseum Rome" alt="Colosseum i Rom"></ot-image>
+<p>Romarna byggde stora byggnader med runda valv som höll upp hela arenan.</p>

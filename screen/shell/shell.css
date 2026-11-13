@@ -61,6 +61,12 @@ html.ot-boot body { visibility: hidden; animation: ot-failopen 0s 8s forwards; }
    the pane and growable visuals share the space left over. */
 html.ot-settled .ot-page { height: 100%; }
 html.ot-measure .ot-page { height: auto; }
+/* Old pixel positions belong to the previous drawing, not to the next font fit.
+   Measure the visual's em-sized host, then redraw its contents at the chosen size. */
+html.ot-measure .ot-page .ot-vis,
+html.ot-measure ot-chart > canvas,
+html.ot-measure ot-image > .ot-img-wrap,
+html.ot-measure ot-image > .ot-credit { display: none; }
 
 /* ---------- Text ---------- */
 h1, h2, h3, p, ul, ol, dl, figure { margin: 0; }

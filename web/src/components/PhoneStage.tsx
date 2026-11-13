@@ -19,6 +19,7 @@ type Props = {
   activeItemId?: string | null;
   onItemMounted: (id: string) => void;
   onResourceClosed: (id: string) => void;
+  onItemFailed?: (id: string, message: string) => void;
   registerPageFrame?: (id: string, send: ((msg: PageShellMessage) => void) | null) => void;
   onPageAnswer?: (answer: PageAnswer) => void;
   /** Phone-only overlays that live on the board surface (the homework tray). */
@@ -46,6 +47,7 @@ export default function PhoneStage({
   activeItemId,
   onItemMounted,
   onResourceClosed,
+  onItemFailed,
   registerPageFrame,
   onPageAnswer,
   overlay,
@@ -65,6 +67,7 @@ export default function PhoneStage({
           showEmptyState={false}
           onItemMounted={onItemMounted}
           onResourceClosed={onResourceClosed}
+          onItemFailed={onItemFailed}
           activeItemId={activeItemId}
           registerPageFrame={registerPageFrame}
           onPageAnswer={onPageAnswer}

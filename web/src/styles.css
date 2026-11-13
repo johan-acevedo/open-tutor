@@ -906,6 +906,39 @@ a:focus-visible {
   text-decoration: none;
 }
 
+/* Material: original book section in an opaque sandbox frame. The figure
+   keeps the default card surface so the section sits beside the fox like
+   any other board item; only the attribution is added chrome. */
+
+.ot-material-fig {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ot-material-frame {
+  display: block;
+  width: 100%;
+  border: 1px solid var(--ot-border);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.ot-material-attrib {
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--ot-text-dim);
+}
+
+.ot-material-error {
+  border: 1px solid var(--ot-border);
+  border-radius: 12px;
+  padding: 20px;
+  text-align: center;
+  font-size: 16px;
+}
+
 .ot-prompt-chip {
   display: inline-block;
   margin-top: 12px;

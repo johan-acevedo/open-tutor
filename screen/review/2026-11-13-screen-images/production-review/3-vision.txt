@@ -1,0 +1,1 @@
+{"accept":true,"reason":"Tydlig och relevant bild av Forum Romanum i Rom som passar för årskurs 6.","fallback":""}

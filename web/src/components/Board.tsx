@@ -8,6 +8,7 @@ type Props = {
   items: BoardItem[];
   focused: BoardFocusPayload | null;
   onItemMounted: (id: string) => void;
+  onItemFailed?: (id: string, message: string) => void;
   onResourceClosed: (id: string) => void;
   mobile?: boolean;
   /** The phone shows the fox instead of the empty-board placeholder card. */
@@ -30,6 +31,7 @@ export default function Board({
   items,
   focused,
   onItemMounted,
+  onItemFailed,
   onResourceClosed,
   mobile = false,
   showEmptyState = true,
@@ -109,6 +111,7 @@ export default function Board({
             ) : (
               <BoardCard
                 item={item}
+                onFailed={onItemFailed}
                 focusedStep={focused?.id === item.id ? focused.step : undefined}
                 revealThrough={
                   mobile && item.kind === 'steps' && focused?.id === item.id

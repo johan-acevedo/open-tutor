@@ -1,0 +1,82 @@
+FFF                                                                      [100%]
+=================================== FAILURES ===================================
+___ test_patch_preview_replays_history_but_delivery_sends_only_latest_change ___
+
+tmp_path = PosixPath('/tmp/pytest-of-johan/pytest-126/test_patch_preview_replays_his0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7be03dfd4640>
+
+    async def test_patch_preview_replays_history_but_delivery_sends_only_latest_change(tmp_path, monkeypatch):
+        monkeypatch.setenv("SCREEN_LOOK", "0")
+        first = '<ot-patch target="svar" do="before"><p id="mellansteg">Nästa steg</p></ot-patch>'
+        second = '<ot-patch target="mellansteg"><p>Nu visar vi steget.</p></ot-patch>'
+        screen = make_screen(tmp_path, model_call=AsyncMock(side_effect=['<h1>Bråk</h1><ot-answer id="svar"></ot-answer>', first, second]))
+        delivered = []
+        screen.on_patch = delivered.append
+        screen.ask("Visa ett bråk")
+        await screen.wait_idle()
+        screen.mark_visible("p1")
+        for ask in ("Lägg till ett steg", "Ändra steget"):
+            screen.ask(ask)
+            await screen.wait_idle()
+        rendered_patch = screen._render_page.call_args.args[1]
+>       assert first in rendered_patch and second in rendered_patch
+E       assert ('<ot-patch target="svar" do="before"><p id="mellansteg">Nästa steg</p></ot-patch>' in '<ot-patch target="mellansteg"><p>Nu visar vi steget.</p></ot-patch>')
+
+server/tests/test_screen.py:940: AssertionError
+_ test_invalid_patch_is_saved_and_reported_to_tutor_without_partial_delivery[issues0] _
+
+tmp_path = PosixPath('/tmp/pytest-of-johan/pytest-126/test_invalid_patch_is_saved_an0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7be03df52f90>
+issues = [{'kind': 'patch', 'msg': 'no element with id "missing"'}]
+
+    @pytest.mark.parametrize("issues", [
+        [{"kind": "patch", "msg": 'no element with id "missing"'}],
+        ["patch failed: TypeError"],
+    ])
+    async def test_invalid_patch_is_saved_and_reported_to_tutor_without_partial_delivery(tmp_path, monkeypatch, issues):
+        monkeypatch.setenv("SCREEN_LOOK", "0")
+        patch = '<ot-patch target="missing"><p>Fel mål</p></ot-patch><ot-patch target="svar" do="remove"></ot-patch>'
+        screen = make_screen(tmp_path, model_call=AsyncMock(side_effect=['<h1>Bråk</h1><ot-answer id="svar"></ot-answer>', patch]),
+                             render_page=AsyncMock(side_effect=[(b"PNG", []), (b"PNG", issues)]))
+        delivered, failures = [], []
+        screen.on_patch, screen.on_failure = delivered.append, failures.append
+        screen.ask("Visa ett bråk")
+        await screen.wait_idle()
+        screen.mark_visible("p1")
+        screen.ask("Visa svaret")
+        await screen.wait_idle()
+>       assert not delivered and not screen.visible_patches
+E       assert (not [PatchResult(job_id='s2', page_id='p1', patch='<ot-patch target="missing"><p>Fel mål</p></ot-patch><ot-patch target="s...00012137694284319878, directory=PosixPath('/tmp/pytest-of-johan/pytest-126/test_invalid_patch_is_saved_an0/pages/s2'))])
+
+server/tests/test_screen.py:962: AssertionError
+_ test_invalid_patch_is_saved_and_reported_to_tutor_without_partial_delivery[issues1] _
+
+tmp_path = PosixPath('/tmp/pytest-of-johan/pytest-126/test_invalid_patch_is_saved_an1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7be03e077ac0>
+issues = ['patch failed: TypeError']
+
+    @pytest.mark.parametrize("issues", [
+        [{"kind": "patch", "msg": 'no element with id "missing"'}],
+        ["patch failed: TypeError"],
+    ])
+    async def test_invalid_patch_is_saved_and_reported_to_tutor_without_partial_delivery(tmp_path, monkeypatch, issues):
+        monkeypatch.setenv("SCREEN_LOOK", "0")
+        patch = '<ot-patch target="missing"><p>Fel mål</p></ot-patch><ot-patch target="svar" do="remove"></ot-patch>'
+        screen = make_screen(tmp_path, model_call=AsyncMock(side_effect=['<h1>Bråk</h1><ot-answer id="svar"></ot-answer>', patch]),
+                             render_page=AsyncMock(side_effect=[(b"PNG", []), (b"PNG", issues)]))
+        delivered, failures = [], []
+        screen.on_patch, screen.on_failure = delivered.append, failures.append
+        screen.ask("Visa ett bråk")
+        await screen.wait_idle()
+        screen.mark_visible("p1")
+        screen.ask("Visa svaret")
+        await screen.wait_idle()
+>       assert not delivered and not screen.visible_patches
+E       assert (not [PatchResult(job_id='s2', page_id='p1', patch='<ot-patch target="missing"><p>Fel mål</p></ot-patch><ot-patch target="s...00012055085971951485, directory=PosixPath('/tmp/pytest-of-johan/pytest-126/test_invalid_patch_is_saved_an1/pages/s2'))])
+
+server/tests/test_screen.py:962: AssertionError
+=========================== short test summary info ============================
+FAILED server/tests/test_screen.py::test_patch_preview_replays_history_but_delivery_sends_only_latest_change
+FAILED server/tests/test_screen.py::test_invalid_patch_is_saved_and_reported_to_tutor_without_partial_delivery[issues0]
+FAILED server/tests/test_screen.py::test_invalid_patch_is_saved_and_reported_to_tutor_without_partial_delivery[issues1]
+3 failed, 62 deselected in 3.69s

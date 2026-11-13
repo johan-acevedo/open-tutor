@@ -5,6 +5,14 @@ Two processes, both in this package:
 - **Web service** (`open_tutor.web`, FastAPI): serves the built page from `web/dist`, and `POST /api/session` returns a short-lived LiveKit room token. The learner's name, school year and newest notes travel in the token's participant metadata. Nothing is stored on the server.
 - **Tutor worker** (`open_tutor.agent`, LiveKit Agents): joins each room as `open-tutor`, runs Soniox speech recognition, the tutor model and the voice, and drives the board through the protocol in [docs/protocol.md](../docs/protocol.md).
 
+The web service also serves original material sections read-only, rendered from the pinned Siyavula EPUBs (steps 3a/3b in [the material-library state](../docs/material-library/STATE.md)):
+
+- `GET /api/materials/sections/{id}` — visible text, image list, completeness, book/source/license metadata for the tutor.
+- `GET /materials/sections/{id}/index.html` — the original section page, embeddable as `<iframe sandbox="">`.
+- `GET /materials/sections/{id}/{asset}` — only the section's own packaged images and CSS.
+
+Packages are built lazily per section under `$XDG_CACHE_HOME/open-tutor/material-packages` and published atomically. A host without the EPUBs answers 503 on these routes and is otherwise unchanged.
+
 ## Run locally
 
 ```bash
@@ -88,6 +96,9 @@ The worker logs the route at the start of each session (`tutor TTS route elevenl
 | `TUTOR_ACCESS_CODE` | Optional family code. When set, the page asks for it once per browser |
 | `TUTOR_ALLOWED_COUNTRIES` | Optional comma-separated Cloudflare country codes, e.g. `SE`. Missing/disallowed country headers get 403; `/api/health` remains accessible |
 | `TUTOR_MAX_SESSIONS_PER_HOUR` | Owner spending cap across the instance (default 12) |
+| `TUTOR_MATERIAL_CACHE` | Directory for rendered original-section packages (default `$XDG_CACHE_HOME/open-tutor/material-packages`, never in the repo) |
+| `TUTOR_MATERIAL_INDEX` | Directory of a saved EmbeddingGemma 2 index that the tutor's `search_materials` tool searches (needs the optional `ml` group). Unset: the tool answers "unavailable" and nothing else changes. There is no default or fallback index |
+| `TUTOR_MATERIALS_DIR`, `TUTOR_MATERIALS_BOOKS` | Override the downloaded Siyavula EPUB directory and its `books.json`. Without the EPUBs the material routes answer 503; nothing else changes |
 | `TUTOR_CLOUD_RECORDING` | `1` uploads session audio and transcripts to LiveKit Cloud observability. Off by default |
 | `TUTOR_DEBUG_LOG` | `1` writes a per-session debug trail to a private local directory (see below). Off by default |
 | `TUTOR_DEBUG_LOG_DIR` | Override the debug trail directory (default `~/.local/state/open-tutor/sessions`) |
@@ -347,6 +358,25 @@ words is not repeated; both fall to the existing apology path, which speaks one 
 without the LLM and ends the session instead of leaving silence with no event. 5 s fits a
 warm text prompt (2-3 s to first token here); a turn carrying a screenshot, or a provider
 under load, can need more, so raise `TUTOR_LLM_TIMEOUT_S` if sessions end with the apology.
+## Material search proof
+
+`open_tutor/materials/search.py` builds an exact cosine index from passage records and
+`scripts/search_materials.py` drives it. This is the bounded EmbeddingGemma 2 proof, not a
+production feature: evidence, sample definition, per-query IDs and limitations are in
+[docs/material-library/step2b-embedding-proof.md](../docs/material-library/step2b-embedding-proof.md).
+
+The model and index are an optional dependency group and never part of the server runtime:
+
+```bash
+uv sync --group ml --python 3.13                 # sentence-transformers, torch, torchvision (CPU)
+bin/with-env uv run --no-sync python scripts/search_materials.py prove
+bin/with-env uv run --no-sync python scripts/search_materials.py query --query "how do plants make food?"
+```
+
+Weights stay in the Hugging Face cache and the index in
+`~/.local/share/open-tutor/materials/embeddinggemma-2-index`. Only owned passage text plus heading
+and breadcrumb context is embedded; passage HTML spans are never model input, empty passages are
+skipped, and hits carry `text_complete: false` when the original content is partly images.
 
 ## Tests
 
@@ -357,3 +387,5 @@ uv run pytest -q
 `scripts/two_session_probe.py` runs two consecutive typed sessions for one fictional learner against a running worker. The first session's saved note goes into the second, as in the browser. It checks that board items arrive and are acknowledged in both, and that no tool name, arguments or JSON reach the captions (the text the voice speaks).
 
 `scripts/live_probe.py` runs a real session against a running worker with a scripted fictional learner: recorded Swedish clips, a generated worksheet, an interruption, 30 s of quiet work, mumbling, and the end of the session. It writes a JSON timeline and the tutor's audio. It uses live providers and costs a little; it is not part of CI.
+
+Run this prototype material server with `uvicorn open_tutor.web:app --workers 1`. Material packages are built lazily; concurrent publishers adopt a valid existing package rather than replacing it.
