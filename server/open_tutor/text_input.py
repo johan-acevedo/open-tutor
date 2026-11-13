@@ -63,6 +63,7 @@ class TypedChat:
         self._lock = asyncio.Lock()
         self._pending: list[str] = []
         self._heard = False  # the tutor has said (or started saying) something already
+        self._greet_instruction: str | None = None
         self._tasks: set[asyncio.Task[None]] = set()
 
     # ---- wiring ----------------------------------------------------------------
@@ -94,13 +95,22 @@ class TypedChat:
 
     # ---- session start ---------------------------------------------------------
 
-    async def start(self, greeting: str, prompt: Callable[[str], Any]) -> None:
+    async def start(
+        self,
+        greeting: str,
+        prompt: Callable[[str], Any],
+        *,
+        greet_instruction: str | None = None,
+    ) -> None:
         """Open the game: greet the child unless a message is already waiting.
 
         ``prompt`` is the worker's ``prompt_event``: it asks for a reply to a session
         event. A message typed before this point is answered instead, with the
-        greeting folded into that reply.
+        greeting folded into that reply. ``greet_instruction`` replaces
+        :data:`GREET_AND_ANSWER` for that reply when the worker's greeting is fixed
+        text rather than a prompt (agent.py).
         """
+        self._greet_instruction = greet_instruction
         self._ready.set()
         async with self._lock:
             if not self._pending:
@@ -160,7 +170,11 @@ class TypedChat:
             self._event("prompt", {"kind": "typed_chat", "greet": greet, "chars": len(text)})
             session.generate_reply(
                 user_input=text,
-                **({"instructions": GREET_AND_ANSWER} if greet else {}),
+                **(
+                    {"instructions": self._greet_instruction or GREET_AND_ANSWER}
+                    if greet
+                    else {}
+                ),
             )
         except Exception as error:
             self._event("chat_typed_failed", {"stage": "reply", "greet": greet,

@@ -13,8 +13,9 @@ from livekit.plugins.openai.responses import llm as responses
 from openai import AsyncOpenAI
 from openai.types import Reasoning
 
-from .config import USER_AGENT, llm_route
+from .config import LLMRoute, USER_AGENT, env_float, llm_fallback_route, llm_route
 from .debug_log import record_active
+from .session_llm import SessionLLM
 
 log = logging.getLogger("open-tutor")
 
@@ -187,11 +188,9 @@ def warm_up() -> None:
         construct_type(type_=ResponseStreamEvent, value=event)
 
 
-def build_llm(session_id: str, http_client: Any = None) -> llm.LLM:
-    """`session_id` is the room name: Go asks for a stable id per conversation.
-    `http_client` is for tests (a recorded provider stream)."""
-    route = llm_route()
-    log.info("tutor LLM route %s model %s api %s", route.name, route.model, route.api)
+def build_route_llm(route: LLMRoute, session_id: str, http_client: Any = None) -> llm.LLM:
+    """The LiveKit LLM for one route. ``session_id`` is the room name: Go asks for a
+    stable id per conversation. ``http_client`` is for tests (a recorded stream)."""
     if route.api == "responses":
         client = AsyncOpenAI(
             api_key=route.api_key,
@@ -230,4 +229,39 @@ def build_llm(session_id: str, http_client: Any = None) -> llm.LLM:
     model_cls = GeminiChatLLM if route.thought_signatures else openai.LLM
     return model_cls(
         model=route.model, base_url=route.base_url, api_key=route.api_key, temperature=0.6, **extra
+    )
+
+
+def build_llm(session_id: str, http_client: Any = None) -> llm.LLM:
+    """The LLM for the route ``TUTOR_LLM`` names (no warm-up, no fallback)."""
+    route = llm_route()
+    log.info("tutor LLM route %s model %s api %s", route.name, route.model, route.api)
+    return build_route_llm(route, session_id, http_client)
+
+
+def build_session_llm(session_id: str, http_client: Any = None) -> llm.LLM:
+    """The session's LLM: the preferred route, wrapped when a fallback is configured.
+
+    With no ``TUTOR_LLM_FALLBACK`` this is exactly ``build_llm`` (today's single-route
+    behaviour). With one, a ``SessionLLM`` races the two during the greeting and keeps
+    the winner for the whole session (see session_llm.py).
+    """
+    route = llm_route()
+    preferred = build_route_llm(route, session_id, http_client)
+    fallback_route = llm_fallback_route()
+    if fallback_route is None:
+        log.info("tutor LLM route %s model %s api %s", route.name, route.model, route.api)
+        return preferred
+    fallback = build_route_llm(fallback_route, session_id, http_client)
+    log.info(
+        "tutor LLM candidates %s (%s) and %s (%s); prefer %s within %s s",
+        route.name, route.model, fallback_route.name, fallback_route.model,
+        route.name, env_float("TUTOR_LLM_PREFER_WITHIN_S", 1.5),
+    )
+    return SessionLLM(
+        preferred,
+        route,
+        fallback,
+        fallback_route,
+        prefer_within=env_float("TUTOR_LLM_PREFER_WITHIN_S", 1.5),
     )

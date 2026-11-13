@@ -455,4 +455,28 @@ def _summarize(events: list[dict[str, Any]]) -> dict[str, Any]:
         ),
         "mode_changes": [(e["t_rel_s"], e.get("mode")) for e in events if e["event"] == "mode"],
         "healed_tool_arguments": sum(e.get("count", 0) for e in events if e["event"] == "healed_arguments"),
+        # Which model was the fox, and both warm-up times, at a glance (session_llm.py).
+        "llm": next(
+            (
+                {
+                    "route": e.get("route"),
+                    "model": e.get("model"),
+                    "choice": e.get("choice"),
+                    "reason": e.get("reason"),
+                    "preferred_s": e.get("preferred_s"),
+                    "fallback_s": e.get("fallback_s"),
+                }
+                for e in reversed(events)
+                if e["event"] == "llm_chosen"
+            ),
+            {"route": None, "reason": "no warm-up (single route)"},
+        ),
+        "llm_failovers": [
+            {"at_s": e["t_rel_s"], "from": e.get("from"), "to": e.get("to"), "error": e.get("error")}
+            for e in events
+            if e["event"] == "llm_failover"
+        ],
+        "greeting_said": next(
+            (e["t_rel_s"] for e in events if e["event"] == "greeting"), None
+        ),
     }
