@@ -1,0 +1,17 @@
+CROWD new plan 370x610: labels '2 cm' and '1 cm' overlap by 12 px; use a shorter label, fewer figures or more room
+CROWD new plan 1000x700: labels '3 cm' and '2 cm' overlap by 10 px; use a shorter label, fewer figures or more room
+CROWD new plan 1000x700: labels '2 cm' and '1 cm' overlap by 27 px; use a shorter label, fewer figures or more room
+CROWD new short-edges 370x610: label 'diagonalen' does not fit inside the pane; use a shorter label, fewer figures or more room
+fixed-or-flagged new plan 370x610: figurer: label '2 cm' crosses an outline
+fixed-or-flagged new plan 370x610: figurer: label '1 cm' crosses an outline
+fixed-or-flagged new plan 370x610: figurer: label '2 cm' crosses an outline
+fixed-or-flagged new plan 370x610: figurer: labels '2 cm' and '1 cm' overlap
+fixed-or-flagged new plan 1000x700: figurer: labels '3 cm' and '2 cm' overlap
+fixed-or-flagged new plan 1000x700: figurer: labels '2 cm' and '1 cm' overlap
+fixed-or-flagged new short-edges 370x610: graf: label 'diagonalen' does not fit inside the pane
+FAIL:
+  new plan 370x610: UNREPORTED: figurer: label '3 cm' crosses an outline
+  new ratblock 370x610: UNREPORTED: ratblock: label '3 cm' crosses an outline
+  new ratblock 1000x700: UNREPORTED: ratblock: label '3 cm' crosses an outline
+  new notch-long 370x610: UNREPORTED: figurer: label 'två centimeter' crosses an outline
+  new notch-long 1000x700: UNREPORTED: figurer: label 'två centimeter' crosses an outline

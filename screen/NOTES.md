@@ -14,6 +14,21 @@ in the reference. No new tag or runtime change. This small batch does not measur
 failure rates or speed differences. Evidence and rerun commands:
 `review/2026-11-13-circle-text/` and `tools/probe_circle_text.py`.
 
+## Graph label placement + overlap lint, 2026-11-13
+
+Side/segment labels use polygon winding and measured clearance. Placement and
+`crowded` lint check straight outlines, neighboring side labels and pane bounds.
+Tight notches remain flagged. Warnings update after patches/reveals; server
+previews return final lint, clearing repaired findings. Hidden graph children
+are drawn only when revealed. A fresh Hydrogen-low retry retained every given
+measure by separating the figures: 12.51 s total, clean at 370×610 and 1000×700.
+The first worker trial dropped a measure; it is retained as historical evidence,
+not the accepted example. Parent review corrected a NaN in the independent check
+and then fixed five previously unreported outline crossings. Reproduce with
+`tools/check_graph_labels.py --prior-ref 848f8c1`; evidence is in
+`review/2026-11-13-graph-labels/`. Arbitrary text/curves/decorations are outside
+this lint; no new tags or length lint.
+
 ## Toolbox follow-up, 2026-11-13
 
 Image intents are resolved on the server before pages, corrections or patches render:

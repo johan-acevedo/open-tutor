@@ -1055,22 +1055,26 @@ async def test_image_review_timeout_delivers_text_page_and_logs_the_rejected_can
 class _FakeFrame:
     """A stub for the srcdoc frame: records the wait/evaluate order."""
 
-    def __init__(self, calls, late_issues=None, fail_image_wait=False):
+    def __init__(self, calls, late_issues=None, fail_image_wait=False, initial_issues=None):
         self.calls = calls
         self.late_issues = late_issues or []
         self.fail_image_wait = fail_image_wait
+        self.initial_issues = initial_issues or []
+        self.image_waited = False
 
     async def wait_for_function(self, script, timeout=None):
         self.calls.append(("wait", script, timeout))
-        if "ot-image img" in script and self.fail_image_wait:
-            raise TimeoutError("still loading")
+        if "ot-image img" in script:
+            self.image_waited = True
+            if self.fail_image_wait:
+                raise TimeoutError("still loading")
 
     async def evaluate(self, script, arg=None):
         self.calls.append(("eval", script, arg))
         if "otReady" in script:
             return None
         if "ot.fontPx" in script:
-            return {"fontPx": 18, "issues": []}
+            return {"fontPx": 18, "issues": list(self.late_issues if self.image_waited else self.initial_issues)}
         if "ot.patch" in script:
             return []
         if "getAnimations" in script:
@@ -1138,7 +1142,8 @@ async def test_patch_preview_waits_for_new_images_before_screenshot(tmp_path, mo
     calls: list = []
     late = [{"kind": "image", "msg": "image failed to load: https://example.invalid/x.jpg",
              "where": "ot-image"}]
-    _stub_browser(monkeypatch, calls, late_issues=late)
+    stale = {"kind": "crowded", "msg": "label crosses its line"}
+    _stub_browser(monkeypatch, calls, late_issues=late, initial_issues=[stale])
     png, issues = await screen._default_render_page(
         "<h1>Rom</h1>", '<ot-patch target="x"><ot-image src="https://example.invalid/x.jpg"></ot-image></ot-patch>',
         370, 610)
@@ -1147,7 +1152,9 @@ async def test_patch_preview_waits_for_new_images_before_screenshot(tmp_path, mo
     assert kinds.index("screenshot") > kinds.index("wait")
     image_waits = [call for call in calls if call[0] == "wait" and "ot-image img" in call[1]]
     assert len(image_waits) == 1 and image_waits[0][2] == 5000
+    assert kinds.index("screenshot") > calls.index(image_waits[0])
     assert late[0] in issues
+    assert stale not in issues
 
 
 async def test_slow_patch_image_still_screenshots_instead_of_failing(tmp_path, monkeypatch):
@@ -1168,3 +1175,20 @@ async def test_plain_page_render_does_not_wait_for_patch_images(tmp_path, monkey
     png, issues = await screen._default_render_page("<h1>Rom</h1>", None, 370, 610)
     assert png == b"PNG" and issues == []
     assert not [call for call in calls if call[0] == "wait" and "ot-image img" in call[1]]
+
+
+async def test_patch_preview_retains_renderer_exception_after_final_lint(tmp_path, monkeypatch):
+    screen = make_screen(tmp_path)
+    calls = []
+    frame = _stub_browser(monkeypatch, calls)
+    evaluate = frame.evaluate
+
+    async def reject_patch(script, arg=None):
+        if "ot.patch" in script:
+            raise ValueError("patch rejected")
+        return await evaluate(script, arg)
+
+    monkeypatch.setattr(frame, "evaluate", reject_patch)
+    png, issues = await screen._default_render_page("<h1>Prov</h1>", "bad patch", 370, 610)
+    assert png == b"PNG"
+    assert issues == ["patch failed: ValueError"]
