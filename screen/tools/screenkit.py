@@ -42,7 +42,7 @@ def compose(body: str) -> str:
     return (frame.replace("{{CSP}}", CSP).replace("{{CSS}}", css)
             .replace("{{LAN}}", lan_text)
             .replace("{{JS}}", js.replace("</script", "<\\/script"))
-            .replace("{{BODY}}", body))
+            .replace("{{BODY}}", htmllib.escape(body, quote=False)))
 
 
 def host_page(doc: str) -> str:

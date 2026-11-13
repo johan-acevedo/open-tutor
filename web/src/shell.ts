@@ -21,5 +21,12 @@ export function composePage(body: string): string {
     .replace('{{CSS}}', () => shellCss)
     .replace('{{LAN}}', () => mapLanData.replace(/</g, '\\u003c'))
     .replace('{{JS}}', () => shellJs.replace(/<\/script/g, '<\\/script'))
-    .replace('{{BODY}}', () => body);
+    .replace('{{BODY}}', () => body.replace(/[&<>]/g, character => {
+      switch (character) {
+        case '&': return '&amp;';
+        case '<': return '&lt;';
+        case '>': return '&gt;';
+        default: return character;
+      }
+    }));
 }

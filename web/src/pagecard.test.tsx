@@ -40,7 +40,10 @@ describe('PageCard', () => {
     expect(frame).toBeTruthy();
     expect(frame.getAttribute('sandbox')).toBe('allow-scripts');
     expect(frame.title).toBe('Klockan');
-    expect(frame.srcdoc).toContain('<h1>Vad är klockan?</h1>');
+    const doc = new DOMParser().parseFromString(frame.srcdoc, 'text/html');
+    const source = doc.querySelector<HTMLTemplateElement>('#ot-source');
+    expect(source?.content.textContent).toBe('<h1>Vad är klockan?</h1>');
+    expect(doc.querySelector('#page h1')).toBeNull();
     expect(frame.srcdoc).toContain('connect-src https://cdn.jsdelivr.net https://commons.wikimedia.org');
   });
 

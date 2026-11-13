@@ -28,7 +28,8 @@
              js: [CDN + 'npm/katex@0.19.1/dist/katex.min.js', CDN + 'npm/katex@0.19.1/dist/contrib/auto-render.min.js'] },
     jsxgraph: { css: [CDN + 'npm/jsxgraph@1.14.1/distrib/jsxgraph.css'], js: [CDN + 'npm/jsxgraph@1.14.1/distrib/jsxgraphcore.js'] },
     chart: { js: [CDN + 'npm/chart.js@4.6.1/dist/chart.umd.min.js'] },
-    d3: { js: [CDN + 'npm/d3@7.9.0/dist/d3.min.js'] }
+    d3: { js: [CDN + 'npm/d3@7.9.0/dist/d3.min.js'] },
+    purify: { js: [CDN + 'npm/dompurify@3.4.17/dist/purify.min.js'] }
   };
   var DATA = {
     countries: CDN + 'gh/nvkelso/natural-earth-vector@ca96624a56bd078437bca8184e78163e5039ad19/geojson/ne_50m_admin_0_countries.geojson',
@@ -85,7 +86,8 @@
     name = (name || '').trim();
     if (!name) return css(COLORS[fallback || 'cyan']);
     if (COLORS[name]) return css(COLORS[name]);
-    return name; // a CSS colour the model wrote itself
+    // This value also enters SVG attributes. Do not let a colour become markup.
+    return /^[#a-z0-9(),.% /+-]+$/i.test(name) && CSS.supports('color', name) ? name : css(COLORS[fallback || 'cyan']);
   }
   function alpha(hex, a) {
     var m = /^#([0-9a-f]{6})$/i.exec(hex);
@@ -162,6 +164,46 @@
     if (root.querySelector('ot-chart')) want.chart = true;
     if (root.querySelector('ot-map')) want.d3 = true;
     return Object.keys(want);
+  }
+
+  // Parse model markup before connecting any of it to the live document.
+  var UNSAFE_TAGS = ['script', 'style', 'link', 'meta', 'base', 'iframe', 'object', 'embed',
+                     'template', 'foreignObject', 'animate', 'animateMotion', 'animateTransform', 'set', 'use'];
+  function sanitizedFragment(html) {
+    var fragment;
+    if ('setHTML' in Element.prototype) {
+      var host = document.createElement('div');
+      host.setHTML(String(html || ''), { sanitizer: {
+        removeElements: UNSAFE_TAGS,
+        removeAttributes: ['style', 'is', 'srcdoc']
+      } });
+      fragment = document.createDocumentFragment();
+      fragment.append.apply(fragment, Array.prototype.slice.call(host.childNodes));
+    } else {
+      if (!window.DOMPurify || !DOMPurify.isSupported) throw new Error('HTML sanitizer unavailable');
+      fragment = DOMPurify.sanitize(String(html || ''), {
+        RETURN_DOM_FRAGMENT: true,
+        ADD_ATTR: ['correct', 'later'],
+        FORBID_TAGS: UNSAFE_TAGS.map(function (tag) { return tag.toLowerCase(); }),
+        FORBID_ATTR: ['style', 'is', 'srcdoc'],
+        CUSTOM_ELEMENT_HANDLING: {
+          tagNameCheck: /^ot-[a-z][a-z0-9-]*$/,
+          attributeNameCheck: /^(?!on)[a-z][a-z0-9-]*$/i,
+          allowCustomizedBuiltInElements: false
+        }
+      });
+    }
+    $$('*', fragment).forEach(function (el) {
+      Array.prototype.slice.call(el.attributes).forEach(function (attribute) {
+        var name = attribute.name.toLowerCase();
+        if (name.indexOf('on') === 0) el.removeAttribute(attribute.name);
+        if (['href', 'src', 'xlink:href', 'action', 'formaction'].indexOf(name) >= 0) {
+          var value = attribute.value.replace(/[\u0000-\u0020]/g, '');
+          if (!/^(https?:|data:image\/(png|jpeg|gif|webp|avif);|#|\/)/i.test(value)) el.removeAttribute(attribute.name);
+        }
+      });
+    });
+    return fragment;
   }
 
   // ---------------------------------------------------------------- maths
@@ -2268,9 +2310,8 @@
 
   ot.patch = async function (html) {
     try {
-      var tpl = document.createElement('template');
-      tpl.innerHTML = String(html || '');
-      var ops = $$('ot-patch', tpl.content).filter(function (p) { return !p.parentElement || !p.parentElement.closest('ot-patch'); });
+      var fragment = sanitizedFragment(html);
+      var ops = $$('ot-patch', fragment).filter(function (p) { return !p.parentElement || !p.parentElement.closest('ot-patch'); });
       if (!ops.length) issue('patch', 'no <ot-patch> found');
       var changed = [], replaced = [], removed = [], reveals = [];
       ops.forEach(function (op) {
@@ -2373,6 +2414,10 @@
       var r = await Promise.race([p, timeout(left).then(function () { return WAITING; })]);
       if (r === WAITING) slow.push(label);
     }
+    if (!('setHTML' in Element.prototype)) await stage('HTML sanitizer', lib('purify'));
+    var source = document.getElementById('ot-source');
+    page.appendChild(sanitizedFragment(source.content.textContent));
+    source.remove();
     await stage('libraries', Promise.all(needs(page).map(lib)));
     defineAll();
     renderMath(page);

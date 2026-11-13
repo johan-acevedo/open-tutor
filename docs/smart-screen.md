@@ -244,7 +244,9 @@ Known and open:
 - The look pass is about half of a page's time; decide after real sessions whether it earns it.
 - A page can still give the answer away in a picture (seen: the sum marked on a number line).
 - The tutor says "jag fixar en sida" before carrying on; acceptable or not is Johan's call.
-- Scripts written by the page model would run inside the sandboxed frame; not stripped yet.
+- Page and patch HTML enters through an inert template and a shared sanitizer. Native
+  `setHTML` is used when available, with DOMPurify for other browsers. Model scripts,
+  event handlers and styles are removed before insertion; the shell's own code still runs.
 - Image search still runs in the page (unfiltered Commons result).
 
 ### Tutor model routes (2026-11-13)
