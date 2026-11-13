@@ -189,7 +189,7 @@ async def test_greeting_is_spoken_by_tts_alone_and_enters_the_history():
     await greet(session, debug, line, variant, {"name": "Kian"})
     await asyncio.sleep(0)
 
-    assert session.said == [(line, {"allow_interruptions": True})]
+    assert session.said == [(line, {"allow_interruptions": False})]
     assert session.replies == []  # no LLM turn, so nothing waits on a provider
     assert session.history == [("assistant", line)]  # the model knows it has greeted
     assert any(event == "greeting" and data["variant"] == variant for event, data in debug.events)

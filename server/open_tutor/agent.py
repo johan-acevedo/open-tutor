@@ -1166,7 +1166,11 @@ async def greet(
     """
     debug.record("greeting", {"kind": "fixed", "variant": variant, "text": greeting})
     try:
-        handle = session.say(greeting, allow_interruptions=True)
+        # Not interruptible: on 2026-11-13 the microphone picked up room sound within a
+        # second of joining in both of the owner's calls, which cancelled the greeting
+        # before any audio and left about 11 s of silence. The line is short; speech
+        # during it is answered when it ends.
+        handle = session.say(greeting, allow_interruptions=False)
     except RuntimeError as error:
         # The session closed before the first word. Fall back to a generated greeting so
         # the child is never left in silence without an event in the log.
