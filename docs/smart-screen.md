@@ -251,6 +251,18 @@ the generated page and patch at phone and wide sizes before selecting a model.
 
 ### Tutor tools (replace `commission_board` and `edit_board` in smart mode)
 
+Growable visual fit correction (2026-11-13, `fix/screen-growable-fit`): old drawing
+coordinates were counted as page overflow while choosing a new font size. A six-node
+mind map consequently fell to 11 px plus scaling, despite empty space. During
+measurement only, generated visual layers, chart canvases and image views are excluded;
+their em-sized host boxes still participate, and components redraw at the chosen size.
+The synthetic reproduction changes from 10.09 effective px to 20.5 px at 603×743.
+The reported session page was checked locally: 19 px, no lint after the fix; no session
+content is committed. A fresh Hydrogen low page took 9.19 s, with clean lint at 603×743
+and 1000×700; its longer text still gives an honest 15.75 px `dense` warning at 370×610.
+Evidence and repeatable checks covering ten visual kinds and resizing are in
+`screen/review/2026-11-13-growable-fit/` and `screen/tools/check_fit.py`.
+
 Patch preview correction (2026-11-13, `fix/screen-patch-history`): the request already
 carried the original page and applied changes, but the renderer forgot that history.
 An id inserted by one patch then appeared missing to the next preview. Preview now
