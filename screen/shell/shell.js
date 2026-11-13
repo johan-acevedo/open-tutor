@@ -1680,20 +1680,23 @@
     var view = VIEWS[viewKey] || (nums(viewKey).length === 4 ? nums(viewKey) : null);
     // d3 reads a ring wound the other way as the rest of the globe, so the fit needs rewind()
     if (allRegions && !view) { data.regions.forEach(function (r) { focus.push(rewind(regionFeature(data, r))); }); }
-    // A key under the map gets its own strip, so the map is fitted into what is left.
+    // A key under the map gets its own strip, so the map is fitted into what is left. On a wide
+    // pane the key moves beside the map instead: a tall, narrow map (Sweden) is fitted by the
+    // height it gets, so a short wide box wastes the width and shrinks the codes with it.
     var mode = regionLabelMode(el, allRegions);
     var lay = el.layer();
     lay.innerHTML = '';
     var credit = hist ? 'Gränser: historical-basemaps · Natural Earth' : 'Natural Earth';
-    var legend = null, strip = 0;
+    var legend = null, keys = null, strip = 0;
     if (allRegions && mode === 'kort') {
       legend = document.createElement('div');
       legend.className = 'ot-map-legend';
-      legend.innerHTML = regionLegend(data, el) + '<span class="ot-map-legend-src">' + esc(credit) + '</span>';
+      legend.innerHTML = '<div class="ot-map-keys">' + regionLegend(data, el) + '</div>' +
+        '<span class="ot-map-legend-src">' + esc(credit) + '</span>';
+      keys = legend.firstChild;
       lay.appendChild(legend);
       strip = legend.offsetHeight + 0.3 * f;
     }
-    var mapH = Math.max(h * 0.55, h - strip);
     var target;
     if (view) target = bboxFeature(view);
     else if (focus.length) target = { type: 'FeatureCollection', features: focus };
@@ -1701,10 +1704,61 @@
     var b = d3.geoBounds(target);
     var lon0 = (b[0][0] + b[1][0]) / 2, lat0 = (b[0][1] + b[1][1]) / 2;
     var wide = (b[1][0] - b[0][0]) > 150;
-    var proj = wide ? d3.geoEqualEarth() : d3.geoAzimuthalEqualArea().rotate([-lon0, -lat0]);
-    var pad = view ? 0.4 * f : Math.min(w, h) * 0.08;
-    proj.fitExtent([[pad, pad], [w - pad, mapH - pad]], target);
+    function mapProj(areaW, areaH) {
+      var p = wide ? d3.geoEqualEarth() : d3.geoAzimuthalEqualArea().rotate([-lon0, -lat0]);
+      var pad = view ? 0.4 * f : Math.min(areaW, areaH) * 0.08;
+      p.fitExtent([[pad, pad], [areaW - pad, areaH - pad]], target);
+      return p;
+    }
+    // The map keeps the widest of the two layouts that gives the larger drawing, so a wide short
+    // box gets the map in full height and the key as a column beside it, and a phone (or a
+    // list too long for the height) keeps the key under the map.
+    var area = { w: w, h: Math.max(h * 0.4, h - strip) };
+    var proj = mapProj(area.w, area.h), side = false;
+    if (legend) {
+      var count = data.regions.length;
+      var sizes = [0.68 * f, 0.6 * f, 0.52 * f].filter(function (px) { return px >= 10; });
+      for (var ti = 0; ti < sizes.length && !side; ti++) {
+        legend.style.fontSize = sizes[ti].toFixed(1) + 'px';
+        var rowsFit = Math.max(1, Math.floor((h * 0.92) / (sizes[ti] * 1.35)));
+        // As many columns as the height needs, with the rows shared out evenly between them.
+        var rows = Math.ceil(count / Math.ceil(count / rowsFit));
+        legend.classList.add('ot-map-legend-side');
+        keys.style.gridTemplateRows = 'repeat(' + rows + ', auto)';
+        var keyW = legend.offsetWidth, keyH = legend.offsetHeight, restW = w - keyW - 0.5 * f;
+        if (keyH <= h && keyW <= w * 0.4 && restW > w * 0.5) {
+          var p2 = mapProj(restW, h);
+          if (p2.scale() > proj.scale()) { proj = p2; area = { w: restW, h: h }; side = true; break; }
+        }
+        legend.classList.remove('ot-map-legend-side');
+        keys.style.gridTemplateRows = '';
+        legend.style.fontSize = '';
+      }
+    }
+    var mapH = area.h, mapW = area.w;
+    if (legend && !side) {
+      // Just below the fitted map when there is room, otherwise along the bottom of the box.
+      var top = Math.min(area.h + 0.3 * f, h - legend.offsetHeight - 0.1 * f);
+      legend.style.top = Math.max(0, top) + 'px';
+      legend.style.bottom = 'auto';
+    }
     var path = d3.geoPath(proj);
+    // The view box that a region map is fitted to is wider than the country (it keeps Norway and
+    // Finland as context), so the shapes sit off to one side. Slide the whole map, without
+    // changing its scale, until Sweden is centred in the room the map has.
+    if (allRegions) {
+      var shapesBounds = path.bounds({ type: 'FeatureCollection', features: data.regions.map(function (r) {
+        return rewind(regionFeature(data, r));
+      }) });
+      var m = 0.5 * f;
+      var dx = area.w / 2 - (shapesBounds[0][0] + shapesBounds[1][0]) / 2;
+      var dy = area.h / 2 - (shapesBounds[0][1] + shapesBounds[1][1]) / 2;
+      var loX = m - shapesBounds[0][0], hiX = area.w - m - shapesBounds[1][0];
+      var loY = m - shapesBounds[0][1], hiY = area.h - m - shapesBounds[1][1];
+      dx = loX <= hiX ? Math.min(hiX, Math.max(loX, dx)) : 0;
+      dy = loY <= hiY ? Math.min(hiY, Math.max(loY, dy)) : 0;
+      if (dx || dy) { var t0 = proj.translate(); proj.translate([t0[0] + dx, t0[1] + dy]); }
+    }
     var s = '<rect width="' + w + '" height="' + h + '" fill="' + ocean + '" rx="' + 0.6 * f + '"/>';
     s += '<path d="' + path(d3.geoGraticule10()) + '" fill="none" stroke="#ffffff" stroke-opacity="0.05"/>';
     var bordersOn = hist ? el.hasAttribute('borders') : el.getAttribute('borders') !== 'off';
@@ -1787,10 +1841,10 @@
     places.forEach(function (ch) {
       if (!ch._ll) return;
       var p = proj(ch._ll);
-      if (!p || p[0] < 0 || p[1] < 0 || p[0] > w || p[1] > mapH) { issue('map', 'place outside the map: ' + ch.textContent.trim(), ch); return; }
+      if (!p || p[0] < 0 || p[1] < 0 || p[0] > mapW || p[1] > mapH) { issue('map', 'place outside the map: ' + ch.textContent.trim(), ch); return; }
       ch._px = { x: p[0], y: p[1] };
       var col = color(ch.getAttribute('color'), 'text');
-      var left = ch.getAttribute('side') === 'left' || (ch.getAttribute('side') !== 'right' && p[0] > w * 0.82);
+      var left = ch.getAttribute('side') === 'left' || (ch.getAttribute('side') !== 'right' && p[0] > mapW * 0.82);
       html += '<div class="ot-place-dot" style="left:' + p[0] + 'px;top:' + p[1] + 'px;background:' + col + '"></div>';
       html += '<div class="ot-place-label' + (left ? ' left' : '') + '" style="left:' + p[0] + 'px;top:' + p[1] + 'px;color:' + col + '">' + rich(ch.textContent.trim()) + '</div>';
     });
@@ -1800,12 +1854,12 @@
     } else {
       lay.innerHTML = svg(w, h, s) + html + '<div class="ot-map-credit">' + credit + '</div>';
     }
-    declutter(lay, f, geoByCode, el);
+    declutter(lay, f, geoByCode, el, area);
   }
 
   // Map labels: places keep their spot (a place label may flip to the other side of its dot);
   // country and realm labels move up, down or sideways to a free spot, greedily.
-  function declutter(lay, f, geoByCode, host) {
+  function declutter(lay, f, geoByCode, host, area) {
     var placed = [];
     function box(e) { var r = e.getBoundingClientRect(); return { l: r.left - 2, t: r.top - 1, r: r.right + 2, b: r.bottom + 1 }; }
     function hits(b) { return placed.some(function (p) { return b.l < p.r && b.r > p.l && b.t < p.b && b.b > p.t; }); }
@@ -1878,13 +1932,21 @@
         for (var a = 0; a < n; a++) {
           var ang = (a / n) * Math.PI * 2;
           var dx0 = r * Math.cos(ang), dy0 = r * Math.sin(ang);
+          // A code stays on the map, never in the key beside it.
+          if (area && (x0 + dx0 - w / 2 < 0.02 * area.w || x0 + dx0 + w / 2 > area.w - 0.02 * area.w ||
+              y0 + dy0 - h / 2 < 0 || y0 + dy0 + h / 2 > area.h)) continue;
           var bx = at(dx0, dy0), cost = 0, ins = inside(rings, x0 + dx0, y0 + dy0);
           for (var k = 0; k < placed.length; k++) cost += overlap(bx, placed[k]);
           var score = cost + 0.3 * (dx0 * dx0 + dy0 * dy0) + (ins ? 0 : OUTSIDE);
           if (score < bestScore) { bestScore = score; best = bx; bestInside = ins; }
         }
       }
-      if (!best) best = at(0, 0);
+      if (!best) {
+        l.hidden = true; skipped++;
+        var nokey = lay.querySelector('.ot-region-key[data-code="' + l.getAttribute('data-code') + '"]');
+        if (nokey) nokey.classList.add('ot-region-key-off');
+        return;
+      }
       var bestCost = 0;
       for (var k3 = 0; k3 < placed.length; k3++) bestCost += overlap(best, placed[k3]);
       if (bestCost > 0.35 * w * h) {

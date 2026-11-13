@@ -40,6 +40,31 @@ alone did not solve either problem.
 `smalltest/run.py` accepts `--model`, `--requests` and `--sizes` so a targeted
 DeepSeek check need not call Muse or use yesterday's pane sizes.
 
+Map key layout (this change): a full län map put its 21-letter key in a strip under
+the map. Sweden is taller than wide, so the map was fitted by the height that was left:
+this pane was 940×319 in the page, the strip took 74 px of it, and the country came out
+97×220 px with 9 px letters and one code dropped.
+
+The key is now measured, and the map keeps whichever layout draws the country bigger:
+
+- **Beside the map** when the key fits a column (or two) on the right and the height it
+  frees up more than pays for the width it takes. Two key sizes are tried, 0.68 em and
+  0.6 em, so a narrow-ish pane still gets a readable key instead of none.
+- **Under the map** otherwise (phones, dense pages). The strip is now placed *below* the
+  fitted map instead of being anchored to the bottom of the box, which is why the key no
+  longer covers Skåne or Götaland.
+
+Same page, same pane: country 128×292 px, 21 codes at 12.3 px instead of 20 at 9.4, no
+`crowded` issue. On 760×900 the side key lifted the map from 173 to 292 px. Phones keep
+the key under the map; there the page still needs less content.
+
+The region map is also slid (never scaled) so Sweden is centred in the room it has: the
+view boxes include Norway and Finland as context and put the country off to one side.
+
+Not done: on a small pane the codes hit the 7 px floor and the lint lists the regions
+left out; the cure is less page content, not a smaller map.
+`tools/check_map_key.py` pins the two layouts, the codes, pointing and marking.
+
 Work package 1 of `docs/smart-screen.md` (example screens, shell and components), 2026-11-12.
 
 ## Layout of this folder
@@ -83,7 +108,8 @@ Work package 1 of `docs/smart-screen.md` (example screens, shell and components)
   Sweden, so `shell/data/lan-sverige.json` holds the 21 features cut out, topology-simplified with mapshaper and
   quantised to 1/1000 degree (28 kB; see `shell/data/README.md`). `compose()` inlines it in the frame, like the
   shell itself: no request, and nothing in the page body (LiveKit RPC is ~15 kB). Letter codes on the map
-  (`AB` … `BD`) plus a key under it, since 21 names never fit; codes are sized by the map, not by the page font,
+  (`AB` … `BD`) plus a key, since 21 names never fit: beside the map on a wide pane, under it on a phone (see
+  "Map key layout"). Codes are sized by the map, not by the page font,
   and a label that cannot sit over its region moves to a free spot with a leader line, or is left out (its key row
   dims) with a `crowded` issue when the pane is too small. Every region is pointable as `lan-<bokstav>`.
 - **Computed, not written, maths procedures.** `ot-written` computes uppställning itself (carries, växling, partial
