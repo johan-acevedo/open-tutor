@@ -1,0 +1,29 @@
+{
+ "job": "s1",
+ "kind": "page",
+ "page": "p1",
+ "title": "En vinkel på $60^\\circ$",
+ "model": "gemini-4-hydrogen",
+ "api": "chat",
+ "reasoning": "low",
+ "pane": [
+  370,
+  610
+ ],
+ "model_s": 10.59,
+ "render_s": 1.14,
+ "look_s": 0.0,
+ "retry_s": 0.0,
+ "total_s": 11.73,
+ "issues": [],
+ "residual_lint": [],
+ "repair": {
+  "look": false,
+  "look_fix": false,
+  "retry": false,
+  "retry_applied": false,
+  "notes": [
+   "look pass skipped: page target budget"
+  ]
+ }
+}

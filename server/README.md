@@ -103,6 +103,7 @@ The worker logs the route at the start of each session (`tutor TTS route elevenl
 | `TUTOR_DEBUG_LOG` | `1` writes a per-session debug trail to a private local directory (see below). Off by default |
 | `TUTOR_DEBUG_LOG_DIR` | Override the debug trail directory (default `~/.local/state/open-tutor/sessions`) |
 | `TUTOR_STT_MAX_ENDPOINT_MS`, `TUTOR_MIN_ENDPOINT` | Turn-taking tuning for pauses while a child thinks |
+| `TUTOR_NOISE_CANCELLATION` | `off` (default, today's behaviour), `nc` or `bvc`: LiveKit's enhanced noise cancellation on the child's inbound audio, before the VAD and the recogniser. See [noise and background voice cancellation](#noise-and-background-voice-cancellation). An unknown value stops the worker at boot |
 | `TUTOR_FILLERS` | `1` lets the fox make one short pre-made sound when a reply to the child's turn is late. Off by default |
 | `TUTOR_FILLER_AFTER_S` | How long the child may wait for the reply before the sound (default `0.7`) |
 | `TUTOR_FILLER_CLIPS_DIR` | Parent directory for the cached clips (default `~/.cache/open-tutor/fillers`) |
@@ -119,6 +120,91 @@ Geolocation and keep the origin private behind its tunnel; a publicly reachable
 origin would allow clients to forge that header. The current origin binds to
 ThinkCentre's tailnet address, with public requests arriving through the Mini's
 Cloudflare tunnel. Health checks are exempt to preserve local monitoring.
+
+## Noise and background voice cancellation
+
+A parent and a 13-year-old at one phone in a normal home: sound in the room was taken for the
+child, cut the fox off mid-sentence and made it answer talk that was not meant for it. LiveKit's
+enhanced noise cancellation runs **server-side on the agent's inbound audio**, before the VAD and
+the recogniser, so a turn can only start from filtered audio. That is why it belongs here rather
+than in the page.
+
+`TUTOR_NOISE_CANCELLATION` picks the filter (`server/open_tutor/noise.py`):
+
+| Value | Model | What it does |
+|---|---|---|
+| `off` (default) | none | Today's behaviour. The plugin is not even imported |
+| `nc` | `noise_cancellation.NC()` | Krisp NC: removes non-speech noise (traffic, fans, music), keeps every voice |
+| `bvc` | `noise_cancellation.BVC()` | Krisp BVC: NC plus removing non-primary voices, i.e. other people talking |
+
+What the documentation says (checked 2026-11-13, not from memory):
+
+- The filter is configured on the agent's audio input and runs before STT and VAD —
+  [Noise & echo cancellation](https://docs.livekit.io/transport/media/noise-cancellation/),
+  [Agent session](https://docs.livekit.io/agents/logic/sessions/).
+- The package is `livekit-plugins-noise-cancellation` (`~=0.3`, ours is 0.3.3) and offers `NC()`,
+  `BVC()` and `BVCTelephony()` — [PyPI README](https://pypi.org/project/livekit-plugins-noise-cancellation/).
+  The models ship in the wheel (about 70 MB) and run in the worker process; nothing is uploaded
+  for it. The package "requires LiveKit Cloud", which is what our rooms already use. No extra key,
+  no dashboard setting and no plan upgrade was needed: our Cloud project ran both models on the
+  free Build plan.
+- **Cost** — [pricing](https://livekit.com/pricing): background noise suppression (Krisp NC,
+  ai-coustics QUAIL_L) is included on every plan. Voice isolation (Krisp VIVA/VIVA telephony,
+  ai-coustics Voice Focus S/L) is metered: 100 minutes on Build, 1,000 on Ship, then
+  $0.0012/minute. BVC is named in neither row, so treat its billing as unconfirmed; it is the
+  model the owner asked for and what `TUTOR_NOISE_CANCELLATION=bvc` uses.
+- **For one near-field speaker with other voices in the room**, the docs recommend a *voice
+  isolation* model ("Voice isolation works well when there is a single speaker, while background
+  noise suppression is better for multiple speakers"; the LiveKit blog's short version is "for a
+  single primary speaker, use a voice isolation model"). In this package the equivalent intent is
+  `BVC`. The dedicated voice-isolation plugins (`livekit-plugins-ai-coustics`,
+  `livekit-plugins-krisp`) are separate packages and are the metered ones above.
+- **Do not run two cancellation models at once.** "When using noise cancellation or voice
+  isolation in the agent code, do not enable noise cancellation models in the frontend… Standard
+  noise cancellation and the separate echo cancellation feature can be left enabled." Our page
+  asks for the browser's own `echoCancellation`, `noiseSuppression` and `autoGainControl`
+  (`web/src/useSession.ts`, `new Room({audioCaptureDefaults})`), does not use
+  `@livekit/krisp-noise-filter` and never asks for `voiceIsolation`. That is exactly the allowed
+  combination, so **the web app needs no change**; a device that only has `noiseSuppression`
+  listed as a supported constraint simply keeps it.
+
+Where the cost lands: the first `import livekit.plugins.noise_cancellation` costs about a second
+and loads the native filter, so it happens at process prewarm (`noise.warm_up`, called from
+`prewarm`), never on the first turn. Before that fix the dev worker logged "event loop blocked
+for 1096 ms importing livekit.plugins.noise_cancellation" inside a session and the greeting
+arrived at 1.46-1.49 s instead of 0.22-0.26 s.
+
+What was measured (own instance, 2026-11-13; the numbers and what could not be concluded are in
+[docs/smart-screen.md](../docs/smart-screen.md)):
+
+- The filter really runs: on a noise bed it cuts overall level by 25 dB (BVC) and 38 dB (NC) and
+the peak from 12,000 to about 5,300 and 1,300.
+- On speech it is close to transparent, and `bvc` changed nothing the tutor did in the three
+  cases that matter: room-only talk was still heard as the child, the fox was still interrupted
+  about 1.9 s in, and a clear sentence was still transcribed in every mode. NC keeps all speech
+  by design, and BVC removes *non-primary* voices — with the child silent, the room's voice is
+  the primary one, so it passes.
+- Greeting timing with `bvc` after the prewarm fix: 0.48-0.86 s (dev "start a process per job"
+mode, where prewarm runs at job start) against 0.22-0.29 s with `off` and 1.46-1.49 s before it.
+
+So `bvc` is the value to try on a real phone, and the two failures it cannot fix on its own are
+the ones that happen while the child is silent.
+
+Regenerate the audio and measure again (fictional Swedish speech only, synthesized with the
+session's own voice):
+
+```bash
+OPEN_TUTOR_ENV=~/.config/open-tutor-nc-dev/env \
+  server/bin/with-env uv run --project server python server/scripts/noise_cancellation_audio.py \
+  --out /tmp/nc-audio
+# what the filter itself does to each clip (needs LiveKit Cloud credentials)
+OPEN_TUTOR_ENV=... server/bin/with-env uv run --project server python \
+  server/scripts/noise_cancellation_bench.py --audio /tmp/nc-audio --out /tmp/nc-bench
+# what the tutor does with it, against a running worker
+OPEN_TUTOR_ENV=... server/bin/with-env uv run --project server python \
+  server/scripts/noise_cancellation_probe.py --audio /tmp/nc-audio --case background \
+  --out /tmp/nc-runs/background
+```
 
 ## Filler sounds
 

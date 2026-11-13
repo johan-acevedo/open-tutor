@@ -1,0 +1,129 @@
+{
+ "case": "cirkel",
+ "sizes": {
+  "370x610": {
+   "fontPx": 17.5,
+   "issues": [
+    {
+     "kind": "tag",
+     "msg": "unknown tag <ot-circle>",
+     "where": "<ot-circle id=\"cirkel\">"
+    }
+   ],
+   "graphs": [
+    {
+     "flags": [],
+     "lengths": [
+      {
+       "tag": "ot-segment",
+       "id": "radie",
+       "label": "4 cm",
+       "units": 4.0,
+       "number": 4.0,
+       "implied_scale": 1.0
+      }
+     ],
+     "labels": [
+      {
+       "text": "4 cm",
+       "segment": "radie",
+       "edge_px": 18.4,
+       "inside": false,
+       "overlap_px": -8.8
+      }
+     ],
+     "kinds": [
+      "ot-circle",
+      "ot-point",
+      "ot-segment"
+     ]
+    }
+   ],
+   "flags": [],
+   "ids": [
+    "ot-map-data",
+    "page",
+    "graf",
+    "cirkel",
+    "medelpunkt",
+    "radie"
+   ],
+   "pointable": {
+    "ot-map-data": true,
+    "page": true,
+    "graf": true,
+    "cirkel": true,
+    "medelpunkt": true,
+    "radie": true
+   },
+   "pointable_named": [
+    "graf",
+    "cirkel",
+    "radie"
+   ],
+   "visible_text": "Cirkelns radie\nMedelpunkt\n4 cm\n\nRadie är sträckan från medelpunkten ut till kanten."
+  },
+  "1000x700": {
+   "fontPx": 30.25,
+   "issues": [
+    {
+     "kind": "tag",
+     "msg": "unknown tag <ot-circle>",
+     "where": "<ot-circle id=\"cirkel\">"
+    }
+   ],
+   "graphs": [
+    {
+     "flags": [],
+     "lengths": [
+      {
+       "tag": "ot-segment",
+       "id": "radie",
+       "label": "4 cm",
+       "units": 4.0,
+       "number": 4.0,
+       "implied_scale": 1.0
+      }
+     ],
+     "labels": [
+      {
+       "text": "4 cm",
+       "segment": "radie",
+       "edge_px": 31.8,
+       "inside": false,
+       "overlap_px": -15.1
+      }
+     ],
+     "kinds": [
+      "ot-circle",
+      "ot-point",
+      "ot-segment"
+     ]
+    }
+   ],
+   "flags": [],
+   "ids": [
+    "ot-map-data",
+    "page",
+    "graf",
+    "cirkel",
+    "medelpunkt",
+    "radie"
+   ],
+   "pointable": {
+    "ot-map-data": true,
+    "page": true,
+    "graf": true,
+    "cirkel": true,
+    "medelpunkt": true,
+    "radie": true
+   },
+   "pointable_named": [
+    "graf",
+    "cirkel",
+    "radie"
+   ],
+   "visible_text": "Cirkelns radie\nMedelpunkt\n4 cm\n\nRadie är sträckan från medelpunkten ut till kanten."
+  }
+ }
+}

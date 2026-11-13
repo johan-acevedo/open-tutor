@@ -231,8 +231,10 @@ records the effective model, API, reasoning and any explicit thinking toggle.
 The controls follow [Google's compatibility API](https://ai.google.dev/gemini-api/docs/openai)
 and [DeepSeek's thinking toggle](https://api-docs.deepseek.com/guides/thinking_mode/).
 HTTP request tests use the real SDK with a local recorded-response transport;
-provider acceptance, speed and page quality remain untested. Go probes and new
-Go helpers are paused pending Johan's billing decision. The lead owns live comparisons.
+Hydrogen low subsequently passed the lead's five-job comparison (8.7–11.8 s total,
+clean lint) and live lessons, and is now the dev page writer. Johan approved Go balance
+billing for Muse Spark and DeepSeek, so their probes and helpers may run again. The
+DeepSeek thinking-disabled comparison remains unrun; the lead owns model selection.
 
 Ready commands, run from the repo root **only when the lead elects to compare**:
 
@@ -242,7 +244,7 @@ OPEN_TUTOR_ENV=~/.config/open-tutor-smart-dev/env server/bin/with-env env \
   SCREEN_MODEL=gemini-4-hydrogen SCREEN_API=chat SCREEN_REASONING=low SCREEN_THINKING= \
   uv run --project server python screen/tools/bench_page_budget.py --count 5 --out /tmp/hydrogen-low
 
-# After Go billing is settled: change only the thinking toggle against a low baseline.
+# Optional DeepSeek comparison: change only the thinking toggle against a low baseline.
 OPEN_TUTOR_ENV=~/.config/open-tutor-smart-dev/env server/bin/with-env env \
   SCREEN_MODEL=deepseek-v4.1-flash SCREEN_API=chat SCREEN_REASONING=low SCREEN_THINKING=disabled \
   uv run --project server python screen/tools/bench_page_budget.py --count 5 --out /tmp/deepseek-thinking-disabled
@@ -334,7 +336,15 @@ Known and open:
 - Page and patch HTML enters through an inert template and a shared sanitizer. Native
   `setHTML` is used when available, with DOMPurify for other browsers. Model scripts,
   event handlers and styles are removed before insertion; the shell's own code still runs.
-- Image search still runs in the page (unfiltered Commons result).
+- Images are resolved on the server, not in the page (2026-11-13): a `query` searches
+  Commons, a supplied `src` is re-looked-up, the bitmap is downloaded bounded (2 MiB,
+  JPEG/PNG/WebP from Wikimedia hosts only) and the page writer judges the actual
+  picture with the full lesson context before it is shown. Only a reviewed image ships,
+  with its canonical Commons URL and author/licence credit; anything else becomes a
+  text fallback. Image work stops inside the 12 s soft target; pages without images
+  pay nothing. Live Hydrogen-low evidence (accepted Colosseum/Forum Romanum photos,
+  a flower-lesson rejection, patch-image load fix) is in
+  `screen/review/2026-11-13-screen-images/`.
 
 ### Filler sounds (2026-11-13)
 
@@ -462,6 +472,88 @@ and the worker then answers with the greeting folded into that reply.
   When go-deepseek later failed, the failover back to gemini was refused
   (`llm_failover_skipped`: it needs thought signatures) and the apology path took over.
 
+### Background voice cancellation: on, and what it does not fix (2026-11-13)
+
+A parent and a 13-year-old at one phone: room sound was taken for the child, cancelled the
+greeting, cut the fox off mid-sentence and made it answer talk that was not meant for it. The
+owner's decision was LiveKit's background voice cancellation. It is now a setting,
+`TUTOR_NOISE_CANCELLATION` = `off` (default) | `nc` | `bvc`, applied server-side to the child's
+inbound audio before the VAD and the recogniser (`server/open_tutor/noise.py`). `off` behaves
+exactly as before and does not even import the plugin. Details, docs links and cost are in
+`server/README.md` ("Noise and background voice cancellation"). PRs: #47 (the switch) and the
+follow-up that moved the import to prewarm.
+
+**Measured on dell5500 with my own worker and web service** (`open-tutor-nc-dev`, own ports, own
+debug dir; the shared dev services were not touched), real providers (Soniox, Deepgram Flux,
+Gemini 4 Hydrogen), `TUTOR_INTERRUPT_MIN_S=0.4` as in production. The child's microphone was a
+prepared 24 kHz WAV published into a real room: no recordings of real people, everything
+synthesized with the session's own voice, the "other person in the room" being that voice slowed
+and pitched down 18 %.
+
+One session per row. "Turn" = the tutor started thinking or speaking; "interrupted" = the fox
+was mid-answer when the clip played and stopped before its sentence ended.
+
+| Mode | Clip | Turn | Transcript the STT produced | Fox interrupted |
+|---|---|---|---|---|
+| off | background only (4.8 s of other talk) | yes | the whole other voice, verbatim ("Ja, alltså, jag tänkte att vi kan ta det där i morgon…") | yes, 1.89 s in |
+| bvc | background only, run 1 | yes | the same sentence verbatim | yes, 1.95 s in |
+| bvc | background only, run 2 | yes | the same sentence verbatim | yes, 1.93 s in |
+| bvc | background only, run 3 | yes | the same sentence verbatim | yes, 1.94 s in |
+| nc | background only | yes | the same sentence verbatim | yes, 1.45 s in |
+| off | clear child sentence | yes (7.09 s) | "Hej Räven, jag behöver hjälp med matte-lexan…" | yes, 1.92 s in (the child was speaking) |
+| bvc | clear child sentence | yes (7.17 s) | the same sentence | yes, 1.97 s in |
+| off | child + other talk 14 dB down | yes (7.08 s) | only the child's sentence | yes, 1.88 s in |
+| bvc | child + other talk 14 dB down | yes (7.20 s) | only the child's sentence | yes, 1.91 s in |
+| off | child + other talk 4 dB down (×2) | yes (7.10, 7.16 s) | only the child's sentence | yes, 1.88 / 1.96 s in |
+| bvc | child + other talk 4 dB down (×2) | yes (7.09, 7.20 s) | only the child's sentence | yes, 1.92 / 2.01 s in |
+
+The filter itself, measured by subscribing to the same published track twice in one room, once
+through the filter and once plain, and comparing levels (`noise_cancellation_bench.py`):
+
+| Clip | Model | Speech level change | Overall level | Peak |
+|---|---|---|---|---|
+| noise bed (no speech) | bvc | −6.5 dB | −25.0 → −45.4 dBFS | 12,319 → 5,273 |
+| noise bed (no speech) | nc | −13.8 dB | −20.4 → −58.3 dBFS | 11,783 → 1,257 |
+| other talk only | bvc / nc | −0.3 / −0.2 dB | unchanged | unchanged |
+| child sentence | bvc / nc | −0.7 / −0.3 dB | −22.2 → −23.0 / −22.5 | nearly unchanged |
+| child + talk 14 dB down | bvc / nc | +0.1 / −0.1 dB | −21.8 → −23.1 / −23.2 | unchanged |
+| child + talk 4 dB down | bvc / nc | −2.5 / −0.8 dB | −20.8 → −25.1 / −22.9 | 29,429 → 22,899 / 25,049 |
+
+What that says:
+
+- The filter works and costs nothing measurable per turn: non-speech noise is removed hard, and
+turn detection latency was 7.08-7.37 s in every mode (dominated by STT endpointing, no
+systematic difference). Worker CPU was 0.8-1.3 s per ~65 s session in both modes, i.e. noise.
+- **BVC did not stop the failure that hurt most.** Other talk while the child is silent was still
+transcribed as the child and still cut the fox off at about 1.9 s. That is what the model is: NC
+keeps all speech, and BVC removes *non-primary* voices — when the child is not speaking, the
+room's voice is the primary one, so it passes. Voice isolation cannot know whose voice is the
+child's without being told.
+- It did not damage the real child turn either (case b and c: transcript unchanged, interruption
+  unchanged — and in b and c the interruption was correct, the child really was talking).
+
+What this rig does **not** let me conclude:
+
+- Nothing about a real parent at a distance. My "other voice" is the same synthesized voice,
+pitched down, at the child's own loudness and without room reverberation; a voice across a room
+differs in level, timbre and echo, which is exactly what BVC could key on. The honest next test
+is the owner's phone, by ear, with `TUTOR_NOISE_CANCELLATION=bvc`.
+- Nothing about the softer BVC gains: the level meter says the louder mixed case loses 2.5 dB of
+speech energy, which is consistent with the second voice being partly removed, but I could not
+turn that into a transcript difference with this material.
+- Whether BVC is billed. The pricing page names Krisp NC under background noise suppression and
+Krisp VIVA under voice isolation; BVC is in neither row.
+
+Latency note for the next person: the plugin's first import blocked the event loop for about a
+second inside a session on the dev setup, and the greeting moved from 0.3 s to 1.3 s. It is now
+imported at prewarm (`noise.warm_up`); with `bvc` the greeting lands at 0.48-0.86 s in the "one
+process per job" dev mode, where prewarm runs at job start, against 0.22-0.29 s with `off`.
+
+What is left for the lead or a later change: if the fox still answers the television, that is a
+turn-taking problem, not a filter problem — a level or distance gate on the child's track, or a
+longer `TUTOR_INTERRUPT_MIN_S`, is where it would be solved. Changing interruption thresholds was
+explicitly out of scope here.
+
 ### What Johan's test calls settled (2026-11-13)
 
 Three real calls on the dev setup (Johan alone, with Lucas, and alone again). Decisions:
@@ -526,6 +618,18 @@ table and the same checks failing on the PR #41 shell are in
 4. **First session with a child.** The test that counts.
 
 ## Open
+
+Geometry assessment (2026-11-13, proposal in PR #53): five Hydrogen-low pages and one
+cuboid patch confirm existing graphs can draw measured plane figures, a cuboid and a
+cylinder. The immediate defect is label placement: fixed offsets ignore text width,
+and vertex-mean normals place some concave L labels inside the shape. Parent review
+repeated the render measurements and corrected slanted-label clearance calculations.
+Proposed order: label placement first, test brief reference guidance, then develop a
+qualified plane-length lint; circle and angle primitives need a lead decision. No new
+plane-figure component. Defer a solids tag on the two tested types, without ruling out
+prism, pyramid, cone, sphere or nets (all untested). No runtime changes were made.
+Sources, inspected phone/wide renders, timings and limits:
+`screen/review/2026-11-13-geometry/`.
 
 - Which model and reasoning level the screen runs on (measure with the examples in place).
 - Image generation: whether, and with what.

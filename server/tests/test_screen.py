@@ -961,3 +961,210 @@ async def test_invalid_patch_is_saved_and_reported_to_tutor_without_partial_deli
     meta = json.loads((tmp_path / "pages" / "s2" / "meta.json").read_text())
     assert meta["delivered"] is False
     assert (tmp_path / "pages" / "s2" / "patch.html").read_text() == patch
+
+
+@pytest.fixture
+def commons_picture(monkeypatch):
+    from pathlib import Path
+    from screen.tools import commons_images as commons
+
+    fixtures = Path(__file__).resolve().parents[2] / "screen/tests/fixtures/commons-images"
+    candidate = commons._result(json.loads((fixtures / "search.json").read_text())).candidates[0]
+    photo = (fixtures / "colosseum.jpg").read_bytes()
+    search = AsyncMock(return_value=commons.SearchResult([candidate]))
+    monkeypatch.setattr(commons, "search_images", search)
+    monkeypatch.setattr(commons, "download_image", AsyncMock(return_value=photo))
+    return candidate, photo, search
+
+
+async def test_images_are_reviewed_before_page_or_patch_reaches_renderer_or_child(tmp_path, monkeypatch, commons_picture):
+    monkeypatch.setenv("SCREEN_LOOK", "0")
+    candidate, photo, search = commons_picture
+    body = '<h1>Rom</h1><ot-image id="bild" query="Colosseum" alt="Valv"></ot-image>'
+    patch = '<ot-patch target="bild"><ot-image query="Colosseum" alt="Byggnaden"></ot-image></ot-patch>'
+    verdict = '{"accept":true,"reason":"Relevant architecture."}'
+    model = AsyncMock(side_effect=[body, verdict, patch, verdict])
+    screen = make_screen(tmp_path, model_call=model)
+    pages, patches = [], []
+    screen.on_page, screen.on_patch = pages.append, patches.append
+    screen.ask("Visa valv i Rom")
+    await screen.wait_idle()
+    screen.mark_visible("p1")
+    screen.ask("Byt bilden")
+    await screen.wait_idle()
+    assert len(pages) == len(patches) == 1
+    for source in (pages[0].body, patches[0].patch):
+        assert "query=" not in source and candidate.image_url.replace("&", "&amp;") in source
+        assert "Diliff" in source and "CC BY-SA 2.5" in source
+    for call in (model.call_args_list[1], model.call_args_list[3]):
+        assert call.args[3] == photo and "Lesson context:" in call.args[1]
+    assert search.call_count == 2
+    for result in (pages[0], patches[0]):
+        meta = json.loads((result.directory / "meta.json").read_text())
+        assert meta["image_reviews"][0]["decision"] == "accepted" and "image_s" in meta
+        assert (result.directory / "images.json").exists()
+
+
+async def test_lint_correction_reuses_an_image_approved_in_the_same_job(tmp_path, monkeypatch, commons_picture):
+    monkeypatch.setenv("SCREEN_LOOK", "0")
+    _, _, search = commons_picture
+    body = '<h1>Rom</h1><ot-image id="bild" query="Colosseum" alt="Valv"></ot-image>'
+    model = AsyncMock(side_effect=[body, '{"accept":true,"reason":"Relevant."}', body.replace("Rom</h1>", "Valv</h1>")])
+    render = AsyncMock(side_effect=[(b"PNG", [{"kind": "dense", "msg": "shorten text"}]), (b"PNG", [])])
+    screen = make_screen(tmp_path, model_call=model, render_page=render)
+    pages = []
+    screen.on_page = pages.append
+    screen.ask("Visa valv")
+    await screen.wait_idle()
+    assert len(pages) == 1 and pages[0].title == "Valv"
+    assert model.call_count == 3 and search.call_count == 1
+
+
+async def test_image_review_timeout_delivers_text_page_and_logs_the_rejected_candidate(tmp_path, monkeypatch, commons_picture):
+    import time
+
+    monkeypatch.setenv("SCREEN_LOOK", "0")
+    _, photo, _ = commons_picture
+
+    async def model(system, user, images, picture):
+        if picture == photo:
+            await asyncio.Future()
+        return '<h1>Rom</h1><ot-image id="bild" later query="Colosseum" alt="Valv"></ot-image>'
+
+    screen = make_screen(tmp_path, model_call=model)
+    original = screen._image_job
+
+    def short_budget(ask, t0):
+        job = original(ask, t0)
+        job.deadline = time.monotonic() + 0.03
+        return job
+
+    monkeypatch.setattr(screen, "_image_job", short_budget)
+    pages, failures = [], []
+    screen.on_page, screen.on_failure = pages.append, failures.append
+    screen.ask("Visa valv")
+    await screen.wait_idle()
+    assert len(pages) == 1 and not failures
+    assert '<section id="bild" later="">' in pages[0].body and "ot-image" not in pages[0].body
+    events = json.loads((pages[0].directory / "images.json").read_text())
+    assert any(e.get("title") and "budget" in e["reason"] for e in events)
+
+
+# ---- patch images are loaded before the preview screenshot ------------------
+
+class _FakeFrame:
+    """A stub for the srcdoc frame: records the wait/evaluate order."""
+
+    def __init__(self, calls, late_issues=None, fail_image_wait=False):
+        self.calls = calls
+        self.late_issues = late_issues or []
+        self.fail_image_wait = fail_image_wait
+
+    async def wait_for_function(self, script, timeout=None):
+        self.calls.append(("wait", script, timeout))
+        if "ot-image img" in script and self.fail_image_wait:
+            raise TimeoutError("still loading")
+
+    async def evaluate(self, script, arg=None):
+        self.calls.append(("eval", script, arg))
+        if "otReady" in script:
+            return None
+        if "ot.fontPx" in script:
+            return {"fontPx": 18, "issues": []}
+        if "ot.patch" in script:
+            return []
+        if "getAnimations" in script:
+            return None
+        if "ot.issues.slice" in script:
+            return list(self.late_issues)
+        raise AssertionError(f"unexpected script: {script!r}")
+
+
+class _FakePreviewPage:
+    def __init__(self, calls, frame):
+        self.calls = calls
+        self.frames = [object(), frame]
+
+    async def set_content(self, html):
+        self.calls.append(("set_content", len(html)))
+
+    async def wait_for_timeout(self, ms):
+        self.calls.append(("timeout", ms))
+
+    async def screenshot(self):
+        self.calls.append(("screenshot",))
+        return b"PNG"
+
+    async def close(self):
+        self.calls.append(("close",))
+
+
+class _FakeBrowser:
+    def __init__(self, calls, frame):
+        self.calls = calls
+        self.frame = frame
+
+    def is_connected(self):
+        return True
+
+    async def new_page(self, **kwargs):
+        return _FakePreviewPage(self.calls, self.frame)
+
+
+class _FakeStarter:
+    def __init__(self, calls, frame):
+        self.calls = calls
+        self.frame = frame
+        self.chromium = self
+
+    async def start(self):
+        return self
+
+    async def launch(self):
+        return _FakeBrowser(self.calls, self.frame)
+
+
+def _stub_browser(monkeypatch, calls, **frame_kwargs):
+    import playwright.async_api
+
+    frame = _FakeFrame(calls, **frame_kwargs)
+    monkeypatch.setattr(playwright.async_api, "async_playwright",
+                        lambda: _FakeStarter(calls, frame))
+    return frame
+
+
+async def test_patch_preview_waits_for_new_images_before_screenshot(tmp_path, monkeypatch):
+    screen = make_screen(tmp_path)
+    calls: list = []
+    late = [{"kind": "image", "msg": "image failed to load: https://example.invalid/x.jpg",
+             "where": "ot-image"}]
+    _stub_browser(monkeypatch, calls, late_issues=late)
+    png, issues = await screen._default_render_page(
+        "<h1>Rom</h1>", '<ot-patch target="x"><ot-image src="https://example.invalid/x.jpg"></ot-image></ot-patch>',
+        370, 610)
+    assert png == b"PNG"
+    kinds = [call[0] for call in calls]
+    assert kinds.index("screenshot") > kinds.index("wait")
+    image_waits = [call for call in calls if call[0] == "wait" and "ot-image img" in call[1]]
+    assert len(image_waits) == 1 and image_waits[0][2] == 5000
+    assert late[0] in issues
+
+
+async def test_slow_patch_image_still_screenshots_instead_of_failing(tmp_path, monkeypatch):
+    screen = make_screen(tmp_path)
+    calls: list = []
+    _stub_browser(monkeypatch, calls, fail_image_wait=True)
+    png, issues = await screen._default_render_page(
+        "<h1>Rom</h1>", '<ot-patch target="x"><ot-image src="https://example.invalid/x.jpg"></ot-image></ot-patch>',
+        370, 610)
+    assert png == b"PNG"
+    assert any(i["kind"] == "image" and "still loading" in i["msg"] for i in issues)
+
+
+async def test_plain_page_render_does_not_wait_for_patch_images(tmp_path, monkeypatch):
+    screen = make_screen(tmp_path)
+    calls: list = []
+    _stub_browser(monkeypatch, calls)
+    png, issues = await screen._default_render_page("<h1>Rom</h1>", None, 370, 610)
+    assert png == b"PNG" and issues == []
+    assert not [call for call in calls if call[0] == "wait" and "ot-image img" in call[1]]

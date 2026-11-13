@@ -1,0 +1,1 @@
+Gör höjden tydlig: lägg en punkt på höjdkannten och skriv måttet 2 cm utanför figuren, så att etiketten inte ligger på linjen.

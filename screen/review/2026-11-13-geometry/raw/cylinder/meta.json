@@ -1,0 +1,41 @@
+{
+ "case": "cylinder",
+ "ask": "Visa en cylinder med radie 3 cm och höjd 5 cm. Markera radien och höjden med mått och eleven ska kunna peka på radien. Volymen får inte synas.",
+ "steer": null,
+ "pane": [
+  370,
+  610
+ ],
+ "wall_s": 8.04,
+ "spec": {
+  "model": "gemini-4-hydrogen",
+  "api": "chat",
+  "reasoning": "low"
+ },
+ "calls": [
+  {
+   "look": false,
+   "seconds": 6.84,
+   "user_chars": 504,
+   "answer_chars": 590
+  }
+ ],
+ "failures": [],
+ "model_s": 6.8394678346812725,
+ "look_s": 0.0,
+ "retry_s": 0.0,
+ "render_s": 1.201117506250739,
+ "total_s": 8.041824478190392,
+ "issues": [],
+ "residual_lint": [],
+ "repaired": false,
+ "screen_repair": {
+  "look": false,
+  "look_fix": false,
+  "retry": false,
+  "retry_applied": false,
+  "notes": [
+   "look pass skipped: page target budget"
+  ]
+ }
+}

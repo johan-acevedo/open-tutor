@@ -16,6 +16,15 @@ failure rates or speed differences. Evidence and rerun commands:
 
 ## Toolbox follow-up, 2026-11-13
 
+Image intents are resolved on the server before pages, corrections or patches render:
+Commons metadata and bounded bitmap download, then a vision decision with the lesson.
+Only accepted canonical URLs and author/licence credits reach the frame; rejection or
+budget exhaustion yields text while preserving ids and `later`. Image work is capped
+at 6 s and stops before the 12 s soft target's render reserve. The frame no longer
+searches Commons; raw media cannot bypass `ot-image`. Patch previews await new bitmaps
+up to 5 s and report a still-loading issue if that wait expires. Recorded tests and
+Hydrogen low evidence: `review/2026-11-13-screen-images/`.
+
 Fit correction: a visual's old absolute pixel positions must not size the next font
 measurement. Generated drawing layers, chart canvases and image views are excluded only
 while measuring their em-sized hosts, then redrawn. The six-node mind map now uses the
@@ -41,9 +50,11 @@ evidence, separate-batch caveat and the old/new look comparison.
 Model comparison controls are prepared without live calls: `SCREEN_MODEL=gemini-4-hydrogen`
 uses Google and `GEMINI_API_KEY`, thinking `low` or `medium` via `SCREEN_REASONING`.
 DeepSeek accepts `SCREEN_THINKING=disabled` as a separate toggle, omitting effort.
-Recorded HTTP tests cover routes, keys, image inputs and incompatible settings;
-live acceptance and quality are still for the lead to verify. Commands are in
-`docs/smart-screen.md`. No Go probes/helpers until Johan settles billing.
+Recorded HTTP tests cover routes, keys, image inputs and incompatible settings.
+Hydrogen low is now the dev page writer, judged on live lessons and the lead's five
+8.7–11.8 s page jobs. Johan approved Go balance billing for Muse Spark and DeepSeek;
+their probes/helpers may run again. The DeepSeek thinking-disabled comparison remains
+unrun. Commands are in `docs/smart-screen.md`.
 
 Pane/repair review: corrected-page renders are bounded too, with a short margin
 for saving and delivery. A renderer timeout keeps the already rendered page.

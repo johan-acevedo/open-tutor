@@ -444,6 +444,11 @@ def _summarize(events: list[dict[str, Any]]) -> dict[str, Any]:
         if o.get("is_error")
     )
     return {
+        "diag_batches": sum(1 for e in events if e["event"] == "diag"),
+        "diag_events": sum(len(e.get("events", [])) for e in events if e["event"] == "diag"),
+        "diag_dropped": max(
+            [e.get("dropped", 0) for e in events if e["event"] == "diag"] + [0]
+        ),
         "child_final_turns": child_turns,
         "child_typed_turns": typed_turns,
         "tutor_replies": tutor_replies,
