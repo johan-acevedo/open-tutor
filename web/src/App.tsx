@@ -89,6 +89,7 @@ export default function App() {
               items={session.items}
               focused={session.focused}
               onItemMounted={session.onItemMounted}
+              onItemFailed={session.onItemFailed}
               onResourceClosed={(id) => void session.resourceClosed(id)}
               mobile={mobile}
               activeItemId={session.activeItemId}

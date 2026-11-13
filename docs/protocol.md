@@ -44,6 +44,7 @@ type BoardItem =
   | { id: string; kind: "image"; title?: string; url: string; alt: string }
   | { id: string; kind: "pending"; title: string; height?: number }       // "Ritar…" placeholder
   | { id: string; kind: "resource"; title: string; url: string; embedUrl?: string; source?: string; prompt?: string }
+  | { id: string; kind: "material"; title: string; section_id: string } // original book section; the browser derives the page URL from the catalogue ID, the agent never supplies a URL
   | { id: string; kind: "homework"; title: string; images?: string[]; text?: string }; // browser-created only
 
 type Step = { tex: string; note?: string; op?: string };  // op/note: how this row came from the previous one (LaTeX op, e.g. "-5", "\\div 3")
@@ -51,6 +52,8 @@ type Note = { at: string; topic: string; clicked?: string; tricky?: string; next
 ```
 
 Generated HTML runs in `<iframe sandbox="allow-scripts">` with a strict CSP and no access to the page, learner storage or credentials. Links in resources open in a new tab.
+
+Original book sections run in `<iframe sandbox="">` (empty token list: no scripts, opaque origin, no same-origin access) with the served page's own strict CSP and no access to the page, learner storage or credentials. The browser fetches that section's metadata first, then loads the packaged page from the same origin (`/materials/sections/{section_id}/index.html`, derived from the validated catalogue ID). The `board.show`/`board.update` acknowledgement for `material` answers only after metadata parses and the frame's `load` fires; metadata failure, frame error, unmount, or a superseding section rejects the RPC instead of acknowledging. Frame `load` proves the top-level document loaded, not that every image inside finished — image completeness is never claimed from it. A one-line source attribution (book, section, licence) sits under the frame; the item never switches the avatar into quiet/resource mode.
 
 The frame preserves its commissioned `width` and `height`. It scales down proportionally when the visible `.ot-board-scroll` content box becomes smaller. Controls remain interactive after scaling. HTML items without `width` keep their fluid width.
 

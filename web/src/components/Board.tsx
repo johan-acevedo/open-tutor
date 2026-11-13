@@ -7,6 +7,7 @@ type Props = {
   items: BoardItem[];
   focused: BoardFocusPayload | null;
   onItemMounted: (id: string) => void;
+  onItemFailed?: (id: string, message: string) => void;
   onResourceClosed: (id: string) => void;
   mobile?: boolean;
   activeItemId?: string | null;
@@ -20,6 +21,7 @@ export default function Board({
   items,
   focused,
   onItemMounted,
+  onItemFailed,
   onResourceClosed,
   mobile = false,
   activeItemId,
@@ -128,6 +130,7 @@ export default function Board({
           <div key={item.id} className="ot-card-slot" hidden={mobile && view.kind !== 'all' && item.id !== visibleId}>
             <BoardCard
               item={item}
+              onFailed={onItemFailed}
               focusedStep={focused?.id === item.id ? focused.step : undefined}
               revealThrough={
                 mobile && view.kind === 'focus' && item.kind === 'steps'

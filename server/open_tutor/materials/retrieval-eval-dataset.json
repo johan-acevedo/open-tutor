@@ -1,0 +1,542 @@
+{
+  "format": "open-tutor-retrieval-eval/1",
+  "id": "siyavula-text-retrieval-2026-11",
+  "description": "Small, declared section-level retrieval evaluation for material-library step 2c. It measures EmbeddingGemma 2 against a stdlib lexical baseline on one bounded candidate pool from the eight English Siyavula EPUBs. It is an engineering check, not a general benchmark or a production-quality claim.",
+  "corpus": {
+    "language": "en",
+    "data_dir": "~/.local/share/open-tutor/materials/siyavula",
+    "books_json": "tools/siyavula/books.json",
+    "note": "Candidate passages are extracted from the pinned, unchanged Siyavula EPUBs. Grade labels are South African source grades."
+  },
+  "languages": {
+    "queries": [
+      "en",
+      "sv"
+    ],
+    "translation": "none",
+    "note": "Every concept has one English and one Swedish spoken-style question. The Swedish question is sent unchanged to the same encoder and tokenizer; the corpus stays English."
+  },
+  "max_passages": 400,
+  "topic_groups": [
+    {
+      "id": "energy-grade-4",
+      "label": "Energy and energy transfer (Grade 4 Natural Sciences and Technology)",
+      "book_id": "natural-sciences-and-technology-4",
+      "selectors": [
+        "natural-sciences-and-technology-4:energy and energy transfer:40"
+      ]
+    },
+    {
+      "id": "metals-grade-5",
+      "label": "Metals and non-metals (Grade 5 Natural Sciences and Technology)",
+      "book_id": "natural-sciences-and-technology-5",
+      "selectors": [
+        "natural-sciences-and-technology-5:metals and non-metals:45"
+      ]
+    },
+    {
+      "id": "circuits-grade-6",
+      "label": "Electric circuits (Grade 6 Natural Sciences and Technology)",
+      "book_id": "natural-sciences-and-technology-6",
+      "selectors": [
+        "natural-sciences-and-technology-6:a simple circuit:40",
+        "natural-sciences-and-technology-6:circuit diagrams:15"
+      ]
+    },
+    {
+      "id": "electrostatics-grade-10",
+      "label": "Electrostatics (Grade 10 Physical Sciences)",
+      "book_id": "physical-sciences-10",
+      "selectors": [
+        "physical-sciences-10:electrostatics:50"
+      ]
+    },
+    {
+      "id": "refraction-grade-11",
+      "label": "Refraction, Snell's law and total internal reflection (Grade 11 Physical Sciences)",
+      "book_id": "physical-sciences-11",
+      "selectors": [
+        "physical-sciences-11:5.5 refraction:25",
+        "physical-sciences-11:5.6 snell:20",
+        "physical-sciences-11:5.7 critical:15"
+      ]
+    },
+    {
+      "id": "trigonometry-grade-10",
+      "label": "Trigonometric ratios (Grade 10 Mathematics)",
+      "book_id": "mathematics-10",
+      "selectors": [
+        "mathematics-10:5.3 defining the trigonometric ratios:20",
+        "mathematics-10:5.4 reciprocal ratios:5",
+        "mathematics-10:5.6 special angles:10"
+      ]
+    },
+    {
+      "id": "quadratics-grade-11",
+      "label": "Quadratic equations and the discriminant (Grade 11 Mathematics)",
+      "book_id": "mathematics-11",
+      "selectors": [
+        "mathematics-11:2.2 completing the square:10",
+        "mathematics-11:2.3 quadratic formula:10",
+        "mathematics-11:2.6 nature of roots:20"
+      ]
+    },
+    {
+      "id": "calculus-grade-12",
+      "label": "Limits and tangents (Grade 12 Mathematics)",
+      "book_id": "mathematics-12",
+      "selectors": [
+        "mathematics-12:6.1 limits:20",
+        "mathematics-12:6.3 rules for differentiation:10",
+        "mathematics-12:6.4 equation of a tangent:10"
+      ]
+    }
+  ],
+  "concepts": [
+    {
+      "id": "energy-from-sun",
+      "topic_group": "energy-grade-4",
+      "questions": {
+        "en": "Why do living things need energy from the sun?",
+        "sv": "Varför behöver levande varelser energi från solen?"
+      },
+      "relevant_sections": [
+        {
+          "book_id": "natural-sciences-and-technology-4",
+          "breadcrumbs": [
+            "Energy and Energy transfer"
+          ],
+          "heading": "Energy for life"
+        },
+        {
+          "book_id": "natural-sciences-and-technology-4",
+          "breadcrumbs": [
+            "Energy and Energy transfer"
+          ],
+          "heading": "Energy from the Sun"
+        }
+      ],
+      "relevance_note": "Both sections explain energy for living things and the Sun as its source."
+    },
+    {
+      "id": "metal-or-not",
+      "topic_group": "metals-grade-5",
+      "questions": {
+        "en": "How can you tell whether something is a metal or not?",
+        "sv": "Hur kan man avgöra om något är en metall eller inte?"
+      },
+      "relevant_sections": [
+        {
+          "book_id": "natural-sciences-and-technology-5",
+          "breadcrumbs": [],
+          "heading": "Metals and non-metals"
+        },
+        {
+          "book_id": "natural-sciences-and-technology-5",
+          "breadcrumbs": [
+            "Metals and non-metals"
+          ],
+          "heading": "Properties of metals"
+        },
+        {
+          "book_id": "natural-sciences-and-technology-5",
+          "breadcrumbs": [
+            "Metals and non-metals"
+          ],
+          "heading": "Properties of non-metals"
+        },
+        {
+          "book_id": "natural-sciences-and-technology-5",
+          "breadcrumbs": [
+            "Metals and non-metals",
+            "Properties of non-metals"
+          ],
+          "heading": "Comparing metals and non-metals"
+        }
+      ],
+      "relevance_note": "The chapter introduction and the property/comparison sections are all reasonable source sections."
+    },
+    {
+      "id": "metal-cooking-pots",
+      "topic_group": "metals-grade-5",
+      "questions": {
+        "en": "Why is metal good for making pots and pans?",
+        "sv": "Varför är metall bra att göra grytor och pannor av?"
+      },
+      "relevant_sections": [
+        {
+          "book_id": "natural-sciences-and-technology-5",
+          "breadcrumbs": [
+            "Metals and non-metals"
+          ],
+          "heading": "Properties of metals"
+        }
+      ],
+      "relevance_note": "Properties of metals covers heat conduction, which is the reason for cooking pots."
+    },
+    {
+      "id": "battery-lamp",
+      "topic_group": "circuits-grade-6",
+      "questions": {
+        "en": "What makes the bulb light up when you connect it to a battery?",
+        "sv": "Vad får glödlampan att lysa när man kopplar den till ett batteri?"
+      },
+      "relevant_sections": [
+        {
+          "book_id": "natural-sciences-and-technology-6",
+          "breadcrumbs": [
+            "Electric circuits"
+          ],
+          "heading": "A simple circuit"
+        },
+        {
+          "book_id": "natural-sciences-and-technology-6",
+          "breadcrumbs": [
+            "Electric circuits",
+            "A simple circuit"
+          ],
+          "heading": "Circuit components"
+        }
+      ],
+      "relevance_note": "The simple circuit and its components explain the closed path and the cell."
+    },
+    {
+      "id": "switch-job",
+      "topic_group": "circuits-grade-6",
+      "questions": {
+        "en": "What is the job of a switch in a circuit?",
+        "sv": "Vad har en strömbrytare för uppgift i en krets?"
+      },
+      "relevant_sections": [
+        {
+          "book_id": "natural-sciences-and-technology-6",
+          "breadcrumbs": [
+            "Electric circuits"
+          ],
+          "heading": "A simple circuit"
+        },
+        {
+          "book_id": "natural-sciences-and-technology-6",
+          "breadcrumbs": [
+            "Electric circuits",
+            "A simple circuit"
+          ],
+          "heading": "Circuit components"
+        }
+      ],
+      "relevance_note": "The switch is described as a circuit component that opens and closes the path."
+    },
+    {
+      "id": "draw-circuit",
+      "topic_group": "circuits-grade-6",
+      "questions": {
+        "en": "How do you draw a circuit so someone else can build the same one?",
+        "sv": "Hur ritar man en krets så att någon annan kan bygga samma sak?"
+      },
+      "relevant_sections": [
+        {
+          "book_id": "natural-sciences-and-technology-6",
+          "breadcrumbs": [
+            "Electric circuits"
+          ],
+          "heading": "Circuit diagrams"
+        }
+      ],
+      "relevance_note": "Circuit diagrams introduces the drawing conventions and component symbols."
+    },
+    {
+      "id": "balloon-hair",
+      "topic_group": "electrostatics-grade-10",
+      "questions": {
+        "en": "Why does a balloon stick to your hair after you rub it?",
+        "sv": "Varför fastnar en ballong i håret när man gnuggar den?"
+      },
+      "relevant_sections": [
+        {
+          "book_id": "physical-sciences-10",
+          "breadcrumbs": [
+            "Chapter 16: Electrostatics"
+          ],
+          "heading": "16.2 Two kinds of charge"
+        },
+        {
+          "book_id": "physical-sciences-10",
+          "breadcrumbs": [
+            "Chapter 16: Electrostatics",
+            "16.2 Two kinds of charge"
+          ],
+          "heading": "Tribo-electric charging"
+        },
+        {
+          "book_id": "physical-sciences-10",
+          "breadcrumbs": [
+            "Chapter 16: Electrostatics",
+            "16.4 Quantisation of charge"
+          ],
+          "heading": "Polarisation"
+        }
+      ],
+      "relevance_note": "Charging by rubbing and charge separation in an insulator explain the sticking."
+    },
+    {
+      "id": "like-charges-repel",
+      "topic_group": "electrostatics-grade-10",
+      "questions": {
+        "en": "Why do two things with the same charge push each other away?",
+        "sv": "Varför stöter två saker med samma laddning bort varandra?"
+      },
+      "relevant_sections": [
+        {
+          "book_id": "physical-sciences-10",
+          "breadcrumbs": [
+            "Chapter 16: Electrostatics"
+          ],
+          "heading": "16.2 Two kinds of charge"
+        },
+        {
+          "book_id": "physical-sciences-10",
+          "breadcrumbs": [
+            "Chapter 16: Electrostatics",
+            "16.2 Two kinds of charge"
+          ],
+          "heading": "Force between charges"
+        }
+      ],
+      "relevance_note": "Two kinds of charge and the force between charges state that like charges repel."
+    },
+    {
+      "id": "electron-charge",
+      "topic_group": "electrostatics-grade-10",
+      "questions": {
+        "en": "How big is the charge of a single electron?",
+        "sv": "Hur stor laddning har en enda elektron?"
+      },
+      "relevant_sections": [
+        {
+          "book_id": "physical-sciences-10",
+          "breadcrumbs": [
+            "Chapter 16: Electrostatics"
+          ],
+          "heading": "16.4 Quantisation of charge"
+        },
+        {
+          "book_id": "physical-sciences-10",
+          "breadcrumbs": [
+            "Chapter 16: Electrostatics",
+            "16.4 Quantisation of charge"
+          ],
+          "heading": "Unit of charge"
+        }
+      ],
+      "relevance_note": "Quantisation and the unit of charge give the elementary charge."
+    },
+    {
+      "id": "pencil-water-refraction",
+      "topic_group": "refraction-grade-11",
+      "questions": {
+        "en": "Why does a pencil look broken when you put it in a glass of water?",
+        "sv": "Varför ser en penna ut att vara avbruten i ett glas vatten?"
+      },
+      "relevant_sections": [
+        {
+          "book_id": "physical-sciences-11",
+          "breadcrumbs": [
+            "Chapter 5: Geometrical optics"
+          ],
+          "heading": "5.5 Refraction"
+        },
+        {
+          "book_id": "physical-sciences-11",
+          "breadcrumbs": [
+            "Chapter 5: Geometrical optics",
+            "5.5 Refraction"
+          ],
+          "heading": "Optical density"
+        },
+        {
+          "book_id": "physical-sciences-11",
+          "breadcrumbs": [
+            "Chapter 5: Geometrical optics",
+            "5.5 Refraction"
+          ],
+          "heading": "Representing refraction with ray diagrams"
+        }
+      ],
+      "relevance_note": "Refraction, optical density and ray diagrams explain the apparent bend."
+    },
+    {
+      "id": "snell-angle",
+      "topic_group": "refraction-grade-11",
+      "questions": {
+        "en": "How do you work out the angle when light bends into water?",
+        "sv": "Hur räknar man ut vinkeln när ljuset böjs in i vatten?"
+      },
+      "relevant_sections": [
+        {
+          "book_id": "physical-sciences-11",
+          "breadcrumbs": [
+            "Chapter 5: Geometrical optics"
+          ],
+          "heading": "5.6 Snell's Law"
+        },
+        {
+          "book_id": "physical-sciences-11",
+          "breadcrumbs": [
+            "Chapter 5: Geometrical optics",
+            "5.5 Refraction"
+          ],
+          "heading": "Refractive index"
+        }
+      ],
+      "relevance_note": "Snell's law and refractive index are the calculation route."
+    },
+    {
+      "id": "trig-ratios",
+      "topic_group": "trigonometry-grade-10",
+      "questions": {
+        "en": "How do you find the sine, cosine and tangent of an angle in a right-angled triangle?",
+        "sv": "Hur hittar man sinus, cosinus och tangens för en vinkel i en rätvinklig triangel?"
+      },
+      "relevant_sections": [
+        {
+          "book_id": "mathematics-10",
+          "breadcrumbs": [
+            "Chapter 5: Trigonometry"
+          ],
+          "heading": "5.3 Defining the trigonometric ratios"
+        }
+      ],
+      "relevance_note": "This section defines the three ratios by opposite, adjacent and hypotenuse."
+    },
+    {
+      "id": "complete-square",
+      "topic_group": "quadratics-grade-11",
+      "questions": {
+        "en": "How do you rewrite x squared plus six x as a perfect square?",
+        "sv": "Hur skriver man om x i kvadrat plus sex x som en jämn kvadrat?"
+      },
+      "relevant_sections": [
+        {
+          "book_id": "mathematics-11",
+          "breadcrumbs": [
+            "Chapter 2: Equations and inequalities"
+          ],
+          "heading": "2.2 Completing the square"
+        }
+      ],
+      "relevance_note": "Completing the square is the method the question asks for."
+    },
+    {
+      "id": "discriminant-roots",
+      "topic_group": "quadratics-grade-11",
+      "questions": {
+        "en": "How can the discriminant tell you how many solutions an equation has?",
+        "sv": "Hur kan diskriminanten visa hur många lösningar en ekvation har?"
+      },
+      "relevant_sections": [
+        {
+          "book_id": "mathematics-11",
+          "breadcrumbs": [
+            "Chapter 2: Equations and inequalities"
+          ],
+          "heading": "2.6 Nature of roots"
+        },
+        {
+          "book_id": "mathematics-11",
+          "breadcrumbs": [
+            "Chapter 2: Equations and inequalities",
+            "2.6 Nature of roots"
+          ],
+          "heading": "The discriminant"
+        }
+      ],
+      "relevance_note": "Nature of roots and the discriminant define the number and type of roots."
+    },
+    {
+      "id": "limit-meaning",
+      "topic_group": "calculus-grade-12",
+      "questions": {
+        "en": "What does it mean when we say a function gets closer and closer to a limit?",
+        "sv": "Vad menar man när man säger att en funktion kommer närmare och närmare ett gränsvärde?"
+      },
+      "relevant_sections": [
+        {
+          "book_id": "mathematics-12",
+          "breadcrumbs": [
+            "Chapter 6: Differential calculus"
+          ],
+          "heading": "6.1 Limits"
+        },
+        {
+          "book_id": "mathematics-12",
+          "breadcrumbs": [
+            "Chapter 6: Differential calculus",
+            "6.1 Limits"
+          ],
+          "heading": "Limits"
+        },
+        {
+          "book_id": "mathematics-12",
+          "breadcrumbs": [
+            "Chapter 6: Differential calculus",
+            "6.1 Limits"
+          ],
+          "heading": "Notation"
+        }
+      ],
+      "relevance_note": "The section and its worked sub-sections define limit behaviour and notation."
+    },
+    {
+      "id": "tangent-equation",
+      "topic_group": "calculus-grade-12",
+      "questions": {
+        "en": "How do you find the equation of a tangent to a curve at a point?",
+        "sv": "Hur hittar man ekvationen för en tangent till en kurva i en punkt?"
+      },
+      "relevant_sections": [
+        {
+          "book_id": "mathematics-12",
+          "breadcrumbs": [
+            "Chapter 6: Differential calculus"
+          ],
+          "heading": "6.4 Equation of a tangent to a curve"
+        }
+      ],
+      "relevance_note": "This section gives the tangent-line method using the derivative at a point."
+    }
+  ],
+  "absent_topics": [
+    {
+      "id": "absent-mobile-screen",
+      "questions": {
+        "en": "How does a mobile phone screen show a picture?",
+        "sv": "Hur visar en mobilskärm en bild?"
+      },
+      "note": "No candidate section and no corpus passage mentions a mobile phone screen or a touch screen."
+    },
+    {
+      "id": "absent-wifi",
+      "questions": {
+        "en": "How does Wi-Fi send data through the air?",
+        "sv": "Hur skickar Wi-Fi data genom luften?"
+      },
+      "note": "The corpus contains no Wi-Fi section; no candidate section is relevant."
+    },
+    {
+      "id": "absent-sourdough",
+      "questions": {
+        "en": "How do you bake sourdough bread?",
+        "sv": "Hur bakar man surdegsbröd?"
+      },
+      "note": "No candidate section and no corpus passage mentions sourdough or bread baking."
+    },
+    {
+      "id": "absent-vaccine",
+      "questions": {
+        "en": "How does a vaccine protect you from a disease?",
+        "sv": "Hur skyddar ett vaccin mot en sjukdom?"
+      },
+      "note": "No candidate section; the corpus has no vaccine or vaccination passage."
+    }
+  ]
+}
