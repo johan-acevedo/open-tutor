@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ConnectionState, Room, RoomEvent, RpcError, Track } from 'livekit-client';
+import { ConnectionState, Room, RoomEvent, RpcError, Track, TrackEvent } from 'livekit-client';
 import type { RpcInvocationData } from 'livekit-client';
 import type { BoardFocusPayload, BoardItem, HomeworkAttributes, Note, SessionResponse } from './protocol';
 import type { PageShellMessage } from './components/PageCard';
@@ -26,6 +26,7 @@ import { AgentGate } from './agentGate';
 import { isNoteLike, validateBoardFocus, validateBoardItem, validateBoardPageOp } from './validate';
 import { dataUrlToBytes, downscaleImage } from './image';
 import { audioElementBusy } from './audioTracks';
+import { createDiagLog, initialVisibilityState, type DiagLog } from './callDiagnostics';
 import type { HomeworkDraft } from './components/HomeworkTray';
 
 export type Phase = 'profiles' | 'connecting' | 'live' | 'ending' | 'ended';
@@ -211,6 +212,10 @@ export function useSession(mobile = false) {
   const extraAudioRef = useRef<HTMLAudioElement[]>([]);
   const audioContextRef = useRef<AudioContext | null>(null);
   const micWantedRef = useRef(true);
+  // Bounded browser-side call diagnostics (visibility, connection, mic-track
+  // reality vs wanted state, playback, resume outcomes). Fresh per session.
+  const diagRef = useRef<DiagLog | null>(null);
+  const diagStopRef = useRef<(() => void) | null>(null);
   const toastTimer = useRef<number>(0);
   const sentTimer = useRef<number>(0);
   const captionTimer = useRef<number>(0);
@@ -228,6 +233,8 @@ export function useSession(mobile = false) {
 
   const noteAgentPresent = useCallback(() => {
     agentGateRef.current.markPresent();
+    // The agent is here now: queued diagnostics have somewhere to go.
+    void diagRef.current?.flush();
   }, []);
 
   /** Send one text stream message to the tutor, waiting for the agent to be there. */
@@ -330,6 +337,19 @@ export function useSession(mobile = false) {
         /* ignore */
       }
     }
+    const stopDiag = diagStopRef.current;
+    diagStopRef.current = null;
+    if (stopDiag) {
+      try {
+        stopDiag();
+      } catch {
+        /* ignore */
+      }
+    }
+    // Undelivered in-memory diagnostics die with the session; only the
+    // server journal (events already sent) survives. That is the documented
+    // delivery limit, not a silent loss: drops are counted on the wire.
+    diagRef.current = null;
     const room = roomRef.current;
     roomRef.current = null;
     preparedRoomRef.current = null;
@@ -420,6 +440,21 @@ export function useSession(mobile = false) {
       mountResolvers.current.clear();
       setPhase('connecting');
       agentGateRef.current.reset();
+      // Fresh per-session diagnostics: seq/dropped restart so journals never mix rooms.
+      const diag = createDiagLog({
+        send: (text) => {
+          const live = roomRef.current;
+          if (!live) return Promise.reject(new Error('no room'));
+          return live.localParticipant.sendText(text, { topic: TOPIC_SESSION_EVENT });
+        },
+        isReady: () =>
+          agentGateRef.current.isReady() && roomRef.current?.state === ConnectionState.Connected,
+      });
+      diagRef.current = diag;
+      {
+        const init = initialVisibilityState();
+        diag.note('visibility', { state: init.state, via: 'init', precise: init.precise });
+      }
 
       const notes = p.notes.slice(-5).reverse(); // newest first
       let session: SessionResponse;
@@ -494,17 +529,102 @@ export function useSession(mobile = false) {
       });
       room.on(RoomEvent.Reconnecting, () => {
         if (!intentionalEndRef.current) setConnBanner('reconnecting');
+        diag.note('connection', { kind: 'reconnecting' });
+      });
+      room.on(RoomEvent.Reconnected, () => {
+        diag.note('connection', { kind: 'reconnected' });
+        void diag.flush();
       });
       room.on(RoomEvent.ConnectionStateChanged, (state: ConnectionState) => {
         if (state === ConnectionState.Connected) setConnBanner(null);
         else if (state === ConnectionState.Reconnecting && !intentionalEndRef.current) {
           setConnBanner('reconnecting');
         }
+        diag.note('connection', { kind: 'state', state: String(state) });
       });
-      room.on(RoomEvent.Disconnected, () => {
+      room.on(RoomEvent.Disconnected, (reason) => {
         if (intentionalEndRef.current) return;
         setConnBanner('disconnected');
+        diag.note('connection', { kind: 'disconnected', reason: String(reason ?? '') });
       });
+      // Local microphone reality vs the wanted state (micWantedRef): the SDK
+      // reacquires ended tracks on its own, so this only observes and logs.
+      const audioCtxState = () => {
+        try {
+          return audioContextRef.current?.state ?? 'unavailable';
+        } catch {
+          return 'unavailable';
+        }
+      };
+      room.on(RoomEvent.AudioPlaybackStatusChanged, (enabled) => {
+        diag.note('playback', { allowed: enabled, ctx: audioCtxState(), via: 'event' });
+      });
+      room.on(RoomEvent.TrackMuted, (pub, participant) => {
+        if (participant === room.localParticipant && pub.kind === Track.Kind.Audio) {
+          diag.note('mic-track', { change: 'muted', wanted: micWantedRef.current, via: 'publication' });
+        }
+      });
+      room.on(RoomEvent.TrackUnmuted, (pub, participant) => {
+        if (participant === room.localParticipant && pub.kind === Track.Kind.Audio) {
+          diag.note('mic-track', { change: 'unmuted', wanted: micWantedRef.current, via: 'publication' });
+        }
+      });
+      const diagCleanups: Array<() => void> = [];
+      const watchedMedia = new Set<MediaStreamTrack>();
+      const watchMicMediaTrack = (media: MediaStreamTrack | undefined) => {
+        if (!media || watchedMedia.has(media)) return;
+        if (typeof media.addEventListener !== 'function') return;
+        watchedMedia.add(media);
+        const changes: Array<[string, () => void]> = [
+          ['muted', () => diag.note('mic-track', { change: 'muted', wanted: micWantedRef.current, via: 'track' })],
+          ['unmuted', () => diag.note('mic-track', { change: 'unmuted', wanted: micWantedRef.current, via: 'track' })],
+          ['ended', () => diag.note('mic-track', { change: 'ended', wanted: micWantedRef.current, via: 'track' })],
+        ];
+        for (const [name, fn] of changes) media.addEventListener(name, fn);
+        diagCleanups.push(() => {
+          for (const [name, fn] of changes) {
+            try {
+              media.removeEventListener(name, fn);
+            } catch {
+              /* ignore */
+            }
+          }
+        });
+      };
+      room.on(RoomEvent.LocalTrackPublished, (pub) => {
+        if (pub.kind !== Track.Kind.Audio) return;
+        diag.note('mic-track', { change: 'published', wanted: micWantedRef.current, via: 'publication' });
+        watchMicMediaTrack(pub.track?.mediaStreamTrack);
+        const local = pub.track;
+        if (local && typeof local.on === 'function' && typeof local.off === 'function') {
+          const onRestarted = () => {
+            diag.note('mic-track', { change: 'restarted', wanted: micWantedRef.current, via: 'track' });
+            // A restart can swap the underlying MediaStreamTrack: re-observe it.
+            watchMicMediaTrack(pub.track?.mediaStreamTrack);
+          };
+          local.on(TrackEvent.Restarted, onRestarted);
+          diagCleanups.push(() => {
+            try {
+              local.off(TrackEvent.Restarted, onRestarted);
+            } catch {
+              /* ignore */
+            }
+          });
+        }
+      });
+      room.on(RoomEvent.LocalTrackUnpublished, (pub) => {
+        if (pub.kind !== Track.Kind.Audio) return;
+        diag.note('mic-track', { change: 'unpublished', wanted: micWantedRef.current, via: 'publication' });
+      });
+      diagStopRef.current = () => {
+        for (const fn of diagCleanups) {
+          try {
+            fn();
+          } catch {
+            /* ignore */
+          }
+        }
+      };
 
       registerRpc(room, BOARD_RPC_SHOW, async (data) => {
         let parsed: unknown;
@@ -666,6 +786,10 @@ export function useSession(mobile = false) {
       }
       readParticipantStates(room);
       if (room.remoteParticipants.size > 0) noteAgentPresent();
+      // A publication that predates the wiring above (defensive): observe it.
+      for (const pub of room.localParticipant.audioTrackPublications.values()) {
+        if (pub.kind === Track.Kind.Audio && pub.track) watchMicMediaTrack(pub.track.mediaStreamTrack);
+      }
       // The session request only knew the window size (the board pane is not
       // mounted until we go live). Watch the real pane and report resizes,
       // rotation and layout changes over the existing session-event channel;
@@ -728,8 +852,10 @@ export function useSession(mobile = false) {
       }
       try {
         await room.startAudio();
+        diag.note('playback', { allowed: room.canPlaybackAudio, ctx: audioCtxState(), via: 'start' });
       } catch {
         setAudioBlocked(true);
+        diag.note('playback', { allowed: false, ctx: audioCtxState(), via: 'start' });
       }
       try {
         await room.localParticipant.setMicrophoneEnabled(true);
@@ -804,15 +930,21 @@ export function useSession(mobile = false) {
   const resumeMedia = useCallback(async () => {
     const room = roomRef.current;
     if (!room) return;
+    // Outcome codes only — never raw exception text. Behavior unchanged.
+    const diag = diagRef.current;
+    diag?.note('resume', { step: 'attempt', ok: true, code: 'attempt' });
     // Both calls begin in the tap handler; neither waits for a network operation.
     const playback = room.startAudio();
     const context = audioContextRef.current;
     if (context?.state === 'suspended') void context.resume().catch(() => setAudioBlocked(true));
     try {
       await playback;
-      setAudioBlocked(!room.canPlaybackAudio);
+      const allowed = room.canPlaybackAudio;
+      setAudioBlocked(!allowed);
+      diag?.note('resume', { step: 'audio', ok: allowed, code: allowed ? 'ok' : 'audio-failed' });
     } catch {
       setAudioBlocked(true);
+      diag?.note('resume', { step: 'audio', ok: false, code: 'audio-failed' });
     }
     if (resumeNeeded && micWantedRef.current) {
       try {
@@ -820,9 +952,11 @@ export function useSession(mobile = false) {
         await room.localParticipant.setMicrophoneEnabled(true);
         setMicEnabled(true);
         setMicBlocked(false);
+        diag?.note('resume', { step: 'mic', ok: true, code: 'ok' });
       } catch {
         setMicEnabled(false);
         setMicBlocked(true);
+        diag?.note('resume', { step: 'mic', ok: false, code: 'mic-failed' });
       }
     }
     setResumeNeeded(false);
@@ -832,14 +966,34 @@ export function useSession(mobile = false) {
     if (phase !== 'live' || !mobile) return;
     let hidden = false;
     const onVisibility = () => {
-      if (document.hidden) hidden = true;
-      else if (hidden) {
+      if (document.hidden) {
+        hidden = true;
+        diagRef.current?.note('visibility', { state: 'hidden', via: 'visibilitychange' });
+      } else if (hidden) {
         hidden = false;
         setResumeNeeded(true);
+        diagRef.current?.note('visibility', { state: 'visible', via: 'visibilitychange' });
       }
     };
+    // pagehide/pageshow bracket what visibilitychange alone cannot: on iOS
+    // a hidden page means lock-screen or app-switch, never diagnosed here.
+    const onPageHide = () => {
+      diagRef.current?.note('visibility', { state: 'hidden', via: 'pagehide' });
+    };
+    const onPageShow = () => {
+      diagRef.current?.note('visibility', {
+        state: document.visibilityState === 'visible' ? 'visible' : 'hidden',
+        via: 'pageshow',
+      });
+    };
     document.addEventListener('visibilitychange', onVisibility);
-    return () => document.removeEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pagehide', onPageHide);
+    window.addEventListener('pageshow', onPageShow);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pagehide', onPageHide);
+      window.removeEventListener('pageshow', onPageShow);
+    };
   }, [phase, mobile]);
 
   const resourceClosed = useCallback(
@@ -861,6 +1015,7 @@ export function useSession(mobile = false) {
     intentionalEndRef.current = true;
     setPhase('ending');
     setConnBanner(null);
+    void diagRef.current?.flush();
     const disconnected = new Promise<void>((resolve) => {
       const onDisc = () => {
         room.off(RoomEvent.Disconnected, onDisc);
