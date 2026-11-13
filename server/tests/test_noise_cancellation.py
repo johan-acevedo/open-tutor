@@ -92,3 +92,53 @@ def test_off_does_not_import_the_native_filter():
     )
     done = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, cwd=".")
     assert done.returncode == 0, done.stderr[-2000:]
+
+
+def test_a_configured_mode_is_loaded_at_prewarm_not_in_the_session():
+    """The first import costs about a second of event loop; it must not be in a session.
+
+    On 2026-11-14 the dev worker logged "event loop blocked for 1096ms importing
+    livekit.plugins.noise_cancellation" inside a session and the greeting was a second
+    late. `noise.warm_up` is what prewarm calls, so it has to do the import itself.
+    """
+    import subprocess
+    import sys
+
+    code = (
+        "import sys, os, time;"
+        "os.environ['TUTOR_NOISE_CANCELLATION'] = 'bvc';"
+        "from open_tutor import noise;"
+        "t0 = time.monotonic();"
+        "noise.warm_up(noise.noise_cancellation_mode());"
+        "warm = time.monotonic() - t0;"
+        "assert 'livekit.plugins.noise_cancellation' in sys.modules, 'prewarm must import it';"
+        "t0 = time.monotonic();"
+        "noise.room_options('child-1', 'bvc');"
+        "after = time.monotonic() - t0;"
+        "print(round(warm, 3), round(after, 4))"
+    )
+    done = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, cwd=".")
+    assert done.returncode == 0, done.stderr[-2000:]
+    warm, after = (float(value) for value in done.stdout.split())
+    # Whatever the prewarm import cost, the session pays a small fraction of it.
+    assert warm > after, (warm, after)
+
+
+def test_warm_up_with_off_still_touches_nothing():
+    import subprocess
+    import sys
+
+    code = (
+        "import sys, os;"
+        "os.environ.pop('TUTOR_NOISE_CANCELLATION', None);"
+        "from open_tutor import noise;"
+        "noise.warm_up(noise.noise_cancellation_mode());"
+        "assert 'livekit.plugins.noise_cancellation' not in sys.modules"
+    )
+    done = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, cwd=".")
+    assert done.returncode == 0, done.stderr[-2000:]
+
+
+def test_warm_up_refuses_an_unknown_mode():
+    with pytest.raises(ValueError):
+        noise.warm_up("krisp")

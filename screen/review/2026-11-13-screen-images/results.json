@@ -1,0 +1,89 @@
+{
+ "events": [],
+ "patch": {
+  "model_s": 2.379710664972663,
+  "render_s": 0.32236277870833874,
+  "total_s": 6.109671442769468,
+  "image_s": 3.41,
+  "image_reviews": [
+   {
+    "title": "File:Forum romanum 6k (5760x2097).jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:Forum_romanum_6k_(5760x2097).jpg",
+    "decision": "accepted",
+    "reason": "Clear, relevant panoramic photograph of Forum Romanum in Rome, suitable for a 6th-grade student.",
+    "sha256": "e6dbfda2655633373d36ba7fb5f39712e1ece69aa973d072df47afd9fb9af403",
+    "bytes": 129991
+   }
+  ],
+  "issues": []
+ },
+ "rejection": {
+  "events": [
+   {
+    "title": "File:Colosseum in Rome-April 2007-1- copie 2B.jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:Colosseum_in_Rome-April_2007-1-_copie_2B.jpg",
+    "decision": "rejected",
+    "reason": "Bilden föreställer Colosseum i Rom och har ingenting med maskrosens livscykel att göra.",
+    "sha256": "5ff28743d7bbca92c3a0977b80d689c523acda39670f69a056f99d895142d7b1",
+    "bytes": 152275
+   },
+   {
+    "title": "File:Colosseum in Rome, Italy - April 2007.jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:Colosseum_in_Rome,_Italy_-_April_2007.jpg",
+    "decision": "rejected",
+    "reason": "Bilden visar Colosseum i Rom och har ingenting med maskrosens livscykel eller en blomma att göra.",
+    "sha256": "5ff28743d7bbca92c3a0977b80d689c523acda39670f69a056f99d895142d7b1",
+    "bytes": 152275
+   },
+   {
+    "title": "File:Cross Colosseum Rome Italy.jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:Cross_Colosseum_Rome_Italy.jpg",
+    "decision": "rejected",
+    "reason": "Bilden föreställer Colosseum i Rom och har inget med maskrosens livscykel eller blommor att göra.",
+    "sha256": "5ff28743d7bbca92c3a0977b80d689c523acda39670f69a056f99d895142d7b1",
+    "bytes": 152275
+   }
+  ],
+  "seconds": 14.24,
+  "body": "<h1>Maskrosen</h1><section id=\"blomma\"><p>Maskrosen går igenom flera steg i sin livscykel: först ett <strong>frö</strong>, sedan en <strong>grodd</strong>, därefter en gul <strong>blomma</strong> och till sist en <strong>fröboll</strong>.</p></section>"
+ },
+ "wall_s": 31.5,
+ "page_accepted_retry": {
+  "note": "same ask rerun live; first attempt fell back on image budget (kept in page_fallback below)",
+  "total_s": 10.0,
+  "image_s": 5.7,
+  "verdict": "accepted: Clear, high-quality photograph of the Colosseum in Rome, relevant and suitable for a 6th-grade student.",
+  "artifacts": [
+   "page.html",
+   "page-shot-370x610.png",
+   "page-shot-1000x700.png",
+   "images-page.json"
+  ]
+ },
+ "page_fallback": {
+  "model_s": 5.970449239946902,
+  "render_s": 1.2127645811997354,
+  "total_s": 10.015521588269621,
+  "image_s": 2.83,
+  "image_reviews": [
+   {
+    "title": "File:Colosseum in Rome-April 2007-1- copie 2B.jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:Colosseum_in_Rome-April_2007-1-_copie_2B.jpg",
+    "decision": "rejected",
+    "reason": "image review cancelled or budget exhausted"
+   },
+   {
+    "query": "Colosseum Rome",
+    "source": "",
+    "decision": "rejected",
+    "reason": "image preparation failed: TimeoutError"
+   }
+  ],
+  "issues": [],
+  "wide": {
+   "ready_ms": 235,
+   "fontPx": 30.25,
+   "issues": []
+  }
+ }
+}

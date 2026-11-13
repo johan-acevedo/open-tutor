@@ -1,0 +1,101 @@
+{
+ "settings": {
+  "image_budget_s": 6.0,
+  "page_target_s": 12.0,
+  "job_timeout_s": 20.0,
+  "model": {
+   "model": "gemini-4-hydrogen",
+   "api": "chat",
+   "reasoning": "low"
+  }
+ },
+ "calls": [
+  {
+   "kind": "writer",
+   "response": "1-writer.txt"
+  },
+  {
+   "kind": "writer",
+   "response": "2-writer.txt"
+  },
+  {
+   "kind": "vision",
+   "response": "3-vision.txt"
+  }
+ ],
+ "failures": [],
+ "jobs": [
+  {
+   "job": "s1",
+   "kind": "page",
+   "page": "p1",
+   "title": "Colosseum i Rom",
+   "model": "gemini-4-hydrogen",
+   "api": "chat",
+   "reasoning": "low",
+   "pane": [
+    370,
+    610
+   ],
+   "model_s": 3.67,
+   "render_s": 1.12,
+   "look_s": 0.0,
+   "retry_s": 0.0,
+   "total_s": 9.92,
+   "issues": [],
+   "residual_lint": [],
+   "repair": {
+    "look": false,
+    "look_fix": false,
+    "retry": false,
+    "retry_applied": false,
+    "notes": []
+   },
+   "image_s": 5.13,
+   "image_reviews": [
+    {
+     "title": "File:Colosseum in Rome-April 2007-1- copie 2B.jpg",
+     "source": "https://commons.wikimedia.org/wiki/File:Colosseum_in_Rome-April_2007-1-_copie_2B.jpg",
+     "decision": "rejected",
+     "reason": "image review cancelled or budget exhausted"
+    },
+    {
+     "query": "Colosseum Rome",
+     "source": "",
+     "decision": "rejected",
+     "reason": "image preparation failed: TimeoutError"
+    }
+   ],
+   "artifacts": "s1"
+  },
+  {
+   "job": "s2",
+   "kind": "patch",
+   "page": "p1",
+   "model": "gemini-4-hydrogen",
+   "api": "chat",
+   "reasoning": "low",
+   "pane": [
+    370,
+    610
+   ],
+   "model_s": 3.67,
+   "render_s": 0.49,
+   "total_s": 6.97,
+   "issues": [],
+   "delivered": true,
+   "image_s": 2.81,
+   "image_reviews": [
+    {
+     "title": "File:Forum romanum 6k (5760x2097).jpg",
+     "source": "https://commons.wikimedia.org/wiki/File:Forum_romanum_6k_(5760x2097).jpg",
+     "decision": "accepted",
+     "reason": "Tydlig och relevant bild av Forum Romanum i Rom som passar för årskurs 6.",
+     "sha256": "e6dbfda2655633373d36ba7fb5f39712e1ece69aa973d072df47afd9fb9af403",
+     "bytes": 129991
+    }
+   ],
+   "artifacts": "s2"
+  }
+ ]
+}

@@ -14,6 +14,9 @@ import screenkit
 ATTACKS = '''</template><script>window.modelRan = true</script>
 <h1>Säker klocka</h1>
 <img src="data:image/png;base64,broken" onerror="window.modelRan = true">
+<video poster="https://example.org/unchecked.jpg"><source src="https://example.org/unchecked.mp4"></video>
+<input type="image" src="https://example.org/unchecked.jpg">
+<svg><image href="https://example.org/unchecked.jpg"></image></svg>
 <svg onload="window.modelRan = true"><circle r="2"></circle></svg>
 <button id="attack-button" onclick="window.modelRan = true">Tryck</button>
 <a id="link" href="javascript:window.modelRan = true">Länk</a>
@@ -50,11 +53,13 @@ def run(browser, fallback: bool, blocked: bool = False):
             frame.evaluate("() => document.getElementById('attack-button').click()")
             assert frame.evaluate("() => !document.getElementById('link').hasAttribute('href')")
             assert not frame.evaluate("() => !!window.modelRan")
+            assert frame.evaluate("() => !document.querySelector('#page img, #page image, #page video, #page input[type=image]')")
             assert frame.evaluate("() => !document.querySelector('#page script, #page style, #page [onclick], #page [onerror], #page [onload]')")
             frame.evaluate('''() => ot.patch(`<ot-patch target="clock"><ot-clock time="9:15" onmouseover="window.modelRan=true"><img src="data:image/png;base64,broken" onerror="window.modelRan=true"><script>window.modelRan=true</script></ot-clock></ot-patch>`)''')
             assert frame.evaluate("() => document.getElementById('clock').getAttribute('time')") == '9:15'
             frame.evaluate("() => document.getElementById('clock').dispatchEvent(new Event('mouseover'))")
             assert not frame.evaluate("() => !!window.modelRan")
+            assert frame.evaluate("() => !document.querySelector('#page img, #page image, #page video, #page input[type=image]')")
             assert frame.evaluate("() => !document.querySelector('#page script, #page [onmouseover], #page [onerror]')")
             frame.evaluate("() => ot.reveal('facit')")
             assert frame.evaluate("() => document.getElementById('facit').hasAttribute('data-revealed')")

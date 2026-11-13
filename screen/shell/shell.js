@@ -167,14 +167,15 @@
   }
 
   // Parse model markup before connecting any of it to the live document.
-  var UNSAFE_TAGS = ['script', 'style', 'link', 'meta', 'base', 'iframe', 'object', 'embed',
+  var UNSAFE_TAGS = ['script', 'style', 'link', 'meta', 'base', 'iframe', 'object', 'embed', 'img', 'image',
+                     'picture', 'video', 'audio', 'source', 'track',
                      'template', 'foreignObject', 'animate', 'animateMotion', 'animateTransform', 'set', 'use'];
   function sanitizedFragment(html) {
     var fragment;
     if ('setHTML' in Element.prototype) {
       var host = document.createElement('div');
       host.setHTML(String(html || ''), { sanitizer: {
-        removeElements: UNSAFE_TAGS,
+        removeElements: UNSAFE_TAGS.concat([{ name: 'image', namespace: 'http://www.w3.org/2000/svg' }]),
         removeAttributes: ['style', 'is', 'srcdoc']
       } });
       fragment = document.createDocumentFragment();
@@ -194,6 +195,7 @@
       });
     }
     $$('*', fragment).forEach(function (el) {
+      if (el.tagName === 'INPUT' && el.type === 'image') { el.remove(); return; }
       Array.prototype.slice.call(el.attributes).forEach(function (attribute) {
         var name = attribute.name.toLowerCase();
         if (name.indexOf('on') === 0) el.removeAttribute(attribute.name);
@@ -2081,20 +2083,8 @@
   function resolveImage(el) {
     var src = el.getAttribute('src');
     if (src) return Promise.resolve({ src: src, credit: el.getAttribute('credit') || '' });
-    var q = el.getAttribute('query');
-    if (!q) return Promise.resolve(null);
-    var api = 'https://commons.wikimedia.org/w/api.php?action=query&format=json&origin=*&generator=search&gsrnamespace=6&gsrlimit=6' +
-      '&gsrsearch=' + encodeURIComponent('filetype:bitmap ' + q) + '&prop=imageinfo&iiprop=url|extmetadata|size&iiurlwidth=1280';
-    return fetch(api).then(function (r) { return r.json(); }).then(function (data) {
-      var pages = data && data.query && data.query.pages ? Object.keys(data.query.pages).map(function (k) { return data.query.pages[k]; }) : [];
-      pages.sort(function (a, b) { return (a.index || 0) - (b.index || 0); });
-      var pick = pages.find(function (p) { var ii = p.imageinfo && p.imageinfo[0]; return ii && ii.width >= 600; }) || pages[0];
-      if (!pick) return null;
-      var ii = pick.imageinfo[0], md = ii.extmetadata || {};
-      var artist = md.Artist ? String(md.Artist.value).replace(/<[^>]*>/g, '').trim() : '';
-      var lic = md.LicenseShortName ? md.LicenseShortName.value : '';
-      return { src: ii.thumburl || ii.url, credit: 'Bild: ' + [artist, lic, 'Wikimedia Commons'].filter(Boolean).join(', ') };
-    }).catch(function (e) { issue('image', 'image search failed: ' + e.message, el); return null; });
+    if (el.hasAttribute('query')) issue('image', 'unresolved image query: the server must inspect it before display', el);
+    return Promise.resolve(null);
   }
   function drawImageLabels(el, w, h, f) {
     var lay = el.layer();

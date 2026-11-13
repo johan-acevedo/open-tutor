@@ -1,0 +1,3 @@
+<ot-patch target="byggnad" do="after">
+  <ot-image id="forum" query="Forum Romanum Rome" alt="Forum Romanum i Rom"></ot-image>
+</ot-patch>
