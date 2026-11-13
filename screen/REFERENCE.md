@@ -75,6 +75,7 @@ A step without `$` is a short explanation line. `result` on a step makes it gree
 </ot-graph>
 ```
 `sides` labels each side in turn (A→B, B→C, C→A). Right angles are marked by themselves.
+Draw labelled sides to scale; if a sketch is deliberately not to scale, mark that ot-polygon (or ot-graph) `schematic`.
 
 **Circle:** no `ot-circle` tag. For radius 4 at (0, 0), use two `ot-fn color="cyan" domain="-4 4"`
 curves in one `ot-graph`: `sqrt(16-x^2)` and `-sqrt(16-x^2)`. Add `<ot-point id="medelpunkt" x="0" y="0"></ot-point>`
