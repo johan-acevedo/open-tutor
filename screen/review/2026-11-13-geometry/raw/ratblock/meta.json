@@ -1,0 +1,41 @@
+{
+ "case": "ratblock",
+ "ask": "Visa ett rätblock som är 4 cm långt, 3 cm brett och 2 cm högt. Måtten ska stå vid sina kanter och eleven ska kunna peka på höjden. Volymen får inte synas.",
+ "steer": null,
+ "pane": [
+  370,
+  610
+ ],
+ "wall_s": 12.68,
+ "spec": {
+  "model": "gemini-4-hydrogen",
+  "api": "chat",
+  "reasoning": "low"
+ },
+ "calls": [
+  {
+   "look": false,
+   "seconds": 11.56,
+   "user_chars": 516,
+   "answer_chars": 518
+  }
+ ],
+ "failures": [],
+ "model_s": 11.558963750954717,
+ "look_s": 0.0,
+ "retry_s": 0.0,
+ "render_s": 1.1227886760607362,
+ "total_s": 12.683033827226609,
+ "issues": [],
+ "residual_lint": [],
+ "repaired": false,
+ "screen_repair": {
+  "look": false,
+  "look_fix": false,
+  "retry": false,
+  "retry_applied": false,
+  "notes": [
+   "look pass skipped: page target budget"
+  ]
+ }
+}

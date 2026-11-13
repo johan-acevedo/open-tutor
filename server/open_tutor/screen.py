@@ -35,6 +35,7 @@ if str(_REPO_ROOT) not in sys.path:
 
 from screen.tools import prompt as screen_prompt  # noqa: E402
 from screen.tools import screenkit as screenkit  # noqa: E402
+from screen.tools.page_images import PageImages  # noqa: E402
 
 SCREEN_BASE_URL = "https://opencode.ai/inference/go/openai/v1"
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
@@ -51,6 +52,7 @@ MAX_HOMEWORK_IMAGES = 4
 FINAL_RENDER_RESERVE_S = 3.0
 DELIVERY_RESERVE_S = 0.2
 MIN_OPTIONAL_STEP_S = 2.0
+IMAGE_BUDGET_S = 6.0
 # The shell's `dense` minimum is 16 px below 600 px wide (screen/shell/shell.js).
 NARROW_PANE_WIDTH = 600
 NARROW_PANE_HEIGHT = 640
@@ -482,6 +484,8 @@ class Screen:
                                      "Explain in words instead, briefly.")
             return
         visible = self.pages[self.visible_id]
+        images = self._image_job(ask, t0)
+        patch = await images.prepare(patch)
         png, issues, render_s = await self._render(visible.body, patch)
         errors = [issue_text(i) for i in issues
                   if issue_kind(i) == "patch" or str(i).startswith("patch failed:")]
@@ -489,13 +493,14 @@ class Screen:
         spec = self.model_spec()
         w, h = self._pane_size()
         job_dir = self._save(job_id, ask,
-                             {"patch.html": patch, "patched.png": png},
+                             {"patch.html": patch, "patched.png": png, "images.json": json.dumps(images.events, ensure_ascii=False)},
                              {"job": job_id, "kind": "patch", "page": visible.page_id,
                               **spec,
                               "pane": [w, h],
                               "model_s": round(model_s, 2), "render_s": round(render_s, 2),
                               "total_s": round(total_s, 2), "issues": issues,
-                              "delivered": not errors})
+                              "delivered": not errors,
+                              "image_s": round(images.seconds, 2), "image_reviews": images.events})
         record_active("screen_patch", {"job": job_id, "page": visible.page_id,
                                        "total_s": round(total_s, 2), "issues": issues,
                                        "delivered": not errors})
@@ -519,6 +524,8 @@ class Screen:
         self._page_counter += 1
         page_id = f"p{self._page_counter}"
         width, height = self._pane_size()
+        images = self._image_job(ask, t0)
+        body = await images.prepare(body)
         png, issues, render_s = await self._render(body, None)
         reserve_s = max(render_s, FINAL_RENDER_RESERVE_S)
         step_s = MIN_OPTIONAL_STEP_S
@@ -541,6 +548,7 @@ class Screen:
                     if self._time_left(t0) < reserve_s:
                         repair["notes"].append("look fix not rendered: no time left")
                     else:
+                        fixed = await images.prepare(fixed)
                         rendered, why = await self._render_optional(fixed, t0)
                         if rendered is None:
                             repair["notes"].append(f"look fix dropped: {why}")
@@ -566,6 +574,7 @@ class Screen:
                 if why:
                     repair["notes"].append(f"lint retry {why}")
                 elif corrected and corrected != body:
+                    corrected = await images.prepare(corrected)
                     rendered, why = await self._render_optional(corrected, t0)
                     if rendered is None:
                         repair["notes"].append(f"lint retry dropped: {why}")
@@ -591,7 +600,7 @@ class Screen:
         total_s = time.monotonic() - t0
         spec = self.model_spec()
         job_dir = self._save(job_id, ask,
-                             {"page.html": body, "shot.png": png},
+                             {"page.html": body, "shot.png": png, "images.json": json.dumps(images.events, ensure_ascii=False)},
                              {"job": job_id, "kind": "page", "page": page_id,
                               "title": page_title(body, page_id),
                               **spec,
@@ -599,7 +608,11 @@ class Screen:
                               "model_s": round(model_s, 2), "render_s": round(render_s, 2),
                               "look_s": round(look_s, 2), "retry_s": round(retry_s, 2),
                               "total_s": round(total_s, 2), "issues": issues,
-                              "residual_lint": residual, "repair": repair})
+                              "residual_lint": residual, "repair": repair,
+                              "image_s": round(images.seconds, 2), "image_reviews": images.events})
+        if images.events:
+            record_active("screen_images", {"job": job_id, "seconds": round(images.seconds, 2),
+                                            "reviews": images.events})
         record_active("screen_page", {"job": job_id, "page": page_id,
                                       "total_s": round(total_s, 2), "issues": issues,
                                       "residual_lint": residual,
@@ -616,6 +629,17 @@ class Screen:
             outcome = self.on_page(result)
             if inspect.isawaitable(outcome):
                 await outcome
+
+    def _image_job(self, ask: str, t0: float) -> PageImages:
+        async def review(user: str, image: bytes | None) -> str:
+            text, _ = await self._call_model(
+                "Choose an educational image for a Swedish school child. Inspect the actual picture with the lesson context. "
+                "Return only the requested JSON decision, reason and a text/HTML alternative if rejected.", user, image)
+            return text
+
+        deadline = min(time.monotonic() + IMAGE_BUDGET_S,
+                       t0 + min(self.timeout, PAGE_TARGET_S) - FINAL_RENDER_RESERVE_S - DELIVERY_RESERVE_S)
+        return PageImages(self._build_user_text(ask), review, deadline)
 
     def _time_left(self, t0: float) -> float:
         """Seconds until the job limit; optional work is spent from this."""
@@ -712,16 +736,20 @@ class Screen:
         client = OpenAI(api_key=key, base_url=GEMINI_BASE_URL if gemini else SCREEN_BASE_URL,
                         default_headers=headers,
                         timeout=40.0, max_retries=0)
+        image_url = None
+        if look_png:
+            import base64
+
+            mime = "image/jpeg" if look_png.startswith(b"\xff\xd8\xff") else (
+                "image/webp" if look_png[:4] == b"RIFF" and look_png[8:12] == b"WEBP" else "image/png")
+            image_url = f"data:{mime};base64,{base64.b64encode(look_png).decode()}"
         if api == "chat":
             content: list[dict[str, Any]] = [{"type": "text", "text": user}]
             for url in images:
                 content.append({"type": "image_url", "image_url": {"url": url}})
             if look_png:
-                import base64
-
-                data = base64.b64encode(look_png).decode()
                 content.append({"type": "image_url",
-                                "image_url": {"url": f"data:image/png;base64,{data}"}})
+                                "image_url": {"url": image_url}})
             reasoning: dict[str, Any] = {}
             if spec.get("thinking"):
                 reasoning["extra_body"] = {"thinking": {"type": spec["thinking"]}}
@@ -737,14 +765,11 @@ class Screen:
         from openai.types import Reasoning
 
         if images or look_png:
-            import base64
-
             parts: list[dict[str, Any]] = [{"type": "input_text", "text": user}]
             for url in images:
                 parts.append({"type": "input_image", "image_url": url})
             if look_png:
-                parts.append({"type": "input_image", "image_url": (
-                    f"data:image/png;base64,{base64.b64encode(look_png).decode()}")})
+                parts.append({"type": "input_image", "image_url": image_url})
             response = client.responses.create(
                 model=model, instructions=system,
                 input=[{"role": "user", "content": parts}],  # type: ignore[arg-type]
@@ -789,15 +814,15 @@ class Screen:
                 "() => document.documentElement.dataset.otReady === '1'", timeout=30000)
             info = await frame.evaluate("() => ({fontPx: ot.fontPx, issues: ot.issues})")
             issues = list(info.get("issues") or [])
+            preview_issues = []
             if patch:
                 # Replay distinct batches: removals must finish before the next patch.
                 # Reduced motion makes the preview final immediately, saving the old 1 s wait.
                 for change in [*self.visible_patches, patch]:
                     try:
-                        patch_issues = await frame.evaluate("(p) => ot.patch(p)", change)
-                        issues.extend(patch_issues or [])
+                        await frame.evaluate("(p) => ot.patch(p)", change)
                     except Exception as error:  # noqa: BLE001 - rejected before child delivery
-                        issues.append(f"patch failed: {type(error).__name__}")
+                        preview_issues.append(f"patch failed: {type(error).__name__}")
                         break
                     await frame.evaluate("""async () => {
                         for (const a of document.getAnimations()) {
@@ -805,12 +830,20 @@ class Screen:
                         }
                         await new Promise(requestAnimationFrame);
                     }""")
-            if patch:
-                # Graph labels can be repaired by the patch: use current lint,
-                # keeping only exceptions that could not enter the frame's list.
+                # Boot covered the first render, not bitmaps added by a patch.
+                # Bound the wait and retain its advisory even if final lint clears.
+                try:
+                    await frame.wait_for_function(
+                        "() => ![...document.querySelectorAll('ot-image img')]"
+                        ".some(i => i.src && !i.complete)",
+                        timeout=5000)
+                except Exception:  # noqa: BLE001 - deliver the preview with its limitation
+                    preview_issues.append({"kind": "image", "msg": "patch image still loading after 5 seconds"})
+                # A patch can repair graph labels and an image can fail late:
+                # read current lint after loading, preserving renderer exceptions.
                 current = await frame.evaluate("() => ({fontPx: ot.fontPx, issues: ot.issues})")
-                issues = list(current.get("issues") or []) + [i for i in issues
-                    if isinstance(i, str) and i.startswith("patch failed:")]
+                issues = list(current.get("issues") or []) + preview_issues
+
             shot = await page.screenshot()
             return bytes(shot), issues
         finally:

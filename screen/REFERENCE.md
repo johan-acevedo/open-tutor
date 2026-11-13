@@ -111,7 +111,8 @@ can be pointed at by id `lan-<bokstav>`: `lan-M` is Skåne, `lan-BD` is Norrbott
 </ot-map>
 ```
 
-**Image** with its source. `query` finds a photo on Wikimedia Commons; `src` + `credit` if you have one.
+**Image**: `query` asks the server to find and inspect a Commons image; unsuitable images become text. The child never searches.
+Use only `ot-image`, never raw `img` or SVG images. Prefer `query`; supplied `src` and credits are verified too.
 `ot-label` marks a part: `at` is x and y in percent of the image.
 ```html
 <ot-image query="Colosseum Rome" alt="Colosseum i Rom"></ot-image>

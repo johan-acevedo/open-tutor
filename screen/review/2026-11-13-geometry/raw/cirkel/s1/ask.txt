@@ -1,0 +1,1 @@
+Rita en cirkel med radien 4 cm. Visa radien som ett streck från medelpunkten med etiketten 4 cm, och eleven ska kunna peka på radien. Arean får inte synas.

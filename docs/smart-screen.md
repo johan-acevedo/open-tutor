@@ -231,8 +231,10 @@ records the effective model, API, reasoning and any explicit thinking toggle.
 The controls follow [Google's compatibility API](https://ai.google.dev/gemini-api/docs/openai)
 and [DeepSeek's thinking toggle](https://api-docs.deepseek.com/guides/thinking_mode/).
 HTTP request tests use the real SDK with a local recorded-response transport;
-provider acceptance, speed and page quality remain untested. Go probes and new
-Go helpers are paused pending Johan's billing decision. The lead owns live comparisons.
+Hydrogen low subsequently passed the lead's five-job comparison (8.7–11.8 s total,
+clean lint) and live lessons, and is now the dev page writer. Johan approved Go balance
+billing for Muse Spark and DeepSeek, so their probes and helpers may run again. The
+DeepSeek thinking-disabled comparison remains unrun; the lead owns model selection.
 
 Ready commands, run from the repo root **only when the lead elects to compare**:
 
@@ -242,7 +244,7 @@ OPEN_TUTOR_ENV=~/.config/open-tutor-smart-dev/env server/bin/with-env env \
   SCREEN_MODEL=gemini-4-hydrogen SCREEN_API=chat SCREEN_REASONING=low SCREEN_THINKING= \
   uv run --project server python screen/tools/bench_page_budget.py --count 5 --out /tmp/hydrogen-low
 
-# After Go billing is settled: change only the thinking toggle against a low baseline.
+# Optional DeepSeek comparison: change only the thinking toggle against a low baseline.
 OPEN_TUTOR_ENV=~/.config/open-tutor-smart-dev/env server/bin/with-env env \
   SCREEN_MODEL=deepseek-v4.1-flash SCREEN_API=chat SCREEN_REASONING=low SCREEN_THINKING=disabled \
   uv run --project server python screen/tools/bench_page_budget.py --count 5 --out /tmp/deepseek-thinking-disabled
@@ -334,7 +336,15 @@ Known and open:
 - Page and patch HTML enters through an inert template and a shared sanitizer. Native
   `setHTML` is used when available, with DOMPurify for other browsers. Model scripts,
   event handlers and styles are removed before insertion; the shell's own code still runs.
-- Image search still runs in the page (unfiltered Commons result).
+- Images are resolved on the server, not in the page (2026-11-13): a `query` searches
+  Commons, a supplied `src` is re-looked-up, the bitmap is downloaded bounded (2 MiB,
+  JPEG/PNG/WebP from Wikimedia hosts only) and the page writer judges the actual
+  picture with the full lesson context before it is shown. Only a reviewed image ships,
+  with its canonical Commons URL and author/licence credit; anything else becomes a
+  text fallback. Image work stops inside the 12 s soft target; pages without images
+  pay nothing. Live Hydrogen-low evidence (accepted Colosseum/Forum Romanum photos,
+  a flower-lesson rejection, patch-image load fix) is in
+  `screen/review/2026-11-13-screen-images/`.
 
 ### Filler sounds (2026-11-13)
 
@@ -526,6 +536,18 @@ table and the same checks failing on the PR #41 shell are in
 4. **First session with a child.** The test that counts.
 
 ## Open
+
+Geometry assessment (2026-11-13, proposal in PR #53): five Hydrogen-low pages and one
+cuboid patch confirm existing graphs can draw measured plane figures, a cuboid and a
+cylinder. The immediate defect is label placement: fixed offsets ignore text width,
+and vertex-mean normals place some concave L labels inside the shape. Parent review
+repeated the render measurements and corrected slanted-label clearance calculations.
+Proposed order: label placement first, test brief reference guidance, then develop a
+qualified plane-length lint; circle and angle primitives need a lead decision. No new
+plane-figure component. Defer a solids tag on the two tested types, without ruling out
+prism, pyramid, cone, sphere or nets (all untested). No runtime changes were made.
+Sources, inspected phone/wide renders, timings and limits:
+`screen/review/2026-11-13-geometry/`.
 
 - Which model and reasoning level the screen runs on (measure with the examples in place).
 - Image generation: whether, and with what.
