@@ -141,9 +141,10 @@ screenshots: http://dell5500.tail2e1c4e.ts.net:8790/ (user service `open-tutor-s
   `ot-hidden` and `later` for answers the tutor reveals, `ot-answer` / `ot-choice` / `ot-gap` that post the child's
   answer to the parent, pointing (`{ot:'point', id}`), and patches written as `<ot-patch target do>` HTML that fade in
   with a soft highlight. On `ready` the shell reports lint issues (KaTeX errors, unknown tags, overflow, crowded
-  diagrams — including graph side/segment labels that touch their stroke or each other, placed from the polygon
-  winding with a measured two-axis clearance and flagged with the fix direction when the notch is genuinely tight …)
-  for the Screen agent's look-and-fix step.
+  diagrams — including graph side/segment labels that cross straight outlines or each other, placed from the polygon
+  winding with measured clearance and flagged when the layout remains tight; arbitrary text/curves are not checked)
+  for the Screen agent's bounded correction step. Graph warnings update on patches/reveals; patch previews
+  use final lint so repaired warnings clear. Evidence: `screen/review/2026-11-13-graph-labels/`.
 - **Components**: `ot-steps`, `ot-written` (computed uppställning incl. liggande stolen), `ot-clock`, `ot-fraction`,
   `ot-numberline`, `ot-balance`, `ot-graph` (JSXGraph), `ot-chart` (Chart.js from a `<table>`), `ot-map` (d3-geo with
   Natural Earth and historical borders, plus Sweden's 21 län with letter codes and a key; replaces Leaflet),

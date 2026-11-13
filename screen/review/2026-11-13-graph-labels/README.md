@@ -1,62 +1,79 @@
-# Graph label placement + overlap lint, 2026-11-13
+# Graph label placement and overlap lint, 2026-11-13
 
-Side/segment labels in `ot-graph` no longer cross their own stroke, and what is
-still crowded becomes actionable lint instead of a silent overlap.
+Side and segment labels now use measured clearance and polygon winding. Remaining
+crossings, side-label overlaps and pane overflow produce actionable `crowded` lint.
+This is placement plus detection, not a guarantee that every authored layout fits.
 
-## What was wrong
+## Change
 
-`sideLabel` (`screen/shell/shell.js`) centred every label a fixed `1.05 * font`
-out along the edge normal, ignoring the label's real width/height, and picked the
-polygon side from the vertex mean — which sits in the notch of a concave shape.
-Vertical `4 cm`/`3 cm` labels crossed their outline by 3–5 px, the slanted
-`Vinkelben` by ~25/43 px, and two L labels went inside the material.
+The previous fixed `1.05 * font` offset ignored label width. The vertex mean also
+picked the wrong outward direction in a concave L. Labels crossed vertical and
+slanted strokes, and two L labels landed inside the material.
 
-## What changed (shell only, no tags, no geometry)
+- Use the signed polygon area for outward normals, in either vertex order.
+- Offset by the measured box's reach along the normal, plus stroke clearance.
+  Auto ranges reserve label room; explicit ranges are retained subject to the
+  graph's existing equal-unit aspect rule.
+- Nudge along an edge or flip a segment label when that avoids collisions.
+  Check every straight polygon/segment outline in the graph, not just the
+  label's own edge. Never shrink text to hide a collision.
+- Rebuild graph lint after fitting, patches and reveals. Hidden work is omitted
+  until revealed; hidden graph children are not drawn early. Updated warnings
+  still reach the parent after earlier warnings have been replaced.
+- The server's patch preview reads final frame lint, clearing repaired warnings
+  while retaining patch exceptions. No new tags, reference lines or length lint.
 
-- Outward per edge from the polygon winding (signed area; both vertex orders),
-  not the vertex mean. Segment labels keep the above-the-line default.
-- Reach-aware offset from the measured box: `(|nx|*w + |ny|*h)/2` plus a
-  line/margin gap — the corrected two-axis clearance, never a dominant-axis guess.
-- Auto ranges widen for the longest side label so labels fit inside the pane
-  instead of being clamped back across their stroke. Author-set `x`/`y` win;
-  leftovers become lint.
-- Neighbour collisions: tangential nudge, segment side flip, never text
-  shrinking. What cannot be placed cleanly is recorded per graph and emitted as
-  `crowded: label ... use a shorter label, fewer figures or more room` — the
-  existing bounded retry repairs from that wording. Lint is rebuilt after every
-  final draw, so it describes the delivered page, never an intermediate fit pass.
-- Point anchors, ticks, hidden/later labels and unrelated maths are untouched
-  and never flagged. No length lint in this change.
+The correction text says to keep given measures and use separate graphs or more
+room. Removing a required measure is not an acceptable layout repair.
 
-## Evidence
+## Repeatable evidence
 
-- `inputs/` — the four unedited Hydrogen bodies from
-  `review/2026-11-13-geometry/raw` (plan, vinkel, ratblock, cylinder).
-- `../tools/check_graph_labels.py` — repeatable render + independent geometry
-  recomputation at 370×610 and 1000×700. Fails on the prior shell
-  (`--prior-ref HEAD`: 14 unreported defects — own-stroke crossings,
-  inside-material labels, label-label overlaps), passes on this shell with every
-  leftover flagged as `crowded` lint. `shots/results.json` has both runs;
-  `shots/*-prior-*.png` are the before renders.
-- `model/` — one fresh Hydrogen-low job on the research plan ask (7.7 s +
-  5.4 s, both model calls under the 12 s target). First attempt crowded the
-  notch (`labels '2 cm' and '2 cm' overlap by 17 px`); the bounded retry dropped
-  one crowded notch label and delivered with zero residual lint.
-  `model/patched-370x610.png`: restoring the dropped label via patch surfaces
-  the same `crowded` lint in `patch_issues`; `ot.point` still finds both ids.
+From the repository root:
 
-## What really improved, and what did not
+```sh
+uv run --project server python screen/tools/check_graph_labels.py --out /tmp/graph-labels --prior-ref 848f8c1
+```
 
-- plan/vinkel/ratblock/cylinder: labels clear of their strokes at both sizes;
-  CW and CCW L stay outside the material. `l-cw` is fully clean.
-- Honestly still flagged: the plan notch (`'2 cm' and '1 cm' overlap`, 12–27 px —
-  two 72 px labels cannot share a 63 px notch), one rect/L neighbour pair on the
-  writer's tight layout at 1000×700, and `short-edges`' `diagonalen` at 370×610.
-  These read as lint with the fix direction, not as clean pages.
-- Limits: winding only fixes simple polygons; dense multi-figure pages still
-  need the writer to separate figures or shorten labels; lint describes the
-  delivered pane (the model page is clean at 370×610 but flags at 1000×700 —
-  same body, wider font). No new layout engine, no shrunk text.
+This manual Chromium check downloads the shell's public libraries; it needs no
+model or key, but is not an offline CI test. It measures four unedited Hydrogen
+bodies from the geometry research plus three synthetic cases at 370×610 and
+1000×700. It also checks pointing, warning replacement over patches, reveal
+visibility and the real server preview after repair.
 
-`check_fit` (incl. resize), `check_readability`, `check_sanitizer`,
-`check_patch_history` and `check_map_key` pass on this shell.
+`shots/results.json` records the corrected independent geometry check: the prior
+shell has unreported defects; this shell has none within the checked scope.
+Reported unresolved defects remain visible in the screenshots and check log.
+Parent review found that the first checker read absent edge coordinates, making
+part of its calculation NaN. Fixing the checker exposed five unreported outline
+crossings on the worker head (`worker-head-review-failure.log`). The final shell
+and checker cover neighboring straight outlines as well as the source edge.
+
+## Hydrogen low page and patch
+
+`model-reviewed/` is the final fresh job, with unedited raw and delivered source,
+metadata and both pane renders. Total 12.51 s: generation 8.10 s, correction
+2.66 s, rendering 1.75 s. This is one observed job, not a latency benchmark.
+The first layout crowded the notch. The retry separated the rectangle and L
+into two graphs, retained all given measures, and left the answer empty. The
+same delivered body has no lint at either size: 16 px phone, 19.5 px wide.
+The parent inspected both screenshots.
+
+`model/` preserves the earlier worker trial and its real patch/pointing evidence.
+That retry removed one notch label; it is not the acceptance example. Its old
+clean-lint claim also predates the corrected outline check. The final lifecycle
+check verifies that newly introduced crowding reaches patch callers and repaired
+crowding disappears from the real server preview.
+
+## Limits and checks
+
+- The original tight two-figure plan remains crowded, with notch and neighboring
+  outline collisions on phone and side-label pairs on wide panes. They are
+  flagged. The overlong `diagonalen` in `short-edges` exceeds the phone graph box
+  and is flagged too.
+- Winding assumes simple polygons. Arbitrary `ot-text`, point/vertex labels,
+  curved function outlines and right-angle decorations are outside this lint.
+  In particular, the existing angle page's `60°` text touches `Vinkelben`; this
+  change does not claim that page is completely collision-free.
+- Growable fit/resizing, readability, native/library/blocked sanitizer, patch
+  history and map-key checks pass. Full configured server suite: 429 passed,
+  18 skipped. Evidence was rendered locally on dell5500; nothing was deployed.

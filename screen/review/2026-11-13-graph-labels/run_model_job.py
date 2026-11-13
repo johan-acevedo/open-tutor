@@ -1,4 +1,4 @@
-"""One fresh Hydrogen-low page job proving the new graph lint helps the writer.
+"""One fresh Hydrogen-low page job checking how the writer responds to graph lint.
 
 Ask (the research plan ask, unedited): rectangle 4x3 + L with side labels and a
 perimeter answer box, narrow pane where crowding bites. The first attempt's label
@@ -66,6 +66,7 @@ async def main(out: Path) -> dict:
         holder["raw"] = strip_fences(holder.get("raw", ""))
         (out / "ask.txt").write_text(ASK, encoding="utf-8")
         (out / "raw.html").write_text(holder["raw"], encoding="utf-8")
+        await screen.aclose()
 
     await run()
     summary = {"ask": ASK, "wall_s": holder.get("wall_s"), "calls": holder.get("calls", []),

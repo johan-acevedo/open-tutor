@@ -805,6 +805,12 @@ class Screen:
                         }
                         await new Promise(requestAnimationFrame);
                     }""")
+            if patch:
+                # Graph labels can be repaired by the patch: use current lint,
+                # keeping only exceptions that could not enter the frame's list.
+                current = await frame.evaluate("() => ({fontPx: ot.fontPx, issues: ot.issues})")
+                issues = list(current.get("issues") or []) + [i for i in issues
+                    if isinstance(i, str) and i.startswith("patch failed:")]
             shot = await page.screenshot()
             return bytes(shot), issues
         finally:

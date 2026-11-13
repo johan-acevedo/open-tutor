@@ -2,12 +2,12 @@
 
 Renders the unedited Hydrogen regression bodies (screen/review/2026-11-13-graph-labels/inputs/)
 plus small synthetic crowding cases at 370x610 and 1000x700, measures every side label
-against its own stroke, neighboring labels, the outlined shape and the pane, and requires
+against straight outlines, neighboring side labels, the outlined shape and the pane, and requires
 every remaining defect to be named by a `crowded: label ...` lint issue.
 
   uv run --project server python screen/tools/check_graph_labels.py --out /tmp/graph-labels
   uv run --project server python screen/tools/check_graph_labels.py --out /tmp/graph-labels --shell DIR
-  uv run --project server python screen/tools/check_graph_labels.py --out /tmp/graph-labels --prior-ref HEAD
+  uv run --project server python screen/tools/check_graph_labels.py --out /tmp/graph-labels --prior-ref 848f8c1
 
 --prior-ref exports that git ref's shell and runs the same measurement there: the check
 must FAIL on the prior shell (unreported defects) and PASS here (defects fixed, the rest
@@ -79,12 +79,16 @@ MEASURE_JS = """() => {
     });
     const exact = [...el.querySelectorAll('.ot-side-lbl')];
     if (exact.length) {
-      exact.forEach(nd => {
+      const labeledEdges = g.edges.filter(e => e.sides);
+      exact.forEach((nd, index) => {
+        const edge = labeledEdges[index];
+        if (!edge || edge.kind !== nd.dataset.kind || edge.edge !== +nd.dataset.edge || edge.for !== (nd.dataset.for || ''))
+          throw new Error('label/source edge association changed');
         g.labels.push({ text: (nd.textContent || '').trim(),
           cx: parseFloat(nd.style.left) || 0, cy: parseFloat(nd.style.top) || 0,
           w: nd.offsetWidth || 0, h: nd.offsetHeight || 0,
           for: nd.dataset.for || '', kind: nd.dataset.kind || 'side', edge: +(nd.dataset.edge || 0),
-          ax: +nd.dataset.ax, ay: +nd.dataset.ay, bx: +nd.dataset.bx, by: +nd.dataset.by,
+          ax: edge.ax, ay: edge.ay, bx: edge.bx, by: edge.by,
           assoc: 'exact' });
       });
     } else {
@@ -129,6 +133,26 @@ def in_poly(x, y, poly):
     return inside
 
 
+def stroke_hits_box(edge, box, pad):
+    """Clip a finite segment against the text rectangle (Liang–Barsky)."""
+    left, top, right, bottom = box
+    left -= pad; top -= pad; right += pad; bottom += pad
+    x, y = edge["ax"], edge["ay"]
+    dx, dy = edge["bx"] - x, edge["by"] - y
+    lo, hi = 0.0, 1.0
+    for p, q in ((-dx, x-left), (dx, right-x), (-dy, y-top), (dy, bottom-y)):
+        if abs(p) < 1e-9:
+            if q < 0:
+                return False
+        elif p < 0:
+            lo = max(lo, q/p)
+        else:
+            hi = min(hi, q/p)
+        if lo > hi:
+            return False
+    return True
+
+
 def analyse(info):
     """Independent geometry recomputation: returns (defects, reported)."""
     f = float(info.get("fontPx") or 16)
@@ -152,6 +176,8 @@ def analyse(info):
             dist = seg_dist(lb["cx"], lb["cy"], lb)
             if reach - dist > 1.0:
                 defects.append(f"{g['id'] or 'graph'}: label '{lb['text']}' crosses its own line")
+            if any(stroke_hits_box(edge, box, max(1, f * 0.083)) for edge in g["edges"]):
+                defects.append(f"{g['id'] or 'graph'}: label '{lb['text']}' crosses an outline")
             if lb.get("kind") == "side" and g.get("edges"):
                 poly = next((e["poly"] for e in g["edges"]
                              if e["for"] == lb["for"] and e["poly"]), None)
@@ -194,7 +220,10 @@ def run_shell(shell, out, tag, prior_fail_expected):
                         for pid in pointable:
                             if pid and not frame.evaluate(f"() => ot.point('{pid}')"):
                                 failures.append(f"{tag} {name} {w}x{h}: ot.point('{pid}') failed")
+                        frame.evaluate('() => ot.point(null)')
                         info["issues"] = frame.evaluate("() => ot.issues")
+                        if any(i.get('kind') in {'draw', 'load', 'boot'} for i in info['issues']):
+                            failures.append(f"{tag} {name} {w}x{h}: drawing failed: {info['issues']}")
                         defects, reported, uncovered = analyse(info)
                         if uncovered:
                             failures.append(f"{tag} {name} {w}x{h}: UNREPORTED: {'; '.join(uncovered)}")
@@ -212,6 +241,64 @@ def run_shell(shell, out, tag, prior_fail_expected):
     return failures, notes, crowding
 
 
+def check_warning_lifecycle(shell):
+    """Warnings must update over RPC, clear after repair, and ignore hidden work."""
+    long = "Original long label " * 20
+    body = ('<h1>Etikett</h1><ot-graph id="g" x="-1 1" y="-1 2" axes="off">'
+            f'<ot-segment id="s" from="0 0" to="0 1">{long}</ot-segment></ot-graph>')
+    fixed = '<ot-patch target="s"><ot-segment from="0 0" to="0 1">1</ot-segment></ot-patch>'
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        try:
+            page = browser.new_page(viewport={"width": 370, "height": 610})
+            page.set_content(screenkit.host_page(screenkit.compose(body, shell)))
+            frame = screenkit._frame(page)
+            frame.wait_for_function("document.documentElement.dataset.otReady==='1'")
+            assert frame.evaluate('() => ot.issues.some(i => i.kind === "crowded")'), "missing initial crowding"
+            changed = frame.evaluate('(p) => ot.patch(p)',
+                '<ot-patch target="s"><ot-segment from="0 0" to="0 1">'
+                + "Changed long label " * 20 + '</ot-segment></ot-patch>')
+            assert any('Changed' in i.get('msg', '') for i in changed), "new warning lost after replacing old issues"
+            frame.evaluate('(p) => ot.patch(p)', fixed)
+            assert not frame.evaluate('() => ot.issues'), "repaired warning remained"
+            for wrapper, target in ((body.replace('id="g"', 'id="g" later'), 'g'),
+                                    ('<ot-hidden id="secret">' + body + '</ot-hidden>', 'secret')):
+                page.set_content(screenkit.host_page(screenkit.compose(wrapper, shell)))
+                frame = screenkit._frame(page)
+                frame.wait_for_function("document.documentElement.dataset.otReady==='1'")
+                assert not frame.evaluate('() => ot.issues'), "hidden labels reported as visible crowding"
+                assert frame.evaluate('(id) => ot.reveal(id)', target)
+                assert frame.evaluate('() => ot.issues.some(i => i.kind === "crowded")'), "revealed warning missing"
+            page.set_content(screenkit.host_page(screenkit.compose(body.replace('id="s"', 'id="s" later'), shell)))
+            frame = screenkit._frame(page)
+            frame.wait_for_function("document.documentElement.dataset.otReady==='1'")
+            assert not frame.evaluate('() => document.querySelectorAll(".ot-side-lbl").length'), "hidden part label was drawn"
+            assert not frame.evaluate('() => ot.issues'), "hidden part produced crowding"
+            assert frame.evaluate('() => ot.reveal("s")')
+            assert frame.evaluate('() => document.querySelectorAll(".ot-side-lbl").length === 1'), "revealed part did not redraw"
+            assert frame.evaluate('() => ot.issues.some(i => i.kind === "crowded")'), "revealed part warning missing"
+        finally:
+            browser.close()
+
+    # Real server preview must replace its initial label warnings with final lint.
+    import asyncio
+    import sys
+    import tempfile
+    sys.path.insert(0, str(ROOT.parent / 'server'))
+    from open_tutor.screen import Screen
+
+    async def preview():
+        with tempfile.TemporaryDirectory() as directory:
+            screen = Screen({}, directory)
+            try:
+                _, issues = await screen._default_render_page(body, fixed, 370, 610)
+                assert not issues, f"server returned repaired label warnings: {issues}"
+            finally:
+                await screen.aclose()
+
+    asyncio.run(preview())
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=str(ROOT / "review/2026-11-13-graph-labels/shots"))
@@ -223,6 +310,7 @@ def main(argv=None):
     out.mkdir(parents=True, exist_ok=True)
     shell = Path(args.shell) if args.shell else None
     failures, notes, crowding = run_shell(shell, out, "new", False)
+    check_warning_lifecycle(shell)
     result = {"shell": str(shell or "worktree"), "failures": failures,
               "crowding_reported": crowding, "notes": notes}
     if args.prior_ref and not args.skip_prior:

@@ -1203,11 +1203,13 @@
     });
     // Side/segment labels in creation order, each tied to its actual source edge.
     var sideMeta = el._sideMeta = [];
+    var strokeEdges = [];
     children.forEach(function (ch) {
       var tag = ch.tagName.toLowerCase();
       var col = color(ch.getAttribute('color'), SERIES[idx % SERIES.length]);
       var dash = ch.hasAttribute('dashed') ? 2 : 0;
       ch._jxg = [];
+      if (ch.hasAttribute('later') || ch.hasAttribute('hidden')) return;
       try {
         if (tag === 'ot-fn') {
           idx++;
@@ -1243,6 +1245,11 @@
         } else if (tag === 'ot-segment' || tag === 'ot-polygon') {
           var pts = tag === 'ot-segment' ? points((ch.getAttribute('from') || '') + ', ' + (ch.getAttribute('to') || '')) : points(ch.getAttribute('points'));
           if (pts.length < 2) throw new Error(tag + ' needs points');
+          var edgePoints = pts.map(function (p) { return px(p[0], p[1]); });
+          for (var edge = 0; edge < (tag === 'ot-polygon' ? edgePoints.length : 1); edge++) {
+            var edgeA = edgePoints[edge], edgeB = edgePoints[(edge + 1) % edgePoints.length];
+            strokeEdges.push({ ax: edgeA.x, ay: edgeA.y, bx: edgeB.x, by: edgeB.y });
+          }
           var scol = color(ch.getAttribute('color'), tag === 'ot-polygon' ? 'cyan' : 'violet');
           if (tag === 'ot-segment') {
             ch._jxg.push(board.create('segment', pts, { strokeColor: scol, strokeWidth: sw * 1.5, dash: dash, fixed: true, highlight: false }));
@@ -1316,7 +1323,7 @@
     over.style.cssText = 'position:absolute;inset:0;pointer-events:none';
     over.innerHTML = html;
     lay.appendChild(over);
-    try { settleSideLabels(el, over, w, h, f, sw); } catch (e) { el._graphCrowding = []; /* labels stay where the first pass put them */ }
+    settleSideLabels(el, over, w, h, f, sw, strokeEdges);
     el._px = px;
   }
   function sideLabel(a, b, out, html, col, f, bg) {
@@ -1343,7 +1350,7 @@
   // resolve neighbour collisions where cheap, keep labels inside the pane without
   // pushing them back across their own edge, and record what is still crowded in
   // el._graphCrowding for lint. Never shrinks text.
-  function settleSideLabels(el, over, w, h, f, sw) {
+  function settleSideLabels(el, over, w, h, f, sw, strokeEdges) {
     var metas = el._sideMeta || [];
     el._graphCrowding = [];
     if (!metas.length || over.offsetWidth < 2) return;
@@ -1357,13 +1364,25 @@
     function place(i, cx, cy) { nodes[i].style.left = cx + 'px'; nodes[i].style.top = cy + 'px'; }
     var gap = 0.25 * f + 1.5 * sw;
     function reach(m, b) { return (Math.abs(m.nx) * b.w + Math.abs(m.ny) * b.h) / 2 + gap; }
-    function distPtSeg(x, y, m) {
-      var dx = m.bx - m.ax, dy = m.by - m.ay;
-      var len2 = dx * dx + dy * dy || 1;
-      var t = Math.max(0, Math.min(1, ((x - m.ax) * dx + (y - m.ay) * dy) / len2));
-      return Math.hypot(x - (m.ax + t * dx), y - (m.ay + t * dy));
+    function ownOverlap(m, b) {
+      return reach(m, b) - ((b.cx - m.ax) * m.nx + (b.cy - m.ay) * m.ny);
     }
-    function ownOverlap(m, b) { return reach(m, b) - distPtSeg(b.cx, b.cy, m); }
+    function hitsStroke(b) {
+      var pad = 0.75 * sw;
+      return strokeEdges.some(function (e) {
+        var dx = e.bx - e.ax, dy = e.by - e.ay, lo = 0, hi = 1;
+        var clips = [[-dx, e.ax - b.l + pad], [dx, b.r - e.ax + pad],
+                     [-dy, e.ay - b.t + pad], [dy, b.b - e.ay + pad]];
+        for (var k = 0; k < clips.length; k++) {
+          var p = clips[k][0], q = clips[k][1];
+          if (Math.abs(p) < 1e-9) { if (q < 0) return false; }
+          else if (p < 0) lo = Math.max(lo, q / p);
+          else hi = Math.min(hi, q / p);
+          if (lo > hi) return false;
+        }
+        return true;
+      });
+    }
     function rectOverlap(b1, b2, pad) {
       var ox = Math.min(b1.r, b2.r) - Math.max(b1.l, b2.l) + pad;
       var oy = Math.min(b1.b, b2.b) - Math.max(b1.t, b2.t) + pad;
@@ -1391,7 +1410,12 @@
         for (var j = i + 1; j < metas.length; j++) {
           if (!nodes[i] || !nodes[j]) continue;
           var bi = box(i), bj = box(j);
-          if (!bj.w || !bj.h || !rectOverlap(bi, bj, 1)) continue;
+          if (!bj.w || !bj.h) continue;
+          if (!rectOverlap(bi, bj, 1)) {
+            if (hitsStroke(bj) && tryNudge(j, bi, bj)) moved = true;
+            if (hitsStroke(bi) && tryNudge(i, box(j), bi)) moved = true;
+            continue;
+          }
           if (tryNudge(j, bi, bj) || (metas[j].kind === 'seg' && tryFlip(j, bi)) || (metas[i].kind === 'seg' && tryNudge(i, bj, bi))) { moved = true; }
         }
       }
@@ -1409,7 +1433,7 @@
           cand.r = cand.cx + cand.w / 2; cand.b = cand.cy + cand.h / 2;
           // a nudge that lands inside the outlined shape trades one defect for another
           if (m.poly && inPoly(cand.cx, cand.cy, m.poly)) continue;
-          if (ownOverlap(m, cand) <= 0 && !rectOverlap(other, cand, 1) && clearOfOthers(j, cand)) {
+          if (ownOverlap(m, cand) <= 0 && !hitsStroke(cand) && !rectOverlap(other, cand, 1) && clearOfOthers(j, cand)) {
             place(j, cand.cx, cand.cy);
             return true;
           }
@@ -1429,7 +1453,7 @@
       cand.l = cand.cx - cand.w / 2; cand.t = cand.cy - cand.h / 2;
       cand.r = cand.cx + cand.w / 2; cand.b = cand.cy + cand.h / 2;
       var fm = { nx: -m.nx, ny: -m.ny, bx: m.bx, by: m.by, ax: m.ax, ay: m.ay };
-      if (ownOverlap(fm, cand) <= 0 && !rectOverlap(other, cand, 1) && clearOfOthers(j, cand)) {
+      if (ownOverlap(fm, cand) <= 0 && !hitsStroke(cand) && !rectOverlap(other, cand, 1) && clearOfOthers(j, cand)) {
         m.nx = -m.nx; m.ny = -m.ny;
         place(j, cand.cx, cand.cy);
         return true;
@@ -1448,7 +1472,7 @@
       if (dx || dy) place(i, b.cx + dx, b.cy + dy);
     });
     // 4) what is still crowded becomes lint; placement never pretends to be clean
-    var HELP = '; use a shorter label, fewer figures or more room';
+    var HELP = '; keep given measures; shorten labels, use separate graphs or give the graph more room';
     function nm(i) { return (nodes[i].textContent || '').trim().slice(0, 24) || ('edge ' + (metas[i].edge + 1)); }
     metas.forEach(function (m, i) {
       if (!nodes[i]) return;
@@ -1456,6 +1480,7 @@
       if (!b.w || !b.h) return;
       var ov = ownOverlap(m, b);
       if (ov > 1) el._graphCrowding.push('label \'' + nm(i) + '\' crosses its own line by ' + Math.round(ov) + ' px' + HELP);
+      else if (hitsStroke(b)) el._graphCrowding.push('label \'' + nm(i) + '\' crosses an outline' + HELP);
       else if (m.poly && inPoly(b.cx, b.cy, m.poly)) el._graphCrowding.push('label \'' + nm(i) + '\' is inside the outlined shape' + HELP);
       if (b.l < -0.5 || b.t < -0.5 || b.r > w + 0.5 || b.b > h + 0.5)
         el._graphCrowding.push('label \'' + nm(i) + '\' does not fit inside the pane' + HELP);
@@ -2469,10 +2494,17 @@
   // or intermediate fit pass. drawGraph records per-graph findings; the crowded
   // kind already earns the existing bounded retry, whose wording names the fix.
   function lintGraphs() {
-    ot.issues = ot.issues.filter(function (i) {
-      return !(i.kind === 'crowded' && i.where && i.where.indexOf('<ot-graph') === 0 && /^labels? /.test(i.msg));
+    var removedReported = 0;
+    ot.issues = ot.issues.filter(function (i, index) {
+      var remove = i.kind === 'crowded' && i.where && i.where.indexOf('<ot-graph') === 0 && /^labels? /.test(i.msg);
+      if (remove && index < reported) removedReported++;
+      return !remove;
     });
+    reported = Math.max(0, reported - removedReported);
     $$('ot-graph', page).forEach(function (el) {
+      // Boot temporarily hides the entire body. Only semantic hiding suppresses
+      // findings here; these labels become visible as soon as boot finishes.
+      if (!el.getClientRects().length || el.closest('[later], [hidden], ot-hidden:not([data-revealed]) .ot-hidden-body')) return;
       (el._graphCrowding || []).forEach(function (msg) { issue('crowded', msg, el); });
     });
   }
@@ -2575,7 +2607,10 @@
     else if (el.reveal) { shown = el.reveal() || el; fadeIn(shown, 0); }
     else if ($$('[later]', el).length) $$('[later]', el).forEach(function (k) { k.removeAttribute('later'); fadeIn(k, 0); });
     else issue('reveal', '"' + id + '" has nothing hidden to reveal', el);
+    var graph = el.closest('ot-graph');
+    if (graph && graph.redraw) graph.redraw();
     flash(shown);
+    lintGraphs();
     return true;
   };
 
@@ -2665,7 +2700,7 @@
     ot.ready.then(function () {
       if (m.ot === 'patch') ot.patch(m.html);
       else if (m.ot === 'point') ot.point(m.id || null);
-      else if (m.ot === 'reveal') ot.reveal(m.id);
+      else if (m.ot === 'reveal') { ot.reveal(m.id); flushPatched(); }
       else if (m.ot === 'restore') ot.restore(m.state);
     });
   }
