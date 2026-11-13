@@ -814,16 +814,15 @@ class Screen:
                 "() => document.documentElement.dataset.otReady === '1'", timeout=30000)
             info = await frame.evaluate("() => ({fontPx: ot.fontPx, issues: ot.issues})")
             issues = list(info.get("issues") or [])
-            seen = len(issues)
+            preview_issues = []
             if patch:
                 # Replay distinct batches: removals must finish before the next patch.
                 # Reduced motion makes the preview final immediately, saving the old 1 s wait.
                 for change in [*self.visible_patches, patch]:
                     try:
-                        patch_issues = await frame.evaluate("(p) => ot.patch(p)", change)
-                        issues.extend(patch_issues or [])
+                        await frame.evaluate("(p) => ot.patch(p)", change)
                     except Exception as error:  # noqa: BLE001 - rejected before child delivery
-                        issues.append(f"patch failed: {type(error).__name__}")
+                        preview_issues.append(f"patch failed: {type(error).__name__}")
                         break
                     await frame.evaluate("""async () => {
                         for (const a of document.getAnimations()) {
@@ -831,19 +830,20 @@ class Screen:
                         }
                         await new Promise(requestAnimationFrame);
                     }""")
-                # A patch-added image is still fetching when ot.patch reports:
-                # the boot wait above covered the first render, not this one.
-                # Hold the screenshot (bounded) until its bitmap arrived, so the
-                # tutor judges the picture the child will see, not an empty box.
+                # Boot covered the first render, not bitmaps added by a patch.
+                # Bound the wait and retain its advisory even if final lint clears.
                 try:
                     await frame.wait_for_function(
                         "() => ![...document.querySelectorAll('ot-image img')]"
                         ".some(i => i.src && !i.complete)",
                         timeout=5000)
-                except Exception:  # noqa: BLE001 - preserve the page and report the incomplete preview
-                    issues.append({"kind": "image", "msg": "patch image still loading after 5 seconds"})
-                late = await frame.evaluate("(n) => ot.issues.slice(n)", seen)
-                issues.extend(item for item in late or [] if item not in issues)
+                except Exception:  # noqa: BLE001 - deliver the preview with its limitation
+                    preview_issues.append({"kind": "image", "msg": "patch image still loading after 5 seconds"})
+                # A patch can repair graph labels and an image can fail late:
+                # read current lint after loading, preserving renderer exceptions.
+                current = await frame.evaluate("() => ({fontPx: ot.fontPx, issues: ot.issues})")
+                issues = list(current.get("issues") or []) + preview_issues
+
             shot = await page.screenshot()
             return bytes(shot), issues
         finally:

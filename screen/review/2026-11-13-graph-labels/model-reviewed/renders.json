@@ -1,0 +1,15 @@
+{
+ "name": "delivered",
+ "sizes": {
+  "370x610": {
+   "ready_ms": 443,
+   "fontPx": 16,
+   "issues": []
+  },
+  "1000x700": {
+   "ready_ms": 400,
+   "fontPx": 19.5,
+   "issues": []
+  }
+ }
+}

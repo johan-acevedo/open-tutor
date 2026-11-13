@@ -1,0 +1,23 @@
+{
+ "ask": "Rita en rektangel som är 4 cm bred och 3 cm hög, och en L-form med måtten 3 cm, 2 cm och 1 cm. Måtten ska stå vid sidorna. En svarsruta för rektangelns omkrets. Rita inget svar.",
+ "wall_s": 12.51,
+ "calls": [
+  {
+   "look": false,
+   "seconds": 8.1,
+   "user_chars": 539,
+   "answer_chars": 428
+  },
+  {
+   "look": false,
+   "seconds": 2.66,
+   "user_chars": 1659,
+   "answer_chars": 486
+  }
+ ],
+ "failures": [],
+ "model_s": 8.095855629071593,
+ "render_s": 1.7514723888598382,
+ "retry_s": 2.6602192521095276,
+ "residual_issues": []
+}
