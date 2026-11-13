@@ -45,6 +45,8 @@ import json
 import math
 import pathlib
 import re
+import hashlib
+import subprocess
 import sys
 import time
 
@@ -54,8 +56,7 @@ sys.path.insert(0, str(ROOT.parent / "server"))
 
 SIZES = ((370, 610), (1000, 700))
 
-# The candidate reference text, written in the voice of screen/REFERENCE.md.
-# Two short blocks; every claim here is checked by `selftest` first.
+# Historical Swedish candidate, preserved to reproduce the original arms.
 CANDIDATE = """**Cirkel.** Det finns ingen cirkeltagg: rita bågen som två kurvor i en `ot-graph`, med samma färg.
 `<ot-point id="medelpunkt" x="0" y="0">`, `<ot-segment id="radie" from="0 0" to="4 0">4 cm</ot-segment>`,
 `<ot-fn color="cyan" domain="-4 4">sqrt(16 - x^2)</ot-fn>` och `<ot-fn color="cyan" domain="-4 4">-sqrt(16 - x^2)</ot-fn>`
@@ -65,8 +66,9 @@ CANDIDATE = """**Cirkel.** Det finns ingen cirkeltagg: rita bågen som två kurv
 koordinater. Den flyttas bara in i grafens ruta, aldrig undan från linjer: välj en punkt med luft runt."""
 
 # v2: the same two blocks, with the measured constraint on a wide label spelled out.
-# The v1 wording let a wide text be centred on a slanted leg and reach back over it by
-# 9-14 px (review/2026-11-13-circle-text). One job tests whether the sharper line fixes it.
+# v1 and v2 use different positions for the wide text.
+# The original projection-only measurement called this overlap; parent review
+# corrected that false positive. Both wordings are kept as observed evidence.
 CANDIDATE_V2 = CANDIDATE.replace(
     "Den flyttas bara in i grafens ruta, aldrig undan från linjer: välj en punkt med luft runt.",
     "Inget flyttar texten undan en linje, och en bred text når tillbaka halva sin bredd: "
@@ -102,6 +104,8 @@ CASES = {
     "vinkel-bas": {"base": "vinkel", "steer": False},
     "vinkel-ref": {"base": "vinkel", "steer": True},
     "vinkel-ref2": {"base": "vinkel", "steer": True, "candidate": CANDIDATE_V2},
+    "cirkel-final": {"base": "cirkel", "steer": True, "shipped": True},
+    "vinkel-final": {"base": "vinkel", "steer": True, "shipped": True},
 }
 
 PATCH = {
@@ -118,7 +122,23 @@ def ask_for(case_id: str) -> tuple[str, str, bool]:
 
 
 def candidate_for(case_id: str) -> str:
+    if CASES[case_id].get("shipped"):
+        ref = (ROOT / "REFERENCE.md").read_text()
+        return ref[ref.index("**Circle:"):ref.index("\n**Chart**")].strip()
     return CASES[case_id].get("candidate", CANDIDATE)
+
+
+def baseline_prompt() -> str:
+    """Pin the baseline reference so adding the candidate cannot contaminate it."""
+    from screen.tools import prompt as screen_prompt
+    current = (ROOT / "REFERENCE.md").read_text().strip()
+    baseline = subprocess.run(
+        ["git", "show", "848f8c1:screen/REFERENCE.md"], cwd=ROOT.parent,
+        check=True, capture_output=True, text=True).stdout.strip()
+    prompt = screen_prompt.system_prompt()
+    if prompt.count(current) != 1:
+        raise ValueError("reference is not present exactly once in the static prompt")
+    return prompt.replace(current, baseline, 1)
 
 
 def spec_for(name: str) -> tuple[str, bool]:
@@ -289,15 +309,39 @@ def label_centre(lb: dict) -> dict:
 
 
 def clearance(lb: dict, a: dict, b: dict) -> tuple[float, float]:
-    """(distance from the label centre to the line, overlap of the box's half
-    extent along the line's normal with that distance). Positive overlap means
-    the text reaches back over the stroke."""
+    """(centre distance, finite-segment-to-text-box gap), in pixels.
+
+    A gap of zero means intersection. Projecting half the box onto a line's
+    normal gives false intersections beyond an endpoint; clip the actual
+    segment first, then measure corners and endpoints for disjoint geometry.
+    This measures the centreline, excluding stroke thickness.
+    """
     centre = label_centre(lb)
     dist = seg_dist(centre, a, b)
-    nx, ny = -(b["y"] - a["y"]), b["x"] - a["x"]
-    nl = math.hypot(nx, ny) or 1
-    reach = (abs(nx / nl) * lb["w"] + abs(ny / nl) * lb["h"]) / 2
-    return dist, reach - dist
+    left, top = lb["x"], lb["y"]
+    right, bottom = left + lb["w"], top + lb["h"]
+    dx, dy = b["x"] - a["x"], b["y"] - a["y"]
+    lo, hi = 0.0, 1.0
+    for v, q in ((-dx, a["x"]-left), (dx, right-a["x"]),
+                 (-dy, a["y"]-top), (dy, bottom-a["y"])):
+        if abs(v) < 1e-9:
+            if q < 0:
+                break
+        elif v < 0:
+            lo = max(lo, q/v)
+        else:
+            hi = min(hi, q/v)
+        if lo > hi:
+            break
+    else:
+        return dist, 0.0
+    def point_box(p):
+        return math.hypot(max(left-p["x"], 0, p["x"]-right),
+                          max(top-p["y"], 0, p["y"]-bottom))
+    gaps = [point_box(a), point_box(b)]
+    gaps.extend(seg_dist({"x": x, "y": y}, a, b)
+                for x, y in ((left, top), (right, top), (right, bottom), (left, bottom)))
+    return dist, min(gaps)
 
 
 def find_labels(info: dict, needle: str) -> list[dict]:
@@ -404,11 +448,11 @@ def analyse_circle(info: dict, base: str) -> dict:
                  key=lambda l: seg_dist(label_centre(l), seg["px"][0], seg["px"][1]),
                  default=None)
         if lb:
-            dist, overlap = clearance(lb, seg["px"][0], seg["px"][1])
+            dist, gap = clearance(lb, seg["px"][0], seg["px"][1])
             out["radius_label"] = {"text": lb["text"], "edge_px": round(dist, 1),
-                                   "overlap_px": round(overlap, 1)}
-            if overlap > 1:
-                flags.append(f"label '{lb['text']}' crosses the radius line by {overlap:.0f} px")
+                                   "box_gap_px": round(gap, 1)}
+            if gap <= 0:
+                flags.append(f"label '{lb['text']}' intersects the radius centreline")
     # Every other label against every drawn segment, for the record.
     out["labels"] = []
     for lb in g["labels"]:
@@ -416,10 +460,10 @@ def analyse_circle(info: dict, base: str) -> dict:
                "w": round(lb["w"], 1), "h": round(lb["h"], 1)}
         worst = None
         for s in segs:
-            dist, overlap = clearance(lb, s["px"][0], s["px"][1])
-            if worst is None or overlap > worst["overlap_px"]:
+            dist, gap = clearance(lb, s["px"][0], s["px"][1])
+            if worst is None or gap < worst["box_gap_px"]:
                 worst = {"segment": s["id"], "edge_px": round(dist, 1),
-                         "overlap_px": round(overlap, 1)}
+                         "box_gap_px": round(gap, 1)}
         if worst:
             row.update(worst)
         out["labels"].append(row)
@@ -477,16 +521,15 @@ def analyse_angle(info: dict, base: str) -> dict:
             dist_v = math.hypot(centre["x"] - vertex["x"], centre["y"] - vertex["y"])
             clear = []
             for a, b in ((vertex, far[0]), (vertex, far[1])):
-                d, ov = clearance(lb, a, b)
-                clear.append({"edge_px": round(d, 1), "overlap_px": round(ov, 1)})
+                d, gap = clearance(lb, a, b)
+                clear.append({"edge_px": round(d, 1), "box_gap_px": round(gap, 1)})
             out["label_60"] = {"text": lb["text"], "from_vertex_px": round(dist_v, 1),
                                "from_vertex_em": round(dist_v / f, 1), "inside_wedge": inside,
                                "legs": clear}
             if inside is False:
                 flags.append("the 60 label is outside the angle")
-            if any(c["overlap_px"] > 1 for c in clear):
-                worst = max(c["overlap_px"] for c in clear)
-                flags.append(f"the 60 label crosses a leg by {worst:.0f} px")
+            if any(c["box_gap_px"] <= 0 for c in clear):
+                flags.append("the 60 label intersects a leg centreline")
         # "Vinkelben": the ask wants it at the far end of the slanted leg.
         lb2 = min(find_labels(info, "Vinkelben"), key=lambda l: min(
             math.hypot(label_centre(l)["x"] - p["x"], label_centre(l)["y"] - p["y"])
@@ -498,12 +541,12 @@ def analyse_angle(info: dict, base: str) -> dict:
             near = min(range(len(far)), key=lambda k: math.hypot(
                 centre["x"] - far[k]["x"], centre["y"] - far[k]["y"]))
             d_end = math.hypot(centre["x"] - far[near]["x"], centre["y"] - far[near]["y"])
-            d_leg, ov = clearance(lb2, vertex, far[near])
+            d_leg, gap = clearance(lb2, vertex, far[near])
             out["label_ben"] = {"text": lb2["text"], "from_end_px": round(d_end, 1),
                                "from_end_em": round(d_end / f, 1),
-                               "edge_px": round(d_leg, 1), "overlap_px": round(ov, 1)}
-            if ov > 1:
-                flags.append(f"the Vinkelben label crosses its leg by {ov:.0f} px")
+                               "edge_px": round(d_leg, 1), "box_gap_px": round(gap, 1)}
+            if gap <= 0:
+                flags.append("the Vinkelben label intersects its leg centreline")
             if d_end > 3 * f:
                 flags.append(f"the Vinkelben label sits {d_end / f:.1f} em from the leg end")
     # All labels against all legs, for the record.
@@ -513,9 +556,9 @@ def analyse_angle(info: dict, base: str) -> dict:
                "w": round(lb["w"], 1), "h": round(lb["h"], 1)}
         worst = None
         for s in segs:
-            d, ov = clearance(lb, s["px"][0], s["px"][1])
-            if worst is None or ov > worst["overlap_px"]:
-                worst = {"segment": s["id"], "edge_px": round(d, 1), "overlap_px": round(ov, 1)}
+            d, gap = clearance(lb, s["px"][0], s["px"][1])
+            if worst is None or gap < worst["box_gap_px"]:
+                worst = {"segment": s["id"], "edge_px": round(d, 1), "box_gap_px": round(gap, 1)}
         if worst:
             row.update(worst)
         out["labels"].append(row)
@@ -548,7 +591,7 @@ def run_cases(out: pathlib.Path, case_ids: list[str]) -> list[dict]:
     from open_tutor.screen import Screen, strip_fences
     from screen.tools import prompt as screen_prompt
 
-    baseline_prompt = screen_prompt.system_prompt()
+    baseline_system = baseline_prompt()
     rows = []
     for case_id in case_ids:
         folder = out / case_id
@@ -561,8 +604,8 @@ def run_cases(out: pathlib.Path, case_ids: list[str]) -> list[dict]:
             screen = Screen(LEARNER, folder, session_id=f"circletex-{case_id}",
                             get_pane_size=lambda: SIZES[0])
             screen.add_turn("child", CHILD)
-            if steer:
-                screen._system = f"{baseline_prompt}\n\n{candidate}"
+            if not CASES[case_id].get("shipped"):
+                screen._system = f"{baseline_system}\n\n{candidate}" if steer else baseline_system
 
             async def model(system, user, images, look_png):
                 started = time.monotonic()
@@ -589,6 +632,9 @@ def run_cases(out: pathlib.Path, case_ids: list[str]) -> list[dict]:
                         "spec": screen.model_spec(), "calls": holder.get("calls", []),
                         "failures": failures,
                         "system_chars": len(screen.system_prompt()),
+                        "system_sha256": hashlib.sha256(screen.system_prompt().encode()).hexdigest(),
+                        "reference_sha256": hashlib.sha256((ROOT / "REFERENCE.md").read_bytes()).hexdigest(),
+                        "exact_shipped_prompt": bool(CASES[case_id].get("shipped")),
                         "candidate_chars": len(candidate) if steer else 0}
                 raw = strip_fences(holder.get("raw", ""))
                 (folder / "ask.txt").write_text(ask, encoding="utf-8")
@@ -615,6 +661,7 @@ def run_cases(out: pathlib.Path, case_ids: list[str]) -> list[dict]:
 
         asyncio.run(main())
         _measure_folder(folder, case_id)
+    return rows
 
 
 def _measure_folder(folder: pathlib.Path, name: str) -> None:
@@ -661,7 +708,7 @@ def run_patch(out: pathlib.Path, case_id: str) -> dict:
         screen = Screen(LEARNER, folder, session_id=f"circletex-patch-{case_id}",
                         get_pane_size=lambda: SIZES[0])
         if steer:
-            screen._system = f"{screen_prompt.system_prompt()}\n\n{CANDIDATE}"
+            screen._system = f"{baseline_prompt()}\n\n{candidate_for(case_id)}"
         screen.pages["sida-1"] = PageResult(job_id="base", page_id="sida-1", title="bas",
                                             body=body, png=b"")
         screen.mark_visible("sida-1")
@@ -824,7 +871,7 @@ def main(argv=None) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("run", help="real Screen jobs, then measure their raw bodies")
     r.add_argument("--out", type=pathlib.Path, required=True)
-    r.add_argument("--cases", default=",".join(CASES))
+    r.add_argument("--cases", default="cirkel-bas,cirkel-ref,vinkel-bas,vinkel-ref,vinkel-ref2")
     m = sub.add_parser("measure", help="re-render and measure saved bodies (no model call)")
     m.add_argument("--dir", type=pathlib.Path, required=True)
     p = sub.add_parser("patch", help="one real tutor follow-up on a delivered page")

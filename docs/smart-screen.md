@@ -146,7 +146,10 @@ screenshots: http://dell5500.tail2e1c4e.ts.net:8790/ (user service `open-tutor-s
   `ot-numberline`, `ot-balance`, `ot-graph` (JSXGraph), `ot-chart` (Chart.js from a `<table>`), `ot-map` (d3-geo with
   Natural Earth and historical borders, plus Sweden's 21 län with letter codes and a key; replaces Leaflet),
   `ot-image` (Wikimedia Commons), `ot-timeline`, `ot-cycle`,
-  `ot-mindmap`. The model writes no JavaScript.
+  `ot-mindmap`. The model writes no JavaScript. Five graph reference lines document the two-curve circle
+  recipe and centred `ot-text`; exact English Hydrogen-low pages were inspected at phone/wide sizes.
+  Text annotations currently have no visible pointing feedback (documented). Evidence:
+  `screen/review/2026-11-13-circle-text/`.
 - **Examples**: nine pages with one patch each (klockan, bråk, pris per kilo, ekvation, räta linjen, Romarriket,
   engelska på kafé, vattnets kretslopp, Sveriges län) covering every row of the capability table; the static prompt
   (role + reference + examples) is about 4 600 tokens (`screen/tools/prompt.py`).

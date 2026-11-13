@@ -2,17 +2,17 @@
 
 ## Circle and positioned text, 2026-11-13
 
-Two short reference blocks were compared against the current reference, one synthetic ask each,
-four page jobs plus one patch, Hydrogen low: a circle recipe and `ot-text`. On these pages the
-circle shape and its radius were already right without help (this baseline wrote the two-curve
-recipe itself); the candidate made one circle one colour instead of two. `ot-text` removed the
-anchor dots that `<ot-point>` labels leave in a figure and put the 60° label closer to the vertex,
-but a wide label centred on a point still crosses a slanted leg (9 px at 370, 14 px at 1000), and
-a sharper sentence made it worse (18/29 px). The reference therefore documents `ot-text` as centred
-with no offset and sends a wide label to `<ot-point label-pos="…">`, the form that stayed clear.
-`ot.point` on an `ot-text` id returns true and shows nothing; that is runtime, not reference.
-Bodies, screenshots, measurements, caveats and the rerun commands: `review/2026-11-13-circle-text/`.
-No timing claim is made from five jobs.
+Five reference lines document the two-curve circle recipe and centred `ot-text`
+without a marker. Circle baseline already drew the correct shape; guidance made
+both halves one colour. `ot-text` removed extra point-label dots. Parent review
+corrected a projection-only measurement that falsely called labels beyond a
+segment endpoint crossings: v2 actually leaves more space, not less. The final
+English prompt was tested in place on two fresh Hydrogen-low pages (7.68/8.36 s,
+no repair), both inspected at 370×610 and 1000×700. Radius and vertex pointing
+work; `ot-text` pointing returns true with no visible effect, explicitly noted
+in the reference. No new tag or runtime change. This small batch does not measure
+failure rates or speed differences. Evidence and rerun commands:
+`review/2026-11-13-circle-text/` and `tools/probe_circle_text.py`.
 
 ## Toolbox follow-up, 2026-11-13
 

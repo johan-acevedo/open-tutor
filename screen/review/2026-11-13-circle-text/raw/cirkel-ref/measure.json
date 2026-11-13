@@ -45,7 +45,7 @@
    "radius_label": {
     "text": "4 cm",
     "edge_px": 18.4,
-    "overlap_px": -8.8
+    "box_gap_px": 8.8
    },
    "labels": [
     {
@@ -56,7 +56,7 @@
      "h": 19.2,
      "segment": "radie",
      "edge_px": 18.4,
-     "overlap_px": -8.8
+     "box_gap_px": 8.8
     }
    ],
    "fontPx": 17.5,
@@ -172,7 +172,7 @@
    "radius_label": {
     "text": "4 cm",
     "edge_px": 31.8,
-    "overlap_px": -15.1
+    "box_gap_px": 15.1
    },
    "labels": [
     {
@@ -183,7 +183,7 @@
      "h": 33.3,
      "segment": "radie",
      "edge_px": 31.8,
-     "overlap_px": -15.1
+     "box_gap_px": 15.1
     }
    ],
    "fontPx": 30.25,

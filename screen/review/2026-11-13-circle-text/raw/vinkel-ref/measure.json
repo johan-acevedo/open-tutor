@@ -1,13 +1,11 @@
 {
- "case": "vinkel-ref-delivered",
+ "case": "vinkel-ref",
  "base_ask": "vinkel",
  "steered": true,
  "sizes": {
   "370x610": {
    "fontPx": 17.5,
-   "flags": [
-    "the Vinkelben label crosses its leg by 9 px"
-   ],
+   "flags": [],
    "segments": [
     {
      "id": "ben-1",
@@ -74,11 +72,11 @@
     "legs": [
      {
       "edge_px": 27.5,
-      "overlap_px": -17.9
+      "box_gap_px": 17.9
      },
      {
       "edge_px": 33.7,
-      "overlap_px": -15.9
+      "box_gap_px": 15.9
      }
     ]
    },
@@ -87,7 +85,7 @@
     "from_end_px": 31.6,
     "from_end_em": 1.8,
     "edge_px": 31.6,
-    "overlap_px": 9.1
+    "box_gap_px": 0.4
    },
    "labels": [
     {
@@ -98,7 +96,7 @@
      "h": 19.2,
      "segment": "ben-2",
      "edge_px": 33.7,
-     "overlap_px": -15.9
+     "box_gap_px": 15.9
     },
     {
      "text": "Vinkelben",
@@ -108,7 +106,7 @@
      "h": 19.2,
      "segment": "ben-2",
      "edge_px": 31.6,
-     "overlap_px": 9.1
+     "box_gap_px": 0.4
     }
    ],
    "texts": [
@@ -199,9 +197,7 @@
   },
   "1000x700": {
    "fontPx": 30.25,
-   "flags": [
-    "the Vinkelben label crosses its leg by 14 px"
-   ],
+   "flags": [],
    "segments": [
     {
      "id": "ben-1",
@@ -268,11 +264,11 @@
     "legs": [
      {
       "edge_px": 50.0,
-      "overlap_px": -33.3
+      "box_gap_px": 33.3
      },
      {
       "edge_px": 61.3,
-      "overlap_px": -30.9
+      "box_gap_px": 30.9
      }
     ]
    },
@@ -281,7 +277,7 @@
     "from_end_px": 57.4,
     "from_end_em": 1.9,
     "edge_px": 57.4,
-    "overlap_px": 13.6
+    "box_gap_px": 1.5
    },
    "labels": [
     {
@@ -292,7 +288,7 @@
      "h": 33.3,
      "segment": "ben-2",
      "edge_px": 61.3,
-     "overlap_px": -30.9
+     "box_gap_px": 30.9
     },
     {
      "text": "Vinkelben",
@@ -302,7 +298,7 @@
      "h": 33.3,
      "segment": "ben-2",
      "edge_px": 57.4,
-     "overlap_px": 13.6
+     "box_gap_px": 1.5
     }
    ],
    "texts": [

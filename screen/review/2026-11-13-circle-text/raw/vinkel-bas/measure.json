@@ -74,11 +74,11 @@
     "legs": [
      {
       "edge_px": 41.6,
-      "overlap_px": -28.9
+      "box_gap_px": 28.9
      },
      {
       "edge_px": 32.4,
-      "overlap_px": -12.6
+      "box_gap_px": 12.6
      }
     ]
    },
@@ -87,7 +87,7 @@
     "from_end_px": 61.6,
     "from_end_em": 3.5,
     "edge_px": 61.6,
-    "overlap_px": -18.7
+    "box_gap_px": 16.6
    },
    "labels": [
     {
@@ -98,7 +98,7 @@
      "h": 25.4,
      "segment": "ben2",
      "edge_px": 32.4,
-     "overlap_px": -12.6
+     "box_gap_px": 12.6
     },
     {
      "text": "Vinkelben",
@@ -108,7 +108,7 @@
      "h": 19.2,
      "segment": "ben2",
      "edge_px": 61.6,
-     "overlap_px": -18.7
+     "box_gap_px": 16.6
     }
    ],
    "texts": [
@@ -268,11 +268,11 @@
     "legs": [
      {
       "edge_px": 74.9,
-      "overlap_px": -52.9
+      "box_gap_px": 52.9
      },
      {
       "edge_px": 58.6,
-      "overlap_px": -24.8
+      "box_gap_px": 24.8
      }
     ]
    },
@@ -281,7 +281,7 @@
     "from_end_px": 107.0,
     "from_end_em": 3.5,
     "edge_px": 107.0,
-    "overlap_px": -32.5
+    "box_gap_px": 28.8
    },
    "labels": [
     {
@@ -292,7 +292,7 @@
      "h": 43.9,
      "segment": "ben2",
      "edge_px": 58.7,
-     "overlap_px": -24.8
+     "box_gap_px": 24.8
     },
     {
      "text": "Vinkelben",
@@ -302,7 +302,7 @@
      "h": 33.3,
      "segment": "ben2",
      "edge_px": 107.0,
-     "overlap_px": -32.5
+     "box_gap_px": 28.8
     }
    ],
    "texts": [

@@ -45,7 +45,7 @@
    "radius_label": {
     "text": "4 cm",
     "edge_px": 18.4,
-    "overlap_px": -8.8
+    "box_gap_px": 8.8
    },
    "labels": [
     {
@@ -56,7 +56,7 @@
      "h": 19.2,
      "segment": "radie",
      "edge_px": 14.4,
-     "overlap_px": -4.8
+     "box_gap_px": 4.8
     },
     {
      "text": "4 cm",
@@ -66,7 +66,7 @@
      "h": 19.2,
      "segment": "radie",
      "edge_px": 18.4,
-     "overlap_px": -8.8
+     "box_gap_px": 8.8
     },
     {
      "text": "kant",
@@ -76,14 +76,14 @@
      "h": 19.2,
      "segment": "radie",
      "edge_px": 54.7,
-     "overlap_px": -45.1
+     "box_gap_px": 45.1
     }
    ],
    "fontPx": 17.5,
    "second_graph_angle": {
     "fontPx": 17.5,
     "flags": [
-     "the Vinkelben label crosses its leg by 41 px"
+     "the Vinkelben label intersects its leg centreline"
     ],
     "segments": [
      {
@@ -151,11 +151,11 @@
      "legs": [
       {
        "edge_px": 34.2,
-       "overlap_px": -24.6
+       "box_gap_px": 24.6
       },
       {
        "edge_px": 28.8,
-       "overlap_px": -11.0
+       "box_gap_px": 11.0
       }
      ]
     },
@@ -164,7 +164,7 @@
      "from_end_px": 0.0,
      "from_end_em": 0.0,
      "edge_px": 0.0,
-     "overlap_px": 40.7
+     "box_gap_px": 0.0
     },
     "labels": [
      {
@@ -175,7 +175,7 @@
       "h": 19.2,
       "segment": "ben2",
       "edge_px": 0.8,
-      "overlap_px": 8.8
+      "box_gap_px": 0.0
      },
      {
       "text": "60°",
@@ -185,7 +185,7 @@
       "h": 19.2,
       "segment": "ben2",
       "edge_px": 28.8,
-      "overlap_px": -11.0
+      "box_gap_px": 11.0
      },
      {
       "text": "Vinkelben",
@@ -195,7 +195,7 @@
       "h": 19.2,
       "segment": "ben2",
       "edge_px": 0.0,
-      "overlap_px": 40.7
+      "box_gap_px": 0.0
      }
     ],
     "texts": [
@@ -363,7 +363,7 @@
    "radius_label": {
     "text": "4 cm",
     "edge_px": 20.8,
-    "overlap_px": -9.9
+    "box_gap_px": 9.9
    },
    "labels": [
     {
@@ -374,7 +374,7 @@
      "h": 21.7,
      "segment": "radie",
      "edge_px": 16.3,
-     "overlap_px": -5.4
+     "box_gap_px": 5.4
     },
     {
      "text": "4 cm",
@@ -384,7 +384,7 @@
      "h": 21.7,
      "segment": "radie",
      "edge_px": 20.8,
-     "overlap_px": -9.9
+     "box_gap_px": 9.9
     },
     {
      "text": "kant",
@@ -394,14 +394,14 @@
      "h": 21.7,
      "segment": "radie",
      "edge_px": 62.6,
-     "overlap_px": -51.8
+     "box_gap_px": 51.8
     }
    ],
    "fontPx": 19.75,
    "second_graph_angle": {
     "fontPx": 19.75,
     "flags": [
-     "the Vinkelben label crosses its leg by 47 px"
+     "the Vinkelben label intersects its leg centreline"
     ],
     "segments": [
      {
@@ -469,11 +469,11 @@
      "legs": [
       {
        "edge_px": 39.2,
-       "overlap_px": -28.3
+       "box_gap_px": 28.3
       },
       {
        "edge_px": 33.0,
-       "overlap_px": -12.8
+       "box_gap_px": 12.8
       }
      ]
     },
@@ -482,7 +482,7 @@
      "from_end_px": 0.0,
      "from_end_em": 0.0,
      "edge_px": 0.0,
-     "overlap_px": 46.5
+     "box_gap_px": 0.0
     },
     "labels": [
      {
@@ -493,7 +493,7 @@
       "h": 21.7,
       "segment": "ben2",
       "edge_px": 0.5,
-      "overlap_px": 10.5
+      "box_gap_px": 0.0
      },
      {
       "text": "60°",
@@ -503,7 +503,7 @@
       "h": 21.7,
       "segment": "ben2",
       "edge_px": 33.0,
-      "overlap_px": -12.8
+      "box_gap_px": 12.8
      },
      {
       "text": "Vinkelben",
@@ -513,7 +513,7 @@
       "h": 21.7,
       "segment": "ben2",
       "edge_px": 0.0,
-      "overlap_px": 46.5
+      "box_gap_px": 0.0
      }
     ],
     "texts": [

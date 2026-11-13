@@ -1,0 +1,391 @@
+{
+ "case": "vinkel-final",
+ "base_ask": "vinkel",
+ "steered": true,
+ "sizes": {
+  "370x610": {
+   "fontPx": 17.5,
+   "flags": [],
+   "segments": [
+    {
+     "id": "ben1",
+     "from": "0 0",
+     "to": "5 0",
+     "text": "",
+     "px": [
+      {
+       "x": 49.7,
+       "y": 359.5
+      },
+      {
+       "x": 275.3,
+       "y": 359.5
+      }
+     ]
+    },
+    {
+     "id": "ben2",
+     "from": "0 0",
+     "to": "2.5 4.3",
+     "text": "",
+     "px": [
+      {
+       "x": 49.7,
+       "y": 359.5
+      },
+      {
+       "x": 162.5,
+       "y": 165.5
+      }
+     ]
+    }
+   ],
+   "angles": [
+    {
+     "vertex_px": {
+      "x": 49.7,
+      "y": 359.5
+     },
+     "deg": 59.83,
+     "legs": [
+      "ben1",
+      "ben2"
+     ],
+     "far": [
+      {
+       "x": 275.34722222222223,
+       "y": 359.54861111111114
+      },
+      {
+       "x": 162.5,
+       "y": 165.4513888888889
+      }
+     ]
+    }
+   ],
+   "angle_deg": 59.83,
+   "label_60": {
+    "text": "60°",
+    "from_vertex_px": 50.4,
+    "from_vertex_em": 2.9,
+    "inside_wedge": true,
+    "legs": [
+     {
+      "edge_px": 22.5,
+      "box_gap_px": 12.9
+     },
+     {
+      "edge_px": 27.7,
+      "box_gap_px": 9.8
+     }
+    ]
+   },
+   "label_ben": {
+    "text": "Vinkelben",
+    "from_end_px": 18.1,
+    "from_end_em": 1.0,
+    "edge_px": 18.1,
+    "box_gap_px": 8.4
+   },
+   "labels": [
+    {
+     "text": "60°",
+     "x": 79.8,
+     "y": 327.3,
+     "w": 30,
+     "h": 19.2,
+     "segment": "ben2",
+     "edge_px": 27.7,
+     "box_gap_px": 9.9
+    },
+    {
+     "text": "Vinkelben",
+     "x": 121,
+     "y": 137.8,
+     "w": 83,
+     "h": 19.2,
+     "segment": "ben2",
+     "edge_px": 18.1,
+     "box_gap_px": 8.4
+    }
+   ],
+   "texts": [
+    "ot-segment",
+    "ot-segment",
+    "ot-point",
+    "ot-text",
+    "ot-text"
+   ],
+   "issues": [],
+   "ids": [
+    "ot-map-data",
+    "page",
+    "graf",
+    "ben1",
+    "ben2",
+    "vinkelspets",
+    "gradtal",
+    "vinkelben-text"
+   ],
+   "point": {
+    "ot-map-data": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 1,
+      "strokeWidth": 0
+     }
+    },
+    "page": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 1,
+      "strokeWidth": 0
+     }
+    },
+    "graf": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 1,
+      "strokeWidth": 0
+     }
+    },
+    "ben1": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 0,
+      "strokeWidth": 2.31
+     }
+    },
+    "ben2": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 0,
+      "strokeWidth": 2.31
+     }
+    },
+    "vinkelspets": {
+     "ok": true,
+     "effect": {
+      "kids": 1,
+      "pointed": 0,
+      "strokeWidth": 2.5
+     }
+    },
+    "gradtal": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 0,
+      "strokeWidth": 0
+     }
+    },
+    "vinkelben-text": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 0,
+      "strokeWidth": 0
+     }
+    }
+   },
+   "visible_text": "En vinkel på 60°\n60°\nVinkelben"
+  },
+  "1000x700": {
+   "fontPx": 30.25,
+   "flags": [],
+   "segments": [
+    {
+     "id": "ben1",
+     "from": "0 0",
+     "to": "5 0",
+     "text": "",
+     "px": [
+      {
+       "x": 250.9,
+       "y": 452.8
+      },
+      {
+       "x": 670.1,
+       "y": 452.8
+      }
+     ]
+    },
+    {
+     "id": "ben2",
+     "from": "0 0",
+     "to": "2.5 4.3",
+     "text": "",
+     "px": [
+      {
+       "x": 250.9,
+       "y": 452.8
+      },
+      {
+       "x": 460.5,
+       "y": 92.2
+      }
+     ]
+    }
+   ],
+   "angles": [
+    {
+     "vertex_px": {
+      "x": 250.9,
+      "y": 452.8
+     },
+     "deg": 59.83,
+     "legs": [
+      "ben1",
+      "ben2"
+     ],
+     "far": [
+      {
+       "x": 670.1153846153845,
+       "y": 452.7692307692308
+      },
+      {
+       "x": 460.5,
+       "y": 92.23076923076928
+      }
+     ]
+    }
+   ],
+   "angle_deg": 59.83,
+   "label_60": {
+    "text": "60°",
+    "from_vertex_px": 93.7,
+    "from_vertex_em": 3.1,
+    "inside_wedge": true,
+    "legs": [
+     {
+      "edge_px": 42.0,
+      "box_gap_px": 25.3
+     },
+     {
+      "edge_px": 51.4,
+      "box_gap_px": 21.0
+     }
+    ]
+   },
+   "label_ben": {
+    "text": "Vinkelben",
+    "from_end_px": 33.5,
+    "from_end_em": 1.1,
+    "edge_px": 33.5,
+    "box_gap_px": 16.9
+   },
+   "labels": [
+    {
+     "text": "60°",
+     "x": 309.2,
+     "y": 394.2,
+     "w": 51,
+     "h": 33.3,
+     "segment": "ben2",
+     "edge_px": 51.4,
+     "box_gap_px": 21.0
+    },
+    {
+     "text": "Vinkelben",
+     "x": 388,
+     "y": 42.1,
+     "w": 145,
+     "h": 33.3,
+     "segment": "ben2",
+     "edge_px": 33.5,
+     "box_gap_px": 16.9
+    }
+   ],
+   "texts": [
+    "ot-segment",
+    "ot-segment",
+    "ot-point",
+    "ot-text",
+    "ot-text"
+   ],
+   "issues": [],
+   "ids": [
+    "ot-map-data",
+    "page",
+    "graf",
+    "ben1",
+    "ben2",
+    "vinkelspets",
+    "gradtal",
+    "vinkelben-text"
+   ],
+   "point": {
+    "ot-map-data": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 1,
+      "strokeWidth": 0
+     }
+    },
+    "page": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 1,
+      "strokeWidth": 0
+     }
+    },
+    "graf": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 1,
+      "strokeWidth": 0
+     }
+    },
+    "ben1": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 0,
+      "strokeWidth": 4
+     }
+    },
+    "ben2": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 0,
+      "strokeWidth": 4
+     }
+    },
+    "vinkelspets": {
+     "ok": true,
+     "effect": {
+      "kids": 1,
+      "pointed": 0,
+      "strokeWidth": 1.58
+     }
+    },
+    "gradtal": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 0,
+      "strokeWidth": 0
+     }
+    },
+    "vinkelben-text": {
+     "ok": true,
+     "effect": {
+      "kids": 0,
+      "pointed": 0,
+      "strokeWidth": 0
+     }
+    }
+   },
+   "visible_text": "En vinkel på 60°\n60°\nVinkelben"
+  }
+ }
+}
