@@ -382,7 +382,7 @@ async def test_real_substitution_images_become_image_content(monkeypatch, tmp_pa
     assert "Worked example" in result
     feedback = load_visible_image_feedback(MATHS10_SUBSTITUTION_ID)
     assert f"{feedback.attached} original source image(s)" in result
-    assert f"{feedback.omitted} more visible image(s) were left out" in result
+    assert f"{feedback.omitted} more visible image files were left out" in result
     assert "not a screenshot" in result and "current viewport" in result
     items = tutor.chat_ctx.items
     assert len(items) == 1 and items[0].role == "user"

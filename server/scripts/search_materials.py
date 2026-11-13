@@ -44,6 +44,7 @@ from open_tutor.materials.search import (
     EmbeddingGemmaEmbedder,
     build_index,
     default_index_dir,
+    document_input,
     load_index,
     normalize,
     query_index,
@@ -162,6 +163,7 @@ def full_library_fingerprint(
     passage_ids: list[str],
     model_id: str,
     model_revision: str,
+    embedded_inputs: list[str],
 ) -> str:
     """Stable identity of one full-corpus build: source SHAs plus passage IDs."""
     canonical = json.dumps(
@@ -172,6 +174,8 @@ def full_library_fingerprint(
             "passage_ids": list(passage_ids),
             "model_id": model_id,
             "model_revision": model_revision,
+            "dtype": "torch.float32",
+            "embedded_input_sha256": hashlib.sha256(json.dumps(embedded_inputs, ensure_ascii=False, separators=(",", ":")).encode("utf-8")).hexdigest(),
         },
         sort_keys=True,
         separators=(",", ":"),
@@ -188,9 +192,12 @@ def _validate_full_vectors(index) -> None:
         )
     if index.dimension <= 0:
         raise ValueError(f"Invalid dimension {index.dimension}")
-    for value in index.vectors:
-        if not math.isfinite(value):
-            raise ValueError("Full-library index contains non-finite vectors")
+    if index.dtype != "torch.float32":
+        raise ValueError("Full-library index must use torch.float32")
+    for position in range(len(index.entries)):
+        norm_squared = sum(value * value for value in index.vector(position))
+        if not math.isfinite(norm_squared) or not 0.99 < norm_squared < 1.01:
+            raise ValueError("Full-library index requires finite unit vectors")
 
 
 def _read_saved_full_library(index_dir: Path) -> dict | None:
@@ -318,7 +325,7 @@ def cmd_build_full(args: argparse.Namespace) -> int:
     del passages  # free the live objects; only stripped dicts are embedded
     expected = full_library_fingerprint(
         book_shas, min_chars, max_chars, [record["id"] for record in records],
-        args.model, args.revision,
+        args.model, args.revision, [document_input(record) for record in records],
     )
     # Idempotent reuse: the exact same corpus and model needs no new vectors.
     # This check is stdlib-only, so a reuse run never loads torch or the model.
@@ -333,6 +340,7 @@ def cmd_build_full(args: argparse.Namespace) -> int:
             else:
                 if (
                     existing.model_id == args.model
+                    and existing.dtype == "torch.float32"
                     and existing.model_revision == args.revision
                     and (saved.get("book_shas") or {}) == book_shas
                     and len(existing.entries) + existing.skipped_empty_text == len(records)
@@ -344,6 +352,7 @@ def cmd_build_full(args: argparse.Namespace) -> int:
                         "fingerprint": expected,
                         "model_id": existing.model_id,
                         "model_revision": existing.model_revision,
+                        "dtype": existing.dtype,
                         "vectors": len(existing.entries),
                         "dimension": existing.dimension,
                         "skipped_empty_text": existing.skipped_empty_text,
@@ -523,7 +532,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return args.func(args)
-    except (OSError, ValueError, RuntimeError, KeyError, FileNotFoundError) as error:
+    except (OSError, ValueError, RuntimeError, KeyError, ImportError) as error:
         print(json.dumps({"error": str(error)}), file=sys.stderr)
         return 1
 

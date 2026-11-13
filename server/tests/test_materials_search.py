@@ -411,12 +411,12 @@ def test_build_full_refuses_the_proof_and_evaluation_indexes(tmp_path):
 def test_full_library_fingerprint_tracks_sources_and_model():
     shas = {"book-a": "0" * 64, "book-b": "1" * 64}
     ids = ["psg-1", "psg-2"]
-    first = full_library_fingerprint(shas, 400, 1200, ids, "google/embeddinggemma-2", "rev")
-    assert first == full_library_fingerprint(shas, 400, 1200, ids, "google/embeddinggemma-2", "rev")
+    first = full_library_fingerprint(shas, 400, 1200, ids, "google/embeddinggemma-2", "rev", ["title: Original | text: content"])
+    assert first == full_library_fingerprint(shas, 400, 1200, ids, "google/embeddinggemma-2", "rev", ["title: Original | text: content"])
     changed_sha = dict(shas, **{"book-a": "2" * 64})
-    assert full_library_fingerprint(changed_sha, 400, 1200, ids, "google/embeddinggemma-2", "rev") != first
-    assert full_library_fingerprint(shas, 400, 1200, ids + ["psg-3"], "google/embeddinggemma-2", "rev") != first
-    assert full_library_fingerprint(shas, 400, 1200, ids, "google/embeddinggemma-2", "other") != first
+    assert full_library_fingerprint(changed_sha, 400, 1200, ids, "google/embeddinggemma-2", "rev", ["title: Original | text: content"]) != first
+    assert full_library_fingerprint(shas, 400, 1200, ids + ["psg-3"], "google/embeddinggemma-2", "rev", ["title: Original | text: content"]) != first
+    assert full_library_fingerprint(shas, 400, 1200, ids, "google/embeddinggemma-2", "other", ["title: Original | text: content"]) != first
     # The XHTML slice never reaches the model, so it is stripped before embedding.
     assert "html" in STRIP_RECORD_KEYS
 
@@ -452,3 +452,50 @@ def test_real_embeddinggemma_separates_a_matching_and_an_unrelated_passage():
     assert hits[0]["passage_id"] == "psg-light"
     assert hits[0]["score"] > hits[1]["score"]
     assert QUERY_PREFIX.startswith("task: search result")
+
+
+def test_full_fingerprint_tracks_heading_and_document_template():
+    shas = {'book': '0' * 64}
+    args = (shas, 400, 1200, ['same-passage-id'], 'google/embeddinggemma-2', 'rev')
+    first = full_library_fingerprint(*args, ['title: Original | text: content'])
+    assert full_library_fingerprint(*args, ['title: Changed | text: content']) != first
+    assert full_library_fingerprint(*args, ['new-prefix: Original | text: content']) != first
+
+
+@pytest.mark.parametrize('values,dtype', [([0.0, 0.0], 'torch.float32'), ([1.0, 0.0], 'torch.bfloat16')])
+def test_full_index_rejects_zero_vectors_and_wrong_dtype(values, dtype):
+    from array import array
+    from scripts.search_materials import _validate_full_vectors
+    from open_tutor.materials.search import SearchIndex
+    index = SearchIndex(model_id='m', model_revision='r', dtype=dtype, dimension=2,
+                        entries=[{'passage_id': 'p'}], vectors=array('f', values))
+    with pytest.raises(ValueError):
+        _validate_full_vectors(index)
+
+
+def test_full_build_reuses_exact_inputs_without_loading_embedder(tmp_path, monkeypatch, capsys):
+    from types import SimpleNamespace
+    import search_materials as cli
+    source = record('psg-1', 'A real source sentence.', book_id='book-a')
+    passage = SimpleNamespace(to_dict=lambda: dict(source))
+    monkeypatch.setattr(cli, '_available_books', lambda _: [{'id': 'book-a', 'sha256': '0' * 64}])
+    monkeypatch.setattr(cli, 'extract_catalogue_passages', lambda **_: ([passage], {}))
+    encoder = StubEmbedder([[1.0, 0.0, 0.0]], [1.0, 0.0, 0.0])
+    encoder.describe = lambda: {'model_id': encoder.model_id}
+    monkeypatch.setattr(cli, 'EmbeddingGemmaEmbedder', lambda **_: encoder)
+    args = SimpleNamespace(index=tmp_path / 'index', books_json=tmp_path / 'books.json',
+                           data_dir=tmp_path, min_chars=400, max_chars=1200, force=False,
+                           model=encoder.model_id, revision=encoder.model_revision, batch_size=8)
+    assert cli.cmd_build_full(args) == 0
+    capsys.readouterr()
+    before = {p.name: (p.read_bytes(), p.stat().st_mtime_ns) for p in args.index.iterdir()}
+    def forbid_model(**kwargs):
+        raise AssertionError('Unchanged index must not load a model')
+    monkeypatch.setattr(cli, 'EmbeddingGemmaEmbedder', forbid_model)
+    assert cli.cmd_build_full(args) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report['reused'] is True and report['dtype'] == 'torch.float32'
+    assert {p.name: (p.read_bytes(), p.stat().st_mtime_ns) for p in args.index.iterdir()} == before
+    source['heading'] = 'A changed heading'
+    with pytest.raises(AssertionError, match='must not load'):
+        cli.cmd_build_full(args)
