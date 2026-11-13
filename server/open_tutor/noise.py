@@ -52,11 +52,25 @@ def noise_cancellation_mode(environ: dict[str, str] | None = None) -> str:
 
 def _filter_options(mode: str):
     # Imported here on purpose: the package loads a native filter and its model at import
-    # time (about 70 MB of .kef files), so `off` must not pay for it.
+    # time (about 70 MB of .kef files), so `off` must not pay for it. `warm_up` below pays
+    # that cost at process prewarm instead of inside a session.
     from livekit.plugins import noise_cancellation
 
     models = {"nc": noise_cancellation.NC, "bvc": noise_cancellation.BVC}
     return models[mode]()
+
+
+def warm_up(mode: str) -> None:
+    """Load the filter's native side before any session needs it.
+
+    The first import costs about a second and blocks the event loop. On 2026-11-14 that
+    second landed inside a session on the dev setup and pushed the greeting back from
+    0.3-0.4 s to 1.3 s. Importing and building the options at prewarm moves it to worker
+    start, where nothing is waiting. Errors are not swallowed: a mode whose model cannot
+    load should fail at boot.
+    """
+    if mode != OFF:
+        audio_input(mode)
 
 
 def audio_input(mode: str) -> room_io.AudioInputOptions | None:
