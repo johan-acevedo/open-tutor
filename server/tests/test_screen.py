@@ -921,3 +921,43 @@ def test_gemini_page_never_uses_go_key_as_fallback(tmp_path, monkeypatch):
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     with pytest.raises(RuntimeError, match="GEMINI_API_KEY is empty"):
         make_screen(tmp_path)._default_model_call("system", "user", [], None)
+
+
+async def test_patch_delivery_sends_only_latest_change_and_retains_history(tmp_path, monkeypatch):
+    monkeypatch.setenv("SCREEN_LOOK", "0")
+    first = '<ot-patch target="svar" do="before"><p id="mellansteg">Nästa steg</p></ot-patch>'
+    second = '<ot-patch target="mellansteg"><p>Nu visar vi steget.</p></ot-patch>'
+    screen = make_screen(tmp_path, model_call=AsyncMock(side_effect=['<h1>Bråk</h1><ot-answer id="svar"></ot-answer>', first, second]))
+    delivered = []
+    screen.on_patch = delivered.append
+    screen.ask("Visa ett bråk")
+    await screen.wait_idle()
+    screen.mark_visible("p1")
+    for ask in ("Lägg till ett steg", "Ändra steget"):
+        screen.ask(ask)
+        await screen.wait_idle()
+    assert delivered[-1].patch == second
+    assert screen.visible_patches == [first, second]
+
+
+@pytest.mark.parametrize("issues", [
+    [{"kind": "patch", "msg": 'no element with id "missing"'}],
+    ["patch failed: TypeError"],
+])
+async def test_invalid_patch_is_saved_and_reported_to_tutor_without_partial_delivery(tmp_path, monkeypatch, issues):
+    monkeypatch.setenv("SCREEN_LOOK", "0")
+    patch = '<ot-patch target="missing"><p>Fel mål</p></ot-patch><ot-patch target="svar" do="remove"></ot-patch>'
+    screen = make_screen(tmp_path, model_call=AsyncMock(side_effect=['<h1>Bråk</h1><ot-answer id="svar"></ot-answer>', patch]),
+                         render_page=AsyncMock(side_effect=[(b"PNG", []), (b"PNG", issues)]))
+    delivered, failures = [], []
+    screen.on_patch, screen.on_failure = delivered.append, failures.append
+    screen.ask("Visa ett bråk")
+    await screen.wait_idle()
+    screen.mark_visible("p1")
+    screen.ask("Visa svaret")
+    await screen.wait_idle()
+    assert not delivered and not screen.visible_patches
+    assert len(failures) == 1 and "not applied" in failures[0]
+    meta = json.loads((tmp_path / "pages" / "s2" / "meta.json").read_text())
+    assert meta["delivered"] is False
+    assert (tmp_path / "pages" / "s2" / "patch.html").read_text() == patch

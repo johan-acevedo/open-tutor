@@ -1,0 +1,30 @@
+[
+  {
+    "pane": [
+      370,
+      610
+    ],
+    "patches": 2,
+    "failures": [
+      "The screen change was not applied: patch: no element with id \"missing\". Ask for a corrected change or a new page; explain in words meanwhile."
+    ],
+    "patch_issues": [
+      [],
+      []
+    ]
+  },
+  {
+    "pane": [
+      1000,
+      700
+    ],
+    "patches": 2,
+    "failures": [
+      "The screen change was not applied: patch: no element with id \"missing\". Ask for a corrected change or a new page; explain in words meanwhile."
+    ],
+    "patch_issues": [
+      [],
+      []
+    ]
+  }
+]

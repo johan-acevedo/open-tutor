@@ -483,6 +483,8 @@ class Screen:
             return
         visible = self.pages[self.visible_id]
         png, issues, render_s = await self._render(visible.body, patch)
+        errors = [issue_text(i) for i in issues
+                  if issue_kind(i) == "patch" or str(i).startswith("patch failed:")]
         total_s = time.monotonic() - t0
         spec = self.model_spec()
         w, h = self._pane_size()
@@ -492,9 +494,15 @@ class Screen:
                               **spec,
                               "pane": [w, h],
                               "model_s": round(model_s, 2), "render_s": round(render_s, 2),
-                              "total_s": round(total_s, 2), "issues": issues})
+                              "total_s": round(total_s, 2), "issues": issues,
+                              "delivered": not errors})
         record_active("screen_patch", {"job": job_id, "page": visible.page_id,
-                                       "total_s": round(total_s, 2), "issues": issues})
+                                       "total_s": round(total_s, 2), "issues": issues,
+                                       "delivered": not errors})
+        if errors:
+            await self._fail(job_id, "The screen change was not applied: " + "; ".join(errors)[:400]
+                             + ". Ask for a corrected change or a new page; explain in words meanwhile.")
+            return
         self.visible_patches.append(patch)
         result = PatchResult(job_id=job_id, page_id=visible.page_id, patch=patch,
                              png=png, issues=issues, model_s=model_s,
@@ -763,7 +771,7 @@ class Screen:
             self._pw = await async_playwright().start()
         if self._browser is None or not self._browser.is_connected():
             self._browser = await self._pw.chromium.launch()
-        page = await self._browser.new_page(viewport={"width": width, "height": height})
+        page = await self._browser.new_page(viewport={"width": width, "height": height}, reduced_motion="reduce")
         try:
             await page.set_content(screenkit.host_page(screenkit.compose(body)))
             # The inner srcdoc frame may not exist on the very first tick;
@@ -782,12 +790,21 @@ class Screen:
             info = await frame.evaluate("() => ({fontPx: ot.fontPx, issues: ot.issues})")
             issues = list(info.get("issues") or [])
             if patch:
-                try:
-                    patch_issues = await frame.evaluate("(p) => ot.patch(p)", patch)
-                    issues.extend(patch_issues or [])
-                except Exception as error:  # noqa: BLE001 - a bad patch is reported, not fatal
-                    issues.append(f"patch failed: {type(error).__name__}")
-                await page.wait_for_timeout(1000)
+                # Replay distinct batches: removals must finish before the next patch.
+                # Reduced motion makes the preview final immediately, saving the old 1 s wait.
+                for change in [*self.visible_patches, patch]:
+                    try:
+                        patch_issues = await frame.evaluate("(p) => ot.patch(p)", change)
+                        issues.extend(patch_issues or [])
+                    except Exception as error:  # noqa: BLE001 - rejected before child delivery
+                        issues.append(f"patch failed: {type(error).__name__}")
+                        break
+                    await frame.evaluate("""async () => {
+                        for (const a of document.getAnimations()) {
+                            if (Number.isFinite(a.effect.getComputedTiming().endTime)) a.finish();
+                        }
+                        await new Promise(requestAnimationFrame);
+                    }""")
             shot = await page.screenshot()
             return bytes(shot), issues
         finally:

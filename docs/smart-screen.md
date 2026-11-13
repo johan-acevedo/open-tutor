@@ -251,6 +251,17 @@ the generated page and patch at phone and wide sizes before selecting a model.
 
 ### Tutor tools (replace `commission_board` and `edit_board` in smart mode)
 
+Patch preview correction (2026-11-13, `fix/screen-patch-history`): the request already
+carried the original page and applied changes, but the renderer forgot that history.
+An id inserted by one patch then appeared missing to the next preview. Preview now
+replays earlier patch batches in order before the candidate, including completed
+removals. Only the latest patch is sent to the child. A genuine `patch` error rejects
+the whole candidate before RPC, saves `delivered: false` and notifies the tutor through
+`on_failure`; there is no automatic model retry. Static preview uses reduced motion
+and completes finite animations, replacing the old one-second wait. The child's
+animations are unchanged. Synthetic browser evidence at both pane sizes is in
+`screen/review/2026-11-13-patch-history/`; no family session content is copied there.
+
 | Tool | Does | Speed |
 |---|---|---|
 | `ask_screen(ask)` | asks for a new page or a change to the visible one; returns at once | page 5–15 s, change 1–7 s |
