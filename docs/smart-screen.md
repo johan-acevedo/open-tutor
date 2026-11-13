@@ -447,6 +447,25 @@ and the worker then answers with the greeting folded into that reply.
   When go-deepseek later failed, the failover back to gemini was refused
   (`llm_failover_skipped`: it needs thought signatures) and the apology path took over.
 
+### What Johan's test calls settled (2026-11-13)
+
+Three real calls on the dev setup (Johan alone, with Lucas, and alone again). Decisions:
+
+- **Filler sounds: off.** They played on every turn, because a reply never starts within
+  0.7 s, and "only hurt the experience". `TUTOR_FILLERS` stays unset; the code is dormant.
+- **Background voice cancellation: on** (`TUTOR_NOISE_CANCELLATION=bvc`) **and 2 s before
+  sound may interrupt the fox** (`TUTOR_INTERRUPT_MIN_S=2.0`). Johan: before, he had to
+  tense up to be understood and stay silent while the fox spoke; with both on he "could
+  be relaxed". Keep both when this goes to production. Not yet tried with the children
+  alone or with a quiet, distant voice.
+- **The greeting is fixed text and cannot be interrupted.** Room sound in the first second
+  had cancelled it before any audio in two calls.
+- **Fox and page writer: Gemini 4 Hydrogen, thinking low**, DeepSeek V4.1 Flash as the
+  fox's backup. Pages arrived in 6-10 s in the calls.
+- **The mic button is the backstop** for talk that is not meant for the fox; its state is
+  logged from the start of the session.
+- Dev settings live in `~/.config/open-tutor-smart-dev/env` on dell5500, not in the repo.
+
 ## Work packages
 
 Toolbox follow-up, 2026-11-13: narrow-page layout and readability lint are in
