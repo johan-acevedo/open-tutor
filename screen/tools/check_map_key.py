@@ -1,20 +1,29 @@
-"""Check the map key layout and region interaction, without provider calls.
+"""Check the län map: its own drawing box, tight bounds, the key in flow, region interaction.
 
 The pages are unedited DeepSeek V4.1 Flash output for "Visa Sveriges 21 län …"
-(see screen/review/2026-11-13-map-key/). What is checked:
+(see screen/review/2026-11-13-map-key/, the parent folder of this change's evidence).
+What is checked, without provider calls:
 
-- a wide pane puts the key beside the map, so the map can use the full height;
-- a phone keeps the key under the map, and the key never covers the country;
-- the 21 letter codes are all on the map when the map has room, at a readable size,
-  and a code that does not fit is hidden with its key row dimmed;
+- the map is drawn into its own box (`.ot-map-canvas`) with the key in normal flow beside it
+  (wide pane) or under it (phone), never as an overlay over sea or country;
+- Sweden is fitted tightly to its 21 region polygons, so the country fills the drawing box
+  instead of sitting small inside the broad `sverige` view (Norway, Finland, the Baltic);
+- the 21 letter codes are on the map where the map has room, at a readable size on a wide
+  pane, and a code that does not fit is hidden with its key row dimmed;
 - `ot.point('lan-M')` still outlines Skåne, and a patch still marks and names regions.
 
 Run from the repo root:
   uv run --project server python screen/tools/check_map_key.py
+  uv run --project server python screen/tools/check_map_key.py --shots   # also write the PNGs
+
+`--shell DIR` composes with another shell directory (frame.html, shell.css, shell.js), which is
+how the same checks are run against the shell from before this change:
+  screen/tools/check_prior_shell.sh
 """
 
 from __future__ import annotations
 
+import argparse
 import pathlib
 import sys
 
@@ -23,22 +32,22 @@ from playwright.sync_api import sync_playwright
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import screenkit  # noqa: E402
 
-REVIEW = pathlib.Path(__file__).resolve().parents[1] / "review" / "2026-11-13-map-key"
-# page.html and page-ref.html are the fresh pages, page-early.html is the same ask on the old shell.
-# page-ref.html has a bigger answer block, so its map box is shorter: its code count is reported,
-# not asserted.
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+REVIEW = ROOT / "review" / "2026-11-13-map-key"
+OUT = ROOT / "review" / "2026-11-13-map-phone"
+# page.html and page-early.html have short enough answer blocks to fit all 21 letters on a wide
+# map; page-ref.html has the biggest answer block, so one letter stays in the key there.
 BODIES = (("page.html", True), ("page-ref.html", False), ("page-early.html", True))
 WIDE = (1000, 700)
-PHONE = (370, 610)
 MEDIUM = (760, 900)
+PHONE = (370, 610)
+PHONE_SHORT = (370, 558)
 
 GEOMETRY = """() => {
-  const map = document.querySelector('ot-map');
-  const lay = map.querySelector('.ot-vis');
-  const box = lay.getBoundingClientRect();
+  const lay = document.querySelector('ot-map .ot-vis');
+  const canvas = lay.querySelector('.ot-map-canvas');
+  const box = (canvas || lay).getBoundingClientRect();
   const key = lay.querySelector('.ot-map-legend');
-  // The country as CSS pixels: a path's own box is in svg user units, which only match the
-  // layer's pixels when the map was drawn at its final size.
   const rects = [...lay.querySelectorAll('.ot-region-shape')].map(s => s.getBoundingClientRect());
   const bb = rects.length ? {
     x0: Math.min(...rects.map(r => r.left)) - box.left,
@@ -51,15 +60,18 @@ GEOMETRY = """() => {
   const rel = r => ({left: r.left - box.left, top: r.top - box.top, right: r.right - box.left,
                      bottom: r.bottom - box.top, width: r.width, height: r.height});
   return {
+    separate: !!canvas,
+    layout: lay.classList.contains('ot-map-key-side') ? 'beside' : 'under',
     box: {w: box.width, h: box.height},
-    side: key ? key.classList.contains('ot-map-legend-side') : false,
     key: key ? rel(key.getBoundingClientRect()) : null,
+    keyScrollW: key ? key.scrollWidth : 0,
     rows: rows.length,
     codesTotal: codes.length,
     shown: codes.filter(c => !c.hidden).length,
     codeBoxes: codes.filter(c => !c.hidden).map(c => rel(c.getBoundingClientRect())),
     codePx: codes.length ? parseFloat(getComputedStyle(codes[0]).fontSize) : 0,
-    country: bb ? {w: bb.x1 - bb.x0, h: bb.y1 - bb.y0, right: bb.x1, bottom: bb.y1} : null,
+    country: bb ? {w: bb.x1 - bb.x0, h: bb.y1 - bb.y0, left: bb.x0, top: bb.y0,
+                   right: bb.x1, bottom: bb.y1} : null,
     dimRows: rows.filter(r => r.classList.contains('ot-region-key-off')).length,
     fontPx: ot.fontPx,
     issues: ot.issues
@@ -67,50 +79,71 @@ GEOMETRY = """() => {
 }"""
 
 
-def open_page(browser, body: str, size: tuple[int, int]):
+def open_page(browser, body: str, size: tuple[int, int], shell: pathlib.Path, shot=None):
     page = browser.new_page(viewport={"width": size[0], "height": size[1]})
-    page.set_content(screenkit.host_page(screenkit.compose(body)))
+    page.set_content(screenkit.host_page(screenkit.compose(body, shell)))
     frame = screenkit._frame(page)
     frame.wait_for_function("() => document.documentElement.dataset.otReady === '1'", timeout=30000)
+    if shot:
+        page.screenshot(path=str(shot))
     return page, frame
 
 
-def geometry(browser, body: str, size: tuple[int, int]) -> dict:
-    page, frame = open_page(browser, body, size)
+def geometry(browser, body: str, size: tuple[int, int], shell: pathlib.Path, shot=None) -> dict:
+    page, frame = open_page(browser, body, size, shell, shot)
     try:
         return frame.evaluate(GEOMETRY)
     finally:
         page.close()
 
 
-def check_wide(g: dict, where: str, strict: bool) -> None:
-    assert g["side"], f"{where}: the key should sit beside the map, got {g['key']}"
+def fill(g: dict) -> tuple[float, float]:
+    """How much of the drawing box the country covers, as fractions of its height and width."""
+    return g["country"]["h"] / g["box"]["h"], g["country"]["w"] / g["box"]["w"]
+
+
+def check_box(g: dict, where: str, layout: str) -> None:
+    """The key has its own space, and Sweden fills the box the map is drawn into."""
+    assert g["separate"], f"{where}: the key has no box of its own (.ot-map-canvas missing); it overlays the map"
     assert g["rows"] == 21, f"{where}: the key has {g['rows']} rows"
+    assert g["layout"] == layout, f"{where}: the key is {g['layout']} the map, expected {layout}"
+    if layout == "beside":
+        assert g["key"]["left"] >= g["box"]["w"] - 1, f"{where}: the key starts inside the drawing box"
+        assert g["keyScrollW"] <= g["key"]["width"] + 1, \
+            f"{where}: the key column clips its names ({g['keyScrollW']:.0f} in {g['key']['width']:.0f} px)"
+        assert g["key"]["top"] >= -1 and g["key"]["bottom"] <= g["box"]["h"] + 1, \
+            f"{where}: the key does not fit the drawing box height"
+        assert not [c for c in g["codeBoxes"] if c["right"] > g["key"]["left"] + 1], \
+            f"{where}: letter codes run into the key"
+    else:
+        assert g["key"]["top"] >= g["box"]["h"] - 1, \
+            f"{where}: the key starts at {g['key']['top']:.0f} inside a {g['box']['h']:.0f} px drawing box"
+        assert g["key"]["right"] <= g["box"]["w"] + 1, f"{where}: the key runs out of the map"
+    c = g["country"]
+    assert c["left"] >= -1 and c["top"] >= -1 and c["right"] <= g["box"]["w"] + 1 and c["bottom"] <= g["box"]["h"] + 1, \
+        f"{where}: the country is not inside its drawing box: {c} vs {g['box']}"
+    fh, _ = fill(g)
+    assert fh >= 0.85, \
+        f"{where}: the country only fills {fh * 100:.0f}% of the drawing box height " \
+        f"({c['h']:.0f} of {g['box']['h']:.0f} px); the fit is not tight"
+
+
+def check_wide(g: dict, where: str, strict: bool) -> None:
+    check_box(g, where, "beside")
     if strict:
         assert g["shown"] == 21, f"{where}: only {g['shown']} of 21 codes are on the map"
-    assert g["codePx"] >= 11, f"{where}: codes at {g['codePx']} px are unreadable"
-    assert g["country"]["h"] >= 0.7 * g["box"]["h"], \
-        f"{where}: the map only uses {g['country']['h']:.0f} of {g['box']['h']:.0f} px"
-    assert g["key"]["left"] >= g["country"]["right"], f"{where}: the key covers the map"
-    assert g["key"]["height"] <= g["box"]["h"] + 1, f"{where}: the key is taller than the map box"
-    if strict:
         assert not [i for i in g["issues"] if i["kind"] == "crowded"], f"{where}: {g['issues']}"
-    assert not [c for c in g["codeBoxes"] if c["right"] > g["key"]["left"] + 1], \
-        f"{where}: letter codes run into the key"
+    assert g["codePx"] >= 11, f"{where}: codes at {g['codePx']} px are unreadable"
 
 
 def check_phone(g: dict, where: str) -> None:
-    assert not g["side"], f"{where}: the key must stay under the map on a phone"
-    assert g["rows"] == 21, f"{where}: the key has {g['rows']} rows"
-    assert g["key"]["top"] >= g["country"]["bottom"] - 1, \
-        f"{where}: the key starts at {g['key']['top']:.0f} but the country ends at {g['country']['bottom']:.0f}"
-    assert g["key"]["bottom"] <= g["box"]["h"] + 1, f"{where}: the key runs out of the map box"
+    check_box(g, where, "under")
     assert g["shown"] + g["dimRows"] == 21, \
         f"{where}: {g['shown']} codes shown and {g['dimRows']} dimmed key rows"
 
 
-def check_pointing(browser, body: str, name: str) -> None:
-    page, frame = open_page(browser, body, WIDE)
+def check_pointing(browser, name: str, shell: pathlib.Path) -> None:
+    page, frame = open_page(browser, (REVIEW / name).read_text(), WIDE, shell)
     try:
         assert frame.evaluate("() => ot.point('lan-M')"), f"{name}: point lan-M was refused"
         pointed = frame.evaluate(
@@ -123,10 +156,11 @@ def check_pointing(browser, body: str, name: str) -> None:
         page.close()
 
 
-def check_patching(browser, body: str, name: str) -> None:
+def check_patching(browser, name: str, shell: pathlib.Path, shots: bool) -> None:
     patch = (REVIEW / "mark.patch.html").read_text()
     for size in (WIDE, PHONE):
-        page, frame = open_page(browser, body, size)
+        shot = OUT / f"{name.removesuffix('.html')}-{size[0]}x{size[1]}-patched.png" if shots else None
+        page, frame = open_page(browser, (REVIEW / name).read_text(), size, shell)
         try:
             issues = frame.evaluate("(p) => ot.patch(p)", patch)
             where = f"{name} {size[0]}x{size[1]} patch"
@@ -136,37 +170,62 @@ def check_patching(browser, body: str, name: str) -> None:
             for region in ("Skåne", "Stockholm", "Norrbotten"):
                 assert region in named, f"{where}: {region} is not named on the map: {named}"
             g = frame.evaluate(GEOMETRY)
-            assert g["rows"] == 21, f"{where}: the key has {g['rows']} rows"
-            assert g["side"] == (size == WIDE), f"{where}: the key moved to the wrong side"
+            if shot:
+                # let the redraw and its fade-in finish before the screenshot
+                page.wait_for_timeout(2500)
+                page.screenshot(path=str(shot))
+            check_box(g, where, "beside" if size == WIDE else "under")
         finally:
             page.close()
 
 
-def main() -> int:
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--shell", default=str(ROOT / "shell"), help="shell directory to compose with")
+    ap.add_argument("--shots", action="store_true", help="write screenshots to the review folder")
+    ap.add_argument("--table-only", action="store_true",
+                    help="print the measured table and skip the assertions (used on an older shell)")
+    a = ap.parse_args(argv)
+    shell = pathlib.Path(a.shell).resolve()
+    if a.shots:
+        OUT.mkdir(parents=True, exist_ok=True)
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
         try:
-            print("| page | pane | text | key | codes | code size | country | map box | crowded |")
-            print("|---|---|---|---|---|---|---|---|---|")
+            print("| page | pane | key | codes | code size | country | drawing box | filled | crowded | text |")
+            print("|---|---|---|---|---|---|---|---|---|---|")
             for name, strict in BODIES:
                 body = (REVIEW / name).read_text()
-                for size, check in ((PHONE, check_phone), (MEDIUM, None), (WIDE, check_wide)):
-                    g = geometry(browser, body, size)
-                    if check is check_phone:
-                        check(g, f"{name} {size[0]}x{size[1]}")
-                    elif check:
-                        check(g, f"{name} {size[0]}x{size[1]}", strict)
+                for size in (PHONE_SHORT, PHONE, MEDIUM, WIDE):
+                    shot = OUT / f"{name.removesuffix('.html')}-{size[0]}x{size[1]}.png" if a.shots else None
+                    g = geometry(browser, body, size, shell, shot)
+                    where = f"{name} {size[0]}x{size[1]}"
+                    if not a.table_only:
+                        if size == WIDE:
+                            check_wide(g, where, strict)
+                        elif size[0] <= 600:
+                            check_phone(g, where)
+                        else:
+                            check_box(g, where, "beside")
+                    fh, fw = fill(g)
                     crowded = [i for i in g["issues"] if i["kind"] == "crowded"]
-                    print(f"| {name} | {size[0]}x{size[1]} | {g['fontPx']} px | "
-                          f"{'beside' if g['side'] else 'under'} | {g['shown']}/{g['codesTotal']} | "
+                    dense = [i for i in g["issues"] if i["kind"] == "dense"]
+                    box = f"{round(g['box']['w'])}x{round(g['box']['h'])}"
+                    print(f"| {name} | {size[0]}x{size[1]} | {g['layout']}{'' if g['separate'] else ' (overlay)'} | "
+                          f"{g['shown']}/{g['codesTotal']} | "
                           f"{g['codePx']} px | {round(g['country']['w'])}x{round(g['country']['h'])} | "
-                          f"{round(g['box']['w'])}x{round(g['box']['h'])} | "
-                          f"{'yes' if crowded else 'no'} |")
-                check_pointing(browser, body, name)
-                check_patching(browser, body, name)
+                          f"{box} | "
+                          f"{fh * 100:.0f}% h / {fw * 100:.0f}% w | {'yes' if crowded else 'no'} | "
+                          f"{g['fontPx']} px{' (dense)' if dense else ''} |")
+                if a.table_only:
+                    continue
+                check_pointing(browser, name, shell)
+                check_patching(browser, name, shell, a.shots)
         finally:
             browser.close()
-    print("Map key checks passed: layout, codes, pointing and patch.")
+    if a.table_only:
+        return 0
+    print("Map checks passed: separate key box, tight country bounds, codes, pointing and patch.")
     return 0
 
 

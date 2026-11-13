@@ -340,11 +340,25 @@ now measures its key and keeps whichever layout draws Sweden bigger — a column
 two) beside the map on a wide pane, a strip under it on a phone — and the strip sits
 below the fitted map instead of over it. Same real page, 1000×700 pane: the country
 grows from 97×220 to 128×292 px and the 21 codes from 9.4 to 12.3 px, with no
-`crowded` issue. The region map is also slid so Sweden is centred in the room it has.
-Phones keep today's key under the map and still need less page content. Evidence,
-screenshots and `screen/tools/check_map_key.py` are in
+`crowded` issue. Phones keep today's key under the map and still need less page content.
+Evidence, screenshots and `screen/tools/check_map_key.py` are in
 `screen/review/2026-11-13-map-key/`. `screen/REFERENCE.md` no longer says the key is
 under the map, since the shell decides where it goes.
+
+Phone regions map, 2026-11-13 (follow-up on `t3/phone-regions-map`, after PR #41): the
+län map is now two boxes in normal flow — a drawing box and the key, never an overlay —
+and the map is fitted to Sweden's 21 region polygons instead of the broad `sverige` view
+that kept Norway, Finland and the Baltic in frame. On the same real pages, 370×610: the
+country goes from 45×104 px inside a 327×217 px box with the key over it, to 85×192 px in
+a 330×211 px drawing box with the key in its own strip below (codes on the map 12 → 20 of
+21; the last stays dimmed in the key). 1000×700: 136×309 px in a 682×340 drawing box and
+21 codes, no `crowded` issue, with the key as a 251 px column beside it. On a phone the
+region map also takes a taller share of the page (`min-height: 16em` below 600 px), which
+costs about 1 px of text on long pages: the shell reports `dense` rather than hiding it.
+A phone drawing box stays landscape; a portrait one would need 12–13 px text on a
+610-tall pane, so less page content is the cure. Evidence, screenshots, the measured
+table and the same checks failing on the PR #41 shell are in
+`screen/review/2026-11-13-map-phone/`.
 
 1. **Example screens, shell and components.** Owner: a separate Opus 5.5 thread. Status: started
    2026-11-12. Draft delivered 2026-11-12 in PR #29 (`feat/screen-examples`); waits for review by the lead and

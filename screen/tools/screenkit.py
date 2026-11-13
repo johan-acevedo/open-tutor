@@ -31,12 +31,15 @@ CSP = ("default-src 'none'; "
        "connect-src https://cdn.jsdelivr.net https://commons.wikimedia.org")
 
 
-def compose(body: str) -> str:
-    frame = (SHELL / "frame.html").read_text()
-    css = (SHELL / "shell.css").read_text()
-    js = (SHELL / "shell.js").read_text()
+def compose(body: str, shell: pathlib.Path | None = None) -> str:
+    """Wrap a page body in the shell. `shell` points at another shell directory (a git ref
+    exported to disk), which is how the map checks are also run on an older shell."""
+    shell = pathlib.Path(shell) if shell else SHELL
+    frame = (shell / "frame.html").read_text()
+    css = (shell / "shell.css").read_text()
+    js = (shell / "shell.js").read_text()
     # Sweden's 21 län travel with the shell, not with the page body (RPC keeps to ~15 kB).
-    lan = json.loads((DATA / "lan-sverige.json").read_text())
+    lan = json.loads((shell / "data" / "lan-sverige.json").read_text())
     lan_text = json.dumps(lan, ensure_ascii=False, separators=(",", ":")).replace("<", "\\u003c")
     # Replace BODY last so a body can never inject into the shell slots.
     return (frame.replace("{{CSP}}", CSP).replace("{{CSS}}", css)
