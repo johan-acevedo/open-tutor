@@ -1,5 +1,23 @@
 # Smart Screen: choices, tried and rejected
 
+## Toolbox follow-up, 2026-11-13
+
+Narrow panes up to 600 px use one column for rows and grids even when the pane
+is landscape. Their title is smaller, and the reference asks for two to four
+title words. Lint reports phone text below 16 px, includes any fallback scale,
+and flags titles longer than two lines. It does not enforce delivery policy.
+The server owns correction and the decision to show a page with remaining issues.
+
+Real DeepSeek pages, patches, screenshots and repeatable commands are in
+`review/2026-11-13-readability/`. The line page and both patches still get dense
+on phones. The line page also repeats an answer before asking for it. The
+reference now explicitly includes visual answer leakage, but prompt wording
+alone did not solve either problem.
+
+`tools/check_readability.py` checks actual browser reading order and warnings.
+`smalltest/run.py` accepts `--model`, `--requests` and `--sizes` so a targeted
+DeepSeek check need not call Muse or use yesterday's pane sizes.
+
 Work package 1 of `docs/smart-screen.md` (example screens, shell and components), 2026-11-12.
 
 ## Layout of this folder

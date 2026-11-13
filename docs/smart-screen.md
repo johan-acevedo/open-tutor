@@ -298,6 +298,13 @@ deliberately slow stub provider and reports what the worker's log recorded.
 
 ## Work packages
 
+Toolbox follow-up, 2026-11-13: narrow-page layout and readability lint are in
+review on `fix/screen-toolbox-layout`. This uses real DeepSeek V4.1 Flash low
+output at 370×610, 370×558 and 1000×700. Evidence and remaining density/answer-leak
+problems are in `screen/review/2026-11-13-readability/`. Map layout, safe page
+composition, and the server's bounded lint correction are separate changes.
+The lead deploys after review and merge. No dev services were restarted.
+
 1. **Example screens, shell and components.** Owner: a separate Opus 5.5 thread. Status: started
    2026-11-12. Draft delivered 2026-11-12 in PR #29 (`feat/screen-examples`); waits for review by the lead and
    Johan before anything else builds on it.

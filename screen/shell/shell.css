@@ -104,6 +104,16 @@ small, .small { font-size: 0.85em; }
   .row:not(.keep) > :where(ot-graph, ot-map, ot-chart, ot-image, ot-clock, ot-balance, ot-cycle, ot-mindmap) { flex: 1 1 auto; }
 }
 
+/* A short, narrow pane still needs a single reading column. */
+@media (max-width: 600px) {
+  .row { flex-direction: column; }
+  .row > * { flex: 0 0 auto; }
+  .row > .grow, .row > .ot-grows,
+  .row > :where(ot-graph, ot-map, ot-chart, ot-image, ot-clock, ot-balance, ot-cycle, ot-mindmap) { flex: 1 1 auto; }
+  .grid { grid-template-columns: minmax(0, 1fr); }
+  h1 { font-size: 1.3em; line-height: 1.2; }
+}
+
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
