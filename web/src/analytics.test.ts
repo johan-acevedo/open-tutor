@@ -223,6 +223,16 @@ describe('analytics', () => {
     expect(stripKodFromUrl('https://tutor.example/?foo=1')).toBe('https://tutor.example/?foo=1');
     expect(stripKodFromUrl('/?kod=abc')).toBe('/');
     expect(stripKodFromUrl('/')).toBe('/');
+    // Percent-encoded parameter names are the same parameter.
+    expect(stripKodFromUrl('https://tutor.example/?%6bod=SECRET&foo=1')).toBe('https://tutor.example/?foo=1');
+  });
+
+  it('scrubs a percent-encoded kod from the referrer', () => {
+    const cleaned = sanitizePosthogEvent({
+      event: 'page_opened',
+      properties: { $referrer: 'https://x.example/?%6Bod=SECRET', $session_entry_referrer: 'https://x.example/?%6bod=SECRET' },
+    });
+    expect(JSON.stringify(cleaned)).not.toContain('SECRET');
   });
 
   it('returns one stable device id per page load when localStorage throws', () => {

@@ -491,3 +491,24 @@ def test_aclose_with_real_client_and_hung_transport_completes_within_budget(monk
         assert lingering == []
     finally:
         hung.set()
+
+
+def test_typed_listener_attaches_before_the_chat_stream_handler():
+    """A message typed while entrypoint awaits wait_for_participant() is
+    delivered as soon as the lk.chat handler exists. The tracker's listener
+    must already be attached then, or analytics undercounts typed turns
+    while the debug report (which buffers) counts them."""
+    tree = ast.parse((Path(__file__).parent.parent / "open_tutor" / "agent.py").read_text())
+    fn = _entrypoint(tree)
+    attach = register = wait = None
+    for node in ast.walk(fn):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+            name = node.func.attr
+            if name == "attach_typed_listener" and attach is None:
+                attach = node.lineno
+            elif name == "register_text_stream_handler" and register is None:
+                register = node.lineno
+            elif name == "wait_for_participant" and wait is None:
+                wait = node.lineno
+    assert attach is not None and register is not None and wait is not None
+    assert attach < register < wait, (attach, register, wait)

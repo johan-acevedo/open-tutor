@@ -93,7 +93,9 @@ type PostHogEvent = { properties?: Record<string, any> } & Record<string, any>;
  *  without the access code keep their shape and identity. */
 function sanitizeValue(value: unknown, seen: Set<object>): unknown {
   if (typeof value === 'string') {
-    return value.includes('kod=') ? stripKodFromUrl(value) : value;
+    // Parse rather than substring-match: `?%6bod=…` is the same parameter.
+    // A query needs a literal ? or &, so other strings skip the parse.
+    return /[?&]/.test(value) ? stripKodFromUrl(value) : value;
   }
   if (value === null || typeof value !== 'object') return value;
   if (seen.has(value)) return value; // never loop on a cyclic payload

@@ -1174,6 +1174,12 @@ async def entrypoint(ctx: JobContext) -> None:
     # a message that arrives before the handler exists is dropped by the RTC layer with
     # no record anywhere, and RoomIO only registers lk.chat when the session starts.
     typed = TypedChat()
+    # Typed turns are counted at the typed-input boundary, not from SDK chat
+    # items (spoken transcripts arrive there too and would double-count). The
+    # listener attaches before the stream handler exists, so a message typed
+    # while we wait for the participant is still counted.
+    tracker = SessionTracker()
+    typed.attach_typed_listener(tracker.record_typed_turn)
     ctx.room.register_text_stream_handler(TOPIC_CHAT, typed.on_stream)
     child = await ctx.wait_for_participant()
     typed.expect(child.identity)
@@ -1221,12 +1227,6 @@ async def entrypoint(ctx: JobContext) -> None:
     # an UnboundLocalError in every session, analytics on or off.
     analytics = get_analytics()
     distinct_id = stable_distinct_id(device_id, learner.get("name"), ctx.room.name)
-    tracker = SessionTracker()
-    # Typed turns are counted at the typed-input boundary, not from SDK chat
-    # items (spoken transcripts arrive there too and would double-count).
-    # Same synchronous stretch as attach_record above: the loop cannot
-    # deliver a message before this runs, so no turn is missed.
-    typed.attach_typed_listener(tracker.record_typed_turn)
 
     voice = build_tts()
     log.info("tutor TTS route %s", tts_route(voice))
