@@ -123,7 +123,11 @@ class Probe:
         session = client.post(
             "/api/session",
             json={"learner": {"name": "Leo", "grade": 7, "notes": []}},
-            headers={"x-tutor-code": os.environ.get("TUTOR_ACCESS_CODE", "")},
+            headers={
+                "x-tutor-code": os.environ.get("TUTOR_ACCESS_CODE", ""),
+                # In-process probe bypasses Cloudflare, which normally sets this.
+                "cf-ipcountry": "SE",
+            },
         ).json()
         room = rtc.Room()
 
