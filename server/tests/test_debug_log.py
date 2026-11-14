@@ -108,6 +108,11 @@ def test_transcript_both_sides_and_tool_content_recorded(tmp_path):
         function_call_outputs=[llm.FunctionCallOutput(call_id="c1", name="show_steps",
                                                      output="Item b1 is now visible.", is_error=False)],
     ))
+    # The typed turn is recorded at the typed-input boundary (TypedChat), not
+    # as a chat item: the user chat items above are the spoken echo and an
+    # injected prompt, neither of which may count as typed.
+    debug.record("chat_typed", {"text": "Visa hur man löser 3x + 5 = 20.",
+                                "queued": False, "greeted": True})
     path = debug.finalize("ended_by_child")
     body = json.loads(path.read_text(encoding="utf-8"))
     by_event = {}
@@ -296,3 +301,22 @@ async def test_learner_disconnect_finishes_session(tmp_path):
     room.emit("participant_disconnected", SimpleNamespace(identity=tutor.child_identity))
     assert await asyncio.wait_for(task, 1) == "child_left"
     assert cleaned == ["session", "room", "job"]
+
+
+def test_summarize_counts_typed_only_at_the_typed_boundary(tmp_path):
+    """The debug report must not double-count spoken turns as typed.
+
+    Spoken transcripts arrive both as final child_speech and as user chat
+    items; only a chat_typed event (the typed-input boundary) is a typed turn.
+    """
+    from open_tutor.debug_log import summarize
+
+    env, base = enabled_env(tmp_path)
+    debug = DebugLog.create("tutor-room10", LEARNER, "AJ_x", environ=env, base_dir=base)
+    debug.record_sdk(events.UserInputTranscribedEvent(transcript="hej", is_final=True))
+    debug.record_sdk(events.ConversationItemAddedEvent(
+        item=llm.ChatMessage(role="user", content=["hej"])))
+    assert summarize(debug.events)["child_final_turns"] == 1
+    assert summarize(debug.events)["child_typed_turns"] == 0
+    debug.record("chat_typed", {"text": "hej", "queued": False, "greeted": True})
+    assert summarize(debug.events)["child_typed_turns"] == 1

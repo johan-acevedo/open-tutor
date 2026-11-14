@@ -25,11 +25,14 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 import time
 from typing import Any, Callable
 
 from livekit import rtc
 from livekit.agents import AgentSession
+
+log = logging.getLogger("open-tutor")
 
 TOPIC_CHAT = "lk.chat"
 
@@ -65,6 +68,10 @@ class TypedChat:
         self._heard = False  # the tutor has said (or started saying) something already
         self._greet_instruction: str | None = None
         self._tasks: set[asyncio.Task[None]] = set()
+        # Analytics counters (one call per typed turn, no text). Attached in
+        # entrypoint next to attach_record, before the loop can deliver a
+        # message, so no turn is missed.
+        self._typed_listeners: list[Callable[[], None]] = []
 
     # ---- wiring ----------------------------------------------------------------
 
@@ -74,6 +81,14 @@ class TypedChat:
         for event, data in self._buffered:
             record(event, data)
         self._buffered.clear()
+
+    def attach_typed_listener(self, listener: Callable[[], None]) -> None:
+        """Counted turns: called once per typed message that arrives.
+
+        Analytics counts typed turns from this hook — not from SDK
+        ``conversation_item_added`` user messages, where spoken transcripts
+        also arrive and one spoken turn would count as spoken=1 and typed=1."""
+        self._typed_listeners.append(listener)
 
     def expect(self, identity: str | None) -> None:
         """Only the linked child's messages are ours to answer."""
@@ -141,6 +156,12 @@ class TypedChat:
         # reply machinery can lose it.
         self._event("chat_typed", {"text": text[:2000], "queued": not self._ready.is_set(),
                                    "greeted": self._heard})
+        # The same typed boundary analytics counts from (never the SDK chat items).
+        for listener in list(self._typed_listeners):
+            try:
+                listener()
+            except Exception as error:
+                log.debug("typed listener failed: %s", error)
         self._pending.append(text)
         await self._flush()
 

@@ -71,13 +71,19 @@ def default_dir() -> Path:
 
 
 def config_snapshot(environ: dict[str, str] | None = None) -> dict[str, str]:
-    """Only the allowlisted keys, values truncated. Never credentials."""
+    """Only the allowlisted keys, values truncated. Never credentials.
+
+    Plus a derived ``posthog_enabled`` boolean (``"1"``/``"0"``): product
+    analytics state belongs in the trail, the project token never does.
+    """
     env = os.environ if environ is None else environ
     snapshot: dict[str, str] = {}
     for key in SAFE_CONFIG_KEYS:
         value = env.get(key)
         if value is not None:
             snapshot[key] = value[:200]
+    get = env.get if hasattr(env, "get") else (lambda k, d="": os.environ.get(k, d))
+    snapshot["posthog_enabled"] = "1" if (get("TUTOR_POSTHOG_KEY", "") or "").strip() else "0"
     return snapshot
 
 
@@ -288,7 +294,7 @@ class DebugLog:
         if not self.enabled or self.directory is None:
             self.close()
             return None
-        summary = _summarize(self.events)
+        summary = summarize(self.events)
         report = {
             "report": "open-tutor debug session",
             "written_utc": _utc_now(),
@@ -412,21 +418,14 @@ def _dump_error(event: Any) -> dict[str, Any]:
     return entry
 
 
-def _is_prompt_injection(text: str) -> bool:
-    """Worker-injected session events are user-role messages, not the child's words."""
-    return text.startswith("[Session event")
-
-
-def _summarize(events: list[dict[str, Any]]) -> dict[str, Any]:
+def summarize(events: list[dict[str, Any]]) -> dict[str, Any]:
+    """Session counts for the debug report and for analytics (see analytics.py)."""
     child_turns = sum(1 for e in events if e["event"] == "child_speech" and e.get("final"))
-    typed_turns = sum(
-        1
-        for e in events
-        if e["event"] == "chat_item"
-        and e.get("item") == "message"
-        and e.get("role") == "user"
-        and not _is_prompt_injection(e.get("text") or "")
-    )
+    # Typed turns are counted at the typed-input boundary (TypedChat records
+    # one ``chat_typed`` per message that arrives): LiveKit also adds spoken
+    # transcripts as user ``conversation_item_added``, so counting user chat
+    # items would count one spoken turn as spoken=1 AND typed=1.
+    typed_turns = sum(1 for e in events if e["event"] == "chat_typed")
     tutor_replies = sum(1 for e in events if e["event"] == "reply_started")
     assistant_texts = sum(
         1

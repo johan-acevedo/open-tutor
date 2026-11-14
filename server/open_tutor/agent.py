@@ -10,6 +10,7 @@ import base64
 import json
 import logging
 import os
+import time
 from datetime import datetime, timezone
 from typing import Any
 
@@ -34,6 +35,7 @@ from livekit.plugins import cartesia, elevenlabs, silero, soniox
 from pydantic import ValidationError
 
 from . import noise, prompt
+from .analytics import SessionTracker, get_analytics, sanitize_outcome, stable_distinct_id
 from .board import (
     HtmlItem,
     Ids,
@@ -1172,6 +1174,12 @@ async def entrypoint(ctx: JobContext) -> None:
     # a message that arrives before the handler exists is dropped by the RTC layer with
     # no record anywhere, and RoomIO only registers lk.chat when the session starts.
     typed = TypedChat()
+    # Typed turns are counted at the typed-input boundary, not from SDK chat
+    # items (spoken transcripts arrive there too and would double-count). The
+    # listener attaches before the stream handler exists, so a message typed
+    # while we wait for the participant is still counted.
+    tracker = SessionTracker()
+    typed.attach_typed_listener(tracker.record_typed_turn)
     ctx.room.register_text_stream_handler(TOPIC_CHAT, typed.on_stream)
     child = await ctx.wait_for_participant()
     typed.expect(child.identity)
@@ -1179,9 +1187,11 @@ async def entrypoint(ctx: JobContext) -> None:
         meta = json.loads(child.metadata or "{}")
         learner = meta.get("learner", {})
         board = meta.get("board", {}) or {}
+        device_id = meta.get("device_id")
     except json.JSONDecodeError:
         learner = {}
         board = {}
+        device_id = None
 
     debug = DebugLog.create(ctx.room.name, learner, getattr(getattr(ctx, "job", None), "id", "?"))
     typed.attach_record(debug.record)
@@ -1209,6 +1219,14 @@ async def entrypoint(ctx: JobContext) -> None:
         tutor = Tutor(learner, ctx.room, board=board, greeting_note=note)
     tutor.child_identity = child.identity
     set_active(debug)
+
+    # Product analytics (PostHog): one process-wide client, fully off without
+    # TUTOR_POSTHOG_KEY. Bound here, before any handler registration below
+    # closes over the tracker: Python reads enclosing-function locals at call
+    # time, but these are entrypoint locals, so a later assignment would be
+    # an UnboundLocalError in every session, analytics on or off.
+    analytics = get_analytics()
+    distinct_id = stable_distinct_id(device_id, learner.get("name"), ctx.room.name)
 
     voice = build_tts()
     log.info("tutor TTS route %s", tts_route(voice))
@@ -1261,6 +1279,7 @@ async def entrypoint(ctx: JobContext) -> None:
         # Names only: arguments can hold the child's words.
         log.info("tools executed: %s", ", ".join(call.name for call in event.function_calls))
         debug.record_sdk(event)
+        tracker.record_sdk(event)
 
     for sdk_event in (
         "user_input_transcribed",
@@ -1276,6 +1295,11 @@ async def entrypoint(ctx: JobContext) -> None:
         "error",
     ):
         session.on(sdk_event, debug.record_sdk)
+        session.on(sdk_event, tracker.record_sdk)
+    # "close" has its own debug subscription in _run_until_done (session_closed)
+    # and "function_tools_executed" its own handler above: both record to the
+    # tracker here so the ended-event counts match the debug summary.
+    session.on("close", tracker.record_sdk)
 
     if fillers is not None:
         # Follows child turns and agent state; plays on its own track, never in the
@@ -1472,6 +1496,13 @@ async def entrypoint(ctx: JobContext) -> None:
         debug.record("worker_session_started", {
             "cloud_recording": os.environ.get("TUTOR_CLOUD_RECORDING") == "1",
             "noise_cancellation": noise_mode})
+        analytics.capture(distinct_id, "tutor_session_started", {
+            "room": ctx.room.name,
+            "grade": learner.get("grade"),
+            "returning": len(learner.get("notes") or []) > 0,
+            "llm_route": os.environ.get("TUTOR_LLM", "go"),
+            "tts": tts_route(voice),
+        })
         if fillers is not None:
             # Publishes the filler track and starts making the clips in the background;
             # a failure here leaves the feature off and never breaks the session.
@@ -1500,6 +1531,30 @@ async def entrypoint(ctx: JobContext) -> None:
         report_path = debug.finalize(outcome)
         if report_path is not None:
             log.info("debug session report: %s", report_path)
+        try:
+            summary = tracker.summary()
+            # Fixed category only: the raw outcome can carry an exception
+            # message, which never leaves the worker (see sanitize_outcome).
+            outcome_category, error_type = sanitize_outcome(outcome)
+            ended: dict[str, Any] = {
+                "room": ctx.room.name,
+                "duration_s": round(time.time() - debug.started_at, 1),
+                "outcome": outcome_category,
+                "close_reason": summary.get("close_reason"),
+                "child_spoken_turns": summary.get("child_final_turns", 0),
+                "child_typed_turns": summary.get("child_typed_turns", 0),
+                "tutor_replies": summary.get("tutor_replies", 0),
+                "tool_calls": summary.get("tool_calls", 0),
+                "tool_errors": summary.get("tool_errors", 0),
+                "provider_errors": summary.get("provider_errors", 0),
+            }
+            if error_type is not None:
+                ended["error_type"] = error_type
+            analytics.capture(distinct_id, "tutor_session_ended", ended)
+        finally:
+            # Off the event loop with a short timeout: a slow analytics
+            # backend must not delay the session teardown.
+            await analytics.aclose()
         clear_active()
 
 

@@ -21,6 +21,7 @@ from livekit import api
 from pydantic import BaseModel, Field
 
 from .config import AGENT_NAME
+from .analytics import posthog_settings
 from .materials.serving import SectionPackageStore, materials_router
 
 WEB_DIST = Path(os.environ.get("TUTOR_WEB_DIST", Path(__file__).resolve().parents[2] / "web" / "dist"))
@@ -50,6 +51,9 @@ class Learner(BaseModel):
 class SessionRequest(BaseModel):
     learner: Learner
     board: BoardInfo = BoardInfo()
+    # Random per-browser id (crypto.randomUUID, localStorage) so sessions from
+    # the same device can be counted together. Opaque: never personal data.
+    device_id: str | None = Field(default=None, max_length=100)
 
 
 class SessionLimiter:
@@ -96,6 +100,15 @@ def create_app(
                 return JSONResponse(status_code=403, content={"detail": "Open Tutor is currently available from Sweden only."})
         return await call_next(request)
 
+    @app.get("/api/config")
+    async def config() -> dict[str, Any]:
+        """Public runtime config for the page. No secrets: only the PostHog
+        project token (``phc_…``, meant to be public) and host, or null when
+        analytics is off. Passes through the country middleware like other routes.
+        """
+        settings = posthog_settings(env)
+        return {"posthog": settings} if settings else {"posthog": None}
+
     @app.get("/api/health")
     async def health() -> dict[str, Any]:
         return {"ok": True, "livekit": bool(env.get("LIVEKIT_URL"))}
@@ -111,8 +124,11 @@ def create_app(
             raise HTTPException(status_code=429, detail="busy")
         room = "tutor-" + secrets.token_urlsafe(9)
         identity = "learner-" + secrets.token_hex(4)
-        metadata = json.dumps({"learner": body.learner.model_dump(exclude_none=True),
-                               "board": body.board.model_dump()}, ensure_ascii=False)
+        meta: dict[str, Any] = {"learner": body.learner.model_dump(exclude_none=True),
+                                "board": body.board.model_dump()}
+        if body.device_id:
+            meta["device_id"] = body.device_id
+        metadata = json.dumps(meta, ensure_ascii=False)
         token = (
             api.AccessToken(env["LIVEKIT_API_KEY"], env["LIVEKIT_API_SECRET"])
             .with_identity(identity)

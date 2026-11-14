@@ -60,6 +60,8 @@ export type SessionLearner = {
 export type SessionRequest = {
   learner: SessionLearner;
   board: { w: number; h: number; device: string };
+  /** Random per-browser id (localStorage) so one device's sessions link up. */
+  device_id: string;
 };
 
 export type SessionResponse = {

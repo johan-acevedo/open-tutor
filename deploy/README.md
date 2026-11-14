@@ -11,6 +11,28 @@ Share the page as `https://<host>/?kod=<family code>`. The browser remembers the
 
 Only one worker should register as `open-tutor` per LiveKit project. A second (for example a developer's `dev` worker) would take some of the sessions.
 
+## Product analytics (PostHog, EU cloud)
+
+Off until configured: without a key the page loads no analytics SDK and the
+worker sends nothing. To enable, add to `~/.config/open-tutor/env` (same file
+as the other secrets) and restart both services:
+
+```bash
+TUTOR_POSTHOG_KEY=phc_…
+# TUTOR_POSTHOG_HOST=https://eu.i.posthog.com   # default, normally unset
+systemctl --user restart open-tutor-web open-tutor-agent
+```
+
+What is counted: one `tutor_session_started` and one `tutor_session_ended`
+event per session (room, grade, turns, tool and error counts), plus page-side
+funnel events (`page_opened`, `access_code_result`, `session_started`, …).
+Person profiles are identified only (`device id + learner name`); conversation
+text, typed text, homework content and images never leave the session, and
+session outcomes are fixed categories (error events carry only the exception
+class name, never its message). With no
+key, `/api/config` returns `{"posthog": null}` and every analytics helper is
+a no-op.
+
 ## Isolated material-library preview
 
 `deploy/materials-preview.sh` installs separate user services and a separate HTTPS port on the current machine. It requires a private `~/.config/open-tutor-materials/env` file (0600) with the existing provider credentials and `TUTOR_AGENT_NAME=open-tutor-materials-preview`; it refuses the normal family dispatch name. The launcher builds this checkout, synchronizes a separate ML-enabled virtualenv, downloads speech/VAD assets, and restarts only `open-tutor-materials-web` and `open-tutor-materials-agent`.
