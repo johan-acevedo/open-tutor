@@ -102,6 +102,8 @@ The worker logs the route at the start of each session (`tutor TTS route elevenl
 | `TUTOR_CLOUD_RECORDING` | `1` uploads session audio and transcripts to LiveKit Cloud observability. Off by default |
 | `TUTOR_DEBUG_LOG` | `1` writes a per-session debug trail to a private local directory (see below). Off by default |
 | `TUTOR_DEBUG_LOG_DIR` | Override the debug trail directory (default `~/.local/state/open-tutor/sessions`) |
+| `TUTOR_POSTHOG_KEY` | PostHog project token (`phc_…`, EU cloud). Unset (default): analytics fully off, no SDK load, no network calls |
+| `TUTOR_POSTHOG_HOST` | PostHog host, default `https://eu.i.posthog.com` |
 | `TUTOR_STT_MAX_ENDPOINT_MS`, `TUTOR_MIN_ENDPOINT` | Turn-taking tuning for pauses while a child thinks |
 | `TUTOR_NOISE_CANCELLATION` | `off` (default, today's behaviour), `nc` or `bvc`: LiveKit's enhanced noise cancellation on the child's inbound audio, before the VAD and the recogniser. See [noise and background voice cancellation](#noise-and-background-voice-cancellation). An unknown value stops the worker at boot |
 | `TUTOR_FILLERS` | `1` lets the fox make one short pre-made sound when a reply to the child's turn is late. Off by default |
@@ -279,6 +281,10 @@ bin/with-env uv run python scripts/debug_sessions.py --show tutor-XXXX
 ```
 
 Default off, so open-source adopters get no behaviour or file change.
+
+The trail's config snapshot also records analytics state as `posthog_enabled`
+(`"1"`/`"0"`): the project token itself is never written anywhere server-side.
+See [hosting](../deploy/README.md) for turning PostHog on.
 
 ## Teaching boards
 

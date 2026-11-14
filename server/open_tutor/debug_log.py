@@ -71,13 +71,19 @@ def default_dir() -> Path:
 
 
 def config_snapshot(environ: dict[str, str] | None = None) -> dict[str, str]:
-    """Only the allowlisted keys, values truncated. Never credentials."""
+    """Only the allowlisted keys, values truncated. Never credentials.
+
+    Plus a derived ``posthog_enabled`` boolean (``"1"``/``"0"``): product
+    analytics state belongs in the trail, the project token never does.
+    """
     env = os.environ if environ is None else environ
     snapshot: dict[str, str] = {}
     for key in SAFE_CONFIG_KEYS:
         value = env.get(key)
         if value is not None:
             snapshot[key] = value[:200]
+    get = env.get if hasattr(env, "get") else (lambda k, d="": os.environ.get(k, d))
+    snapshot["posthog_enabled"] = "1" if (get("TUTOR_POSTHOG_KEY", "") or "").strip() else "0"
     return snapshot
 
 
@@ -288,7 +294,7 @@ class DebugLog:
         if not self.enabled or self.directory is None:
             self.close()
             return None
-        summary = _summarize(self.events)
+        summary = summarize(self.events)
         report = {
             "report": "open-tutor debug session",
             "written_utc": _utc_now(),
@@ -417,7 +423,8 @@ def _is_prompt_injection(text: str) -> bool:
     return text.startswith("[Session event")
 
 
-def _summarize(events: list[dict[str, Any]]) -> dict[str, Any]:
+def summarize(events: list[dict[str, Any]]) -> dict[str, Any]:
+    """Session counts for the debug report and for analytics (see analytics.py)."""
     child_turns = sum(1 for e in events if e["event"] == "child_speech" and e.get("final"))
     typed_turns = sum(
         1

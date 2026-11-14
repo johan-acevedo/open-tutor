@@ -10,6 +10,7 @@ import base64
 import json
 import logging
 import os
+import time
 from datetime import datetime, timezone
 from typing import Any
 
@@ -34,6 +35,7 @@ from livekit.plugins import cartesia, elevenlabs, silero, soniox
 from pydantic import ValidationError
 
 from . import noise, prompt
+from .analytics import SessionTracker, get_analytics, stable_distinct_id
 from .board import (
     HtmlItem,
     Ids,
@@ -1179,9 +1181,11 @@ async def entrypoint(ctx: JobContext) -> None:
         meta = json.loads(child.metadata or "{}")
         learner = meta.get("learner", {})
         board = meta.get("board", {}) or {}
+        device_id = meta.get("device_id")
     except json.JSONDecodeError:
         learner = {}
         board = {}
+        device_id = None
 
     debug = DebugLog.create(ctx.room.name, learner, getattr(getattr(ctx, "job", None), "id", "?"))
     typed.attach_record(debug.record)
@@ -1276,6 +1280,7 @@ async def entrypoint(ctx: JobContext) -> None:
         "error",
     ):
         session.on(sdk_event, debug.record_sdk)
+        session.on(sdk_event, tracker.record_sdk)
 
     if fillers is not None:
         # Follows child turns and agent state; plays on its own track, never in the
@@ -1438,6 +1443,11 @@ async def entrypoint(ctx: JobContext) -> None:
 
     outcome = "unknown"
     warm_up_task: asyncio.Task | None = None
+    # Product analytics (PostHog): one process-wide client, fully off without
+    # TUTOR_POSTHOG_KEY. The tracker counts SDK events without storing text.
+    analytics = get_analytics()
+    distinct_id = stable_distinct_id(device_id, learner.get("name"), ctx.room.name)
+    tracker = SessionTracker()
 
     def opening(_instruction: str) -> None:
         """The session is ready and nothing was typed before it: greet in fixed text.
@@ -1472,6 +1482,13 @@ async def entrypoint(ctx: JobContext) -> None:
         debug.record("worker_session_started", {
             "cloud_recording": os.environ.get("TUTOR_CLOUD_RECORDING") == "1",
             "noise_cancellation": noise_mode})
+        analytics.capture(distinct_id, "tutor_session_started", {
+            "room": ctx.room.name,
+            "grade": learner.get("grade"),
+            "returning": len(learner.get("notes") or []) > 0,
+            "llm_route": os.environ.get("TUTOR_LLM", "go"),
+            "tts": tts_route(voice),
+        })
         if fillers is not None:
             # Publishes the filler track and starts making the clips in the background;
             # a failure here leaves the feature off and never breaks the session.
@@ -1500,6 +1517,22 @@ async def entrypoint(ctx: JobContext) -> None:
         report_path = debug.finalize(outcome)
         if report_path is not None:
             log.info("debug session report: %s", report_path)
+        try:
+            summary = tracker.summary()
+            analytics.capture(distinct_id, "tutor_session_ended", {
+                "room": ctx.room.name,
+                "duration_s": round(time.time() - debug.started_at, 1),
+                "outcome": outcome,
+                "close_reason": summary.get("close_reason"),
+                "child_spoken_turns": summary.get("child_final_turns", 0),
+                "child_typed_turns": summary.get("child_typed_turns", 0),
+                "tutor_replies": summary.get("tutor_replies", 0),
+                "tool_calls": summary.get("tool_calls", 0),
+                "tool_errors": summary.get("tool_errors", 0),
+                "provider_errors": summary.get("provider_errors", 0),
+            })
+        finally:
+            analytics.shutdown()
         clear_active()
 
 

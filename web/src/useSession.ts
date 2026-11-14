@@ -22,6 +22,19 @@ import {
 } from './protocol';
 import { appendNote } from './db';
 import type { Profile } from './db';
+import {
+  accessCodeResult,
+  getDeviceId,
+  homeworkShared,
+  identifyLearner,
+  micPermission,
+  resourceOpened,
+  sessionEnded,
+  sessionFailed,
+  sessionStarted,
+  sessionStartRequested,
+  turnSent,
+} from './analytics';
 import { AgentGate } from './agentGate';
 import { isNoteLike, validateBoardFocus, validateBoardItem, validateBoardPageOp } from './validate';
 import { dataUrlToBytes, downscaleImage } from './image';
@@ -223,11 +236,24 @@ export function useSession(mobile = false) {
   const toastTimer = useRef<number>(0);
   const sentTimer = useRef<number>(0);
   const captionTimer = useRef<number>(0);
+  // Session wall-clock for the session_ended duration (seconds, one decimal).
+  const sessionStartAtRef = useRef(0);
+  const sessionEndTrackedRef = useRef(false);
   const boardWatchStopRef = useRef<(() => void) | null>(null);
   const boardLastSentRef = useRef<string>('');
   // A data message published before the agent participant is in the room is dropped
   // by the room, so everything the page sends to the tutor waits for the agent first.
   const agentGateRef = useRef<AgentGate>(new AgentGate());
+
+  /** Report the session end once, from whichever path ends it first. */
+  const trackSessionEnd = useCallback((reason: string) => {
+    if (sessionEndTrackedRef.current) return;
+    sessionEndTrackedRef.current = true;
+    const durationS = sessionStartAtRef.current
+      ? Math.round((Date.now() - sessionStartAtRef.current) / 100) / 10
+      : 0;
+    sessionEnded(reason, durationS);
+  }, []);
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -442,6 +468,9 @@ export function useSession(mobile = false) {
       setDragOver(false);
       mountResolvers.current.clear();
       setPhase('connecting');
+      sessionStartAtRef.current = 0;
+      sessionEndTrackedRef.current = false;
+      sessionStartRequested();
       agentGateRef.current.reset();
       // Fresh per-session diagnostics: seq/dropped restart so journals never mix rooms.
       const diag = createDiagLog({
@@ -457,6 +486,8 @@ export function useSession(mobile = false) {
 
       const notes = p.notes.slice(-5).reverse(); // newest first
       let session: SessionResponse;
+      let codeAsked = false;
+      let failStatus: string | number = 'request-failed';
       try {
         const request = () => {
           const board = readBoardSize();
@@ -465,25 +496,40 @@ export function useSession(mobile = false) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'x-tutor-code': familyCode() },
             body: JSON.stringify({ learner: { name: p.name, grade: p.grade, notes },
-              board }),
+              board, device_id: getDeviceId() }),
           });
         };
         let res = await request();
         if (res.status === 401) {
           // The owner can protect the instance with a family code; asked once per browser.
+          codeAsked = true;
           const code = window.prompt('Skriv familjekoden:') ?? '';
           rememberFamilyCode(code.trim());
           res = await request();
         }
+        if (res.status === 401) {
+          accessCodeResult(false);
+          showToast('Fel familjekod. Försök igen.');
+          cleanupRoom();
+          setPhase('profiles');
+          return;
+        }
+        if (codeAsked) accessCodeResult(true);
         if (res.status === 429) {
+          sessionFailed(429);
           showToast('Det är fullt just nu. Försök igen om en stund.');
           cleanupRoom();
           setPhase('profiles');
           return;
         }
-        if (!res.ok) throw new Error(`session ${res.status}`);
+        if (!res.ok) {
+          failStatus = res.status;
+          throw new Error(`session ${res.status}`);
+        }
         session = (await res.json()) as SessionResponse;
+        identifyLearner(p.name, p.grade);
       } catch {
+        sessionFailed(failStatus);
         showToast('Kunde inte starta sessionen. Kontrollera anslutningen och försök igen.');
         setPhase('profiles');
         cleanupRoom();
@@ -543,6 +589,7 @@ export function useSession(mobile = false) {
       });
       room.on(RoomEvent.Disconnected, (reason) => {
         if (intentionalEndRef.current) return;
+        trackSessionEnd('disconnected');
         setConnBanner('disconnected');
         diag.note('connection', { kind: 'disconnected', reason: String(reason ?? '') });
       });
@@ -647,6 +694,12 @@ export function useSession(mobile = false) {
         // report the size only once that transition has settled, so the
         // tutor commissions the finished pane, not the arrival one.
         await waitForBoardLayout();
+        // Resources the tutor puts in front of the child (funnel step).
+        try {
+          if ((v.item as { kind: string }).kind === 'resource') resourceOpened();
+        } catch {
+          /* analytics must never break the board */
+        }
         return JSON.stringify({ ok: true, board: readBoardSize() });
       });
 
@@ -773,7 +826,10 @@ export function useSession(mobile = false) {
 
       try {
         await room.connect(session.url, session.token);
+        sessionStarted(session.room);
+        sessionStartAtRef.current = Date.now();
       } catch {
+        sessionFailed('connect-failed');
         showToast('Kunde inte ansluta till samtalet. Försök igen.');
         cleanupRoom();
         setPhase('profiles');
@@ -856,17 +912,19 @@ export function useSession(mobile = false) {
         await room.localParticipant.setMicrophoneEnabled(true);
         setMicEnabled(true);
         setMicBlocked(false);
+        micPermission(true);
         // The log needs the starting state, not only later button presses.
         void sendToAgent(JSON.stringify({ type: 'mic', on: true, why: 'start' }), TOPIC_SESSION_EVENT);
       } catch {
         // Mic denied: stay connected, banner + text field instead.
         setMicEnabled(false);
         setMicBlocked(true);
+        micPermission(false);
         void sendToAgent(JSON.stringify({ type: 'mic', on: false, why: 'blocked' }), TOPIC_SESSION_EVENT);
       }
       setPhase('live');
     },
-    [cleanupRoom, prepareStart, readParticipantStates, showToast, waitForMounted],
+    [cleanupRoom, prepareStart, readParticipantStates, showToast, trackSessionEnd, waitForMounted],
   );
 
   const sendChat = useCallback(
@@ -878,6 +936,7 @@ export function useSession(mobile = false) {
       setLastSent(text);
       try {
         await sendToAgent(text, TOPIC_CHAT);
+        turnSent();
         window.clearTimeout(sentTimer.current);
         sentTimer.current = window.setTimeout(() => setLastSent(null), 4000);
       } catch {
@@ -915,10 +974,12 @@ export function useSession(mobile = false) {
       await room.localParticipant.setMicrophoneEnabled(true);
       setMicEnabled(true);
       setMicBlocked(false);
+      micPermission(true);
       void sendToAgent(JSON.stringify({ type: 'mic', on: true, why: 'retry' }), TOPIC_SESSION_EVENT);
     } catch {
       setMicEnabled(false);
       setMicBlocked(true);
+      micPermission(false);
     }
   }, [sendToAgent]);
 
@@ -1008,6 +1069,7 @@ export function useSession(mobile = false) {
     const room = roomRef.current;
     if (!room || phase !== 'live') return;
     intentionalEndRef.current = true;
+    trackSessionEnd('ended_by_child');
     setPhase('ending');
     setConnBanner(null);
     void diagRef.current?.flush();
@@ -1048,6 +1110,7 @@ export function useSession(mobile = false) {
         const title = file.name || 'Bild';
         setItems((prev) => [...prev, { id: itemId, kind: 'homework', title, images: [down.dataUrl] }]);
         setActiveItemId(itemId);
+        homeworkShared('image');
         if (room) {
           await sendHomeworkBytes(room, down.bytes, { kind, source: file.name || 'bild', itemId });
         }
@@ -1075,6 +1138,7 @@ export function useSession(mobile = false) {
         const images = pages.map((pg) => pg.dataUrl);
         setItems((prev) => [...prev, { id: itemId, kind: 'homework', title: file.name || 'PDF', images }]);
         setActiveItemId(itemId);
+        homeworkShared('pdf');
         if (room) {
           const total = String(pages.length);
           for (let i = 0; i < pages.length; i++) {
@@ -1105,6 +1169,7 @@ export function useSession(mobile = false) {
       const itemId = uid();
       setItems((prev) => [...prev, { id: itemId, kind: 'homework', title: 'Inklistrad text', text: trimmed }]);
       setActiveItemId(itemId);
+      homeworkShared('text');
       if (room) {
         try {
           await sendToAgent(trimmed, TOPIC_HOMEWORK_TEXT, { itemId });

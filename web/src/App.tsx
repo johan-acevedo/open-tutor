@@ -3,6 +3,7 @@ import { layoutMode, mapAvatarState } from './avatarState';
 import { listProfiles } from './db';
 import type { Profile } from './db';
 import { useSession } from './useSession';
+import { initAnalytics, pageOpened } from './analytics';
 import ProfilePicker from './components/ProfilePicker';
 import Avatar from './components/Avatar';
 import Board from './components/Board';
@@ -16,6 +17,10 @@ import { useViewport } from './useViewport';
 import { usePhoneStage } from './phoneStage';
 
 export default function App() {
+  // Product analytics warm up once: a no-op until /api/config names a key.
+  useEffect(() => {
+    void initAnalytics().then(() => pageOpened());
+  }, []);
   // Dev-only Smart Screen demo: ?screen-demo=1 shows two example pages with
   // patch/reveal/point buttons, no LiveKit session.
   const screenDemo = (() => {
