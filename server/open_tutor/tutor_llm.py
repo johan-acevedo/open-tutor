@@ -192,6 +192,9 @@ def build_route_llm(route: LLMRoute, session_id: str, http_client: Any = None) -
     """The LiveKit LLM for one route. ``session_id`` is the room name: Go asks for a
     stable id per conversation. ``http_client`` is for tests (a recorded stream)."""
     if route.api == "responses":
+        # Any Responses route lands here, not only Go ones: `cc` serves the same
+        # model on Command Code. Go asks for the session header; Command Code
+        # tolerates it, so one client shape covers both.
         client = AsyncOpenAI(
             api_key=route.api_key,
             base_url=route.base_url,

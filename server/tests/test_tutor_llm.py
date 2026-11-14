@@ -13,7 +13,8 @@ from livekit.agents.llm import ChatContext, FunctionCall, FunctionCallOutput
 
 from open_tutor.agent import Tutor
 from open_tutor.board import StepsItem
-from open_tutor.tutor_llm import GoResponsesLLM, build_llm
+from open_tutor.config import llm_route
+from open_tutor.tutor_llm import GoResponsesLLM, build_llm, build_route_llm
 
 FIXTURE = (Path(__file__).parent / "fixtures" / "go_responses_tool_call.sse").read_bytes()
 
@@ -112,6 +113,29 @@ async def test_each_session_gets_its_own_model_and_session_id(go_env):
     assert second[0].headers["x-opencode-session"] == "tutor-room-2"
     await a.aclose()
     await b.aclose()
+
+
+async def test_cc_route_calls_command_code_responses_with_the_session_header():
+    """The backup route is the same Responses shape as Go, on Command Code's endpoint.
+
+    Command Code tolerates Go's `x-opencode-session` header, so the route reuses it."""
+    requests = []
+    route = llm_route({"TUTOR_LLM": "cc", "COMMAND_CODE_API_KEY": "cc-key"})
+    model = build_route_llm(route, "tutor-room-9", http_client=recorded_go(requests))
+    try:
+        assert isinstance(model, GoResponsesLLM)
+        text, calls, _ = await run(model, context(), Tutor({"name": "Leo"}, room=None))
+        assert text.strip() == "Visar lösningen på tavlan."
+        assert [call.name for call in calls] == ["show_steps"]
+        assert str(requests[0].url) == "https://api.commandcode.ai/provider/v1/responses"
+        assert requests[0].headers["authorization"] == "Bearer cc-key"
+        assert requests[0].headers["x-opencode-session"] == "tutor-room-9"
+        body = json.loads(requests[0].content)
+        assert body["model"] == "meta/muse-spark-1.3-contributor"
+        assert body["reasoning"]["effort"] == "minimal"
+        assert body["store"] is False
+    finally:
+        await model.aclose()
 
 
 def test_warm_up_builds_the_event_models():

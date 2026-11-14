@@ -36,6 +36,7 @@ from pydantic import ValidationError
 
 from . import noise, prompt
 from .analytics import SessionTracker, get_analytics, sanitize_outcome, stable_distinct_id
+from .analytics import warm_up as warm_up_analytics
 from .board import (
     HtmlItem,
     Ids,
@@ -1162,6 +1163,10 @@ def prewarm(proc: JobProcess) -> None:
     noise.warm_up(noise.noise_cancellation_mode())
     proc.userdata["vad"] = silero.VAD.load(min_silence_duration=0.5)
     warm_up()
+    # The first analytics capture inside a session blocked the loop importing the
+    # SDK; with a key set this moves that import to worker start. Without a key it
+    # imports nothing and analytics stays fully off.
+    warm_up_analytics()
 
 
 server.setup_fnc = prewarm
