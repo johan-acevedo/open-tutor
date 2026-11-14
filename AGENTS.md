@@ -13,6 +13,48 @@ product requirements.
 
 The product speaks Swedish. Code, comments, docs, commits and PRs are in English.
 
+## What we are building toward
+
+A summary of the founding brief in `README.md`. Read the brief itself before work that
+shapes how the tutor behaves or what the child sees; where this summary and the brief
+differ, the brief wins.
+
+- **It starts with a parent's need.** The children bring their actual homework on ordinary
+  weekdays. There is no scripted demo. What happens in those sessions guides development,
+  ahead of anyone's prediction of what children want.
+- **The tutor is a calm older student sitting beside the child.** Patient, approachable,
+  interested in what the child thinks. It asks, it explains directly when that helps, and it
+  changes approach when an explanation does not land. It does not turn every difficulty into
+  another question the child cannot answer.
+- **The child owns the work.** The tutor helps them get going and find their own words. It
+  does not write the essay. This boundary is a teacher's judgement, refined through use, not
+  an exhaustive rule set.
+- **It feels like a live call.** No push-to-talk. The tutor speaks when addressed or when it
+  has something useful to add. Silence while the child thinks, reads or writes is a natural
+  part of the session.
+- **The screen gives the voice something to show.** Choose the medium that explains the idea,
+  and keep speech in step with what the child can actually see.
+- **Learning continues through other educators' work.** The tutor may find and share public
+  resources and use its own judgement; there are no approval workflows or allowlists.
+- **No installation, no account.** A school Chromebook, a Windows PC or a phone. What the
+  tutor remembers about a learner lives in that browser.
+- **Swedish first**, across school subjects. Other languages and language switching later.
+- **Open and not for profit.** Providers are replaceable and the owner's own setup is not a
+  dependency of the application.
+
+Left out on purpose until the owner asks for them: accounts, sync between devices, parent
+dashboards and parent instructions, billing, resource ratings, a whiteboard the child edits,
+formal curriculum integration, several tutor personalities.
+
+What we are trying to learn from real use, and what a change should be judged against:
+
+- Does the tutor give the child enough time to think and speak?
+- Does the child move forward while the work stays theirs?
+- Do the visual explanations clarify the subject?
+- Does the tutor recognise when to explain, ask, demonstrate or change approach?
+- Can the child apply what they understood to the next task?
+- Do they want to come back when they need help?
+
 ## Map
 
 | Path | What |
