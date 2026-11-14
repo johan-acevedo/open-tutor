@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import logging
 import os
+import socket
 import threading
 import time
 
@@ -147,86 +148,91 @@ async def aclose_shared_clients() -> None:
             _async_openai.pop(key, None)
 
 
-def _warm_one_sync(label: str, base_url: str, api_key: str, user_agent: str,
-                   timeout_s: float) -> bool:
-    """One cheap sync request (the provider's model list) to warm DNS/TLS.
+class _WarmRequest:
+    """A sync warm-up whose deadline owner can interrupt an active socket."""
 
-    Loop-independent on purpose: the sync client is closed and discarded, so
-    prewarm can never bind the shared async transports to the wrong loop. Even
-    a 404 warms DNS/TCP/TLS, which is the point after a cold restart. Any
-    failure only costs the log line: warmth is best-effort.
-    """
-    try:
-        with httpx.Client(
-            timeout=httpx.Timeout(connect=timeout_s, read=timeout_s,
-                                  write=timeout_s, pool=timeout_s),
-            follow_redirects=True,
-            headers={"User-Agent": user_agent},
-        ) as client:
-            response = client.get(
-                f"{(base_url or '').rstrip('/')}/models",
+    def __init__(self, timeout_s: float, user_agent: str) -> None:
+        self.client = httpx.Client(timeout=timeout_s, follow_redirects=True,
+                                   headers={"User-Agent": user_agent})
+        self.response: httpx.Response | None = None
+        self._streams: list = []
+        self._lock = threading.Lock()
+        self._stopped = False
+
+    def trace(self, event: str, info: dict) -> None:
+        if event.endswith(("connect_tcp.complete", "start_tls.complete")):
+            stream = info["return_value"]
+            with self._lock:
+                self._streams.append(stream)
+                stopped = self._stopped
+            if stopped:
+                stream.close()
+                raise TimeoutError("warm-up deadline")
+
+    def close(self) -> None:
+        with self._lock:
+            self._stopped = True
+            streams = list(self._streams)
+        # Closing a socket alone need not wake recv() in another thread.
+        for stream in streams:
+            sock = stream.get_extra_info("socket")
+            if sock is not None:
+                try:
+                    sock.shutdown(socket.SHUT_RDWR)
+                except OSError:
+                    pass
+        try:
+            if self.response is not None:
+                self.response.close()
+        finally:
+            self.client.close()
+
+    def run(self, label: str, base_url: str, api_key: str) -> bool:
+        try:
+            with self.client.stream(
+                "GET", f"{base_url.rstrip('/')}/models",
                 headers={"Authorization": f"Bearer {api_key}"},
-            )
-            log.info("warmed provider connection to %s (status %s)",
-                     label, response.status_code)
-            return True
-    except Exception as error:  # noqa: BLE001 - warmth is best-effort
-        log.debug("provider warm-up to %s did not answer: %s", label, error)
-        return False
+                extensions={"trace": self.trace},
+            ) as response:
+                self.response = response
+                log.info("warmed provider connection to %s (status %s)", label, response.status_code)
+                return True  # DNS/TCP/TLS is warm; never download the body.
+        except Exception:  # noqa: BLE001 - warmth is best-effort, no credentials in logs
+            log.debug("provider warm-up to %s did not answer", label)
+            return False
+        finally:
+            self.client.close()
 
 
 def warm_provider_connections(
     routes: list[tuple[str, str, str]], user_agent: str, budget_s: float = 5.0
 ) -> dict[str, bool]:
-    """Open one connection per ``(label, base_url, api_key)`` route.
-
-    Synchronous, bounded by an absolute ``budget_s`` total deadline, never
-    raises: worker prewarm
-    calls this and a dead provider must not stop the worker from starting.
-    Loop-independent (sync clients, discarded after use): the shared async
-    transports stay owned by the job loop that will use them. Returns which
-    routes answered, for the log only.
-
-    Each warm-up runs in a daemon thread joined with the remaining budget:
-    httpx timeouts are inactivity timeouts, so a server trickling bytes
-    forever would otherwise outlive ``budget_s`` and stall worker init. A
-    timed-out warm-up counts as not answered; the orphaned daemon thread is
-    discarded and never blocks the worker.
-    """
-    started = time.monotonic()
+    """Warm response headers only, closing active I/O at the total deadline."""
+    deadline = time.monotonic() + max(0.0, budget_s)
     outcome: dict[str, bool] = {}
-    if not routes:
-        return outcome
     try:
-        deduped = list(dict.fromkeys((label, base_url, key) for label, base_url, key in routes if base_url and key))
-        if not deduped:
-            return outcome
-        per_route = max(0.5, budget_s / max(1, len(deduped)))
-        for label, base_url, key in deduped:
-            elapsed = time.monotonic() - started
-            remaining = max(0.5, budget_s) - elapsed
+        deduped = list(dict.fromkeys(route for route in routes if route[1] and route[2]))
+        for index, (label, base_url, key) in enumerate(deduped):
+            remaining = deadline - time.monotonic()
             if remaining <= 0:
                 break
-            # Absolute deadline: the httpx timeouts bound inactivity, not the
-            # total; the thread join bounds the total even for tricklers.
-            join_timeout = max(0.1, min(per_route, remaining))
+            route_deadline = time.monotonic() + remaining / (len(deduped) - index)
+            request = _WarmRequest(max(0.001, route_deadline - time.monotonic()), user_agent)
             holder: dict[str, bool] = {}
 
-            def _target(label=label, base_url=base_url, key=key) -> None:
-                try:
-                    holder["ok"] = _warm_one_sync(label, base_url, key, user_agent, per_route)
-                except Exception:  # noqa: BLE001 - warmth is best-effort
-                    holder["ok"] = False
+            def target(request=request, label=label, base_url=base_url, key=key, holder=holder):
+                holder["ok"] = request.run(label, base_url, key)
 
-            thread = threading.Thread(target=_target, name=f"prewarm-{label}", daemon=True)
+            thread = threading.Thread(target=target, name=f"prewarm-{label}", daemon=True)
             thread.start()
-            thread.join(timeout=join_timeout)
-            if thread.is_alive():
-                log.debug("provider warm-up to %s timed out after %.1fs; continuing",
-                          label, join_timeout)
-                outcome[label] = False
-            else:
-                outcome[label] = bool(holder.get("ok", False))
-    except Exception as error:  # noqa: BLE001 - prewarm must never fail the worker
-        log.debug("provider warm-up skipped: %s", error)
+            # Reserve time to interrupt socket I/O and join the stopped worker.
+            thread.join(timeout=max(0.0, route_deadline - time.monotonic() - 0.1))
+            timed_out = thread.is_alive()
+            if timed_out:
+                request.close()
+                thread.join(timeout=max(0.0, route_deadline - time.monotonic()))
+                log.debug("provider warm-up to %s reached its deadline", label)
+            outcome[label] = not timed_out and holder.get("ok", False)
+    except Exception:  # noqa: BLE001 - prewarm must never fail the worker
+        log.debug("provider warm-up skipped")
     return outcome

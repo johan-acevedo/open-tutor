@@ -535,6 +535,7 @@ async def test_caller_cancel_during_loser_teardown_propagates(tmp_path, monkeypa
             raise
 
     async def fast_fallback(system, user, images, look_png):
+        await asyncio.sleep(0.5)
         return "<h1>Backup</h1>"
 
     monkeypatch.setenv("SCREEN_HEDGE_AFTER_S", "0.05")
@@ -547,6 +548,7 @@ async def test_caller_cancel_during_loser_teardown_propagates(tmp_path, monkeypa
     with pytest.raises(asyncio.CancelledError):
         await asyncio.wait_for(task, timeout=SCREEN_LOSER_CLEANUP_BOUND_S + 3.0)
     assert _time.monotonic() - started < SCREEN_LOSER_CLEANUP_BOUND_S + 3.0
+    await screen.aclose()
     lingering = [t.get_name() for t in asyncio.all_tasks()
                  if t.get_name().startswith("screen-hedge-")]
     assert lingering == []

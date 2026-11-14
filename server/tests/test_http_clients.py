@@ -179,6 +179,6 @@ def test_prewarm_trickling_server_returns_within_budget():
             [("trickle", url, "k")], "ua", budget_s=2.0)
         elapsed = _time.monotonic() - started
         assert elapsed < 4.0  # absolute deadline, not the ~20 s trickle
-        assert outcome == {"trickle": False}
+        assert outcome == {"trickle": True}
     finally:
         server.shutdown()

@@ -27,6 +27,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Iterable
 
+from .reaper import Reaper
+
 log = logging.getLogger("open-tutor")
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -340,6 +342,10 @@ class Screen:
         self.pages_dir = Path(pages_dir)
         self.pages_dir.mkdir(parents=True, exist_ok=True)
         self.session_id = session_id
+        self._reaper = Reaper(SCREEN_LOSER_CLEANUP_BOUND_S)
+        self._requests: dict[asyncio.Task[Any], str] = {}
+        self._streams: dict[Any, str] = {}
+        self._request_streams: dict[asyncio.Task[Any], Any] = {}
         self._model_call = model_call or self._default_model_call
         # The backup model call (Command Code when SCREEN_FALLBACK=cc). None means
         # the default backup path; tests inject a fake here just like model_call.
@@ -447,6 +453,11 @@ class Screen:
                 pass
 
     async def aclose(self) -> None:
+        for task, route in list(self._requests.items()):
+            self._stop_request(task, route)
+        for stream in list(self._streams):
+            self._close_stream(stream)
+        await self._reaper.wait()
         if self._browser is not None:
             try:
                 await self._browser.close()
@@ -616,8 +627,10 @@ class Screen:
             first: asyncio.Event = asyncio.Event()
             holder: dict[str, float] = {}
             try:
-                result = await self._run_route(self._model_call, system, user,
-                                               self._homework_images(), look_png, first, holder)
+                result = await self._request_with_timeout(
+                    self._run_route(self._model_call, system, user,
+                                    self._homework_images(), look_png, first, holder),
+                    route=_spec_provider(self.model_spec()), timeout=budget_s)
             except Exception as error:
                 self._note_call(kind, _spec_provider(self.model_spec()), hedged=False,
                                 ttft_s=None, loser="none", error=type(error).__name__)
@@ -655,10 +668,10 @@ class Screen:
             # after the fallback floor, at least a second to answer.
             primary_timeout = min(primary_timeout, max(1.0, budget_s - FALLBACK_MIN_S))
         try:
-            text, _elapsed = await asyncio.wait_for(
+            text, _elapsed = await self._request_with_timeout(
                 self._run_route(self._model_call, system, user, images, look_png,
                                 first, holder),
-                timeout=primary_timeout,
+                route=primary_provider, timeout=primary_timeout,
             )
             self._note_provider(kind, primary_provider, failed=False)
             self._note_call(kind, primary_provider, hedged=False,
@@ -682,16 +695,16 @@ class Screen:
             fallback_holder: dict[str, float] = {}
             try:
                 if self._fallback_call is not None:
-                    text, _elapsed = await asyncio.wait_for(
+                    text, _elapsed = await self._request_with_timeout(
                         self._run_route(self._fallback_call, system, user, images,
                                        look_png, fallback_first, fallback_holder),
-                        timeout=remaining,
+                        route=_spec_provider(fallback), timeout=remaining,
                     )
                 else:
-                    text, _fallback_first_s = await asyncio.wait_for(
+                    text, _fallback_first_s = await self._request_with_timeout(
                         self._stream_spec(fallback, system, user, images, look_png,
                                         self._track_first(fallback_first, fallback_holder)),
-                        timeout=remaining,
+                        route=_spec_provider(fallback), timeout=remaining,
                     )
             except asyncio.CancelledError:
                 raise
@@ -726,74 +739,39 @@ class Screen:
 
         return on_first_text
 
-    @staticmethod
-    def _caller_cancels() -> int:
-        task = asyncio.current_task()
-        try:
-            return task.cancelling() if task is not None else 0
-        except AttributeError:  # pragma: no cover - Python < 3.11
-            return 0
+    def _own_request(self, task: asyncio.Task[Any], route: str) -> asyncio.Task[Any]:
+        self._requests[task] = route
+        task.add_done_callback(lambda done: self._requests.pop(done, None))
+        return task
 
-    @staticmethod
-    async def _bounded_reap_task(task: "asyncio.Task[Any]", *, label: str,
-                                 bound: float = SCREEN_LOSER_CLEANUP_BOUND_S) -> bool:
-        """Wait for a discarded side within ``bound`` (shielded, never raises).
+    def _close_stream(self, stream: Any) -> None:
+        route = self._streams.pop(stream, None)
+        if route is not None:
+            self._reaper.stop(route, close=stream.close())
 
-        A caller cancellation landing mid-reap does not abort the wait: the
-        shield keeps it alive up to the bound, then the side is
-        force-cancelled and reaped (log once). Returns True when a caller
-        cancellation was observed, so the caller re-raises it after the reap
-        instead of swallowing it as the loser's own ``CancelledError``.
-        Never waits longer than ``bound`` in total.
-        """
-        current = asyncio.current_task()
+    def _stop_request(self, task: asyncio.Task[Any], route: str) -> None:
+        stream = self._request_streams.get(task)
+        stream_route = self._streams.pop(stream, None) if stream is not None else None
+        self._reaper.stop(stream_route or route, [task],
+                          stream.close() if stream_route is not None else None)
+
+    async def _request_with_timeout(self, call: Awaitable[Any], *, route: str,
+                                    timeout: float | None) -> Any:
+        task = self._own_request(asyncio.ensure_future(call), route)
+        if timeout is not None:
+            return await self._await_request(task, timeout)
         try:
-            before = current.cancelling() if current is not None else 0
-        except AttributeError:  # pragma: no cover - Python < 3.11
-            before = 0
-        deadline = time.monotonic() + max(0.0, bound)
-        while not task.done():
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                log.warning("screen hedged call loser cleanup timed out; dropping it (%s)",
-                            label)
-                task.cancel()
-                try:
-                    await task
-                except BaseException:  # noqa: BLE001 - dropped, already logged
-                    pass
-                break
-            try:
-                await asyncio.wait_for(asyncio.shield(task), timeout=remaining)
-            except TimeoutError:
-                log.warning("screen hedged call loser cleanup timed out; dropping it (%s)",
-                            label)
-                task.cancel()
-                try:
-                    await task
-                except BaseException:  # noqa: BLE001 - dropped, already logged
-                    pass
-                break
-            except asyncio.CancelledError:
-                try:
-                    now = current.cancelling() if current is not None else 0
-                except AttributeError:  # pragma: no cover - Python < 3.11
-                    now = before + 1
-                if current is None or now <= before:
-                    break  # the loser itself ended cancelled
-                continue  # our caller wants out; the reap still finishes
-            except Exception:  # noqa: BLE001 - loser outcome is swallowed
-                break
+            return await asyncio.shield(task)
+        finally:
+            if not task.done():
+                self._stop_request(task, route)
+
+    async def _await_request(self, task: asyncio.Task[Any], timeout: float) -> Any:
         try:
-            if not task.cancelled():
-                task.exception()
-        except BaseException:  # noqa: BLE001 - retrieved, never lost
-            pass
-        try:
-            after = current.cancelling() if current is not None else 0
-        except AttributeError:  # pragma: no cover - Python < 3.11
-            after = before
-        return after > before
+            return await asyncio.wait_for(asyncio.shield(task), timeout=max(0.0, timeout))
+        finally:
+            if not task.done():
+                self._stop_request(task, self._requests.get(task, "screen"))
 
     async def _call_model_hedged(self, system: str, user: str,
                                  look_png: bytes | None, kind: str, t0: float,
@@ -824,9 +802,9 @@ class Screen:
             first: asyncio.Event = asyncio.Event()
             holder: dict[str, float] = {}
             try:
-                text, _elapsed = await self._run_route(
-                    self._model_call, system, user, images, look_png, first, holder,
-                    base=call_base)
+                text, _elapsed = await self._request_with_timeout(
+                    self._run_route(self._model_call, system, user, images, look_png, first, holder,
+                                    base=call_base), route=primary_provider, timeout=budget_s)
             except Exception as error:
                 self._note_call(kind, primary_provider, hedged=False,
                                 ttft_s=None, loser="none", error=type(error).__name__)
@@ -849,7 +827,9 @@ class Screen:
             self._run_route(self._model_call, system, user, images, look_png,
                             p_first, p_holder, base=call_base),
             name=f"screen-hedge-primary-{kind}")
+        self._own_request(p_task, primary_provider)
         s_task: asyncio.Task[tuple[str, float]] | None = None
+        other_task: asyncio.Task[tuple[str, float]] | None = None
         errors: dict[str, BaseException] = {}
         primary_error_class: str | None = None
         try:
@@ -899,19 +879,8 @@ class Screen:
                 loser, loser_task = "secondary", s_task
             else:
                 loser, loser_task = "primary", p_task
-            # Bounded loser teardown that never swallows the caller's
-            # cancellation: the loser's own CancelledError (from the cancel
-            # above) is swallowed, but a caller cancellation observed via the
-            # task's cancel count is re-raised before anything else is
-            # awaited, so no page is returned after the caller went away.
-            reap_before = self._caller_cancels()
             if loser_task is not None:
-                loser_task.cancel()
-                await self._bounded_reap_task(
-                    loser_task, label=f"{kind}-{loser}",
-                    bound=SCREEN_LOSER_CLEANUP_BOUND_S)
-            if self._caller_cancels() > reap_before:
-                raise asyncio.CancelledError()
+                self._stop_request(loser_task, primary_provider if loser == "primary" else fallback_provider)
             if loser == "primary" and "primary" in errors:
                 primary_error_class = type(errors["primary"]).__name__
             winner_task = p_task if winner == "primary" else s_task
@@ -919,8 +888,8 @@ class Screen:
             try:
                 # Bounded by the call's original absolute deadline: a winner
                 # that never finishes must not outlive the caller's timeout.
-                winner_text, _winner_elapsed = await asyncio.wait_for(
-                    winner_task, timeout=max(0.0, deadline - time.monotonic()))
+                winner_text, _winner_elapsed = await self._await_request(
+                    winner_task, deadline - time.monotonic())
             except (asyncio.CancelledError, KeyboardInterrupt, SystemExit):
                 # The caller went away: propagate at once instead of starting
                 # a backup that would outlive the caller's timeout.
@@ -955,9 +924,10 @@ class Screen:
                                        look_png, other_first, other_holder,
                                        base=call_base),
                         name=f"screen-hedge-restart-{kind}")
+                self._own_request(other_task, fallback_provider if loser == "secondary" else primary_provider)
                 try:
-                    winner_text, _winner_elapsed = await asyncio.wait_for(
-                        other_task, timeout=remaining)
+                    winner_text, _winner_elapsed = await self._await_request(
+                        other_task, remaining)
                 except (asyncio.CancelledError, KeyboardInterrupt, SystemExit):
                     raise
                 except BaseException as other_error:
@@ -989,17 +959,9 @@ class Screen:
                             ttft_s=winner_first_t, loser=loser_state)
             return winner_text, time.monotonic() - t0
         finally:
-            for task in (p_task, s_task):
-                if task is not None and not task.done():
-                    task.cancel()
-            for task in (p_task, s_task):
+            for task in (p_task, s_task, other_task):
                 if task is not None:
-                    # Bounded and shielded: no side outlives the call within
-                    # more than the loser-cleanup bound, and a caller
-                    # cancellation still propagates after the reap.
-                    await self._bounded_reap_task(
-                        task, label=f"{kind}-finally",
-                        bound=SCREEN_LOSER_CLEANUP_BOUND_S)
+                    self._stop_request(task, self._requests.get(task, primary_provider if task is p_task else fallback_provider))
 
     def _start_screen_secondary(self, fallback: dict[str, str], system: str, user: str,
                                 images: list[str], look_png: bytes | None, kind: str,
@@ -1020,7 +982,9 @@ class Screen:
                     self._track_first(first, holder, base=base))
                 return text, 0.0
             call = _real()
-        return asyncio.create_task(call, name=f"screen-hedge-secondary-{kind}")
+        return self._own_request(
+            asyncio.create_task(call, name=f"screen-hedge-secondary-{kind}"),
+            _spec_provider(fallback))
 
     async def _race_screen_first(
         self,
@@ -1056,12 +1020,7 @@ class Screen:
                 await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
         finally:
             for task in (p_wait, s_wait):
-                if not task.done():
-                    task.cancel()
-                try:
-                    await task
-                except BaseException:  # noqa: BLE001 - waiter, nothing to record
-                    pass
+                self._reaper.stop("screen-first-text", [task])
 
     def _fallback_budget(self) -> float:
         """Seconds the fallback may spend without pushing past the job limit."""
@@ -1490,8 +1449,8 @@ class Screen:
 
         The first-text time is ``None`` when the answer held no text. The caller
         owns the absolute deadline (the job or step budget); the shared transport
-        only carries a generous backstop. The stream is closed in a ``finally``
-        so cancellation always releases the connection."""
+        only carries a generous backstop. A ``finally`` starts stream closure
+        in the owned reaper, so cancellation never waits for provider teardown."""
         from openai.types import Reasoning
 
         from .config import USER_AGENT
@@ -1551,12 +1510,16 @@ class Screen:
                 extra_headers=extra_headers,
                 **reasoning,
             )
+            self._streams[stream] = provider
+            request = asyncio.current_task()
+            self._request_streams[request] = stream
             try:
                 async for chunk in stream:
                     for choice in chunk.choices or []:
                         note_text(choice.delta.content or "")
             finally:
-                await stream.close()
+                self._request_streams.pop(request, None)
+                self._close_stream(stream)
         else:
             if images or look_png:
                 input_parts: list[dict[str, Any]] = [{"type": "input_text", "text": user}]
@@ -1573,12 +1536,16 @@ class Screen:
                 stream=True,
                 extra_headers=extra_headers,
             )
+            self._streams[stream] = provider
+            request = asyncio.current_task()
+            self._request_streams[request] = stream
             try:
                 async for event in stream:
                     if event.type == "response.output_text.delta":
                         note_text(event.delta or "")
             finally:
-                await stream.close()
+                self._request_streams.pop(request, None)
+                self._close_stream(stream)
         text = ("".join(parts)).strip()
         if announced:
             first_s: float | None = time.perf_counter() - t0

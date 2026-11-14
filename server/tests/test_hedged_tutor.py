@@ -408,47 +408,31 @@ async def test_partial_then_failed_secondary_is_never_promoted(hedged, turns):
 
 
 async def test_cancelled_cleanup_closes_provider_and_propagates(turns):
-    """P1: a caller cancellation landing mid-close strands nothing and propagates.
+    """Caller cancellation leaves closure owned and propagates immediately."""
+    from open_tutor.reaper import Reaper
 
-    The cleanup awaits are shielded, so the provider stream is still closed via
-    LiveKit's native ``LLMStream.aclose()`` semantics; the observed caller
-    cancellation is re-raised after every side is closed.
-    """
-    from open_tutor.session_llm import _RoutedStream
+    entered, release = asyncio.Event(), asyncio.Event()
 
-    release = asyncio.Event()
-    entered = asyncio.Event()
-
-    class GatedCloseStream(ScriptedStream):
+    class SlowCloseStream(ScriptedStream):
         async def aclose(self):
             entered.set()
-            await release.wait()  # the caller cancellation lands here
+            await release.wait()
             await super().aclose()
 
-    owner = HedgeFakeLLM("preferred")
-    stream = GatedCloseStream(owner, llm.ChatContext(), [],
-                              APIConnectOptions(), script=[])
-    pump = asyncio.create_task(asyncio.sleep(30))
-    pumps = {"primary": pump}
-    streams = {"primary": stream}
-
-    async def wait_closed() -> None:
-        await asyncio.wait_for(entered.wait(), timeout=5)
-        assert stream.closed is False  # still inside the shielded close
-
-    cleanup = asyncio.create_task(_RoutedStream._stop_all(pumps, streams))
-    await wait_closed()
-    assert not cleanup.done()
-    cleanup.cancel()  # the caller's cancellation, mid-close
-    await asyncio.sleep(0.05)
-    assert not cleanup.done()  # shielded: the close is still in flight
-    release.set()  # let the provider close finish
+    owner = HedgeFakeLLM("preferred", script=[])
+    stream = SlowCloseStream(owner, llm.ChatContext(), [], APIConnectOptions(), script=[])
+    reaper = Reaper()
+    reaper.stop("preferred", [stream._task], stream.aclose())
+    cleanup = asyncio.create_task(reaper.wait())
+    await entered.wait()
+    cleanup.cancel()
     with pytest.raises(asyncio.CancelledError):
-        await cleanup  # ... then the cancellation propagates
-    assert stream.closed  # closed via the native aclose, not stranded
-    assert stream._task.done()  # no provider task left running
-    assert pump.done()
-    assert pumps == {} and streams == {}  # ownership released after cleanup
+        await cleanup
+    assert reaper.tasks  # ownership survives the caller
+    release.set()
+    await reaper.wait()
+    assert stream.closed
+    assert stream._task.done()
 
 
 # ---- third fix round: bounded loser cleanup, wins-only-completed --------------
@@ -519,7 +503,7 @@ async def test_caller_cancel_during_hedged_turn_returns_within_bound(hedged, tur
         LOSER_CLEANUP_BOUND_S = 2.0
 
     preferred = HangingFakeLLM("preferred", script=[(0.5, "slow")])
-    fallback = HedgeFakeLLM("fallback", script=[(0.01, "fast"), (0.05, " more")])
+    fallback = HedgeFakeLLM("fallback", script=[(0.01, "fast"), (60, " more")])
     model = await warmed(preferred, fallback)
 
     stream = model.chat(chat_ctx=llm.ChatContext())

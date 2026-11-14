@@ -37,6 +37,7 @@ from livekit.agents.types import DEFAULT_API_CONNECT_OPTIONS, NOT_GIVEN, NotGive
 
 from .config import LLMRoute
 from .debug_log import record_active
+from .reaper import Reaper
 
 log = logging.getLogger("open-tutor")
 
@@ -57,15 +58,6 @@ DEFAULT_HEDGE_AFTER_S = 2.5
 # discarded side's pump cancel + stream close runs concurrently with winner
 # forwarding and is force-cancelled after this long (log once, no text).
 LOSER_CLEANUP_BOUND_S = 2.0
-
-
-def _cancel_count() -> int:
-    """How many times the current task was cancelled (0 off-loop)."""
-    task = asyncio.current_task()
-    try:
-        return task.cancelling() if task is not None else 0
-    except AttributeError:  # Python < 3.11: no cancelling(); treat as 0/1
-        return 0
 
 
 def tutor_hedge_after_s(environ: dict[str, str] | None = None) -> float | None:
@@ -637,11 +629,9 @@ class _RoutedStream(llm.LLMStream):
         self._call_kwargs = call_kwargs
         self._answered = False
         self._ttft: float | None = None
-        # Owned loser-cleanup tasks: discarded sides are detached into
-        # background tasks (see _spawn_loser_cleanup) so a hanging
-        # cancel/aclose never delays winner forwarding. Reaped in the turn's
-        # finally and in aclose(), always within LOSER_CLEANUP_BOUND_S.
-        self._loser_cleanups: list[asyncio.Task[None]] = []
+        self._reaper = Reaper(LOSER_CLEANUP_BOUND_S)
+        self._owned_streams: dict[llm.LLMStream, str] = {}
+        self._owned_pumps: set[asyncio.Task[None]] = set()
         super().__init__(
             owner,
             chat_ctx=chat_ctx,
@@ -705,6 +695,7 @@ class _RoutedStream(llm.LLMStream):
             conn_options=conn_options,
             **self._call_kwargs,
         )
+        self._owned_streams[inner] = self._owner._name_of(target)
         try:
             async for chunk in inner:
                 if chunk.has_response():
@@ -713,10 +704,7 @@ class _RoutedStream(llm.LLMStream):
                     self._answered = True
                 await self._event_ch.send(chunk)
         finally:
-            try:
-                await inner.aclose()
-            except (Exception, asyncio.CancelledError):
-                pass
+            self._close_stream(inner)
         return self._ttft
 
     async def _forward_hedged(self, primary_llm: llm.LLM, secondary_llm: llm.LLM) -> None:
@@ -744,6 +732,8 @@ class _RoutedStream(llm.LLMStream):
             "primary": asyncio.create_task(
                 _pump_stream(streams["primary"], "primary", queue), name="tutor-hedge-primary"),
         }
+        self._owned_streams[streams["primary"]] = primary_name
+        self._owned_pumps.update(pumps.values())
         secondary_started = False
         buffered: dict[str, list[Any]] = {"primary": [], "secondary": []}
         first_s: dict[str, float] = {}
@@ -812,17 +802,7 @@ class _RoutedStream(llm.LLMStream):
                 await self._event_ch.send(chunk)
             await self._event_ch.send(deciding)
             self._answered = True
-            # The loser is detached into an owned background cleanup running
-            # concurrently with winner forwarding: a hanging cancel/aclose
-            # never delays the winner's remaining chunks. Its first-chunk
-            # time still counts when it arrived before the detach (harvested
-            # below from already-drained stragglers). A caller cancellation
-            # landing here aborts the turn at the next await, after the
-            # background cleanup is reaped within the bound in the finally.
-            entry_cancels = _cancel_count()
             self._spawn_loser_cleanup(loser, pumps, streams, names[loser])
-            if _cancel_count() > entry_cancels:
-                raise asyncio.CancelledError()
             stragglers = self._drain_queue(queue)
             winner_done = False
             hedged = secondary_started
@@ -889,7 +869,8 @@ class _RoutedStream(llm.LLMStream):
             owner._hedge_streak = 0  # an unserved race promotes nothing
             raise
         finally:
-            await self._close_owned(pumps, streams)
+            for side in list(streams):
+                self._spawn_loser_cleanup(side, pumps, streams, names[side])
 
     def _start_secondary(
         self,
@@ -906,6 +887,8 @@ class _RoutedStream(llm.LLMStream):
         )
         pumps["secondary"] = asyncio.create_task(
             _pump_stream(streams["secondary"], "secondary", queue), name="tutor-hedge-secondary")
+        self._owned_streams[streams["secondary"]] = self._owner._name_of(secondary_llm)
+        self._owned_pumps.add(pumps["secondary"])
 
     @staticmethod
     def _drain_queue(queue: "asyncio.Queue[tuple[str, Any]]") -> list[tuple[str, Any]]:
@@ -916,314 +899,32 @@ class _RoutedStream(llm.LLMStream):
             except asyncio.QueueEmpty:
                 return items
 
+    def _close_stream(self, stream: llm.LLMStream) -> None:
+        route = self._owned_streams.pop(stream, None)
+        if route is not None:
+            # LLMStream.aclose() can be overridden or block before it cancels
+            # the provider. Cancel its SDK task before starting that close.
+            self._reaper.stop(route, [stream._task], stream.aclose())
+
     async def aclose(self) -> None:
-        """Close the wrapper and reap owned loser cleanups within the bound."""
-        try:
-            await super().aclose()
-        finally:
-            # The turn's finally already reaps in the normal path; this covers
-            # a background loser cleanup still in flight after _run finished.
-            try:
-                await self._reap_loser_cleanups(bound=LOSER_CLEANUP_BOUND_S)
-            except asyncio.CancelledError:
-                pass
-            except Exception:
-                pass
+        """Start every close at once, then reap under one total deadline."""
+        self._reaper.stop("wrapper", [self._task, *self._owned_pumps], super().aclose())
+        self._owned_pumps.clear()
+        for stream in list(self._owned_streams):
+            self._close_stream(stream)
+        await self._reaper.wait()
 
     def _spawn_loser_cleanup(
-        self,
-        side: str,
-        pumps: dict[str, asyncio.Task[None]],
-        streams: dict[str, llm.LLMStream],
-        route_name: str,
-    ) -> asyncio.Task[None] | None:
-        """Detach a discarded side into an owned background cleanup task.
-
-        The pump/stream are popped at once so the turn's ``finally`` never
-        double-closes them; the background task cancels the pump and closes
-        the stream within ``LOSER_CLEANUP_BOUND_S`` (log once, no text),
-        running concurrently with winner forwarding. Owned in
-        ``self._loser_cleanups`` and reaped in the turn's finally and in
-        ``aclose()``, always within the same bound.
-        """
-        pump = pumps.pop(side, None)
-        stream = streams.pop(side, None)
-        if pump is None and stream is None:
-            return None
-
-        async def _cleanup() -> None:
-            me = asyncio.current_task()
-            try:
-                bg_before = me.cancelling() if me is not None else 0
-            except AttributeError:  # pragma: no cover - Python < 3.11
-                bg_before = 0
-            try:
-                if pump is not None and not pump.done():
-                    pump.cancel()
-                if pump is not None:
-                    try:
-                        await asyncio.wait_for(asyncio.shield(pump),
-                                             timeout=LOSER_CLEANUP_BOUND_S)
-                    except TimeoutError:
-                        log.warning("tutor hedged-turn loser cleanup timed out; "
-                                    "dropping it")
-                        pump.cancel()
-                        try:
-                            await pump
-                        except BaseException:  # noqa: BLE001 - dropped, already logged
-                            pass
-                    except asyncio.CancelledError:
-                        # The pump's own cancellation (from the cancel above)
-                        # is expected: swallow it. Only propagate when this
-                        # background task itself was cancelled (reaping).
-                        try:
-                            bg_after = me.cancelling() if me is not None else 0
-                        except AttributeError:  # pragma: no cover - Python < 3.11
-                            bg_after = bg_before
-                        if bg_after > bg_before:
-                            pump.cancel()
-                            try:
-                                await pump
-                            except BaseException:  # noqa: BLE001 - reaping, propagate
-                                pass
-                            raise
-                        # Expected pump cancel: fall through to stream close.
-                        pass
-                    except Exception:  # noqa: BLE001 - loser outcome is swallowed
-                        pass
-                    finally:
-                        try:
-                            if not pump.cancelled():
-                                pump.exception()
-                        except BaseException:  # noqa: BLE001 - retrieved, never lost
-                            pass
-                if stream is not None:
-                    try:
-                        await asyncio.wait_for(stream.aclose(),
-                                             timeout=LOSER_CLEANUP_BOUND_S)
-                    except TimeoutError:
-                        log.warning("tutor hedged-turn loser cleanup timed out; "
-                                    "dropping it")
-                    except asyncio.CancelledError:
-                        raise
-                    except Exception:  # noqa: BLE001 - loser outcome is swallowed
-                        pass
-            except asyncio.CancelledError:
-                raise
-            except Exception:  # noqa: BLE001 - cleanup never fails the turn
-                pass
-
-        task = asyncio.create_task(_cleanup(), name=f"tutor-hedge-losercleanup-{side}")
-
-        def _retrieve(t: asyncio.Task[None]) -> None:
-            try:
-                t.exception()
-            except BaseException:  # noqa: BLE001 - retrieved, never lost
-                pass
-
-        task.add_done_callback(_retrieve)
-        self._loser_cleanups.append(task)
-        return task
-
-    async def _reap_loser_cleanups(self, bound: float = LOSER_CLEANUP_BOUND_S) -> bool:
-        """Wait for owned loser cleanups within ``bound`` (shielded).
-
-        A caller cancellation landing mid-reap does not abort the wait: the
-        shield keeps it alive up to the bound, then background tasks are
-        force-cancelled and reaped. Returns True when a caller cancellation
-        was observed, so the caller re-raises it after everything owned is
-        closed. Never waits longer than ``bound`` in total.
-        """
-        tasks = list(self._loser_cleanups)
-        self._loser_cleanups.clear()
-        if not tasks:
-            return False
-        current = asyncio.current_task()
-        before = current.cancelling() if current is not None else 0
-        deadline = time.monotonic() + max(0.0, bound)
-        for task in tasks:
-            while not task.done():
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    log.warning("tutor hedged-turn loser cleanup timed out; dropping it")
-                    task.cancel()
-                    try:
-                        await task
-                    except BaseException:  # noqa: BLE001 - dropped, already logged
-                        pass
-                    break
-                try:
-                    await asyncio.wait_for(asyncio.shield(task), timeout=remaining)
-                except TimeoutError:
-                    log.warning("tutor hedged-turn loser cleanup timed out; dropping it")
-                    task.cancel()
-                    try:
-                        await task
-                    except BaseException:  # noqa: BLE001 - dropped, already logged
-                        pass
-                    break
-                except asyncio.CancelledError:
-                    if current is None or current.cancelling() <= before:
-                        break  # the cleanup itself ended cancelled
-                    continue  # our caller wants out; the reap still finishes
-                except Exception:  # noqa: BLE001 - already retrieved via callback
-                    break
-            try:
-                if not task.cancelled():
-                    task.exception()
-            except BaseException:  # noqa: BLE001 - retrieved, never lost
-                pass
-        after = current.cancelling() if current is not None else 0
-        return after > before
-
-    async def _close_owned(
-        self,
-        pumps: dict[str, asyncio.Task[None]],
-        streams: dict[str, llm.LLMStream],
-        bound: float = LOSER_CLEANUP_BOUND_S,
+        self, side: str, pumps: dict[str, asyncio.Task[None]],
+        streams: dict[str, llm.LLMStream], route_name: str,
     ) -> None:
-        """Reap background loser cleanups and close remaining sides in ``bound``.
-
-        One overall deadline covers both: a caller cancellation never waits
-        longer than ``bound`` in total, then propagates after everything
-        owned is closed or force-cancelled.
-        """
-        current = asyncio.current_task()
-        before = current.cancelling() if current is not None else 0
-        deadline = time.monotonic() + max(0.0, bound)
-        remaining = deadline - time.monotonic()
-        if await self._reap_loser_cleanups(bound=max(0.0, remaining)):
-            pass  # caller cancel observed; still close the rest within the bound
-        remaining = deadline - time.monotonic()
-        if await _RoutedStream._stop_all(pumps, streams, bound=max(0.0, remaining)):
-            pass
-        after = current.cancelling() if current is not None else 0
-        if after > before:
-            raise asyncio.CancelledError()
-
-    @staticmethod
-    async def _shielded_close(awaitable, bound: float = LOSER_CLEANUP_BOUND_S) -> bool:
-        """Await ``awaitable`` to completion, swallowing its own outcome.
-
-        A caller cancellation landing mid-close does not abort the close: the
-        shield keeps it alive up to ``bound`` seconds, then the awaited side
-        is force-cancelled and reaped (log once, no text). Returns True when
-        such a cancellation was observed, so the caller re-raises it after
-        everything it owns is closed (distinguished from the awaited side's
-        own outcome via the task's cancel count). Never waits longer than
-        ``bound``.
-        """
-        current = asyncio.current_task()
-        before = current.cancelling() if current is not None else 0
-        inner = asyncio.ensure_future(awaitable)
-        deadline = time.monotonic() + max(0.0, bound)
-        try:
-            while not inner.done():
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    log.warning("tutor hedged-turn loser cleanup timed out; dropping it")
-                    inner.cancel()
-                    try:
-                        await inner
-                    except BaseException:  # noqa: BLE001 - dropped, already logged
-                        pass
-                    break
-                try:
-                    await asyncio.wait_for(asyncio.shield(inner), timeout=remaining)
-                except TimeoutError:
-                    log.warning("tutor hedged-turn loser cleanup timed out; dropping it")
-                    inner.cancel()
-                    try:
-                        await inner
-                    except BaseException:  # noqa: BLE001 - dropped, already logged
-                        pass
-                    break
-                except asyncio.CancelledError:
-                    if current is None or current.cancelling() <= before:
-                        break  # the awaited side itself ended cancelled
-                    continue  # our caller wants out; the close still finishes
-                except Exception:
-                    break  # the awaited side failed; its outcome is swallowed
-            if not inner.cancelled():
-                try:
-                    inner.exception()  # retrieve, so it is never reported as lost
-                except BaseException:  # noqa: BLE001 - retrieved, never lost
-                    pass
-        except (asyncio.CancelledError, Exception):
-            pass
-        after = current.cancelling() if current is not None else 0
-        return after > before
-
-    @staticmethod
-    async def _stop_side(
-        side: str,
-        pumps: dict[str, asyncio.Task[None]],
-        streams: dict[str, llm.LLMStream],
-        bound: float = LOSER_CLEANUP_BOUND_S,
-    ) -> bool:
-        """Cancel a discarded side's pump, then close its stream (bounded).
-
-        Ownership stays in the dicts until the cleanup has finished, and the
-        cleanup is shielded up to ``bound`` even when the caller is cancelled
-        (see ``_shielded_close``), then force-cancelled. Returns True when a
-        caller cancellation was observed, so the caller re-raises it after
-        the close.
-        """
-        cancelled = False
-        pump = pumps.get(side)
-        if pump is not None and not pump.done():
-            pump.cancel()
-            if await _RoutedStream._shielded_close(pump, bound=bound):
-                cancelled = True
-        stream = streams.get(side)
-        if stream is not None:
-            if await _RoutedStream._shielded_close(stream.aclose(), bound=bound):
-                cancelled = True
-        pumps.pop(side, None)
-        streams.pop(side, None)
-        return cancelled
-
-    @staticmethod
-    async def _stop_all(
-        pumps: dict[str, asyncio.Task[None]],
-        streams: dict[str, llm.LLMStream],
-        bound: float = LOSER_CLEANUP_BOUND_S,
-    ) -> bool:
-        """Close every side within ``bound`` total, even when the caller is cancelled.
-
-        Each side's cleanup is shielded up to the shared deadline (see
-        ``_stop_side``), then force-cancelled. A cancellation observed along
-        the way is re-raised only after every side is closed or
-        force-cancelled, so no provider task is left running after the
-        wrapper closes and the caller's cancellation still propagates.
-        Returns True when a caller cancellation was observed (and raises
-        ``CancelledError`` for the direct-call contract).
-        """
-        current = asyncio.current_task()
-        before = current.cancelling() if current is not None else 0
-        deadline = time.monotonic() + max(0.0, bound)
-        for side in list(pumps):
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                # Out of budget: force-cancel what is left without waiting.
-                for s in list(pumps):
-                    t = pumps.pop(s, None)
-                    if t is not None and not t.done():
-                        t.cancel()
-                for s in list(streams):
-                    streams.pop(s, None)
-                break
-            if await _RoutedStream._stop_side(side, pumps, streams, bound=remaining):
-                pass
-        for side in list(streams):
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                for s in list(streams):
-                    streams.pop(s, None)
-                break
-            if await _RoutedStream._stop_side(side, pumps, streams, bound=remaining):
-                pass
-        after = current.cancelling() if current is not None else 0
-        if after > before:
-            raise asyncio.CancelledError()
-        return False
+        pump = pumps.pop(side, None)
+        if pump is not None:
+            self._owned_pumps.discard(pump)
+        stream = streams.pop(side, None)
+        if stream is not None and self._owned_streams.pop(stream, None) is not None:
+            self._reaper.stop(route_name,
+                              [stream._task, *([pump] if pump is not None else [])],
+                              stream.aclose())
+        elif pump is not None:
+            self._reaper.stop(route_name, [pump])
