@@ -204,8 +204,11 @@ def build_route_llm(route: LLMRoute, session_id: str, http_client: Any = None) -
             kwargs["reasoning"] = Reasoning(effort=route.reasoning_effort)
         # store=False: every request carries the full chat context, so nothing depends on
         # server-side response state and no `previous_response_id` links two sessions.
+        # No temperature: Meta tunes Muse Spark for its default (1.0). The 0.6 set at
+        # milestone A had no recorded reason; without it the tutor spoke sooner in the
+        # 2026-11-14 bench (docs/smart-screen.md, "Tutor model routes").
         return GoResponsesLLM(
-            model=route.model, client=client, use_websocket=False, store=False, temperature=0.6, **kwargs
+            model=route.model, client=client, use_websocket=False, store=False, **kwargs
         )
     extra: dict[str, Any] = {}
     if route.reasoning_effort:

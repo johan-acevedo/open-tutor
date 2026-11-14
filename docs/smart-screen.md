@@ -386,6 +386,28 @@ provider-specific failures; both are fixed in our code.
   memory instructions and the tool description now say not to save a note at the
   greeting; five pure and five racing greeting runs called no `save_note`.
 
+**Muse at its default temperature (2026-11-14).** The `go` route sent `temperature=0.6`
+since milestone A, with no recorded reason. Meta's Muse Spark docs say the model is tuned
+for the default (1.0) and to leave sampling unset. Bench: the production tutor prompt and
+tools on a fictional replay of a unit-circle session, Go, reasoning `minimal`, 8 runs per
+row, interleaved; seconds to first speech, median / max.
+
+| Variant | A "håller du med?" | B "rita igen" |
+|---|---|---|
+| temperature 0.6 (old) | 2.18 / 3.03 | 0.96 / 1.61 |
+| no temperature (now) | 1.35 / 2.51 | 0.88 / 1.34 |
+| `parallel_tool_calls: false` | 1.92 / 3.05 | 1.11 / 2.13 |
+| `prompt_cache_key` + `prompt_cache_retention: "24h"` | 2.23 / 4.62 | 1.36 / 1.99 |
+
+No errors or silent turns; tool choice was unchanged (B drew in 8/8 for every variant).
+One sitting, so part of the gap may be noise; spoken quality was not judged, which a real
+session has to settle. Kept parallel tool calls on (the default; Muse made no premature
+double call here). The cache options gave nothing: Go already caches the static prompt per
+`x-opencode-session` (about 3 300 of 3 340 tokens cached from the second call). Go accepts
+`include: ["reasoning.encrypted_content"]` and a replayed reasoning item, but LiveKit drops
+reasoning items between turns; replaying them is an open experiment. The chat routes
+(DeepSeek, Gemini) still send 0.6, unmeasured.
+
 Provider-independent: a non-retryable LLM error is recorded as `provider_error` with the
 provider's own message, and the worker says one short apology through TTS (no LLM) and
 ends the session instead of leaving the child in silence.
