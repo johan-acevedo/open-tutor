@@ -103,8 +103,7 @@ These are not technical preferences. They hold whatever the solution looks like.
 - **A live call is someone's lesson.** Never restart or stop a service while a call is
   running, and never stop processes by name pattern; use the service's own controls. Run
   experiments under your own names and ports so they cannot take a real child's call.
-- **The public instance is visible to others.** Deploying to it needs the owner's go each
-  time. Changes are tried on a development instance first.
+- **Try changes on a development instance first**, then deploy to the public instance.
 - **Real providers cost money.** Run the narrowest live test that proves the change.
 
 ## Working together
