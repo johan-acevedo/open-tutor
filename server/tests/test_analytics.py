@@ -3,7 +3,11 @@
 All material here is synthetic and fictional. The fake client means no network.
 """
 
+import ast
+import asyncio
 import json
+import time
+from pathlib import Path
 from types import SimpleNamespace
 
 import jwt  # provided by livekit-api's dependency (pyjwt)
@@ -17,6 +21,7 @@ from open_tutor.analytics import (
     get_analytics,
     posthog_settings,
     reset_analytics,
+    sanitize_outcome,
     stable_distinct_id,
 )
 from open_tutor.debug_log import config_snapshot
@@ -27,14 +32,22 @@ LEARNER = {"learner": {"name": "Leo", "grade": 8, "notes": [{"at": "2026-11-01",
 
 
 class FakePostHog:
-    """Records captures, then optionally explodes (client failures must never surface)."""
+    """Records captures, then optionally explodes (client failures must never surface).
 
-    def __init__(self, fail=False):
+    The ``capture`` signature mirrors the real posthog 7.x client — the
+    event name first, the id and properties as KEYWORDS. It is keyword-only
+    on purpose: the old positional call ``capture(distinct_id, event, props)``
+    raises TypeError here, so a regression fails loudly instead of
+    silently sending nothing (Analytics.capture swallows client errors).
+    """
+
+    def __init__(self, fail=False, block_on=None):
         self.captured = []
         self.flushed = 0
         self.fail = fail
+        self.block_on = block_on
 
-    def capture(self, distinct_id, event, properties=None):
+    def capture(self, event, *, distinct_id=None, properties=None, **kwargs):
         if self.fail:
             raise RuntimeError("posthog is down")
         self.captured.append({"distinct_id": distinct_id, "event": event,
@@ -43,6 +56,11 @@ class FakePostHog:
     def flush(self):
         if self.fail:
             raise RuntimeError("posthog is down")
+        if self.block_on is not None:
+            # Simulates a hung analytics backend: blocks until the test
+            # releases it. asyncio.run() joins executor threads on loop
+            # close, so the test must set this event before returning.
+            self.block_on.wait(30)
         self.flushed += 1
 
 
@@ -195,3 +213,181 @@ def test_tracker_never_raises_on_unknown_events():
     tracker.record_sdk(object())
     tracker.record_sdk(SimpleNamespace(type="metrics_collected"))
     assert tracker.summary()["tool_calls"] == 0
+
+
+def test_capture_uses_keyword_arguments_like_posthog_7x():
+    """The locked posthog package (7.x) requires
+    ``capture(event, distinct_id=..., properties=...)``; the old positional
+    call raises TypeError and the fake's keyword-only signature would catch it."""
+    fake = FakePostHog()
+    analytics = Analytics.from_env({"TUTOR_POSTHOG_KEY": "phc_test"}, client=fake)
+    analytics.capture("device:dev-1:learner:leo", "tutor_session_started", {"room": "tutor-x"})
+    assert fake.captured == [{"distinct_id": "device:dev-1:learner:leo",
+                              "event": "tutor_session_started",
+                              "properties": {"room": "tutor-x"}}]
+
+
+def test_capture_against_the_real_client_disabled():
+    """The real ``posthog.Posthog`` client with ``disabled=True`` sends
+    nothing and raises nothing: the wrapper call below must survive the real
+    signature (a positional call would raise TypeError here too)."""
+    from posthog import Posthog
+
+    real = Posthog("phc_test", host="https://eu.i.posthog.com", disabled=True)
+    try:
+        analytics = Analytics.from_env({"TUTOR_POSTHOG_KEY": "phc_test"}, client=real)
+        assert analytics.enabled
+        analytics.capture("device:dev-1", "tutor_session_started", {"room": "tutor-x"})
+    finally:
+        try:
+            real.flush()
+        except Exception:
+            pass
+
+
+def test_outcome_sanitized_to_fixed_categories():
+    assert sanitize_outcome("ended_by_child") == ("ended_by_child", None)
+    assert sanitize_outcome("child_left") == ("child_left", None)
+    assert sanitize_outcome("provider_error") == ("provider_error", None)
+    assert sanitize_outcome("sdk_closed_early") == ("sdk_closed_early", None)
+    assert sanitize_outcome("unknown") == ("unknown", None)
+    # The worker's f"error: {Class}: {message}" keeps the class, drops the text.
+    hostile = "error: ValueError: hemlig läxtext som aldrig får lämna servern 98765"
+    assert sanitize_outcome(hostile) == ("error", "ValueError")
+    category, error_type = sanitize_outcome(hostile)
+    props = {"outcome": category, "room": "tutor-x"}
+    if error_type is not None:
+        props["error_type"] = error_type
+    assert "hemlig" not in json.dumps(props) and "98765" not in json.dumps(props)
+    assert sanitize_outcome("error: RuntimeError") == ("error", "RuntimeError")
+    assert sanitize_outcome("something unexpected") == ("unknown", None)
+    assert sanitize_outcome("") == ("unknown", None)
+    assert sanitize_outcome(None) == ("unknown", None)
+
+
+def test_aclose_flushes_off_the_loop_with_timeout():
+    """A slow analytics backend must not park the event loop: aclose
+    returns after ~timeout, never raises, even when flush explodes."""
+    import threading
+
+    release = threading.Event()
+    analytics = Analytics.from_env(
+        {"TUTOR_POSTHOG_KEY": "phc_test"}, client=FakePostHog(block_on=release))
+
+    async def hung_backend() -> None:
+        started = time.monotonic()
+        await analytics.aclose(timeout=0.2)
+        assert time.monotonic() - started < 10
+        release.set()  # let the thread die before the loop closes
+
+    asyncio.run(hung_backend())
+    # Exploding flush is swallowed too.
+    asyncio.run(Analytics.from_env(
+        {"TUTOR_POSTHOG_KEY": "phc_test"}, client=FakePostHog(fail=True)
+    ).aclose(timeout=1.0))
+    # Disabled analytics: no-op.
+    asyncio.run(Analytics.from_env({}).aclose(timeout=1.0))
+    # A fast flush still goes through on the worker thread.
+    fake = FakePostHog()
+    asyncio.run(Analytics.from_env(
+        {"TUTOR_POSTHOG_KEY": "phc_test"}, client=fake
+    ).aclose(timeout=5.0))
+    assert fake.flushed == 1
+
+
+def _entrypoint(tree: ast.Module) -> ast.AsyncFunctionDef:
+    for node in tree.body:
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "entrypoint":
+            return node
+    raise AssertionError("entrypoint not found in agent.py")
+
+
+def _direct_loads(body: list[ast.stmt], names: set[str]) -> list[tuple[str, int]]:
+    """(name, lineno) for every Name Load in ``body``, NOT descending into
+    nested def/lambda bodies (those run later, on events) — but INTO their
+    decorators and defaults, which run at registration time."""
+    found: list[tuple[str, int]] = []
+
+    def visit(node: ast.AST) -> None:
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                for dec in child.decorator_list:
+                    visit(dec)
+                args = child.args
+                for default in list(args.defaults) + [d for d in args.kw_defaults if d is not None]:
+                    visit(default)
+                continue
+            if isinstance(child, ast.Lambda):
+                continue  # bodies run later, on events
+            if isinstance(child, ast.Name) and isinstance(child.ctx, ast.Load) and child.id in names:
+                found.append((child.id, child.lineno))
+            visit(child)
+
+    for stmt in body:
+        visit(stmt)
+    return found
+
+
+def test_entrypoint_binds_analytics_before_use():
+    """Regression test for the P0 UnboundLocalError: ``tracker`` (and
+    ``analytics``/``distinct_id``) are entrypoint locals assigned AFTER the
+    handler registrations that closed over them, so every session crashed
+    even with analytics off.
+
+    Why a static test: the crash is a name-binding order bug, not a runtime
+    value bug — no unit test with mocks could observe it short of running a
+    full LiveKit session. ``ruff check --select F821,F823`` would flag the
+    use-before-assignment too, but ruff is not a project dependency and the
+    ambiguous-closure shape (nested handlers) is exactly what linters hedge
+    on; an AST assertion on the binding order names the invariant directly
+    and runs in the existing suite with no new tooling.
+    """
+    tree = ast.parse((Path(__file__).parent.parent / "open_tutor" / "agent.py").read_text())
+    fn = _entrypoint(tree)
+    watched = {"tracker", "analytics", "distinct_id"}
+    assigned: set[str] = set()
+    for stmt in fn.body:
+        for name, lineno in _direct_loads([stmt], watched):
+            assert name in assigned, (
+                f"{name!r} used at agent.py:{lineno} before it is assigned "
+                "in entrypoint (UnboundLocalError in every session)"
+            )
+        for target in ast.walk(stmt):
+            if isinstance(target, ast.Name) and isinstance(target.ctx, ast.Store):
+                assigned.update({target.id} & watched)
+
+
+def test_entrypoint_wires_tracker_to_tool_and_close_events():
+    """The tracker must see function_tools_executed and close: without
+    those subscriptions tool counts stay 0 and close_reason stays null. The
+    tracker's own unit test covers the event shapes; this test covers the
+    wiring in entrypoint that was missing."""
+    tree = ast.parse((Path(__file__).parent.parent / "open_tutor" / "agent.py").read_text())
+    fn = _entrypoint(tree)
+
+    subscribed: set[str] = set()
+    for node in ast.walk(fn):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "on"
+            and len(node.args) >= 2
+            and isinstance(node.args[1], ast.Attribute)
+            and isinstance(node.args[1].value, ast.Name)
+            and node.args[1].value.id == "tracker"
+        ):
+            first = node.args[0]
+            if isinstance(first, ast.Constant) and isinstance(first.value, str):
+                subscribed.add(first.value)
+    assert "close" in subscribed, "tracker is not subscribed to the close event"
+
+    tools_handler = next(
+        (n for n in ast.walk(fn)
+         if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == "tools_executed"),
+        None,
+    )
+    assert tools_handler is not None, "tools_executed handler is gone"
+    assert any(
+        isinstance(n, ast.Name) and n.id == "tracker" and isinstance(n.ctx, ast.Load)
+        for n in ast.walk(tools_handler)
+    ), "tools_executed handler does not record to the tracker"

@@ -27,7 +27,9 @@ What is counted: one `tutor_session_started` and one `tutor_session_ended`
 event per session (room, grade, turns, tool and error counts), plus page-side
 funnel events (`page_opened`, `access_code_result`, `session_started`, …).
 Person profiles are identified only (`device id + learner name`); conversation
-text, typed text, homework content and images never leave the session. With no
+text, typed text, homework content and images never leave the session, and
+session outcomes are fixed categories (error events carry only the exception
+class name, never its message). With no
 key, `/api/config` returns `{"posthog": null}` and every analytics helper is
 a no-op.
 

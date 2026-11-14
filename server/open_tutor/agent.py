@@ -35,7 +35,7 @@ from livekit.plugins import cartesia, elevenlabs, silero, soniox
 from pydantic import ValidationError
 
 from . import noise, prompt
-from .analytics import SessionTracker, get_analytics, stable_distinct_id
+from .analytics import SessionTracker, get_analytics, sanitize_outcome, stable_distinct_id
 from .board import (
     HtmlItem,
     Ids,
@@ -1214,6 +1214,15 @@ async def entrypoint(ctx: JobContext) -> None:
     tutor.child_identity = child.identity
     set_active(debug)
 
+    # Product analytics (PostHog): one process-wide client, fully off without
+    # TUTOR_POSTHOG_KEY. Bound here, before any handler registration below
+    # closes over the tracker: Python reads enclosing-function locals at call
+    # time, but these are entrypoint locals, so a later assignment would be
+    # an UnboundLocalError in every session, analytics on or off.
+    analytics = get_analytics()
+    distinct_id = stable_distinct_id(device_id, learner.get("name"), ctx.room.name)
+    tracker = SessionTracker()
+
     voice = build_tts()
     log.info("tutor TTS route %s", tts_route(voice))
     # TUTOR_NOISE_CANCELLATION: off (default) | nc | bvc, applied to the child's inbound
@@ -1265,6 +1274,7 @@ async def entrypoint(ctx: JobContext) -> None:
         # Names only: arguments can hold the child's words.
         log.info("tools executed: %s", ", ".join(call.name for call in event.function_calls))
         debug.record_sdk(event)
+        tracker.record_sdk(event)
 
     for sdk_event in (
         "user_input_transcribed",
@@ -1281,6 +1291,10 @@ async def entrypoint(ctx: JobContext) -> None:
     ):
         session.on(sdk_event, debug.record_sdk)
         session.on(sdk_event, tracker.record_sdk)
+    # "close" has its own debug subscription in _run_until_done (session_closed)
+    # and "function_tools_executed" its own handler above: both record to the
+    # tracker here so the ended-event counts match the debug summary.
+    session.on("close", tracker.record_sdk)
 
     if fillers is not None:
         # Follows child turns and agent state; plays on its own track, never in the
@@ -1443,11 +1457,6 @@ async def entrypoint(ctx: JobContext) -> None:
 
     outcome = "unknown"
     warm_up_task: asyncio.Task | None = None
-    # Product analytics (PostHog): one process-wide client, fully off without
-    # TUTOR_POSTHOG_KEY. The tracker counts SDK events without storing text.
-    analytics = get_analytics()
-    distinct_id = stable_distinct_id(device_id, learner.get("name"), ctx.room.name)
-    tracker = SessionTracker()
 
     def opening(_instruction: str) -> None:
         """The session is ready and nothing was typed before it: greet in fixed text.
@@ -1519,10 +1528,13 @@ async def entrypoint(ctx: JobContext) -> None:
             log.info("debug session report: %s", report_path)
         try:
             summary = tracker.summary()
-            analytics.capture(distinct_id, "tutor_session_ended", {
+            # Fixed category only: the raw outcome can carry an exception
+            # message, which never leaves the worker (see sanitize_outcome).
+            outcome_category, error_type = sanitize_outcome(outcome)
+            ended: dict[str, Any] = {
                 "room": ctx.room.name,
                 "duration_s": round(time.time() - debug.started_at, 1),
-                "outcome": outcome,
+                "outcome": outcome_category,
                 "close_reason": summary.get("close_reason"),
                 "child_spoken_turns": summary.get("child_final_turns", 0),
                 "child_typed_turns": summary.get("child_typed_turns", 0),
@@ -1530,9 +1542,14 @@ async def entrypoint(ctx: JobContext) -> None:
                 "tool_calls": summary.get("tool_calls", 0),
                 "tool_errors": summary.get("tool_errors", 0),
                 "provider_errors": summary.get("provider_errors", 0),
-            })
+            }
+            if error_type is not None:
+                ended["error_type"] = error_type
+            analytics.capture(distinct_id, "tutor_session_ended", ended)
         finally:
-            analytics.shutdown()
+            # Off the event loop with a short timeout: a slow analytics
+            # backend must not delay the session teardown.
+            await analytics.aclose()
         clear_active()
 
 

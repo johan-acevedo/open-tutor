@@ -1384,15 +1384,33 @@ function rememberFamilyCode(code: string): void {
   }
 }
 
-/** Family code from a shared link (?kod=…), remembered in this browser. */
-export function familyCode(): string {
+/** Read ?kod= once and scrub it from the URL, remembering the code.
+ *  Called from main.tsx at startup — before analytics init — so PostHog
+ *  never sees the access code in $current_url. Returns the code, or null
+ *  when the URL carries none. */
+export function consumeFamilyCodeFromUrl(): string | null {
   try {
     const fromUrl = new URLSearchParams(window.location.search).get('kod');
     if (fromUrl) {
-      localStorage.setItem(CODE_KEY, fromUrl);
+      try {
+        localStorage.setItem(CODE_KEY, fromUrl);
+      } catch {
+        /* storage blocked: the code still applies to this page load */
+      }
       window.history.replaceState(null, '', window.location.pathname);
       return fromUrl;
     }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/** Family code from a shared link (?kod=…), remembered in this browser. */
+export function familyCode(): string {
+  const fromUrl = consumeFamilyCodeFromUrl();
+  if (fromUrl) return fromUrl;
+  try {
     return localStorage.getItem(CODE_KEY) ?? '';
   } catch {
     return '';

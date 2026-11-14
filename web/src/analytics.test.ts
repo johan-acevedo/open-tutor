@@ -21,13 +21,16 @@ import {
   pageOpened,
   resetAnalytics,
   resourceOpened,
+  sanitizePosthogEvent,
   sessionEnded,
   sessionFailed,
   sessionStarted,
   sessionStartRequested,
   stableLearnerId,
+  stripKodFromUrl,
   turnSent,
 } from './analytics';
+import { consumeFamilyCodeFromUrl } from './useSession';
 
 function configResponse(key: string | null) {
   return {
@@ -85,10 +88,11 @@ describe('analytics', () => {
       expect.objectContaining({
         api_host: 'https://eu.i.posthog.com',
         autocapture: false,
-        capture_pageview: true,
+        capture_pageview: false,
         disable_session_recording: true,
         person_profiles: 'identified_only',
         persistence: 'localStorage',
+        before_send: expect.any(Function),
       }),
     );
   });
@@ -168,5 +172,113 @@ describe('analytics', () => {
     expect(stableLearnerId('dev-1', 'Leo')).toBe('device:dev-1:learner:leo');
     expect(stableLearnerId('dev-1', '  LEO  ')).toBe('device:dev-1:learner:leo');
     expect(stableLearnerId('dev-1', 'Anna  Maria')).toBe('device:dev-1:learner:anna maria');
+  });
+
+  it('strips the kod access code from the URL at startup', () => {
+    window.history.replaceState(null, '', '/?kod=SECRET123');
+    expect(consumeFamilyCodeFromUrl()).toBe('SECRET123');
+    expect(window.location.search).toBe('');
+    expect(window.location.href).not.toContain('SECRET123');
+    // Remembered for the session request.
+    expect(localStorage.getItem('open-tutor-code')).toBe('SECRET123');
+    // Second call finds no kod: the code now comes from storage.
+    expect(consumeFamilyCodeFromUrl()).toBeNull();
+    window.history.replaceState(null, '', '/');
+  });
+
+  it('scrubs kod from URL-like properties via the before_send hook', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(configResponse(POSTHOG_KEY)));
+    await initAnalytics();
+    const beforeSend = posthogMock.init.mock.calls[0][1].before_send as (
+      event: Record<string, unknown>,
+    ) => Record<string, unknown> | null;
+    expect(typeof beforeSend).toBe('function');
+    const cleaned = beforeSend({
+      event: 'page_opened',
+      properties: {
+        $current_url: 'https://tutor.example/?kod=SECRET123&foo=1',
+        $referrer: 'https://tutor.example/?kod=SECRET123',
+        room: 'tutor-x',
+      },
+    }) as { properties: Record<string, unknown> };
+    expect(JSON.stringify(cleaned)).not.toContain('SECRET123');
+    expect(JSON.stringify(cleaned)).not.toContain('kod=');
+    expect(cleaned.properties['room']).toBe('tutor-x');
+    expect(cleaned.properties['$current_url']).toBe('https://tutor.example/?foo=1');
+    expect(cleaned.properties['$referrer']).toBe('https://tutor.example/');
+    // Events without kod pass through untouched.
+    const plain = { event: 'x', properties: { room: 'tutor-x' } };
+    expect(sanitizePosthogEvent(plain)).toBe(plain);
+  });
+
+  it('stripKodFromUrl keeps the rest of the URL intact', () => {
+    expect(stripKodFromUrl('https://tutor.example/?kod=abc&foo=1')).toBe('https://tutor.example/?foo=1');
+    expect(stripKodFromUrl('https://tutor.example/?foo=1&kod=abc')).toBe('https://tutor.example/?foo=1');
+    expect(stripKodFromUrl('https://tutor.example/?kod=abc')).toBe('https://tutor.example/');
+    expect(stripKodFromUrl('https://tutor.example/?foo=1')).toBe('https://tutor.example/?foo=1');
+    expect(stripKodFromUrl('/?kod=abc')).toBe('/');
+    expect(stripKodFromUrl('/')).toBe('/');
+  });
+
+  it('returns one stable device id per page load when localStorage throws', () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('blocked');
+    });
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('blocked');
+    });
+    resetAnalytics();
+    const first = getDeviceId();
+    const second = getDeviceId();
+    expect(first).toBeTruthy();
+    expect(second).toBe(first);
+    vi.restoreAllMocks();
+    resetAnalytics();
+  });
+
+  it('queues events and the identify before init completes, firing page_opened once', async () => {
+    let resolveConfig!: (value: unknown) => void;
+    const gate = new Promise((resolve) => {
+      resolveConfig = resolve;
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockReturnValue(gate.then(() => configResponse(POSTHOG_KEY))),
+    );
+    const ready = initAnalytics();
+    // Fired while the SDK is still loading (StrictMode would double-fire these).
+    pageOpened();
+    pageOpened();
+    sessionStartRequested();
+    identifyLearner('Leo', 8);
+    expect(posthogMock.capture).not.toHaveBeenCalled();
+    resolveConfig(undefined);
+    await ready;
+    expect(analyticsEnabled()).toBe(true);
+    const events = posthogMock.capture.mock.calls.map(([event]) => event);
+    expect(events.filter((e) => e === 'page_opened')).toHaveLength(1);
+    expect(events).toContain('session_start_requested');
+    expect(posthogMock.identify).toHaveBeenCalledTimes(1);
+    const device = getDeviceId();
+    expect(posthogMock.identify).toHaveBeenCalledWith(`device:${device}:learner:leo`, {
+      learner_name: 'Leo',
+      grade: 8,
+    });
+  });
+
+  it('drops queued events when analytics is off', async () => {
+    let resolveConfig!: (value: unknown) => void;
+    const gate = new Promise((resolve) => {
+      resolveConfig = resolve;
+    });
+    vi.stubGlobal('fetch', vi.fn().mockReturnValue(gate.then(() => configResponse(null))));
+    const ready = initAnalytics();
+    pageOpened();
+    identifyLearner('Leo', 8);
+    resolveConfig(undefined);
+    await ready;
+    expect(analyticsEnabled()).toBe(false);
+    expect(posthogMock.capture).not.toHaveBeenCalled();
+    expect(posthogMock.identify).not.toHaveBeenCalled();
   });
 });

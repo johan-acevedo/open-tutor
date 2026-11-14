@@ -9,9 +9,15 @@ content or images: only counts, route names and ids.
 Two events per session, both with a ``room`` property:
 
 - ``tutor_session_started`` {grade, returning, llm_route, tts}
-- ``tutor_session_ended`` {duration_s, outcome, close_reason,
-  child_spoken_turns, child_typed_turns, tutor_replies, tool_calls,
-  tool_errors, provider_errors}
+- ``tutor_session_ended`` {duration_s, outcome, error_type (only when
+  outcome is ``"error"``), close_reason, child_spoken_turns,
+  child_typed_turns, tutor_replies, tool_calls, tool_errors,
+  provider_errors}
+
+``outcome`` is a fixed category (``ended_by_child``, ``child_left``,
+``provider_error``, ``sdk_closed_early``, ``error``, ``unknown``): exception
+messages never leave the worker. For ``error`` the exception class name
+rides along as ``error_type``; the message is dropped.
 
 The ended counts reuse ``debug_log.summarize`` (the same function the debug
 report uses) over a lightweight in-memory stub event list, so the counting
@@ -20,6 +26,7 @@ logic is not duplicated and works when ``TUTOR_DEBUG_LOG`` is off.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -53,6 +60,34 @@ def posthog_settings(environ: dict[str, str] | Any | None = None) -> dict[str, s
 def normalize_learner_name(name: Any) -> str:
     """Lowercase, trimmed, single-spaced. Mirrors web/src/analytics.ts."""
     return " ".join(str(name or "").strip().lower().split())
+
+
+# Outcomes the session can end with. Anything else (notably the
+# ``f"error: {Class}: {message}"`` string the worker builds for the debug
+# trail) is mapped down to one of these before it leaves the worker.
+_KNOWN_OUTCOMES = frozenset({
+    "ended_by_child", "child_left", "provider_error",
+    "sdk_closed_early", "error", "unknown",
+})
+
+
+def sanitize_outcome(outcome: Any) -> tuple[str, str | None]:
+    """Map a worker outcome to ``(category, error_type)`` for analytics.
+
+    Known categories pass through. ``"error: ValueError: <message>"``
+    becomes ``("error", "ValueError")`` — the class name is countable,
+    the message (which can quote the child, the tutor or a provider) is
+    dropped. Anything unrecognised becomes ``("unknown", None)``.
+    """
+    text = str(outcome or "unknown")
+    if text in _KNOWN_OUTCOMES:
+        return text, None
+    if text.startswith("error:"):
+        rest = text[len("error:"):].strip()
+        err_type = rest.split(":", 1)[0].strip()
+        err_type = "".join(c for c in err_type if c.isalnum() or c in "._")[:80]
+        return "error", err_type or "error"
+    return "unknown", None
 
 
 def stable_distinct_id(device_id: Any, learner_name: Any, room: str) -> str:
@@ -98,22 +133,49 @@ class Analytics:
         return self._settings is not None and self._client is not None
 
     def capture(self, distinct_id: str, event: str, properties: dict[str, Any] | None = None) -> None:
-        """Send one event. Never raises; failures are debug-level only."""
+        """Send one event. Never raises; failures are debug-level only.
+
+        The locked ``posthog`` package (7.x) takes the id and properties as
+        keywords: ``client.capture(event, distinct_id=..., properties=...)``.
+        A positional call raises TypeError, so this wrapper pins the keywords.
+        """
         if not self.enabled:
             return
         try:
-            self._client.capture(distinct_id, event, properties or {})
+            self._client.capture(event, distinct_id=distinct_id, properties=properties or {})
         except Exception as error:
             log.debug("posthog capture %s failed: %s", event, error)
 
     def shutdown(self) -> None:
-        """Flush on process shutdown. Never raises."""
+        """Flush on process shutdown. Never raises.
+
+        Synchronous: only for tests and non-async paths. The session teardown
+        in agent.py is async, so it uses ``aclose`` below and never parks the
+        event loop on the SDK's blocking flush.
+        """
         if not self.enabled:
             return
         try:
             flush = getattr(self._client, "flush", None)
             if callable(flush):
                 flush()
+        except Exception as error:
+            log.debug("posthog flush failed: %s", error)
+
+    async def aclose(self, timeout: float = 2.0) -> None:
+        """Flush off the event loop with a short timeout. Never raises.
+
+        The PostHog SDK flush is synchronous (its default drain waits up to
+        ~10 s). Run it in a worker thread and stop waiting after ``timeout``
+        seconds: a slow analytics backend must not delay a session teardown.
+        """
+        if not self.enabled:
+            return
+        flush = getattr(self._client, "flush", None)
+        if not callable(flush):
+            return
+        try:
+            await asyncio.wait_for(asyncio.to_thread(flush), timeout=timeout)
         except Exception as error:
             log.debug("posthog flush failed: %s", error)
 
