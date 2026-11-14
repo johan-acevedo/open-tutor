@@ -12,7 +12,10 @@ in the caller\u2019s environment.
 
 Usage:
   set -a; source ~/.config/homelab/secrets/agent-auth.env; set +a
-  server/bin/with-env uv run --project server python server/scripts/hedge_smoke.py [--parts abcd]
+  server/bin/with-env uv run --project server python server/scripts/hedge_smoke.py [--parts abcd] [--race]
+
+--race sets TUTOR_LLM_RACE=1 and SCREEN_RACE=1, so every part runs in race mode
+(both providers from the start) instead of the delayed hedge.
 """
 
 from __future__ import annotations
@@ -224,7 +227,15 @@ async def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--parts", default="abcd",
                         help="which smoke parts to run (default abcd)")
-    parts = parser.parse_args().parts
+    parser.add_argument("--race", action="store_true",
+                        help="race mode: both providers from the start "
+                             "(TUTOR_LLM_RACE=1, SCREEN_RACE=1)")
+    args = parser.parse_args()
+    parts = args.parts
+    if args.race:
+        os.environ["TUTOR_LLM_RACE"] = "1"
+        os.environ["SCREEN_RACE"] = "1"
+        print("race mode on (TUTOR_LLM_RACE=1, SCREEN_RACE=1)", flush=True)
     if "a" in parts:
         instructions, tools = tutor_harness()
         await part_a(instructions, tools, go_route, cc_route)

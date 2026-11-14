@@ -786,6 +786,34 @@ calls and a lesson with a child were not run.
 Production keeps `SCREEN_FALLBACK` unset until this is proven on the dev setup;
 `tutor` hedging only arms with `TUTOR_LLM_FALLBACK` set, as before.
 
+### Race mode: both providers from the first millisecond (2026-11-14)
+
+The 5 s screen trigger fired on every page: Go's first text takes 5.6–6.5 s, so the
+backup was already being sent on every page, just 5 s late. Racing (`SCREEN_RACE`,
+`TUTOR_LLM_RACE`, both off by default, switched on in production by the lead) sends
+both requests from the start instead of waiting out the delay:
+
+- **Tutor:** the secondary starts immediately (hedge delay 0); first chunk (text or
+  tool call) still wins and the loser is cancelled exactly as today. Every turn gets
+  min-of-two latency instead of paying up to 2.5 s before the backup even starts.
+  `TUTOR_LLM_HEDGE_AFTER_S=0`/empty still means off: race needs a hedge target
+  (never Gemini/thought-signature routes). The sticky switch-over is unchanged;
+  with both sides always starting, two faster secondary turns still promote it,
+  symmetrically back again, with no flapping beyond today's rule.
+- **Screen:** both providers start at once on every model call kind (write, look,
+  retry, image) and the first COMPLETED call wins, not first text. A provider that
+  produces early text and then stalls mid-page loses to the one that finishes,
+  so a trickling provider cannot hold a page past its budget. One side erroring keeps
+  waiting for the other within the call's absolute deadline; both failing raises
+  the primary's error, as today. The loser is cancelled and closed through the
+  existing reaper path the moment the winner completes.
+- **Stats:** `llm_turn` and the screen per-call notes gain `race: true`, the tutor
+  records the loser's first-chunk time when it arrived before the cancel (both
+  sides where available), the screen records the winner's total time and the
+  loser's total/first-text time or error class when known. `tutor_session_ended`
+  gains `llm_race_turns`/`screen_race_calls` counts. Counts and timings only, never
+  text, so providers can be compared side by side from the same turns.
+
 ## Work packages
 
 Toolbox follow-up, 2026-11-13: narrow-page layout and readability lint are in

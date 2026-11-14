@@ -553,3 +553,174 @@ def test_partial_then_failed_turns_are_not_counted_as_wins():
     # The failed secondary is an attempt and an error, never a win.
     assert summary["routes"]["cc"]["turns_won"] == 0
     assert summary["routes"]["cc"]["turns_errored"] == 1
+
+
+# ---- race mode: both routes start at once --------------------------------------
+
+
+@pytest.fixture
+def raced(monkeypatch):
+    # A 30 s hedge wait proves the point: with the race on, the backup must
+    # serve long before it.
+    monkeypatch.setenv("TUTOR_LLM_HEDGE_AFTER_S", "30")
+    monkeypatch.setenv("TUTOR_LLM_RACE", "1")
+    return "1"
+
+
+def test_race_env_parsing(monkeypatch):
+    from open_tutor.session_llm import tutor_llm_race
+
+    monkeypatch.delenv("TUTOR_LLM_RACE", raising=False)
+    assert tutor_llm_race() is False
+    for raw in ("1", "true", "TRUE", " True "):
+        monkeypatch.setenv("TUTOR_LLM_RACE", raw)
+        assert tutor_llm_race() is True
+    for raw in ("0", "", "false", "yes"):
+        monkeypatch.setenv("TUTOR_LLM_RACE", raw)
+        assert tutor_llm_race() is False
+
+
+async def test_race_starts_both_at_once_and_first_chunk_wins(raced, turns):
+    import time as _time
+
+    preferred = HedgeFakeLLM("preferred", script=[(0.5, "slow")])
+    fallback = HedgeFakeLLM("fallback", script=[(0.01, "fast")])
+    model = await warmed(preferred, fallback)
+
+    started = _time.monotonic()
+    assert await run_turn(model) == "fast"  # no mixed reply: nothing of "slow" leaks
+    assert _time.monotonic() - started < 10  # not the 30 s hedge wait
+    assert fallback.calls == 2  # warm-up plus the raced turn
+    assert preferred.streams[-1].closed  # the loser is closed, nothing left running
+    (turn,) = llm_turns(turns)
+    assert turn["primary"] == "preferred" and turn["winner"] == "fallback"
+    assert turn["hedged"] is True and turn["race"] is True
+    assert turn["loser"] == "cancelled"
+    assert 0.0 < turn["ttft_s"] < 0.4  # no 30 s hedge wait: the backup's own time
+    assert "primary_ttft_s" not in turn  # the primary never answered before the cancel
+
+
+async def test_race_primary_wins_and_secondary_is_cancelled(raced, turns):
+    preferred = HedgeFakeLLM("preferred", script=[(0.01, "primary")])
+    fallback = HedgeFakeLLM("fallback", script=[(30, "late")])
+    model = await warmed(preferred, fallback)
+
+    assert await run_turn(model) == "primary"
+    assert fallback.calls == 2  # the backup started at once even though it lost
+    assert fallback.streams[-1].closed
+    (turn,) = llm_turns(turns)
+    assert turn["winner"] == "preferred" and turn["race"] is True
+    assert turn["hedged"] is True and turn["loser"] == "cancelled"
+
+
+async def test_race_first_tool_call_wins_either_way(raced, turns):
+    call = FunctionToolCall(name="ask_screen", arguments="{}", call_id="c1")
+    preferred = HedgeFakeLLM("preferred", script=[(0.01, call)])
+    fallback = HedgeFakeLLM("fallback", script=[(0.5, "slow")])
+    model = await warmed(preferred, fallback)
+
+    stream = model.chat(chat_ctx=llm.ChatContext())
+    try:
+        tools = []
+        async for chunk in stream:
+            tools += [c.name for c in (chunk.delta.tool_calls if chunk.delta else None) or []]
+    finally:
+        await stream.aclose()
+    assert tools == ["ask_screen"]
+    (turn,) = llm_turns(turns)
+    assert turn["winner"] == "preferred" and turn["race"] is True
+
+
+async def test_race_off_keeps_todays_shape(monkeypatch, turns):
+    monkeypatch.setenv("TUTOR_LLM_HEDGE_AFTER_S", "0.05")
+    monkeypatch.delenv("TUTOR_LLM_RACE", raising=False)
+    preferred = HedgeFakeLLM("preferred", script=[(0.01, "snabb")])
+    fallback = HedgeFakeLLM("fallback", script=[(0.01, "backup")])
+    model = await warmed(preferred, fallback)
+
+    assert await run_turn(model) == "snabb"
+    assert fallback.calls == 1  # the warm-up only: the backup never raced
+    (turn,) = llm_turns(turns)
+    assert turn["hedged"] is False and "race" not in turn
+
+
+async def test_race_flag_off_string_disables(monkeypatch, turns):
+    monkeypatch.setenv("TUTOR_LLM_HEDGE_AFTER_S", "0.05")
+    monkeypatch.setenv("TUTOR_LLM_RACE", "0")
+    preferred = HedgeFakeLLM("preferred", script=[(0.01, "snabb")])
+    fallback = HedgeFakeLLM("fallback", script=[(0.01, "backup")])
+    model = await warmed(preferred, fallback)
+
+    assert await run_turn(model) == "snabb"
+    assert fallback.calls == 1
+    (turn,) = llm_turns(turns)
+    assert turn["hedged"] is False and "race" not in turn
+
+
+async def test_race_zero_hedge_stays_off(monkeypatch, turns):
+    """TUTOR_LLM_HEDGE_AFTER_S=0 still means off, even with the race on."""
+    monkeypatch.setenv("TUTOR_LLM_HEDGE_AFTER_S", "0")
+    monkeypatch.setenv("TUTOR_LLM_RACE", "1")
+    preferred = HedgeFakeLLM("preferred", script=[(0.2, "slow")])
+    fallback = HedgeFakeLLM("fallback", script=[(0.01, "fast")])
+    model = await warmed(preferred, fallback)
+
+    assert await run_turn(model) == "slow"
+    assert fallback.calls == 1
+    (turn,) = llm_turns(turns)
+    assert turn["hedged"] is False and "race" not in turn
+
+
+async def test_race_never_touches_gemini(raced, turns):
+    import time as _time
+
+    preferred = HedgeFakeLLM("preferred")
+    fallback = HedgeFakeLLM("fallback", script=[(0.01, "fast")])
+    model = await warmed(preferred, fallback,
+                         preferred_route=route("gemini", signatures=True),
+                         fallback_route=route("plain"))
+    preferred.script = [(0.3, "slow")]
+
+    started = _time.monotonic()
+    assert await run_turn(model) == "slow"  # the backup never raced
+    assert _time.monotonic() - started >= 0.25
+    assert fallback.calls == 1  # the warm-up only
+    (turn,) = llm_turns(turns)
+    assert turn["hedged"] is False and turn["winner"] == "gemini"
+    assert "race" not in turn
+
+
+async def test_race_sticky_switch_stays_symmetric(raced, turns):
+    preferred = HedgeFakeLLM("preferred", script=[(0.3, "slow")])
+    fallback = HedgeFakeLLM("fallback", script=[(0.01, "fast")])
+    model = await warmed(preferred, fallback)
+
+    assert await run_turn(model) == "fast"
+    assert model.route_name == "preferred"  # one win is not enough
+    assert await run_turn(model) == "fast"
+    assert model.route_name == "fallback"  # two in a row: sticky switch
+
+    # Now the old secondary is the slow one: two wins switch straight back.
+    fallback.script = [(0.3, "slow now")]
+    preferred.script = [(0.01, "fast again")]
+    assert await run_turn(model) == "fast again"
+    assert model.route_name == "fallback"  # only one win so far
+    assert await run_turn(model) == "fast again"
+    assert model.route_name == "preferred"
+    switches = [data for event, data in turns if event == "llm_sticky_switch"]
+    assert [(s["from"], s["to"]) for s in switches] == [
+        ("preferred", "fallback"), ("fallback", "preferred")]
+    # No flapping: exactly two switches for four decisive turns, all raced.
+    assert all(turn.get("race") is True for turn in llm_turns(turns))
+
+
+def test_race_note_turn_records_both_sides_and_flag():
+    model = SessionLLM(HedgeFakeLLM("p"), route("p"), HedgeFakeLLM("f"), route("f"))
+    model.note_turn(primary="p", winner="p", hedged=True, ttft_s=0.05,
+                    loser="cancelled", secondary_ttft_s=0.08, race=True)
+    (entry,) = model.turn_stats
+    assert entry["ttft_s"] == 0.05 and entry["secondary_ttft_s"] == 0.08
+    assert entry["race"] is True
+    summary = model.hedge_summary_for_analytics()
+    assert summary["llm_race_turns"] == 1 and summary["llm_hedged_turns"] == 1
+    assert summary["llm_turns_errored"] == 0

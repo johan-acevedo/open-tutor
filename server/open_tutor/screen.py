@@ -263,6 +263,16 @@ def _screen_hedge_after_s() -> float | None:
         return DEFAULT_SCREEN_HEDGE_AFTER_S
 
 
+def _screen_race() -> bool:
+    """True when both providers start every hedged call at once (``SCREEN_RACE``).
+
+    Only collapses the first-text wait to zero and switches the decision to
+    first completion; a fallback must still be ready (``SCREEN_FALLBACK`` and
+    its key), so without one calls serve alone exactly as today. Off by
+    default; parsed per call."""
+    return str(os.environ.get("SCREEN_RACE", "")).strip().lower() in ("1", "true")
+
+
 def default_model_spec() -> dict[str, str]:
     """Which screen model and reasoning level this session uses (env only)."""
     model = _screen_env("SCREEN_MODEL", "muse-spark-1.3-contributor")
@@ -358,6 +368,7 @@ class Screen:
         self._job_failover: dict[str, str] | None = None
         self._job_hedged = False
         self._job_ttft_s: float | None = None
+        self._job_race = False
         self._get_pane_size = get_pane_size or (lambda: (1366, 768))
         self.timeout = timeout
         # Backup credentials are validated once, here: a fallback whose key is
@@ -643,6 +654,9 @@ class Screen:
         hedge_after = _screen_hedge_after_s()
         if hedge_after is None:
             return await self._call_model_legacy(system, user, look_png, kind, t0, budget_s)
+        if _screen_race():
+            return await self._call_model_raced(system, user, look_png, kind, t0,
+                                                fallback, budget_s)
         return await self._call_model_hedged(system, user, look_png, kind, t0,
                                              fallback, hedge_after, budget_s)
 
@@ -963,6 +977,155 @@ class Screen:
                 if task is not None:
                     self._stop_request(task, self._requests.get(task, primary_provider if task is p_task else fallback_provider))
 
+    async def _call_model_raced(self, system: str, user: str,
+                                 look_png: bytes | None, kind: str, t0: float,
+                                 fallback: dict[str, str],
+                                 budget_s: float | None) -> tuple[str, float]:
+        """Race the same call on both providers; first COMPLETED call wins.
+
+        Both sides start at once (``SCREEN_RACE``). Unlike the first-text
+        hedge, a side that produces early text but then stalls mid-answer
+        loses to the side that finishes first, so a trickling provider cannot
+        hold a page past its budget. The loser is cancelled and its stream
+        closed through the reaper the moment the winner completes. One side
+        erroring does not end the race: the other is awaited within the call's
+        absolute deadline, and both failing raises the primary's error, as the
+        hedge does. A caller cancellation propagates at once instead of
+        starting or awaiting anything further.
+        """
+        images = self._homework_images()
+        primary_provider = _spec_provider(self.model_spec())
+        fallback_provider = _spec_provider(fallback)
+        limit = self._fallback_budget()
+        if budget_s is not None:
+            limit = min(limit, budget_s)
+        # One clock for every route's first-text time: the backup's timing
+        # includes the race wait instead of starting at zero on its own start.
+        call_base = time.perf_counter()
+        if limit < FALLBACK_MIN_S:
+            # Too little time left for a backup call to deliver: serve alone.
+            first: asyncio.Event = asyncio.Event()
+            holder: dict[str, float] = {}
+            try:
+                text, _elapsed = await self._request_with_timeout(
+                    self._run_route(self._model_call, system, user, images, look_png, first, holder,
+                                    base=call_base), route=primary_provider, timeout=budget_s)
+            except Exception as error:
+                self._note_call(kind, primary_provider, hedged=False,
+                                ttft_s=None, loser="none", error=type(error).__name__)
+                raise
+            self._note_provider(kind, primary_provider, failed=False)
+            self._note_call(kind, primary_provider, hedged=False,
+                            ttft_s=holder.get("t"), loser="none")
+            return text, time.monotonic() - t0
+        # The absolute monotonic deadline for every attempt in this call.
+        deadline = t0 + limit
+        p_first: asyncio.Event = asyncio.Event()
+        p_holder: dict[str, float] = {}
+        s_first: asyncio.Event = asyncio.Event()
+        s_holder: dict[str, float] = {}
+        p_task = asyncio.create_task(
+            self._run_route(self._model_call, system, user, images, look_png,
+                            p_first, p_holder, base=call_base),
+            name=f"screen-race-primary-{kind}")
+        self._own_request(p_task, primary_provider)
+        s_task = self._start_screen_secondary(
+            fallback, system, user, images, look_png, kind, s_first, s_holder,
+            base=call_base)
+        pending = {"primary": p_task, "secondary": s_task}
+        results: dict[str, tuple[str, float]] = {}
+        errors: dict[str, BaseException] = {}
+        try:
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise asyncio.TimeoutError(f"screen {kind} race exceeded its deadline")
+                # Caller cancellation propagates out of the wait at once; the
+                # finally below stops both attempts. FIRST_COMPLETED: the first
+                # side to finish decides, the other is stopped, never awaited.
+                done, _ = await asyncio.wait(set(pending.values()), timeout=remaining,
+                                             return_when=asyncio.FIRST_COMPLETED)
+                if not done:
+                    raise asyncio.TimeoutError(f"screen {kind} race exceeded its deadline")
+                for side in ("primary", "secondary"):
+                    task = pending.get(side)
+                    if task is None or task not in done:
+                        continue
+                    del pending[side]
+                    try:
+                        results[side] = task.result()
+                    except (asyncio.CancelledError, KeyboardInterrupt, SystemExit):
+                        raise
+                    except BaseException as error:  # noqa: BLE001 - the other side may still win
+                        errors[side] = error
+                if "primary" in results or "secondary" in results:
+                    break  # first completion wins; ties prefer the primary
+                if not pending:
+                    break  # both sides failed before completing: today's error path
+            if "primary" not in results and "secondary" not in results:
+                # Both sides failed: the primary's error surfaces, as the hedge does.
+                if "primary" in errors:
+                    error = errors["primary"]
+                else:
+                    error = errors["secondary"]
+                assert error is not None
+                self._note_call(kind, None, hedged=True, race=True, ttft_s=None,
+                                loser="error", error=type(error).__name__)
+                raise error
+            winner = "primary" if "primary" in results else "secondary"
+            loser = "secondary" if winner == "primary" else "primary"
+            winner_text, winner_elapsed = results[winner]
+            loser_provider = fallback_provider if loser == "secondary" else primary_provider
+            loser_task = s_task if loser == "secondary" else p_task
+            self._stop_request(loser_task, loser_provider)
+            if loser in errors:
+                loser_state, loser_error = "error", type(errors[loser]).__name__
+            elif loser in results:
+                loser_state, loser_error = "completed", None
+            else:
+                loser_state, loser_error = "cancelled", None
+            winner_provider = primary_provider if winner == "primary" else fallback_provider
+            served_by_fallback = winner == "secondary"
+            primary_error_class = type(errors["primary"]).__name__ if "primary" in errors else ""
+            self._note_provider(kind, winner_provider, failed=served_by_fallback,
+                                error_class=primary_error_class)
+            winner_first_t = (p_holder if winner == "primary" else s_holder).get("t")
+            loser_first_t = (s_holder if winner == "primary" else p_holder).get("t")
+            loser_total_s: float | None = results[loser][1] if loser in results else None
+            if self._job_id is not None:
+                from .debug_log import record_active
+
+                hedge_event: dict[str, Any] = {
+                    "job": self._job_id, "kind": kind, "winner": winner_provider,
+                    "ttft_s": None if winner_first_t is None else round(winner_first_t, 3),
+                    "total_s": round(winner_elapsed, 3),
+                    "loser": loser_state,
+                    "race": True,
+                }
+                if loser_total_s is not None:
+                    hedge_event["loser_total_s"] = round(loser_total_s, 3)
+                if loser_first_t is not None:
+                    hedge_event["loser_ttft_s"] = round(loser_first_t, 3)
+                if loser_error is not None:
+                    hedge_event["loser_error"] = loser_error
+                record_active("screen_hedge", hedge_event)
+            self._note_call(kind, winner_provider, hedged=True, race=True,
+                            ttft_s=winner_first_t, loser=loser_state,
+                            winner_total_s=winner_elapsed,
+                            loser_total_s=loser_total_s, loser_ttft_s=loser_first_t,
+                            loser_error=loser_error)
+            return winner_text, time.monotonic() - t0
+        except asyncio.TimeoutError:
+            # Neither side completed within the call's absolute deadline: both
+            # attempts are stopped below; the timeout, not a provider, failed.
+            self._note_call(kind, None, hedged=True, race=True, ttft_s=None,
+                            loser="cancelled", error="TimeoutError")
+            raise
+        finally:
+            for task in (p_task, s_task):
+                self._stop_request(task, self._requests.get(
+                    task, primary_provider if task is p_task else fallback_provider))
+
     def _start_screen_secondary(self, fallback: dict[str, str], system: str, user: str,
                                 images: list[str], look_png: bytes | None, kind: str,
                                 first: asyncio.Event, holder: dict[str, float],
@@ -1030,16 +1193,37 @@ class Screen:
 
     def _note_call(self, kind: str, provider: str | None, *, hedged: bool,
                    ttft_s: float | None, loser: str,
-                   error: str | None = None) -> None:
-        """Remember one model call for analytics (never prompts or answers)."""
-        self._call_stats.append({
+                   error: str | None = None, race: bool = False,
+                   winner_total_s: float | None = None,
+                   loser_total_s: float | None = None,
+                   loser_ttft_s: float | None = None,
+                   loser_error: str | None = None) -> None:
+        """Remember one model call for analytics (never prompts or answers).
+
+        Race-only timings (``winner_total_s``, the loser's times, ``race``)
+        are recorded only when both providers started at once, so hedged and
+        unhedged calls keep exactly today's shape.
+        """
+        entry: dict[str, Any] = {
             "kind": kind, "provider": provider, "hedged": hedged,
             "ttft_s": None if ttft_s is None else round(ttft_s, 3),
             "loser": loser, **({"error": error} if error is not None else {}),
-        })
+        }
+        if race:
+            entry["race"] = True
+        if winner_total_s is not None:
+            entry["winner_total_s"] = round(winner_total_s, 3)
+        if loser_total_s is not None:
+            entry["loser_total_s"] = round(loser_total_s, 3)
+        if loser_ttft_s is not None:
+            entry["loser_ttft_s"] = round(loser_ttft_s, 3)
+        if loser_error is not None:
+            entry["loser_error"] = loser_error
+        self._call_stats.append(entry)
         if kind == "write":
             self._job_hedged = hedged
             self._job_ttft_s = None if ttft_s is None else round(ttft_s, 3)
+            self._job_race = race
 
     def screen_stats_summary(self) -> dict[str, Any]:
         """Per-session screen call stats for ``tutor_session_ended``.
@@ -1052,6 +1236,7 @@ class Screen:
         return {
             "screen_calls_total": summary["calls_total"],
             "screen_hedged_calls": summary["hedged_calls"],
+            "screen_race_calls": sum(1 for call in self._call_stats if call.get("race")),
             "screen_provider_wins": summary["provider_wins"],
             "screen_calls": summary["calls"],
         }
@@ -1132,6 +1317,7 @@ class Screen:
         self._job_failover = None
         self._job_hedged = False
         self._job_ttft_s = None
+        self._job_race = False
         if not ask:
             await self._fail(job_id, "The screen got an empty ask. Explain in words instead, briefly.")
             return
@@ -1320,6 +1506,8 @@ class Screen:
         meta: dict[str, Any] = {"provider": self._job_write_provider or _spec_provider(self.model_spec()),
                                 "failover": self._job_failover is not None,
                                 "hedged": self._job_hedged}
+        if self._job_race:
+            meta["race"] = True
         if self._job_failover is not None and self._job_failover.get("primary_error"):
             meta["primary_error"] = self._job_failover["primary_error"]
         if self._job_ttft_s is not None:

@@ -80,6 +80,19 @@ def tutor_hedge_after_s(environ: dict[str, str] | None = None) -> float | None:
         return DEFAULT_HEDGE_AFTER_S
     return None if value <= 0 else value
 
+
+def tutor_llm_race(environ: dict[str, str] | None = None) -> bool:
+    """True when both routes start every hedged turn at once (``TUTOR_LLM_RACE``).
+
+    Only collapses the hedge delay to zero; a hedge target must still exist
+    (see ``hedge_target``), so ``TUTOR_LLM_HEDGE_AFTER_S=0``/empty still
+    disables hedging entirely. Off by default; parsed per turn."""
+    if environ is None:
+        raw = os.environ.get("TUTOR_LLM_RACE")
+    else:
+        raw = environ.get("TUTOR_LLM_RACE")
+    return str(raw or "").strip().lower() in ("1", "true")
+
 PREFERRED, FALLBACK = "preferred", "fallback"
 
 
@@ -476,14 +489,18 @@ class SessionLLM(llm.LLM):
         ttft_s: float | None,
         loser: str,
         primary_ttft_s: float | None = None,
+        secondary_ttft_s: float | None = None,
         error: str | None = None,
         failover: bool = False,
+        race: bool = False,
     ) -> None:
         """Record one served turn for the debug trail and the analytics summary.
 
         ``loser`` is ``cancelled``/``error``/``none``; ``primary_ttft_s`` is the
         primary's own first-chunk time when the secondary won but the primary
-        answered before it was cancelled (when observed). Only route names,
+        answered before it was cancelled (when observed). In race mode
+        (``race=True``) the mirror ``secondary_ttft_s`` is recorded when the
+        primary won but the secondary had already chunked. Only route names,
         timings and error classes: never message text.
         """
         entry: dict[str, Any] = {
@@ -495,6 +512,10 @@ class SessionLLM(llm.LLM):
         }
         if primary_ttft_s is not None:
             entry["primary_ttft_s"] = round(primary_ttft_s, 3)
+        if secondary_ttft_s is not None:
+            entry["secondary_ttft_s"] = round(secondary_ttft_s, 3)
+        if race:
+            entry["race"] = True
         if error is not None:
             entry["error"] = error
         self._turn_stats.append(entry)
@@ -533,6 +554,7 @@ class SessionLLM(llm.LLM):
         return {
             "llm_turns_total": summary["turns_total"],
             "llm_hedged_turns": summary["hedged_turns"],
+            "llm_race_turns": sum(1 for turn in self._turn_stats if turn.get("race")),
             "llm_turns_errored": summary["turns_errored"],
             "llm_sticky_switches": self._sticky_switches,
             "llm_routes": summary["routes"],
@@ -645,7 +667,7 @@ class _RoutedStream(llm.LLMStream):
         if other is None:
             await self._forward_with_failover(target)
             return
-        await self._forward_hedged(target, other)
+        await self._forward_hedged(target, other, race=tutor_llm_race())
 
     async def _forward_with_failover(self, target: llm.LLM) -> None:
         """Today's behaviour: one route, failing over once when safe."""
@@ -707,20 +729,23 @@ class _RoutedStream(llm.LLMStream):
             self._close_stream(inner)
         return self._ttft
 
-    async def _forward_hedged(self, primary_llm: llm.LLM, secondary_llm: llm.LLM) -> None:
+    async def _forward_hedged(self, primary_llm: llm.LLM, secondary_llm: llm.LLM,
+                              *, race: bool = False) -> None:
         """Race the same request on both routes; first chunk wins.
 
         The primary runs alone until the hedge deadline. Past it, the secondary
         joins and the first stream to yield a (text or tool call) chunk serves the
-        whole turn. Attempts stay within today's worst case: the primary keeps its
-        one same-route retry, the secondary gets none, and a turn both routes fail
-        raises instead of retrying (both were already tried).
+        whole turn. In race mode (``TUTOR_LLM_RACE``) the delay is zero: both
+        sides start at once and min-of-two latency serves every turn. Attempts
+        stay within today's worst case: the primary keeps its one same-route
+        retry, the secondary gets none, and a turn both routes fail raises
+        instead of retrying (both were already tried).
         """
         owner = self._owner
         primary_name = owner._name_of(primary_llm)
         secondary_name = owner._name_of(secondary_llm)
         names = {"primary": primary_name, "secondary": secondary_name}
-        hedge_after = tutor_hedge_after_s() or DEFAULT_HEDGE_AFTER_S
+        hedge_after = 0.0 if race else (tutor_hedge_after_s() or DEFAULT_HEDGE_AFTER_S)
         started = time.perf_counter()
         queue: asyncio.Queue[tuple[str, Any]] = asyncio.Queue()
         streams = {
@@ -792,10 +817,12 @@ class _RoutedStream(llm.LLMStream):
                     # failed.)
                     error = errors["primary"] if "primary" in errors else errors["secondary"]
                     owner.note_turn(primary=primary_name, winner=None, hedged=secondary_started,
-                                     ttft_s=None, loser="error", error=type(error).__name__)
+                                     ttft_s=None, loser="error", error=type(error).__name__,
+                                     race=race)
                     raise error
                 owner.note_turn(primary=primary_name, winner=primary_name,
-                                 hedged=secondary_started, ttft_s=None, loser="none")
+                                 hedged=secondary_started, ttft_s=None, loser="none",
+                                 race=race)
                 return
             loser = "secondary" if winner == "primary" else "primary"
             for chunk in buffered[winner]:
@@ -863,7 +890,9 @@ class _RoutedStream(llm.LLMStream):
                     primary=primary_name, winner=names[winner], hedged=hedged,
                     ttft_s=first_s.get(winner), loser=loser_state,
                     primary_ttft_s=first_s.get("primary") if winner == "secondary" else None,
+                    secondary_ttft_s=first_s.get("secondary") if race and winner == "primary" else None,
                     error=turn_error,
+                    race=race,
                 )
         except asyncio.CancelledError:
             owner._hedge_streak = 0  # an unserved race promotes nothing
