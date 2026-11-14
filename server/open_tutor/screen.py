@@ -39,7 +39,12 @@ from screen.tools.page_images import PageImages  # noqa: E402
 
 SCREEN_BASE_URL = "https://opencode.ai/inference/go/openai/v1"
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+COMMAND_CODE_BASE_URL = "https://api.commandcode.ai/provider/v1"
 JOB_TIMEOUT_S = 20.0
+# A fallback call that cannot run this long is not started: the page could not
+# be rendered and delivered in what is left anyway. The job then fails as it
+# does with no fallback configured.
+FALLBACK_MIN_S = 2.0
 PAGE_TARGET_S = 12.0
 OPTIONAL_STEP_LIMIT_S = 6.0
 # Defaults: Muse Spark on Responses with minimal reasoning. DeepSeek models use
@@ -210,6 +215,23 @@ def _screen_env(name: str, default: str) -> str:
     return os.environ.get(name, default)
 
 
+def _screen_float(name: str, default: float) -> float:
+    try:
+        return float(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        return default
+
+
+def _spec_provider(spec: dict[str, str]) -> str:
+    """Short provider label for meta.json and the debug trail (never a key)."""
+    model = spec.get("model", "").lower()
+    if model.startswith("meta/"):
+        return "cc"
+    if model.startswith("gemini-"):
+        return "google"
+    return "go"
+
+
 class Screen:
     """Follows one session's lesson and renders screen pages in the background."""
 
@@ -220,6 +242,7 @@ class Screen:
         *,
         session_id: str = "screen",
         model_call: ModelCall | None = None,
+        fallback_call: ModelCall | None = None,
         render_page: RenderPage | None = None,
         get_pane_size: Callable[[], tuple[int, int]] | None = None,
         timeout: float = JOB_TIMEOUT_S,
@@ -229,7 +252,15 @@ class Screen:
         self.pages_dir.mkdir(parents=True, exist_ok=True)
         self.session_id = session_id
         self._model_call = model_call or self._default_model_call
+        # The backup model call (Command Code when SCREEN_FALLBACK=cc). None means
+        # the default backup path; tests inject a fake here just like model_call.
+        self._fallback_call = fallback_call
         self._render_page = render_page or self._default_render_page
+        # Per-job failover tracking (one job runs at a time; _run_job resets these).
+        self._job_id: str | None = None
+        self._job_deadline: float | None = None
+        self._job_write_provider: str | None = None
+        self._job_failover: dict[str, str] | None = None
         self._get_pane_size = get_pane_size or (lambda: (1366, 768))
         self.timeout = timeout
         self.turns: list[tuple[str, str]] = []  # ("child"|"tutor", text)
@@ -396,16 +427,96 @@ class Screen:
             urls.extend(image_urls)
         return urls[:MAX_HOMEWORK_IMAGES]
 
-    async def _call_model(self, system: str, user: str,
-                          look_png: bytes | None = None) -> tuple[str, float]:
-        t0 = time.monotonic()
-        if inspect.iscoroutinefunction(self._model_call):
-            result = await self._model_call(system, user, self._homework_images(), look_png)
+    async def _invoke(self, fn: ModelCall, system: str, user: str,
+                    images: list[str], look_png: bytes | None) -> str:
+        if inspect.iscoroutinefunction(fn):
+            result = await fn(system, user, images, look_png)
         else:
             # Blocking (the real OpenAI client): off the event loop.
-            result = await asyncio.to_thread(self._model_call, system, user,
-                                             self._homework_images(), look_png)
-        return str(result), time.monotonic() - t0
+            result = await asyncio.to_thread(fn, system, user, images, look_png)
+        return str(result)
+
+    async def _call_model(self, system: str, user: str,
+                          look_png: bytes | None = None,
+                          kind: str = "write") -> tuple[str, float]:
+        """One model call, with the optional backup (``kind``: write|look|retry|image).
+
+        Without ``SCREEN_FALLBACK`` this is today's single-provider call. With it,
+        the primary runs under ``SCREEN_PRIMARY_TIMEOUT_S``; on any error or timeout
+        the fallback gets the remaining job budget (never hedged: the fallback only
+        starts after the primary failed). Cancellation still propagates, so the job
+        limit in ``_pump`` keeps working."""
+        t0 = time.monotonic()
+        fallback = self.fallback_spec()
+        primary_provider = _spec_provider(self.model_spec())
+        if fallback is None:
+            result = await self._invoke(self._model_call, system, user,
+                                        self._homework_images(), look_png)
+            self._note_provider(kind, primary_provider, failed=False)
+            return result, time.monotonic() - t0
+        primary_timeout = _screen_float("SCREEN_PRIMARY_TIMEOUT_S", 10.0)
+        if primary_timeout <= 0:
+            raise ValueError("SCREEN_PRIMARY_TIMEOUT_S must be positive")
+        try:
+            result = await asyncio.wait_for(
+                self._invoke(self._model_call, system, user,
+                             self._homework_images(), look_png),
+                timeout=primary_timeout,
+            )
+            self._note_provider(kind, primary_provider, failed=False)
+            return result, time.monotonic() - t0
+        except asyncio.CancelledError:
+            raise
+        except Exception as primary_error:  # noqa: BLE001 - failover or fail as today
+            error_class = type(primary_error).__name__
+            remaining = self._fallback_budget()
+            if remaining < FALLBACK_MIN_S:
+                # Too little job time left for a backup call to deliver.
+                raise
+            log.warning("screen %s call failed on %s (%s); trying the fallback with %.1f s left",
+                        kind, self._job_id, error_class, remaining)
+            try:
+                result = await asyncio.wait_for(
+                    self._invoke_fallback(fallback, system, user, look_png, remaining),
+                    timeout=remaining,
+                )
+            except asyncio.CancelledError:
+                raise
+            except Exception as fallback_error:  # noqa: BLE001 - the job fails as today
+                log.warning("screen %s fallback failed (%s) after primary %s",
+                            kind, type(fallback_error).__name__, error_class)
+                raise primary_error from fallback_error
+            self._note_provider(kind, _spec_provider(fallback), failed=True,
+                                error_class=error_class)
+            return result, time.monotonic() - t0
+
+    async def _invoke_fallback(self, fallback: dict[str, str], system: str, user: str,
+                               look_png: bytes | None, budget_s: float) -> str:
+        images = self._homework_images()
+        if self._fallback_call is not None:
+            return await self._invoke(self._fallback_call, system, user, images, look_png)
+        return await asyncio.to_thread(self._run_blocking, fallback, system, user,
+                                       images, look_png, budget_s)
+
+    def _fallback_budget(self) -> float:
+        """Seconds the fallback may spend without pushing past the job limit."""
+        if self._job_deadline is None:
+            return _screen_float("SCREEN_PRIMARY_TIMEOUT_S", 10.0)
+        return self._job_deadline - time.monotonic()
+
+    def _note_provider(self, kind: str, provider: str, *, failed: bool,
+                       error_class: str = "") -> None:
+        """Remember who served a model call for meta.json and the debug trail."""
+        from .debug_log import record_active
+
+        if self._job_write_provider is None and kind == "write":
+            self._job_write_provider = provider
+        if failed:
+            if self._job_failover is None:
+                self._job_failover = {"kind": kind, "provider": provider,
+                                      "primary_error": error_class}
+            record_active("screen_failover", {"job": self._job_id, "kind": kind,
+                                                "to": provider, "error": error_class})
 
     async def _render(self, body: str, patch: str | None) -> tuple[bytes, list, float]:
         width, height = self._pane_size()
@@ -454,10 +565,35 @@ class Screen:
             spec["thinking"] = thinking
         return spec
 
+    def fallback_spec(self) -> dict[str, str] | None:
+        """The backup model, from ``SCREEN_FALLBACK`` (empty: none, today's behaviour).
+
+        ``cc`` is the same Muse model family on Command Code (``meta/`` + the Go
+        model id), reached over the Responses API with the same reasoning level.
+        Anything else -- an unknown name, or ``cc`` with a non-Muse screen model --
+        raises instead of silently running unprotected."""
+        name = _screen_env("SCREEN_FALLBACK", "").strip().lower()
+        if not name:
+            return None
+        if name != "cc":
+            raise ValueError("SCREEN_FALLBACK must be empty or 'cc'")
+        primary = self.model_spec()
+        model = primary["model"]
+        if not model.lower().startswith("muse-"):
+            raise ValueError(
+                f"SCREEN_FALLBACK=cc needs a Muse screen model, not {model!r} "
+                "(today: muse-spark-1.3-contributor)")
+        return {"model": f"meta/{model}", "api": primary["api"],
+                "reasoning": primary["reasoning"]}
+
     async def _run_job(self, job_id: str, ask: str) -> None:
         from .debug_log import record_active
 
         t0 = time.monotonic()
+        self._job_id = job_id
+        self._job_deadline = t0 + self.timeout
+        self._job_write_provider = None
+        self._job_failover = None
         if not ask:
             await self._fail(job_id, "The screen got an empty ask. Explain in words instead, briefly.")
             return
@@ -497,13 +633,15 @@ class Screen:
                              {"job": job_id, "kind": "patch", "page": visible.page_id,
                               **spec,
                               "pane": [w, h],
+                              **self._provider_meta(),
                               "model_s": round(model_s, 2), "render_s": round(render_s, 2),
                               "total_s": round(total_s, 2), "issues": issues,
                               "delivered": not errors,
                               "image_s": round(images.seconds, 2), "image_reviews": images.events})
         record_active("screen_patch", {"job": job_id, "page": visible.page_id,
                                        "total_s": round(total_s, 2), "issues": issues,
-                                       "delivered": not errors})
+                                       "delivered": not errors,
+                                       **self._provider_meta()})
         if errors:
             await self._fail(job_id, "The screen change was not applied: " + "; ".join(errors)[:400]
                              + ". Ask for a corrected change or a new page; explain in words meanwhile.")
@@ -605,6 +743,7 @@ class Screen:
                               "title": page_title(body, page_id),
                               **spec,
                               "pane": [width, height],
+                              **self._provider_meta(),
                               "model_s": round(model_s, 2), "render_s": round(render_s, 2),
                               "look_s": round(look_s, 2), "retry_s": round(retry_s, 2),
                               "total_s": round(total_s, 2), "issues": issues,
@@ -618,7 +757,8 @@ class Screen:
                                       "residual_lint": residual,
                                       "look": repair["look"], "repair_notes": repair["notes"],
                                       "retry": repair["retry"],
-                                      "retry_applied": repair["retry_applied"]})
+                                      "retry_applied": repair["retry_applied"],
+                                      **self._provider_meta()})
         result = PageResult(job_id=job_id, page_id=page_id,
                             title=page_title(body, page_id), body=body, png=png,
                             issues=issues, model_s=model_s, render_s=render_s,
@@ -630,11 +770,21 @@ class Screen:
             if inspect.isawaitable(outcome):
                 await outcome
 
+    def _provider_meta(self) -> dict[str, Any]:
+        """Who served this job's model calls: the write-call provider, and whether
+        any call failed over (with the first primary error class). Never a key."""
+        meta: dict[str, Any] = {"provider": self._job_write_provider or _spec_provider(self.model_spec()),
+                                "failover": self._job_failover is not None}
+        if self._job_failover is not None:
+            meta["primary_error"] = self._job_failover["primary_error"]
+        return meta
+
     def _image_job(self, ask: str, t0: float) -> PageImages:
         async def review(user: str, image: bytes | None) -> str:
             text, _ = await self._call_model(
                 "Choose an educational image for a Swedish school child. Inspect the actual picture with the lesson context. "
-                "Return only the requested JSON decision, reason and a text/HTML alternative if rejected.", user, image)
+                "Return only the requested JSON decision, reason and a text/HTML alternative if rejected.", user, image,
+                kind="image")
             return text
 
         deadline = min(time.monotonic() + IMAGE_BUDGET_S,
@@ -688,7 +838,8 @@ class Screen:
             "Check readability and agreement with the ask. Does any visible number, mark, label "
             "or solved step give away the answer to the child's question? Lint does not detect answer leaks. "
             "Answer OK if right, otherwise only the corrected page body.")
-        answer, _ = await self._call_model(self.system_prompt(), user, look_png=png)
+        answer, _ = await self._call_model(self.system_prompt(), user, look_png=png,
+                                           kind="look")
         answer = strip_fences(answer)
         record_active("screen_look", {"fixed": bool(answer and answer != "OK")})
         if not answer or answer == "OK":
@@ -708,7 +859,7 @@ class Screen:
             f"It still reports these problems after the look pass:\n{problems}\n\n"
             "Fix exactly these in the page and keep what already works. "
             "Answer with the corrected full page body only (no explanation).")
-        answer, _ = await self._call_model(self.system_prompt(), user)
+        answer, _ = await self._call_model(self.system_prompt(), user, kind="retry")
         answer = strip_fences(answer)
         record_active("screen_lint_retry", {"fixed": bool(answer)})
         return None if answer == "OK" or classify_answer(answer) == "patch" else (answer or None)
@@ -717,25 +868,41 @@ class Screen:
 
     def _default_model_call(self, system: str, user: str,
                             images: list[str], look_png: bytes | None) -> str:
-        """Blocking call, run in a thread. Gemini uses Google; other models use Go.
-        There is no provider fallback. SCREEN_THINKING controls DeepSeek's toggle."""
+        """Blocking call, run in a thread. Gemini uses Google, `meta/` models use
+        Command Code, other models use Go. SCREEN_THINKING controls DeepSeek's toggle.
+        With a fallback configured the primary runs under SCREEN_PRIMARY_TIMEOUT_S so
+        a hung provider hands over instead of eating the job budget."""
+        spec = self.model_spec()
+        timeout = 40.0
+        if self.fallback_spec() is not None:
+            timeout = _screen_float("SCREEN_PRIMARY_TIMEOUT_S", 10.0)
+        return self._run_blocking(spec, system, user, images, look_png, timeout)
+
+    def _run_blocking(self, spec: dict[str, str], system: str, user: str,
+                      images: list[str], look_png: bytes | None, timeout_s: float) -> str:
+        """One blocking provider call for an explicit spec and client timeout."""
         from openai import OpenAI
 
         from .config import USER_AGENT
 
-        spec = self.model_spec()
         model, api, effort = spec["model"], spec["api"], spec["reasoning"]
-        gemini = model.lower().startswith("gemini-")
-        key_name = "GEMINI_API_KEY" if gemini else "OPENCODE_GO_API_KEY"
+        provider = _spec_provider(spec)
+        if provider == "cc":
+            key_name, base_url = "COMMAND_CODE_API_KEY", COMMAND_CODE_BASE_URL
+        elif provider == "google":
+            key_name, base_url = "GEMINI_API_KEY", GEMINI_BASE_URL
+        else:
+            key_name, base_url = "OPENCODE_GO_API_KEY", SCREEN_BASE_URL
         key = os.environ.get(key_name, "")
         if not key:
             raise RuntimeError(f"{key_name} is empty: run through server/bin/with-env")
         headers = {"User-Agent": USER_AGENT}
-        if not gemini:
+        if provider != "google":
+            # Go asks for it; Command Code tolerates it.
             headers["x-opencode-session"] = self.session_id
-        client = OpenAI(api_key=key, base_url=GEMINI_BASE_URL if gemini else SCREEN_BASE_URL,
+        client = OpenAI(api_key=key, base_url=base_url,
                         default_headers=headers,
-                        timeout=40.0, max_retries=0)
+                        timeout=timeout_s, max_retries=0)
         image_url = None
         if look_png:
             import base64

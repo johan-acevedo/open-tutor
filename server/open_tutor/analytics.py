@@ -271,6 +271,21 @@ class SessionTracker:
 _process_analytics: Analytics | None = None
 
 
+def warm_up(environ: dict[str, str] | Any | None = None) -> None:
+    """Import the PostHog SDK now, when analytics is configured.
+
+    The first capture inside a session otherwise blocks the event loop importing
+    ``posthog.args`` (observed 241 ms in a live session). Fully off without
+    ``TUTOR_POSTHOG_KEY``: nothing is imported then. An SDK that cannot load
+    stays off, exactly as ``from_env`` treats it at session start."""
+    if posthog_settings(environ) is None:
+        return
+    try:
+        from posthog import Posthog  # noqa: F401  (warmed for from_env)
+    except Exception as error:
+        log.debug("posthog warm-up skipped, analytics stays off: %s", error)
+
+
 def get_analytics(environ: dict[str, str] | Any | None = None, client: Any = None) -> Analytics:
     """The process-wide client. First call wins (``reset_analytics`` for tests)."""
     global _process_analytics

@@ -229,7 +229,9 @@ screenshots and rerun commands are in `screen/review/2026-11-13-page-budget/`.
 Prepared on `feat/screen-model-controls`, without live inference calls. Setting
 `SCREEN_MODEL=gemini-4-hydrogen` selects Google's OpenAI-compatible endpoint and
 `GEMINI_API_KEY`; `SCREEN_REASONING=low` (default) or `medium` selects thinking depth.
-Other models keep the Go route. There is no fallback between providers.
+Other models keep the Go route. Since 2026-11-14 there is one fallback between
+providers: `SCREEN_FALLBACK=cc` retries a failed screen call on the same Muse model
+on Command Code (see the bake-off and backup sections above).
 `SCREEN_THINKING=disabled` on a DeepSeek chat model sends
 `thinking: {type: disabled}` and omits `reasoning_effort`; empty keeps today's low
 reasoning request. Invalid combinations fail explicitly. Page/patch `meta.json`
@@ -597,10 +599,108 @@ Three real calls on the dev setup (Johan alone, with Lucas, and alone again). De
 - **The greeting is fixed text and cannot be interrupted.** Room sound in the first second
   had cancelled it before any audio in two calls.
 - **Fox and page writer: Gemini 4 Hydrogen, thinking low**, DeepSeek V4.1 Flash as the
-  fox's backup. Pages arrived in 6-10 s in the calls.
+  fox's backup. Pages arrived in 6-10 s in the calls. (Superseded 2026-11-14: the
+  model bake-off below moved both to Muse Spark on Go, with Command Code as backup.)
 - **The mic button is the backstop** for talk that is not meant for the fox; its state is
   logged from the start of the session.
 - Dev settings live in `~/.config/open-tutor-smart-dev/env` on dell5500, not in the repo.
+
+### Model bake-off (2026-11-14)
+
+Nine models, two reasoning levels each ("lo" = lowest accepted, "hi" = one step up),
+three runs each: 54 pages, blind-judged by GPT-6.1 Sol on the rendered images only.
+The ask was the tutor's first real `ask_screen` (tutor-written, no child words); the
+learner is fictional ("Testbarn"). Every job ran the production Screen pipeline (write,
+render, lint, look, retry); the job timeout was raised from 20 s to 90 s so slow pages
+were still judged, and `total_s` above 20 means production would have failed the job.
+The tutor bench replayed a fictional unit-circle lesson (paraphrased lines, same turn
+structure) through the real prompt and tools, 5 runs per case, measuring to first speech.
+Scripts: `server/scripts/bench_tutor_speed.py`, `screen/tools/bench_screen_models.py`.
+
+Screen: quality is the blind judge's mean overall /10 (lo-hi over 3 runs); page-ready is
+the median full job time (write + render + look/retry); within-20 counts jobs production
+would have kept. Sorted by quality, then speed.
+
+| Page writer | Quality /10 | Page-ready med s | Within 20 s |
+|---|---|---|---|
+| Gemini 4 Hydrogen · low | 9.0 (9-9) | 9.0 | 2/3 |
+| Gemini 4 Hydrogen · medium | 8.7 (8-10) | 13.3 | 3/3 |
+| Muse Spark 1.3 C · Go · low | 8.0 (8-8) | 8.7 | 3/3 |
+| Muse Ember · CC · medium | 7.3 (7-8) | 8.2 | 3/3 |
+| Muse Ember · CC · low | 7.0 (4-9) | 7.7 | 3/3 |
+| Muse Spark 1.3 C · Go · minimal | 7.0 (6-8) | 9.0 | 3/3 |
+| DeepSeek V4.1 Flash Fast · CC · low | 7.0 (7-7) | 15.0 | 3/3 |
+| DeepSeek V4.1 Flash Ultrafast · CC · low | 6.7 (4-8) | 6.4 | 3/3 |
+| DeepSeek V4.1 Flash Ultrafast · CC · off | 6.0 (4-8) | 4.3 | 3/3 |
+| DeepSeek V4.1 Flash · Go · thinking off | 6.0 (2-8) | 9.0 | 3/3 |
+| GLM 5.3 Flash · Go · minimal | 6.0 (4-8) | 10.8 | 3/3 |
+| GLM 5.3 Flash · CC · low | 5.7 (3-8) | 13.0 | 3/3 |
+| GLM 5.3 Flash · CC · medium | 5.7 (5-6) | 14.0 | 3/3 |
+| DeepSeek V4.1 Flash · Go · low | 5.7 (4-7) | 22.2 | 1/3 |
+| DeepSeek V4.1 Flash · CC · off | 5.3 (2-8) | 9.0 | 3/3 |
+| DeepSeek V4.1 Flash · CC · low | 5.3 (1-8) | 18.0 | 3/3 |
+| DeepSeek V4.1 Flash Fast · CC · off | 5.0 (1-7) | 6.0 | 3/3 |
+| GLM 5.3 Flash · Go · none | 5.0 (4-6) | 12.7 | 3/3 |
+
+Tutor (first speech, median of 5 runs; A = agree/correct case, B = draw-again case):
+
+| Tutor route | A med s | B med s |
+|---|---|---|
+| Muse Spark 1.3 C · Go · minimal | 1.9 | 1.0 |
+| GLM 5.3 Flash · Go · none | 1.2 | 4.0 |
+| GLM 5.3 Flash · CC · low | 1.5 | 3.9 |
+| Muse Ember · CC · low | 1.7 | 2.2 |
+| DeepSeek V4.1 Flash Ultrafast · CC | 1.9 | 3.3 |
+| DeepSeek V4.1 Flash Fast · CC | 3.0 | 3.9 |
+| DeepSeek V4.1 Flash · Go | 3.8 | 4.2 |
+| DeepSeek V4.1 Flash · CC | 4.1 | 6.5 |
+| Gemini 4 Hydrogen · low | 5.4 | 4.8 (2 of 5 runs errored) |
+
+What the numbers say: Gemini low still judges best on the page (9.0), but its tutor
+turns were the slowest measured (5.4/4.8 s medians, B max 12.3 s with 2 errors) and one
+of its three pages missed the 20 s budget. Muse Spark on Go judges 8.0 at low and 7.0
+at minimal, delivers in 8-9 s, and answers as tutor in about 1-2 s with no errors --
+the only setup that is fast and steady on both sides. The spread inside most configs
+(e.g. Ember low 4-9, DeepSeek CC low 1-8) is larger than the gaps between their means:
+three runs judge stability, not a winner.
+
+**The automatic checks passed a page with an empty diagram.** Two pages judged 1/10
+have an empty main panel -- only a coordinate statement, no visual explanation -- yet
+shipped with clean lint (`issues: []`, no residual): P17 (DeepSeek Fast CC off, run 2,
+6.2 s) and P31 (DeepSeek CC low, run 2, 14.1 s). A missing picture is not a lint kind
+the shell reports, so the look pass had nothing to repair. Lint-clean is still not a
+teaching guarantee; image-presence belongs on the checklist the next time the look
+prompt or the shell issues change.
+
+Decision (owner, 2026-11-14): **tutor Muse Spark minimal, page writer Muse Spark low,
+both on Go; Command Code as backup for both (same model, different provider).** The
+backup was verified separately with the real tutor prompt and tools (~1.7 s median to
+first output, correct tool calls); the screen side relies on the same model answering
+the same prompt, plus the failover smoke test in the PR. `TUTOR_LLM=cc` selects the
+backup as the tutor route; `SCREEN_FALLBACK=cc` arms the screen backup (details below).
+The Gemini page writer and the DeepSeek fox backup are retired by this decision.
+
+### Command Code backup: tutor route `cc` and screen failover (2026-11-14)
+
+Production runs one model family (Muse Spark 1.3 Contributor) on two providers: Go
+primary, Command Code backup. Command Code serves the same Responses API
+(`https://api.commandcode.ai/provider/v1`, key `COMMAND_CODE_API_KEY`, model
+`meta/muse-spark-1.3-contributor`, `reasoning: {effort: minimal|low}`) and tolerates
+Go's `x-opencode-session` header.
+
+- **Tutor:** `cc` is a fourth `TUTOR_LLM`/`TUTOR_LLM_FALLBACK` route (see
+  `server/README.md`). It reuses the Responses client; the warm-up race and the
+  signature-safe failover in `session_llm.py` treat it like any other route.
+- **Screen:** `SCREEN_FALLBACK=cc` (empty = off, today's behaviour) retries a failed or
+  timed-out primary once on Command Code -- page, look and retry calls all go through
+  it, never hedged. The primary runs under `SCREEN_PRIMARY_TIMEOUT_S` (default 10 s);
+  the fallback gets the remaining job budget, and starts only when at least 2 s are
+  left (otherwise the job fails as today, inside the 20 s `JOB_TIMEOUT_S`). Only `cc`
+  for Muse models is supported; anything else fails the job loudly at once.
+- **Recorded per job:** `provider` (`go`/`google`/`cc` -- who wrote the delivered page
+  or patch), `failover: true` with the `primary_error` class when any call fell over,
+  in the page/patch `meta.json` and in the `screen_page`/`screen_patch` debug events
+  (plus a `screen_failover` event at the moment). Never a key.
 
 ## Work packages
 

@@ -451,6 +451,35 @@ def test_from_env_builds_a_bounded_real_client():
             pass
 
 
+def test_warm_up_imports_the_sdk_only_when_configured():
+    """The first capture in a session blocked the loop importing posthog.args.
+
+    With a key set, prewarm pays that import at worker start; without one,
+    analytics stays fully off and nothing is imported."""
+    import subprocess
+    import sys
+
+    with_key = (
+        "import sys;"
+        "from open_tutor import analytics;"
+        "analytics.warm_up({'TUTOR_POSTHOG_KEY': 'phc_test'});"
+        "assert 'posthog' in sys.modules and 'posthog.args' in sys.modules, "
+        "'prewarm must import the client module'"
+    )
+    done = subprocess.run([sys.executable, "-c", with_key],
+                          capture_output=True, text=True, cwd=".")
+    assert done.returncode == 0, done.stderr[-2000:]
+    without_key = (
+        "import sys;"
+        "from open_tutor import analytics;"
+        "analytics.warm_up({});"
+        "assert 'posthog' not in sys.modules, 'no key means no import'"
+    )
+    done = subprocess.run([sys.executable, "-c", without_key],
+                          capture_output=True, text=True, cwd=".")
+    assert done.returncode == 0, done.stderr[-2000:]
+
+
 def test_aclose_with_real_client_and_hung_transport_completes_within_budget(monkeypatch):
     """The real posthog.Posthog client whose transport never answers.
 

@@ -47,6 +47,19 @@ LLM_ROUTES = {
         "key": "OPENCODE_GO_API_KEY",
         "reasoning_effort": "minimal",
     },
+    # "cc" is the same Muse Spark 1.3 Contributor model on a different provider,
+    # Command Code, as a stability backup (decided 2026-11-14). Same OpenAI Responses
+    # API (`reasoning: {effort: "minimal"}`), model `meta/muse-spark-1.3-contributor`.
+    # Verified 2026-11-14 with the real tutor prompt and tools: ~1.7 s median to first
+    # output with correct tool calls. Command Code tolerates Go's `x-opencode-session`
+    # header, so the route reuses the same Responses client.
+    "cc": {
+        "api": "responses",
+        "base_url": "https://api.commandcode.ai/provider/v1",
+        "model": "meta/muse-spark-1.3-contributor",
+        "key": "COMMAND_CODE_API_KEY",
+        "reasoning_effort": "minimal",
+    },
     # DeepSeek V4.1 Flash on the same Go subscription (Chat Completions). Stand-in while
     # Muse on Go is slow (2026-11-13: first token after 5-10 s, some calls hang).
     "go-deepseek": {

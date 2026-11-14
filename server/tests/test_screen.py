@@ -1157,6 +1157,243 @@ async def test_patch_preview_waits_for_new_images_before_screenshot(tmp_path, mo
     assert stale not in issues
 
 
+# ---- Command Code fallback ----------------------------------------------------
+
+
+@pytest.fixture
+def debug_events(monkeypatch):
+    import open_tutor.debug_log as debug_log
+
+    events = []
+    monkeypatch.setattr(debug_log, "record_active",
+                        lambda event, data=None: events.append((event, data or {})))
+    return events
+
+
+def failover_screen(tmp_path, monkeypatch, **kwargs):
+    monkeypatch.setenv("SCREEN_FALLBACK", "cc")
+    monkeypatch.setenv("SCREEN_LOOK", "0")
+    kwargs.setdefault("render_page", AsyncMock(return_value=(b"PNG", [])))
+    return make_screen(tmp_path, **kwargs)
+
+
+def test_fallback_spec_defaults_to_none(tmp_path, monkeypatch):
+    monkeypatch.delenv("SCREEN_FALLBACK", raising=False)
+    assert make_screen(tmp_path).fallback_spec() is None
+
+
+def test_fallback_spec_cc_mirrors_the_muse_model(tmp_path, monkeypatch):
+    monkeypatch.setenv("SCREEN_FALLBACK", "cc")
+    assert make_screen(tmp_path).fallback_spec() == {
+        "model": "meta/muse-spark-1.3-contributor", "api": "responses",
+        "reasoning": "minimal"}
+
+
+def test_fallback_spec_cc_keeps_a_raised_reasoning_level(tmp_path, monkeypatch):
+    monkeypatch.setenv("SCREEN_FALLBACK", "cc")
+    monkeypatch.setenv("SCREEN_REASONING", "low")
+    assert make_screen(tmp_path).fallback_spec()["reasoning"] == "low"
+
+
+@pytest.mark.parametrize("env", [
+    {"SCREEN_FALLBACK": "go"},
+    {"SCREEN_FALLBACK": "gemini"},
+    {"SCREEN_FALLBACK": "cc", "SCREEN_MODEL": "gemini-4-hydrogen"},
+    {"SCREEN_FALLBACK": "cc", "SCREEN_MODEL": "deepseek-v4.1-flash"},
+])
+def test_fallback_spec_rejects_anything_but_cc_for_muse(tmp_path, monkeypatch, env):
+    for name in ("SCREEN_FALLBACK", "SCREEN_MODEL", "SCREEN_API",
+                 "SCREEN_REASONING", "SCREEN_THINKING"):
+        monkeypatch.delenv(name, raising=False)
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    with pytest.raises(ValueError, match="SCREEN_FALLBACK"):
+        make_screen(tmp_path).fallback_spec()
+
+
+def test_spec_provider_labels_go_google_and_cc():
+    from open_tutor.screen import _spec_provider
+
+    assert _spec_provider({"model": "muse-spark-1.3-contributor"}) == "go"
+    assert _spec_provider({"model": "gemini-4-hydrogen"}) == "google"
+    assert _spec_provider({"model": "meta/muse-spark-1.3-contributor"}) == "cc"
+
+
+async def test_primary_success_never_touches_the_fallback(tmp_path, monkeypatch, debug_events):
+    fallback = AsyncMock(return_value="<h1>Backup</h1>")
+    screen = failover_screen(tmp_path, monkeypatch,
+                             model_call=AsyncMock(return_value="<h1>Först</h1>"),
+                             fallback_call=fallback)
+    delivered = {}
+    screen.on_page = lambda p: delivered.setdefault("page", p)
+    screen.ask("En sida om bråk")
+    await screen.wait_idle()
+
+    assert fallback.call_count == 0
+    assert delivered["page"].body == "<h1>Först</h1>"
+    meta = job_meta(tmp_path)
+    assert meta["provider"] == "go" and meta["failover"] is False
+    assert "primary_error" not in meta
+    page_events = [data for event, data in debug_events if event == "screen_page"]
+    assert page_events and page_events[0]["provider"] == "go"
+    await screen.aclose()
+
+
+async def test_primary_error_fails_over_and_records_it(tmp_path, monkeypatch, debug_events):
+    screen = failover_screen(
+        tmp_path, monkeypatch,
+        model_call=AsyncMock(side_effect=RuntimeError("provider down")),
+        fallback_call=AsyncMock(return_value="<h1>Backup</h1>"))
+    delivered, failures = {}, []
+    screen.on_page = lambda p: delivered.setdefault("page", p)
+    screen.on_failure = failures.append
+    screen.ask("En sida om bråk")
+    await screen.wait_idle()
+
+    assert not failures
+    assert delivered["page"].body == "<h1>Backup</h1>"
+    meta = job_meta(tmp_path)
+    assert meta["provider"] == "cc" and meta["failover"] is True
+    assert meta["primary_error"] == "RuntimeError"
+    failovers = [data for event, data in debug_events if event == "screen_failover"]
+    assert len(failovers) == 1 and failovers[0]["to"] == "cc"
+    assert failovers[0]["error"] == "RuntimeError"
+    assert failovers[0]["job"] == "s1"
+    await screen.aclose()
+
+
+async def test_primary_timeout_fails_over(tmp_path, monkeypatch):
+    monkeypatch.setenv("SCREEN_PRIMARY_TIMEOUT_S", "0.05")
+
+    async def slow(system, user, images, look_png):
+        await asyncio.sleep(30)
+        return "<h1>Sent</h1>"
+
+    screen = failover_screen(tmp_path, monkeypatch, model_call=slow,
+                             fallback_call=AsyncMock(return_value="<h1>Backup</h1>"))
+    delivered = {}
+    screen.on_page = lambda p: delivered.setdefault("page", p)
+    screen.ask("En sida om bråk")
+    await screen.wait_idle()
+
+    assert delivered["page"].body == "<h1>Backup</h1>"
+    meta = job_meta(tmp_path)
+    assert meta["provider"] == "cc" and meta["failover"] is True
+    assert meta["primary_error"] == "TimeoutError"
+    await screen.aclose()
+
+
+async def test_no_fallback_configured_fails_as_today(tmp_path, monkeypatch, debug_events):
+    monkeypatch.delenv("SCREEN_FALLBACK", raising=False)
+    monkeypatch.setenv("SCREEN_LOOK", "0")
+    fallback = AsyncMock(return_value="<h1>Backup</h1>")
+    screen = make_screen(tmp_path,
+                         model_call=AsyncMock(side_effect=RuntimeError("provider down")),
+                         fallback_call=fallback)
+    delivered, failures = {}, []
+    screen.on_page = lambda p: delivered.setdefault("page", p)
+    screen.on_failure = failures.append
+    screen.ask("En sida om bråk")
+    await screen.wait_idle()
+
+    assert delivered == {} and len(failures) == 1 and "Explain in words" in failures[0]
+    assert fallback.call_count == 0
+    assert not [event for event, _ in debug_events if event == "screen_failover"]
+    await screen.aclose()
+
+
+async def test_small_budget_skips_the_fallback(tmp_path, monkeypatch):
+    fallback = AsyncMock(return_value="<h1>Backup</h1>")
+    screen = failover_screen(tmp_path, monkeypatch, timeout=0.5,
+                             model_call=AsyncMock(side_effect=RuntimeError("down")),
+                             fallback_call=fallback)
+    delivered, failures = {}, []
+    screen.on_page = lambda p: delivered.setdefault("page", p)
+    screen.on_failure = failures.append
+    screen.ask("En sida om bråk")
+    await screen.wait_idle()
+
+    assert delivered == {} and len(failures) == 1
+    assert fallback.call_count == 0  # ~0.5 s left is below the fallback floor
+    await screen.aclose()
+
+
+async def test_look_fails_over_while_the_write_stays_primary(tmp_path, monkeypatch):
+    monkeypatch.setenv("SCREEN_FALLBACK", "cc")
+    monkeypatch.setenv("SCREEN_LOOK", "1")
+    primary = AsyncMock(side_effect=["<h1>Först</h1>", RuntimeError("look down")])
+    screen = make_screen(tmp_path, model_call=primary,
+                         fallback_call=AsyncMock(return_value="<h1>Fixad</h1>"))
+    delivered = {}
+    screen.on_page = lambda p: delivered.setdefault("page", p)
+    screen.ask("En sida om bråk")
+    await screen.wait_idle()
+
+    assert delivered["page"].body == "<h1>Fixad</h1>"
+    meta = job_meta(tmp_path)
+    assert meta["provider"] == "go" and meta["failover"] is True
+    assert meta["primary_error"] == "RuntimeError"
+    await screen.aclose()
+
+
+async def test_patch_failover_records_cc(tmp_path, monkeypatch):
+    screen = await ready_page(tmp_path, monkeypatch)
+    monkeypatch.setenv("SCREEN_FALLBACK", "cc")
+    screen._model_call = AsyncMock(side_effect=RuntimeError("provider down"))
+    screen._fallback_call = AsyncMock(
+        return_value='<ot-patch target="klocka"><ot-clock time="7:30"></ot-clock></ot-patch>')
+    patched, failures = {}, []
+    screen.on_patch = lambda p: patched.setdefault("patch", p)
+    screen.on_failure = failures.append
+    screen.ask("Visa halv sju istället")
+    await screen.wait_idle()
+
+    assert not failures and "7:30" in patched["patch"].patch
+    meta = json.loads((tmp_path / "pages" / "s2" / "meta.json").read_text())
+    assert meta["provider"] == "cc" and meta["failover"] is True
+    assert meta["primary_error"] == "RuntimeError"
+    await screen.aclose()
+
+
+async def test_cc_fallback_wire_request(tmp_path, monkeypatch):
+    """The backup call reaches Command Code with its key, model and session header."""
+    import httpx
+    import openai
+
+    monkeypatch.setenv("SCREEN_FALLBACK", "cc")
+    monkeypatch.setenv("COMMAND_CODE_API_KEY", "test-cc")
+    requests = []
+
+    def handle(request):
+        requests.append(request)
+        payload = {"id": "resp_test", "object": "response", "created_at": 0,
+                   "model": "meta/muse-spark-1.3-contributor",
+                   "output": [{"id": "msg_test", "type": "message", "role": "assistant",
+                                 "status": "completed", "content": [{"type": "output_text",
+                                     "text": "<h1>Hej</h1>", "annotations": []}]}]}
+        return httpx.Response(200, json=payload)
+
+    screen = make_screen(tmp_path)
+    real_client = openai.OpenAI
+    with httpx.Client(transport=httpx.MockTransport(handle)) as http:
+        monkeypatch.setattr(openai, "OpenAI",
+                            lambda **kw: real_client(**kw, http_client=http))
+        text = screen._run_blocking(screen.fallback_spec(), "System", "Lesson",
+                                    [], None, 10.0)
+    assert text == "<h1>Hej</h1>"
+    assert len(requests) == 1
+    request = requests[0]
+    assert request.url.host == "api.commandcode.ai"
+    assert request.url.path == "/provider/v1/responses"
+    assert request.headers["authorization"] == "Bearer test-cc"
+    assert request.headers["x-opencode-session"] == "screen"
+    body = json.loads(request.content)
+    assert body["model"] == "meta/muse-spark-1.3-contributor"
+    assert body["reasoning"] == {"effort": "minimal"}
+    assert body["store"] is False
+    await screen.aclose()
+
+
 async def test_slow_patch_image_still_screenshots_instead_of_failing(tmp_path, monkeypatch):
     screen = make_screen(tmp_path)
     calls: list = []

@@ -96,6 +96,44 @@ def test_fallback_must_differ_from_the_preferred_route():
         )
 
 
+# ---- the Command Code backup route ----------------------------------------------------
+
+
+def test_cc_route_serves_the_same_model_from_command_code():
+    route = llm_route({"TUTOR_LLM": "cc", "COMMAND_CODE_API_KEY": "k"})
+    assert route.name == "cc" and route.api == "responses"
+    assert route.base_url == "https://api.commandcode.ai/provider/v1"
+    assert route.model == "meta/muse-spark-1.3-contributor"
+    assert route.api_key == "k" and route.reasoning_effort == "minimal"
+    assert route.thought_signatures is False
+
+
+def test_cc_route_needs_its_own_key():
+    # The Go key must not silently serve the backup route.
+    with pytest.raises(ValueError, match="COMMAND_CODE_API_KEY"):
+        llm_route({"TUTOR_LLM": "cc", "OPENCODE_GO_API_KEY": "k"})
+
+
+def test_unknown_route_lists_cc_among_the_valid_routes():
+    with pytest.raises(ValueError, match="cc"):
+        llm_route({"TUTOR_LLM": "spark", "OPENCODE_GO_API_KEY": "k"})
+
+
+def test_cc_works_as_the_preferred_route_and_as_the_fallback():
+    preferred = llm_route(
+        {"TUTOR_LLM": "cc", "COMMAND_CODE_API_KEY": "c",
+         "TUTOR_LLM_FALLBACK": "go", "OPENCODE_GO_API_KEY": "k"}
+    )
+    assert preferred.name == "cc"
+    fallback = llm_fallback_route(
+        {"TUTOR_LLM": "go", "OPENCODE_GO_API_KEY": "k",
+         "TUTOR_LLM_FALLBACK": "cc", "COMMAND_CODE_API_KEY": "c"}
+    )
+    assert fallback is not None and fallback.name == "cc"
+    assert fallback.base_url == "https://api.commandcode.ai/provider/v1"
+    assert fallback.api_key == "c"
+
+
 # ---- the greeting ---------------------------------------------------------------------
 
 
