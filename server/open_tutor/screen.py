@@ -27,6 +27,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Iterable
 
+from .reaper import Reaper
+
 log = logging.getLogger("open-tutor")
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -41,6 +43,9 @@ SCREEN_BASE_URL = "https://opencode.ai/inference/go/openai/v1"
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 COMMAND_CODE_BASE_URL = "https://api.commandcode.ai/provider/v1"
 JOB_TIMEOUT_S = 20.0
+# A discarded screen side's cancel/close never delays the winner, the call or
+# shutdown: bounded the same way as the tutor's loser cleanup (log once).
+SCREEN_LOSER_CLEANUP_BOUND_S = 2.0
 # A fallback call that cannot run this long is not started: the page could not
 # be rendered and delivered in what is left anyway. The job then fails as it
 # does with no fallback configured.
@@ -215,11 +220,87 @@ def _screen_env(name: str, default: str) -> str:
     return os.environ.get(name, default)
 
 
+def _accepts_first_text(fn: Callable[..., Any]) -> bool:
+    """Whether a model-call seam function takes an ``on_first_text`` keyword.
+
+    The real implementation streams and declares it; plain fakes (including
+    ``AsyncMock`` without a spec, which exposes no signature) are called the
+    old way and their completion counts as their first text."""
+    try:
+        parameters = inspect.signature(fn).parameters
+    except (TypeError, ValueError):
+        return False
+    return "on_first_text" in parameters or any(
+        p.kind == inspect.Parameter.VAR_KEYWORD for p in parameters.values()
+    )
+
+
 def _screen_float(name: str, default: float) -> float:
     try:
         return float(os.environ.get(name, default))
     except (TypeError, ValueError):
         return default
+
+
+# First-text hedge: how long the primary screen call gets before the same call
+# also starts on SCREEN_FALLBACK. Empty means the #64 flat-timeout failover
+# instead (SCREEN_PRIMARY_TIMEOUT_S); anything unparseable is the default.
+DEFAULT_SCREEN_HEDGE_AFTER_S = 5.0
+
+
+def _screen_hedge_after_s() -> float | None:
+    """Seconds before a slow screen call is hedged, or ``None`` for the legacy
+    flat-timeout failover (``SCREEN_HEDGE_AFTER_S`` empty)."""
+    raw = os.environ.get("SCREEN_HEDGE_AFTER_S")
+    if raw is None:
+        return DEFAULT_SCREEN_HEDGE_AFTER_S
+    raw = str(raw).strip()
+    if not raw:
+        return None
+    try:
+        return float(raw)
+    except ValueError:
+        return DEFAULT_SCREEN_HEDGE_AFTER_S
+
+
+def default_model_spec() -> dict[str, str]:
+    """Which screen model and reasoning level this session uses (env only)."""
+    model = _screen_env("SCREEN_MODEL", "muse-spark-1.3-contributor")
+    gemini = model.lower().startswith("gemini-")
+    deepseek = "deepseek" in model.lower()
+    api = _screen_env("SCREEN_API", "") or ("chat" if deepseek or gemini else "responses")
+    effort = _screen_env("SCREEN_REASONING", "") or ("low" if api == "chat" else "minimal")
+    thinking = _screen_env("SCREEN_THINKING", "")
+    if gemini and (api != "chat" or effort not in {"low", "medium", "high"}):
+        raise ValueError("Gemini pages require SCREEN_API=chat and SCREEN_REASONING=low, medium or high")
+    if thinking and (not deepseek or api != "chat" or thinking not in {"enabled", "disabled"}):
+        raise ValueError("SCREEN_THINKING=enabled|disabled requires a DeepSeek chat model")
+    spec = {"model": model, "api": api, "reasoning": effort}
+    if thinking:
+        spec["thinking"] = thinking
+    return spec
+
+
+def default_fallback_spec() -> dict[str, str] | None:
+    """The backup model, from ``SCREEN_FALLBACK`` (empty: none, today's behaviour).
+
+    ``cc`` is the same Muse model family on Command Code (``meta/`` + the Go
+    model id), reached over the Responses API with the same reasoning level.
+    Anything else -- an unknown name, or ``cc`` with a non-Muse screen model --
+    raises instead of silently running unprotected."""
+    name = _screen_env("SCREEN_FALLBACK", "").strip().lower()
+    if not name:
+        return None
+    if name != "cc":
+        raise ValueError("SCREEN_FALLBACK must be empty or 'cc'")
+    primary = default_model_spec()
+    model = primary["model"]
+    if not model.lower().startswith("muse-"):
+        raise ValueError(
+            f"SCREEN_FALLBACK=cc needs a Muse screen model, not {model!r} "
+            "(today: muse-spark-1.3-contributor)")
+    return {"model": f"meta/{model}", "api": primary["api"],
+            "reasoning": primary["reasoning"]}
 
 
 def _spec_provider(spec: dict[str, str]) -> str:
@@ -230,6 +311,16 @@ def _spec_provider(spec: dict[str, str]) -> str:
     if model.startswith("gemini-"):
         return "google"
     return "go"
+
+
+def _fallback_key_name(spec: dict[str, str]) -> str:
+    """Which backend key a backup spec needs (never the key itself)."""
+    provider = _spec_provider(spec)
+    if provider == "cc":
+        return "COMMAND_CODE_API_KEY"
+    if provider == "google":
+        return "GEMINI_API_KEY"
+    return "OPENCODE_GO_API_KEY"
 
 
 class Screen:
@@ -251,6 +342,10 @@ class Screen:
         self.pages_dir = Path(pages_dir)
         self.pages_dir.mkdir(parents=True, exist_ok=True)
         self.session_id = session_id
+        self._reaper = Reaper(SCREEN_LOSER_CLEANUP_BOUND_S)
+        self._requests: dict[asyncio.Task[Any], str] = {}
+        self._streams: dict[Any, str] = {}
+        self._request_streams: dict[asyncio.Task[Any], Any] = {}
         self._model_call = model_call or self._default_model_call
         # The backup model call (Command Code when SCREEN_FALLBACK=cc). None means
         # the default backup path; tests inject a fake here just like model_call.
@@ -261,8 +356,32 @@ class Screen:
         self._job_deadline: float | None = None
         self._job_write_provider: str | None = None
         self._job_failover: dict[str, str] | None = None
+        self._job_hedged = False
+        self._job_ttft_s: float | None = None
         self._get_pane_size = get_pane_size or (lambda: (1366, 768))
         self.timeout = timeout
+        # Backup credentials are validated once, here: a fallback whose key is
+        # missing is disabled with one clear warning instead of failing every
+        # job, and a primary failure then surfaces as itself instead of being
+        # replaced by the fallback's config error. An injected ``fallback_call``
+        # (tests) needs no key. Shape errors (unknown name, non-Muse model)
+        # still fail loudly at the first call, as before.
+        self._fallback_disabled: str | None = None
+        if _screen_env("SCREEN_FALLBACK", "").strip() and self._fallback_call is None:
+            try:
+                spec = default_fallback_spec()
+            except ValueError:
+                spec = None  # shape errors stay loud at the first call
+            if spec is not None and not os.environ.get(_fallback_key_name(spec), "").strip():
+                self._fallback_disabled = (
+                    f"{_fallback_key_name(spec)} is empty: "
+                    f"SCREEN_FALLBACK={_screen_env('SCREEN_FALLBACK', '').strip()} disabled; "
+                    "the primary serves every call alone"
+                )
+                log.warning("screen backup disabled: %s", self._fallback_disabled)
+        # Per-call stats for analytics (kind, serving provider, hedge use and
+        # first-text times; never prompts or answers).
+        self._call_stats: list[dict[str, Any]] = []
         self.turns: list[tuple[str, str]] = []  # ("child"|"tutor", text)
         self.homework: list[tuple[str, list[str]]] = []  # (description, image data URLs)
         self.answers: list[dict[str, str]] = []
@@ -334,6 +453,11 @@ class Screen:
                 pass
 
     async def aclose(self) -> None:
+        for task, route in list(self._requests.items()):
+            self._stop_request(task, route)
+        for stream in list(self._streams):
+            self._close_stream(stream)
+        await self._reaper.wait()
         if self._browser is not None:
             try:
                 await self._browser.close()
@@ -428,81 +552,509 @@ class Screen:
         return urls[:MAX_HOMEWORK_IMAGES]
 
     async def _invoke(self, fn: ModelCall, system: str, user: str,
-                    images: list[str], look_png: bytes | None) -> str:
+                    images: list[str], look_png: bytes | None,
+                    on_first_text: Callable[[], None] | None = None) -> str:
+        """Run one model-call seam function and return its full text.
+
+        The seam stays ``(system, user, images, look_png) -> text`` so tests keep
+        injecting plain fakes. The real implementation streams and signals its
+        first output text through ``on_first_text``; a seam function that declares
+        an ``on_first_text`` keyword gets it, anything else is called as before
+        (and its completion counts as its first text)."""
         if inspect.iscoroutinefunction(fn):
-            result = await fn(system, user, images, look_png)
+            if on_first_text is not None and _accepts_first_text(fn):
+                result = await fn(system, user, images, look_png, on_first_text=on_first_text)
+            else:
+                result = await fn(system, user, images, look_png)
         else:
-            # Blocking (the real OpenAI client): off the event loop.
+            # Blocking seam doubles (tests only): off the event loop. Production
+            # provider calls are async streaming and never touch a thread.
             result = await asyncio.to_thread(fn, system, user, images, look_png)
         return str(result)
 
+    async def _run_route(self, call: ModelCall, system: str, user: str,
+                         images: list[str], look_png: bytes | None,
+                         first: asyncio.Event, holder: dict[str, float],
+                         base: float | None = None) -> tuple[str, float]:
+        """Run one side of a (possibly hedged) call; signal its first text.
+
+        Returns ``(full text, total seconds)``. A streaming call fires ``first``
+        from its first output text; a plain seam call fires it on completion.
+        ``base`` is the perf-counter baseline the first-text time is measured
+        from; a hedged call passes its own start so every route's timing is on
+        the original call's clock instead of omitting the hedge wait.
+        """
+        t0 = time.monotonic()
+        base = time.perf_counter() if base is None else base
+        fired = False
+
+        def on_first_text() -> None:
+            nonlocal fired
+            if not fired:
+                fired = True
+                holder["t"] = time.perf_counter() - base
+                first.set()
+
+        text = await self._invoke(call, system, user, images, look_png,
+                                  on_first_text=on_first_text)
+        if not fired:
+            # A non-streaming call (plain seam function): completion is its text.
+            holder["t"] = time.perf_counter() - base
+            first.set()
+        return text, time.monotonic() - t0
+
     async def _call_model(self, system: str, user: str,
                           look_png: bytes | None = None,
-                          kind: str = "write") -> tuple[str, float]:
-        """One model call, with the optional backup (``kind``: write|look|retry|image).
+                          kind: str = "write",
+                          budget_s: float | None = None) -> tuple[str, float]:
+        """One model call (``kind``: write|look|retry|image), hedged when armed.
 
         Without ``SCREEN_FALLBACK`` this is today's single-provider call. With it,
-        the primary runs under ``SCREEN_PRIMARY_TIMEOUT_S``; on any error or timeout
-        the fallback gets the remaining job budget (never hedged: the fallback only
-        starts after the primary failed). Cancellation still propagates, so the job
-        limit in ``_pump`` keeps working."""
+        the primary's first output text is awaited for ``SCREEN_HEDGE_AFTER_S``
+        (default 5 s); when nothing arrives the same call starts on the backup
+        and the first side to produce text serves the whole call, the other
+        cancelled and closed. An empty ``SCREEN_HEDGE_AFTER_S`` keeps the #64
+        flat-timeout failover instead. ``budget_s`` is the calling step's own
+        remaining seconds (look/retry): the hedge deadline is capped so both
+        attempts fit inside it, and no hedge starts with under 2 s left.
+        Cancellation still propagates, so the job limit in ``_pump`` keeps
+        working; provider calls are async and streaming, so a cancelled call
+        closes its stream instead of outliving its job in a thread.
+        """
         t0 = time.monotonic()
-        fallback = self.fallback_spec()
-        primary_provider = _spec_provider(self.model_spec())
+        fallback = self._fallback_ready()
         if fallback is None:
-            result = await self._invoke(self._model_call, system, user,
-                                        self._homework_images(), look_png)
-            self._note_provider(kind, primary_provider, failed=False)
-            return result, time.monotonic() - t0
+            first: asyncio.Event = asyncio.Event()
+            holder: dict[str, float] = {}
+            try:
+                result = await self._request_with_timeout(
+                    self._run_route(self._model_call, system, user,
+                                    self._homework_images(), look_png, first, holder),
+                    route=_spec_provider(self.model_spec()), timeout=budget_s)
+            except Exception as error:
+                self._note_call(kind, _spec_provider(self.model_spec()), hedged=False,
+                                ttft_s=None, loser="none", error=type(error).__name__)
+                raise
+            text, _elapsed = result
+            self._note_provider(kind, _spec_provider(self.model_spec()), failed=False)
+            self._note_call(kind, _spec_provider(self.model_spec()), hedged=False,
+                            ttft_s=holder.get("t"), loser="none")
+            return text, time.monotonic() - t0
+        hedge_after = _screen_hedge_after_s()
+        if hedge_after is None:
+            return await self._call_model_legacy(system, user, look_png, kind, t0, budget_s)
+        return await self._call_model_hedged(system, user, look_png, kind, t0,
+                                             fallback, hedge_after, budget_s)
+
+    async def _call_model_legacy(self, system: str, user: str,
+                                 look_png: bytes | None, kind: str, t0: float,
+                                 budget_s: float | None) -> tuple[str, float]:
+        """The #64 flat-timeout failover (``SCREEN_HEDGE_AFTER_S`` empty).
+
+        The primary runs under ``SCREEN_PRIMARY_TIMEOUT_S``, fitted inside the
+        calling step's own budget when one is passed; on any error or timeout
+        the fallback gets the remaining job budget. Never hedged."""
+        fallback = self._fallback_ready()
+        assert fallback is not None  # _call_model only routes here with a backup
+        primary_provider = _spec_provider(self.model_spec())
+        images = self._homework_images()
+        first: asyncio.Event = asyncio.Event()
+        holder: dict[str, float] = {}
         primary_timeout = _screen_float("SCREEN_PRIMARY_TIMEOUT_S", 10.0)
         if primary_timeout <= 0:
             raise ValueError("SCREEN_PRIMARY_TIMEOUT_S must be positive")
+        if budget_s is not None:
+            # Fit both attempts inside the step: the primary gets what is left
+            # after the fallback floor, at least a second to answer.
+            primary_timeout = min(primary_timeout, max(1.0, budget_s - FALLBACK_MIN_S))
         try:
-            result = await asyncio.wait_for(
-                self._invoke(self._model_call, system, user,
-                             self._homework_images(), look_png),
-                timeout=primary_timeout,
+            text, _elapsed = await self._request_with_timeout(
+                self._run_route(self._model_call, system, user, images, look_png,
+                                first, holder),
+                route=primary_provider, timeout=primary_timeout,
             )
             self._note_provider(kind, primary_provider, failed=False)
-            return result, time.monotonic() - t0
+            self._note_call(kind, primary_provider, hedged=False,
+                            ttft_s=holder.get("t"), loser="none")
+            return text, time.monotonic() - t0
         except asyncio.CancelledError:
             raise
         except Exception as primary_error:  # noqa: BLE001 - failover or fail as today
             error_class = type(primary_error).__name__
             remaining = self._fallback_budget()
+            if budget_s is not None:
+                remaining = min(remaining, budget_s)
             if remaining < FALLBACK_MIN_S:
-                # Too little job time left for a backup call to deliver.
+                # Too little time left for a backup call to deliver.
+                self._note_call(kind, None, hedged=False, ttft_s=None,
+                                loser="none", error=error_class)
                 raise
             log.warning("screen %s call failed on %s (%s); trying the fallback with %.1f s left",
                         kind, self._job_id, error_class, remaining)
+            fallback_first: asyncio.Event = asyncio.Event()
+            fallback_holder: dict[str, float] = {}
             try:
-                result = await asyncio.wait_for(
-                    self._invoke_fallback(fallback, system, user, look_png, remaining),
-                    timeout=remaining,
-                )
+                if self._fallback_call is not None:
+                    text, _elapsed = await self._request_with_timeout(
+                        self._run_route(self._fallback_call, system, user, images,
+                                       look_png, fallback_first, fallback_holder),
+                        route=_spec_provider(fallback), timeout=remaining,
+                    )
+                else:
+                    text, _fallback_first_s = await self._request_with_timeout(
+                        self._stream_spec(fallback, system, user, images, look_png,
+                                        self._track_first(fallback_first, fallback_holder)),
+                        route=_spec_provider(fallback), timeout=remaining,
+                    )
             except asyncio.CancelledError:
                 raise
             except Exception as fallback_error:  # noqa: BLE001 - the job fails as today
                 log.warning("screen %s fallback failed (%s) after primary %s",
                             kind, type(fallback_error).__name__, error_class)
+                self._note_call(kind, None, hedged=False, ttft_s=None,
+                                loser="error", error=error_class)
                 raise primary_error from fallback_error
             self._note_provider(kind, _spec_provider(fallback), failed=True,
                                 error_class=error_class)
-            return result, time.monotonic() - t0
+            self._note_call(kind, _spec_provider(fallback), hedged=False,
+                            ttft_s=fallback_holder.get("t"), loser="error")
+            return text, time.monotonic() - t0
 
-    async def _invoke_fallback(self, fallback: dict[str, str], system: str, user: str,
-                               look_png: bytes | None, budget_s: float) -> str:
+    def _track_first(self, event: asyncio.Event,
+                     holder: dict[str, float],
+                     base: float | None = None) -> Callable[[], None]:
+        """An ``on_first_text`` sink backed by an event and a timing holder.
+
+        ``base`` is the perf-counter baseline the timing is measured from; a
+        hedged call passes its own start so the backup's wait is included."""
+        base = time.perf_counter() if base is None else base
+        fired = False
+
+        def on_first_text() -> None:
+            nonlocal fired
+            if not fired:
+                fired = True
+                holder["t"] = time.perf_counter() - base
+                event.set()
+
+        return on_first_text
+
+    def _own_request(self, task: asyncio.Task[Any], route: str) -> asyncio.Task[Any]:
+        self._requests[task] = route
+        task.add_done_callback(lambda done: self._requests.pop(done, None))
+        return task
+
+    def _close_stream(self, stream: Any) -> None:
+        route = self._streams.pop(stream, None)
+        if route is not None:
+            self._reaper.stop(route, close=stream.close())
+
+    def _stop_request(self, task: asyncio.Task[Any], route: str) -> None:
+        stream = self._request_streams.get(task)
+        stream_route = self._streams.pop(stream, None) if stream is not None else None
+        self._reaper.stop(stream_route or route, [task],
+                          stream.close() if stream_route is not None else None)
+
+    async def _request_with_timeout(self, call: Awaitable[Any], *, route: str,
+                                    timeout: float | None) -> Any:
+        task = self._own_request(asyncio.ensure_future(call), route)
+        if timeout is not None:
+            return await self._await_request(task, timeout)
+        try:
+            return await asyncio.shield(task)
+        finally:
+            if not task.done():
+                self._stop_request(task, route)
+
+    async def _await_request(self, task: asyncio.Task[Any], timeout: float) -> Any:
+        try:
+            return await asyncio.wait_for(asyncio.shield(task), timeout=max(0.0, timeout))
+        finally:
+            if not task.done():
+                self._stop_request(task, self._requests.get(task, "screen"))
+
+    async def _call_model_hedged(self, system: str, user: str,
+                                 look_png: bytes | None, kind: str, t0: float,
+                                 fallback: dict[str, str], hedge_after: float,
+                                 budget_s: float | None) -> tuple[str, float]:
+        """Race the same call on both providers; first output text wins.
+
+        The secondary starts when the primary produced no text within the hedge
+        deadline; the winner serves the whole call and the loser is cancelled
+        and its stream closed. One attempt per side: the hedge is the retry, so
+        attempts never exceed today's worst case, and an already attempted
+        route is never requested again within one call. A winner that dies
+        mid-answer gets one failover-like attempt on the other side, but only
+        when that side was never attempted. Every attempt runs under the
+        call's original absolute deadline, and a caller cancellation always
+        propagates instead of starting a backup that would outlive it."""
         images = self._homework_images()
+        primary_provider = _spec_provider(self.model_spec())
+        fallback_provider = _spec_provider(fallback)
+        limit = self._fallback_budget()
+        if budget_s is not None:
+            limit = min(limit, budget_s)
+        # One clock for every route's first-text time: the backup's timing
+        # includes the hedge wait instead of starting at zero on its own start.
+        call_base = time.perf_counter()
+        if limit < FALLBACK_MIN_S:
+            # Too little time left for a backup call to deliver: serve alone.
+            first: asyncio.Event = asyncio.Event()
+            holder: dict[str, float] = {}
+            try:
+                text, _elapsed = await self._request_with_timeout(
+                    self._run_route(self._model_call, system, user, images, look_png, first, holder,
+                                    base=call_base), route=primary_provider, timeout=budget_s)
+            except Exception as error:
+                self._note_call(kind, primary_provider, hedged=False,
+                                ttft_s=None, loser="none", error=type(error).__name__)
+                raise
+            self._note_provider(kind, primary_provider, failed=False)
+            self._note_call(kind, primary_provider, hedged=False,
+                            ttft_s=holder.get("t"), loser="none")
+            return text, time.monotonic() - t0
+        # Both attempts must fit inside the step: the hedge fires at the deadline
+        # or halfway through what is left, whichever comes first.
+        hedge_deadline = min(hedge_after, limit / 2)
+        # The absolute monotonic deadline for every attempt in this call.
+        deadline = t0 + limit
+        p_first: asyncio.Event = asyncio.Event()
+        p_holder: dict[str, float] = {}
+        s_first: asyncio.Event = asyncio.Event()
+        s_holder: dict[str, float] = {}
+        attempted = {"primary"}
+        p_task = asyncio.create_task(
+            self._run_route(self._model_call, system, user, images, look_png,
+                            p_first, p_holder, base=call_base),
+            name=f"screen-hedge-primary-{kind}")
+        self._own_request(p_task, primary_provider)
+        s_task: asyncio.Task[tuple[str, float]] | None = None
+        other_task: asyncio.Task[tuple[str, float]] | None = None
+        errors: dict[str, BaseException] = {}
+        primary_error_class: str | None = None
+        try:
+            try:
+                await asyncio.wait_for(p_first.wait(), timeout=max(0.0, hedge_deadline))
+            except TimeoutError:
+                pass
+            if p_first.is_set():
+                # The primary produced text before the deadline: no hedge.
+                winner: str | None = "primary"
+            else:
+                winner = None
+                if p_task.done():
+                    try:
+                        p_task.result()
+                    except (asyncio.CancelledError, KeyboardInterrupt, SystemExit):
+                        raise
+                    except BaseException as error:
+                        # The primary is already dead; the backup serves alone.
+                        errors["primary"] = error
+                        primary_error_class = type(error).__name__
+            if winner is None:
+                s_task = self._start_screen_secondary(
+                    fallback, system, user, images, look_png, kind, s_first, s_holder,
+                    base=call_base)
+                attempted.add("secondary")
+                winner = await self._race_screen_first(
+                    p_task, s_task, p_first, s_first, p_holder, s_holder, errors)
+                if winner is None:
+                    # Both sides failed before any text: today's error path.
+                    # The primary's error surfaces when both failed, else the
+                    # one side that actually errored (no eager ``.get``
+                    # default: it would raise ``KeyError`` when only the
+                    # secondary failed).
+                    if "primary" in errors:
+                        error = errors["primary"]
+                    else:
+                        error = errors["secondary"]
+                    assert error is not None
+                    if "primary" in errors:
+                        primary_error_class = type(errors["primary"]).__name__
+                    self._note_call(kind, None, hedged=True, ttft_s=None,
+                                    loser="error", error=type(error).__name__)
+                    raise error
+            assert s_task is not None or winner == "primary"
+            if winner == "primary":
+                loser, loser_task = "secondary", s_task
+            else:
+                loser, loser_task = "primary", p_task
+            if loser_task is not None:
+                self._stop_request(loser_task, primary_provider if loser == "primary" else fallback_provider)
+            if loser == "primary" and "primary" in errors:
+                primary_error_class = type(errors["primary"]).__name__
+            winner_task = p_task if winner == "primary" else s_task
+            assert winner_task is not None
+            try:
+                # Bounded by the call's original absolute deadline: a winner
+                # that never finishes must not outlive the caller's timeout.
+                winner_text, _winner_elapsed = await self._await_request(
+                    winner_task, deadline - time.monotonic())
+            except (asyncio.CancelledError, KeyboardInterrupt, SystemExit):
+                # The caller went away: propagate at once instead of starting
+                # a backup that would outlive the caller's timeout.
+                raise
+            except BaseException as winner_error:
+                # The winner died mid-answer: one failover-like attempt on the
+                # other side, unless that side was already attempted in this
+                # call (a hedged race tried both; restarting the cancelled
+                # loser would be a second request on one route).
+                if winner == "primary":
+                    primary_error_class = type(winner_error).__name__
+                if loser in errors or loser in attempted:
+                    self._note_call(kind, None, hedged=True, ttft_s=None,
+                                    loser="error", error=type(winner_error).__name__)
+                    raise winner_error
+                remaining = deadline - time.monotonic()
+                if remaining < FALLBACK_MIN_S:
+                    # No time left for a backup call to deliver.
+                    self._note_call(kind, None, hedged=True, ttft_s=None,
+                                    loser="error", error=type(winner_error).__name__)
+                    raise winner_error
+                # A fresh request needs a fresh first-text signal: the old event
+                # may already be set by the cancelled attempt.
+                other_first, other_holder = asyncio.Event(), {}
+                if loser == "secondary":
+                    other_task: asyncio.Task[tuple[str, float]] = self._start_screen_secondary(
+                        fallback, system, user, images, look_png, kind,
+                        other_first, other_holder, base=call_base)
+                else:
+                    other_task = asyncio.create_task(
+                        self._run_route(self._model_call, system, user, images,
+                                       look_png, other_first, other_holder,
+                                       base=call_base),
+                        name=f"screen-hedge-restart-{kind}")
+                self._own_request(other_task, fallback_provider if loser == "secondary" else primary_provider)
+                try:
+                    winner_text, _winner_elapsed = await self._await_request(
+                        other_task, remaining)
+                except (asyncio.CancelledError, KeyboardInterrupt, SystemExit):
+                    raise
+                except BaseException as other_error:
+                    self._note_call(kind, None, hedged=True, ttft_s=None,
+                                    loser="error", error=type(winner_error).__name__)
+                    raise winner_error from other_error
+                winner = loser
+                winner_first_t = other_holder.get("t")
+            else:
+                winner_first_t = (p_holder if winner == "primary" else s_holder).get("t")
+            winner_provider = primary_provider if winner == "primary" else fallback_provider
+            served_by_fallback = winner == "secondary"
+            self._note_provider(kind, winner_provider, failed=served_by_fallback,
+                                error_class=primary_error_class or "")
+            hedged_race = s_task is not None
+            if loser == "secondary" and s_task is None:
+                loser_state = "none"  # the secondary never started
+            else:
+                loser_state = "error" if loser in errors else "cancelled"
+            if self._job_id is not None and hedged_race:
+                from .debug_log import record_active
+
+                record_active("screen_hedge", {
+                    "job": self._job_id, "kind": kind, "winner": winner_provider,
+                    "ttft_s": None if winner_first_t is None else round(winner_first_t, 3),
+                    "loser": loser_state,
+                })
+            self._note_call(kind, winner_provider, hedged=hedged_race,
+                            ttft_s=winner_first_t, loser=loser_state)
+            return winner_text, time.monotonic() - t0
+        finally:
+            for task in (p_task, s_task, other_task):
+                if task is not None:
+                    self._stop_request(task, self._requests.get(task, primary_provider if task is p_task else fallback_provider))
+
+    def _start_screen_secondary(self, fallback: dict[str, str], system: str, user: str,
+                                images: list[str], look_png: bytes | None, kind: str,
+                                first: asyncio.Event, holder: dict[str, float],
+                                base: float | None = None,
+                                ) -> "asyncio.Task[tuple[str, float]]":
+        """Start the identical call on the backup provider.
+
+        ``base`` is the call's first-text clock (see ``_call_model_hedged``).
+        """
         if self._fallback_call is not None:
-            return await self._invoke(self._fallback_call, system, user, images, look_png)
-        return await asyncio.to_thread(self._run_blocking, fallback, system, user,
-                                       images, look_png, budget_s)
+            call = self._run_route(self._fallback_call, system, user, images,
+                                   look_png, first, holder, base=base)
+        else:
+            async def _real() -> tuple[str, float]:
+                text, _first_s = await self._stream_spec(
+                    fallback, system, user, images, look_png,
+                    self._track_first(first, holder, base=base))
+                return text, 0.0
+            call = _real()
+        return self._own_request(
+            asyncio.create_task(call, name=f"screen-hedge-secondary-{kind}"),
+            _spec_provider(fallback))
+
+    async def _race_screen_first(
+        self,
+        p_task: "asyncio.Task[tuple[str, float]]",
+        s_task: "asyncio.Task[tuple[str, float]]",
+        p_first: asyncio.Event, s_first: asyncio.Event,
+        p_holder: dict[str, float], s_holder: dict[str, float],
+        errors: dict[str, BaseException],
+    ) -> str | None:
+        """Wait for the first output text from either side; ``None`` when both
+        failed before any text. A side that errored stops being waited on."""
+        p_wait = asyncio.create_task(p_first.wait(), name="screen-hedge-wait-primary")
+        s_wait = asyncio.create_task(s_first.wait(), name="screen-hedge-wait-secondary")
+        try:
+            while True:
+                pt = p_holder.get("t")
+                st = s_holder.get("t")
+                if pt is not None and (st is None or pt <= st):
+                    return "primary"
+                if st is not None:
+                    return "secondary"
+                for side, task in (("primary", p_task), ("secondary", s_task)):
+                    if task.done() and side not in errors:
+                        try:
+                            task.result()
+                        except BaseException as error:
+                            errors[side] = error
+                if set(errors) == {"primary", "secondary"}:
+                    return None
+                pending = {t for t in (p_task, s_task, p_wait, s_wait) if not t.done()}
+                if not pending:
+                    return None  # both runners done with no text: both errored
+                await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+        finally:
+            for task in (p_wait, s_wait):
+                self._reaper.stop("screen-first-text", [task])
 
     def _fallback_budget(self) -> float:
         """Seconds the fallback may spend without pushing past the job limit."""
         if self._job_deadline is None:
             return _screen_float("SCREEN_PRIMARY_TIMEOUT_S", 10.0)
         return self._job_deadline - time.monotonic()
+
+    def _note_call(self, kind: str, provider: str | None, *, hedged: bool,
+                   ttft_s: float | None, loser: str,
+                   error: str | None = None) -> None:
+        """Remember one model call for analytics (never prompts or answers)."""
+        self._call_stats.append({
+            "kind": kind, "provider": provider, "hedged": hedged,
+            "ttft_s": None if ttft_s is None else round(ttft_s, 3),
+            "loser": loser, **({"error": error} if error is not None else {}),
+        })
+        if kind == "write":
+            self._job_hedged = hedged
+            self._job_ttft_s = None if ttft_s is None else round(ttft_s, 3)
+
+    def screen_stats_summary(self) -> dict[str, Any]:
+        """Per-session screen call stats for ``tutor_session_ended``.
+
+        Counts, hedges and first-text timings per call kind, plus which provider
+        served each call. Never prompts or answers."""
+        from .analytics import summarize_screen_calls
+
+        summary = summarize_screen_calls(self._call_stats)
+        return {
+            "screen_calls_total": summary["calls_total"],
+            "screen_hedged_calls": summary["hedged_calls"],
+            "screen_provider_wins": summary["provider_wins"],
+            "screen_calls": summary["calls"],
+        }
 
     def _note_provider(self, kind: str, provider: str, *, failed: bool,
                        error_class: str = "") -> None:
@@ -548,22 +1100,18 @@ class Screen:
             json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
         return job_dir
 
+    def _fallback_ready(self) -> dict[str, str] | None:
+        """The backup spec when hedging/failover may actually use it.
+
+        ``None`` when no fallback is configured, or when setup disabled it for a
+        missing key (warned once there). Shape errors still raise loudly."""
+        if self._fallback_disabled is not None:
+            return None
+        return self.fallback_spec()
+
     def model_spec(self) -> dict[str, str]:
         """Which screen model and reasoning level this session uses."""
-        model = _screen_env("SCREEN_MODEL", "muse-spark-1.3-contributor")
-        gemini = model.lower().startswith("gemini-")
-        deepseek = "deepseek" in model.lower()
-        api = _screen_env("SCREEN_API", "") or ("chat" if deepseek or gemini else "responses")
-        effort = _screen_env("SCREEN_REASONING", "") or ("low" if api == "chat" else "minimal")
-        thinking = _screen_env("SCREEN_THINKING", "")
-        if gemini and (api != "chat" or effort not in {"low", "medium", "high"}):
-            raise ValueError("Gemini pages require SCREEN_API=chat and SCREEN_REASONING=low, medium or high")
-        if thinking and (not deepseek or api != "chat" or thinking not in {"enabled", "disabled"}):
-            raise ValueError("SCREEN_THINKING=enabled|disabled requires a DeepSeek chat model")
-        spec = {"model": model, "api": api, "reasoning": effort}
-        if thinking:
-            spec["thinking"] = thinking
-        return spec
+        return default_model_spec()
 
     def fallback_spec(self) -> dict[str, str] | None:
         """The backup model, from ``SCREEN_FALLBACK`` (empty: none, today's behaviour).
@@ -572,19 +1120,7 @@ class Screen:
         model id), reached over the Responses API with the same reasoning level.
         Anything else -- an unknown name, or ``cc`` with a non-Muse screen model --
         raises instead of silently running unprotected."""
-        name = _screen_env("SCREEN_FALLBACK", "").strip().lower()
-        if not name:
-            return None
-        if name != "cc":
-            raise ValueError("SCREEN_FALLBACK must be empty or 'cc'")
-        primary = self.model_spec()
-        model = primary["model"]
-        if not model.lower().startswith("muse-"):
-            raise ValueError(
-                f"SCREEN_FALLBACK=cc needs a Muse screen model, not {model!r} "
-                "(today: muse-spark-1.3-contributor)")
-        return {"model": f"meta/{model}", "api": primary["api"],
-                "reasoning": primary["reasoning"]}
+        return default_fallback_spec()
 
     async def _run_job(self, job_id: str, ask: str) -> None:
         from .debug_log import record_active
@@ -594,13 +1130,17 @@ class Screen:
         self._job_deadline = t0 + self.timeout
         self._job_write_provider = None
         self._job_failover = None
+        self._job_hedged = False
+        self._job_ttft_s = None
         if not ask:
             await self._fail(job_id, "The screen got an empty ask. Explain in words instead, briefly.")
             return
         system = self.system_prompt()
         user = self._build_user_text(ask)
         generation_time = self.timeout - min(2.0, self.timeout * 0.2)
-        answer, model_s = await asyncio.wait_for(self._call_model(system, user), timeout=generation_time)
+        answer, model_s = await asyncio.wait_for(
+            self._call_model(system, user, budget_s=self._fallback_budget()),
+            timeout=generation_time)
         answer = strip_fences(answer)
         if not answer:
             await self._fail(job_id, "The screen answered empty. Explain in words instead, briefly.")
@@ -679,7 +1219,9 @@ class Screen:
             if look_target - (time.monotonic() - t0) >= step_s + reserve_s:
                 repair["look"] = True
                 fixed, look_s, why = await self._bounded(
-                    t0, reserve_s, self._look_once(ask, body, png, issues, width, height), target_s=look_target)
+                    t0, reserve_s,
+                    lambda budget: self._look_once(ask, body, png, issues, width, height, budget),
+                    target_s=look_target)
                 if why:
                     repair["notes"].append(f"look pass {why}")
                 elif fixed and fixed != body:
@@ -708,7 +1250,8 @@ class Screen:
             if self._time_left(t0) >= step_s + reserve_s:
                 repair["retry"] = True
                 corrected, retry_s, why = await self._bounded(
-                    t0, reserve_s, self._retry_with_lint(ask, body, leftover, width, height))
+                    t0, reserve_s,
+                    lambda budget: self._retry_with_lint(ask, body, leftover, width, height, budget))
                 if why:
                     repair["notes"].append(f"lint retry {why}")
                 elif corrected and corrected != body:
@@ -771,40 +1314,57 @@ class Screen:
                 await outcome
 
     def _provider_meta(self) -> dict[str, Any]:
-        """Who served this job's model calls: the write-call provider, and whether
-        any call failed over (with the first primary error class). Never a key."""
+        """Who served this job's model calls: the write-call provider, whether
+        any call failed over (with the primary error class when one errored),
+        whether the write call was hedged, and its first-text time. Never a key."""
         meta: dict[str, Any] = {"provider": self._job_write_provider or _spec_provider(self.model_spec()),
-                                "failover": self._job_failover is not None}
-        if self._job_failover is not None:
+                                "failover": self._job_failover is not None,
+                                "hedged": self._job_hedged}
+        if self._job_failover is not None and self._job_failover.get("primary_error"):
             meta["primary_error"] = self._job_failover["primary_error"]
+        if self._job_ttft_s is not None:
+            meta["ttft_s"] = self._job_ttft_s
+        if self._fallback_disabled is not None:
+            meta["fallback_disabled"] = True
         return meta
 
     def _image_job(self, ask: str, t0: float) -> PageImages:
-        async def review(user: str, image: bytes | None) -> str:
+        async def review(user: str, image: bytes | None, _deadline: float = 0.0) -> str:
             text, _ = await self._call_model(
                 "Choose an educational image for a Swedish school child. Inspect the actual picture with the lesson context. "
                 "Return only the requested JSON decision, reason and a text/HTML alternative if rejected.", user, image,
-                kind="image")
+                kind="image", budget_s=max(0.0, _deadline - time.monotonic()))
             return text
 
         deadline = min(time.monotonic() + IMAGE_BUDGET_S,
                        t0 + min(self.timeout, PAGE_TARGET_S) - FINAL_RENDER_RESERVE_S - DELIVERY_RESERVE_S)
-        return PageImages(self._build_user_text(ask), review, deadline)
+
+        async def review_with_deadline(user: str, image: bytes | None) -> str:
+            return await review(user, image, deadline)
+
+        return PageImages(self._build_user_text(ask), review_with_deadline, deadline)
 
     def _time_left(self, t0: float) -> float:
         """Seconds until the job limit; optional work is spent from this."""
         return self.timeout - (time.monotonic() - t0)
 
     async def _bounded(self, t0: float, reserve_s: float,
-                       call: Awaitable[Any], *, target_s: float | None = None) -> tuple[Any, float, str]:
+                       make_call: Callable[[float], Awaitable[Any]], *, target_s: float | None = None
+                       ) -> tuple[Any, float, str]:
         """Run one optional model step inside the job budget; it never raises.
-        Returns (result, seconds, why-not), with why-not empty on success."""
+        Returns (result, seconds, why-not), with why-not empty on success.
+
+        ``make_call`` receives the same capped budget the outer timeout
+        enforces, so a hedged step plans both attempts inside a deadline it
+        can actually meet instead of being cut before the backup can start."""
         started = time.monotonic()
         try:
             remaining = self._time_left(t0) - reserve_s
             if target_s is not None:
                 remaining = min(remaining, target_s - (started - t0) - reserve_s)
-            result = await asyncio.wait_for(call, timeout=max(0.001, min(OPTIONAL_STEP_LIMIT_S, remaining)))
+            budget = max(0.0, min(OPTIONAL_STEP_LIMIT_S, remaining))
+            result = await asyncio.wait_for(make_call(budget),
+                                            timeout=max(0.001, budget))
         except asyncio.TimeoutError:
             return None, time.monotonic() - started, "timed out"
         except Exception as error:  # noqa: BLE001 - the page still ships
@@ -825,7 +1385,7 @@ class Screen:
         return (png, issues, render_s), ""
 
     async def _look_once(self, ask: str, body: str, png: bytes, issues: list,
-                         width: int, height: int) -> str | None:
+                         width: int, height: int, budget_s: float | None = None) -> str | None:
         """Show the model its own render and source; it answers OK or a body."""
         from .debug_log import record_active
 
@@ -839,7 +1399,7 @@ class Screen:
             "or solved step give away the answer to the child's question? Lint does not detect answer leaks. "
             "Answer OK if right, otherwise only the corrected page body.")
         answer, _ = await self._call_model(self.system_prompt(), user, look_png=png,
-                                           kind="look")
+                                           kind="look", budget_s=budget_s)
         answer = strip_fences(answer)
         record_active("screen_look", {"fixed": bool(answer and answer != "OK")})
         if not answer or answer == "OK":
@@ -847,7 +1407,7 @@ class Screen:
         return answer
 
     async def _retry_with_lint(self, ask: str, body: str, lint: list[str],
-                               width: int, height: int) -> str | None:
+                               width: int, height: int, budget_s: float | None = None) -> str | None:
         """One correction with the page source, the pane and the exact lint."""
         from .debug_log import record_active
 
@@ -859,31 +1419,42 @@ class Screen:
             f"It still reports these problems after the look pass:\n{problems}\n\n"
             "Fix exactly these in the page and keep what already works. "
             "Answer with the corrected full page body only (no explanation).")
-        answer, _ = await self._call_model(self.system_prompt(), user, kind="retry")
+        answer, _ = await self._call_model(self.system_prompt(), user, kind="retry",
+                                           budget_s=budget_s)
         answer = strip_fences(answer)
         record_active("screen_lint_retry", {"fixed": bool(answer)})
         return None if answer == "OK" or classify_answer(answer) == "patch" else (answer or None)
 
     # ---- real model call -------------------------------------------------
 
-    def _default_model_call(self, system: str, user: str,
-                            images: list[str], look_png: bytes | None) -> str:
-        """Blocking call, run in a thread. Gemini uses Google, `meta/` models use
-        Command Code, other models use Go. SCREEN_THINKING controls DeepSeek's toggle.
-        With a fallback configured the primary runs under SCREEN_PRIMARY_TIMEOUT_S so
-        a hung provider hands over instead of eating the job budget."""
-        spec = self.model_spec()
-        timeout = 40.0
-        if self.fallback_spec() is not None:
-            timeout = _screen_float("SCREEN_PRIMARY_TIMEOUT_S", 10.0)
-        return self._run_blocking(spec, system, user, images, look_png, timeout)
+    async def _default_model_call(self, system: str, user: str,
+                                 images: list[str], look_png: bytes | None,
+                                 on_first_text: Callable[[], None] | None = None) -> str:
+        """Async streaming call. Gemini uses Google, `meta/` models use Command
+        Code, other models use Go. SCREEN_THINKING controls DeepSeek's toggle.
 
-    def _run_blocking(self, spec: dict[str, str], system: str, user: str,
-                      images: list[str], look_png: bytes | None, timeout_s: float) -> str:
-        """One blocking provider call for an explicit spec and client timeout."""
-        from openai import OpenAI
+        The call streams so its first output text is observable for the hedge;
+        the stream is always closed, so a cancelled call never outlives its job
+        in a thread (the old blocking client is gone). The transport is shared
+        per host with a long keep-alive (see http_clients.py)."""
+        text, _first_s = await self._stream_spec(
+            self.model_spec(), system, user, images, look_png, on_first_text)
+        return text
+
+    async def _stream_spec(self, spec: dict[str, str], system: str, user: str,
+                           images: list[str], look_png: bytes | None,
+                           on_first_text: Callable[[], None] | None = None
+                           ) -> tuple[str, float | None]:
+        """Stream one provider call; returns ``(full text, seconds to first text)``.
+
+        The first-text time is ``None`` when the answer held no text. The caller
+        owns the absolute deadline (the job or step budget); the shared transport
+        only carries a generous backstop. A ``finally`` starts stream closure
+        in the owned reaper, so cancellation never waits for provider teardown."""
+        from openai.types import Reasoning
 
         from .config import USER_AGENT
+        from .http_clients import shared_async_openai
 
         model, api, effort = spec["model"], spec["api"], spec["reasoning"]
         provider = _spec_provider(spec)
@@ -896,13 +1467,9 @@ class Screen:
         key = os.environ.get(key_name, "")
         if not key:
             raise RuntimeError(f"{key_name} is empty: run through server/bin/with-env")
-        headers = {"User-Agent": USER_AGENT}
-        if provider != "google":
-            # Go asks for it; Command Code tolerates it.
-            headers["x-opencode-session"] = self.session_id
-        client = OpenAI(api_key=key, base_url=base_url,
-                        default_headers=headers,
-                        timeout=timeout_s, max_retries=0)
+        client = shared_async_openai(base_url, key, USER_AGENT)
+        # Go asks for a stable session id; Command Code tolerates the header.
+        extra_headers = {} if provider == "google" else {"x-opencode-session": self.session_id}
         image_url = None
         if look_png:
             import base64
@@ -910,6 +1477,19 @@ class Screen:
             mime = "image/jpeg" if look_png.startswith(b"\xff\xd8\xff") else (
                 "image/webp" if look_png[:4] == b"RIFF" and look_png[8:12] == b"WEBP" else "image/png")
             image_url = f"data:{mime};base64,{base64.b64encode(look_png).decode()}"
+        parts: list[str] = []
+        announced = False
+
+        def note_text(text: str) -> None:
+            nonlocal announced
+            if text:
+                parts.append(text)
+                if not announced:
+                    announced = True
+                    if on_first_text is not None:
+                        on_first_text()
+
+        t0 = time.perf_counter()
         if api == "chat":
             content: list[dict[str, Any]] = [{"type": "text", "text": user}]
             for url in images:
@@ -922,32 +1502,60 @@ class Screen:
                 reasoning["extra_body"] = {"thinking": {"type": spec["thinking"]}}
             if spec.get("thinking") != "disabled":
                 reasoning["reasoning_effort"] = effort
-            response = client.chat.completions.create(
+            stream = await client.chat.completions.create(
                 model=model,
                 messages=[{"role": "system", "content": system},
                           {"role": "user", "content": content}],  # type: ignore[arg-type]
+                stream=True,
+                extra_headers=extra_headers,
                 **reasoning,
             )
-            return (response.choices[0].message.content or "").strip()
-        from openai.types import Reasoning
-
-        if images or look_png:
-            parts: list[dict[str, Any]] = [{"type": "input_text", "text": user}]
-            for url in images:
-                parts.append({"type": "input_image", "image_url": url})
-            if look_png:
-                parts.append({"type": "input_image", "image_url": image_url})
-            response = client.responses.create(
-                model=model, instructions=system,
-                input=[{"role": "user", "content": parts}],  # type: ignore[arg-type]
-                reasoning=Reasoning(effort=effort), store=False,  # type: ignore[arg-type]
-            )
+            self._streams[stream] = provider
+            request = asyncio.current_task()
+            self._request_streams[request] = stream
+            try:
+                async for chunk in stream:
+                    for choice in chunk.choices or []:
+                        note_text(choice.delta.content or "")
+            finally:
+                self._request_streams.pop(request, None)
+                self._close_stream(stream)
         else:
-            response = client.responses.create(
-                model=model, instructions=system, input=user,
+            if images or look_png:
+                input_parts: list[dict[str, Any]] = [{"type": "input_text", "text": user}]
+                for url in images:
+                    input_parts.append({"type": "input_image", "image_url": url})
+                if look_png:
+                    input_parts.append({"type": "input_image", "image_url": image_url})
+                payload: Any = [{"role": "user", "content": input_parts}]
+            else:
+                payload = user
+            stream = await client.responses.create(
+                model=model, instructions=system, input=payload,
                 reasoning=Reasoning(effort=effort), store=False,  # type: ignore[arg-type]
+                stream=True,
+                extra_headers=extra_headers,
             )
-        return (response.output_text or "").strip()
+            self._streams[stream] = provider
+            request = asyncio.current_task()
+            self._request_streams[request] = stream
+            try:
+                async for event in stream:
+                    if event.type == "response.output_text.delta":
+                        note_text(event.delta or "")
+            finally:
+                self._request_streams.pop(request, None)
+                self._close_stream(stream)
+        text = ("".join(parts)).strip()
+        if announced:
+            first_s: float | None = time.perf_counter() - t0
+        else:
+            # A silent answer still carries a timing: its completion is the first
+            # observable moment, which is also what a non-streaming call reports.
+            first_s = time.perf_counter() - t0
+            if on_first_text is not None:
+                on_first_text()
+        return text, first_s
 
     # ---- real renderer ----------------------------------------------------
 

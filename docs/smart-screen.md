@@ -691,16 +691,100 @@ Go's `x-opencode-session` header.
 - **Tutor:** `cc` is a fourth `TUTOR_LLM`/`TUTOR_LLM_FALLBACK` route (see
   `server/README.md`). It reuses the Responses client; the warm-up race and the
   signature-safe failover in `session_llm.py` treat it like any other route.
-- **Screen:** `SCREEN_FALLBACK=cc` (empty = off, today's behaviour) retries a failed or
-  timed-out primary once on Command Code -- page, look and retry calls all go through
-  it, never hedged. The primary runs under `SCREEN_PRIMARY_TIMEOUT_S` (default 10 s);
-  the fallback gets the remaining job budget, and starts only when at least 2 s are
-  left (otherwise the job fails as today, inside the 20 s `JOB_TIMEOUT_S`). Only `cc`
-  for Muse models is supported; anything else fails the job loudly at once.
+- **Screen:** `SCREEN_FALLBACK=cc` (empty = off, today's behaviour) hedges a slow or
+  failing primary with Command Code -- page, look and retry calls stream, and the
+  first side to produce output text serves the whole call while the other is
+  cancelled and its stream closed. The hedge fires at `SCREEN_HEDGE_AFTER_S`
+  (default 5 s), capped so both attempts fit inside the calling step's own budget
+  (a look/retry step's ~6 s deadline starts the hedge at ~3 s); no hedge starts
+  with under 2 s left, and the 20 s job limit always holds. Empty
+  `SCREEN_HEDGE_AFTER_S` keeps the older flat-timeout failover
+  (`SCREEN_PRIMARY_TIMEOUT_S`). Only `cc` for Muse models is supported; anything
+  else fails the job loudly at once, while a missing backup key disables the
+  fallback with one warning and the primary serves alone.
 - **Recorded per job:** `provider` (`go`/`google`/`cc` -- who wrote the delivered page
-  or patch), `failover: true` with the `primary_error` class when any call fell over,
-  in the page/patch `meta.json` and in the `screen_page`/`screen_patch` debug events
-  (plus a `screen_failover` event at the moment). Never a key.
+  or patch), `failover: true` with the `primary_error` class when a primary error
+  fell over, plus `hedged` and the write call's `ttft_s`, in the page/patch
+  `meta.json` and in the `screen_page`/`screen_patch` debug events (plus a
+  `screen_failover` event when the backup serves after a primary error and a
+  `screen_hedge` event for every raced call). Never a key.
+
+### Hedged LLM requests, first-text measurement and warm connections (2026-11-14)
+
+Providers sometimes spike mid-session: a request that normally starts in ~2 s can
+take 25 s. The warm-up race only picks the session's starting route, so a later
+spike hit every turn, and the flat screen failover only reacted after a 10 s timeout.
+This change hedges both (PR: hedged tutor turns, hedged screen calls) with these rules:
+
+- **Tutor:** each turn starts on the primary; past `TUTOR_LLM_HEDGE_AFTER_S`
+  (default 2.5 s, `0`/empty off) the identical request races on the other route.
+  First chunk wins, nothing is forwarded before the winner is decided, attempts
+  stay within today's worst case, and hedging never touches thought-signature
+  routes. A secondary that wins twice running becomes the primary (sticky,
+  symmetric, logged as `llm_sticky_switch`); only a winner that serves its turn
+  to the end counts, a failure or cancel resets the streak, and the loser's
+  cancel/close runs in an owned reaper, without awaiting it on the winner's
+  path. `aclose()` starts every remaining close together, including an active
+  winner, and waits against one 2 s deadline. Survivors are cancelled and
+  logged once per cleanup, with strong references retained until they finish.
+  Every turn records `llm_turn`.
+- **Screen:** page, look and retry calls stream (Responses and Chat both support
+  `stream=True`), so the first output text is observable; the hedge above replaces
+  the flat failover. Provider calls are async and cancellable with an absolute
+  deadline. Cancellation requests provider shutdown and starts stream closure
+  immediately; the reaper owns teardown that continues after the call ends.
+  A provider that trickles bytes forever cannot hold a request thread, because
+  screen requests use async streams.
+  Optional steps pass their own remaining budget in, so the hedge fires at
+  `min(SCREEN_HEDGE_AFTER_S, half the step)` instead of being cut by the outer
+  timeout before the backup can start. Every attempt runs under the call's
+  original absolute deadline, a caller cancellation always propagates instead of
+  starting a backup, an already attempted route is never requested twice in one
+  call, and every route's first-text time is measured from the call's start on
+  one clock (the backup's time includes the hedge wait). Loser teardown never
+  delays a ready page or caller cancellation. Screen shutdown starts every
+  request and stream close before waiting on the same total 2 s reaper budget.
+- **Measurement:** `tutor_session_ended` gains per-route turn wins with median/max
+  ttft, hedge counts and sticky switches, and the same for screen calls; an optional
+  per-turn `tutor_llm_turn` event carries only route names, timings and flags.
+  Only turns served to completion count as wins: a partial-then-failed
+  secondary is an attempt and an error for its route (`turns_errored` globally
+  and per route), never a win. Fully off without `TUTOR_POSTHOG_KEY`, as before.
+- **Warm connections:** one shared httpx transport per (process, loop, host) with
+  ~120 s keep-alive for the tutor and screen clients -- an async transport is
+  bound to its loop, so each loop owns its clients and they are closed at
+  job/process shutdown (sharing one across loops raised `Event loop is closed`).
+  Worker prewarm does a loop-independent sync warm-up per configured provider
+  that reads response headers and closes without downloading the body. At the
+  absolute ~5 s total deadline, it interrupts active socket I/O, closes the
+  response/client and joins the worker within the remaining budget. It never
+  fails worker startup; httpx inactivity timeouts alone cannot bound a trickling
+  server. This targets the cold start seen 2026-11-14, when Go did not answer
+  the 5 s warm-up right after a
+  restart and was normal a minute later.
+
+Review follow-up, 2026-11-14 (PR #65): removed sequential cleanup waits and every
+unbounded post-cancel await in the hedge helpers. Six regressions retained or
+extended from the review probes fail on `0e38597`: loser provider ownership,
+active-winner closure, asynchronous cancellation teardown in tutor and screen,
+and endless response bodies and headers during prewarm. The header test checks
+that no warm-up thread remains when the deadline returns. The earlier
+`turns_errored` fix, hedge timing and sticky-switch rules are unchanged.
+
+Live follow-up on ThinkCentre, 2026-11-14, `hedge_smoke.py --parts ab`, one run
+with fictional prompts: all three ordinary turns used Go without a hedge;
+first-text times were 0.711/1.141/2.107 s and complete-turn walls were
+1.5/1.2/2.4 s. With the primary stalled 10 s, Command Code served the turn at
+3.801 s first text, including the 2.5 s hedge wait, and 10.1 s wall. That wall
+includes the smoke's existing 6 s wait for an unstarted warm-up decision in
+`SessionLLM.pick()`, before the provider turn begins; it is not loser cleanup.
+These are diagnostic observations, not a provider speed comparison. Final server
+verification: `cd server && uv run pytest -q`, 588 passed and 18 skipped. Web:
+`cd web && npm test`, 125 passed. No running service was touched. Real screen
+calls and a lesson with a child were not run.
+
+Production keeps `SCREEN_FALLBACK` unset until this is proven on the dev setup;
+`tutor` hedging only arms with `TUTOR_LLM_FALLBACK` set, as before.
 
 ## Work packages
 

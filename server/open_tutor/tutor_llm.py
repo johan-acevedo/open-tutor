@@ -190,7 +190,14 @@ def warm_up() -> None:
 
 def build_route_llm(route: LLMRoute, session_id: str, http_client: Any = None) -> llm.LLM:
     """The LiveKit LLM for one route. ``session_id`` is the room name: Go asks for a
-    stable id per conversation. ``http_client`` is for tests (a recorded stream)."""
+    stable id per conversation. ``http_client`` is for tests (a recorded stream).
+
+    Production clients share one httpx transport per host with a long keep-alive
+    (see http_clients.py), so turns after a pause reuse the warm connection."""
+    if http_client is None:
+        from .http_clients import shared_async_client
+
+        http_client = shared_async_client(route.base_url)
     if route.api == "responses":
         # Any Responses route lands here, not only Go ones: `cc` serves the same
         # model on Command Code. Go asks for the session header; Command Code
@@ -200,7 +207,7 @@ def build_route_llm(route: LLMRoute, session_id: str, http_client: Any = None) -
             base_url=route.base_url,
             max_retries=0,
             default_headers={"User-Agent": USER_AGENT, "x-opencode-session": session_id},
-            **({"http_client": http_client} if http_client is not None else {}),
+            http_client=http_client,
         )
         kwargs: dict[str, Any] = {}
         if route.reasoning_effort:
@@ -222,9 +229,12 @@ def build_route_llm(route: LLMRoute, session_id: str, http_client: Any = None) -
             base_url=route.base_url,
             max_retries=0,
             default_headers={"User-Agent": USER_AGENT, "x-opencode-session": session_id},
+            http_client=http_client,
         )
     elif http_client is not None:
-        # Tests record the provider stream; production lets the plugin build its client.
+        # Tests record the provider stream (their own transport); production
+        # shares the warm transport (resolved above). Either way the plugin is
+        # handed an explicit client, so it never builds its own.
         extra["client"] = AsyncOpenAI(
             api_key=route.api_key,
             base_url=route.base_url,
