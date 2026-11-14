@@ -842,6 +842,66 @@ def test_model_spec_defaults_to_minimal_reasoning(tmp_path, monkeypatch):
                                    "api": "responses", "reasoning": "minimal"}
 
 
+def _streaming_openai(monkeypatch, handle):
+    """An AsyncOpenAI on a recorded SSE transport, bypassing the shared cache."""
+    import httpx
+    from openai import AsyncOpenAI
+
+    from open_tutor import http_clients
+
+    requests = []
+
+    def recording(request):
+        requests.append(request)
+        return handle(request)
+
+    transport = httpx.MockTransport(recording)
+    monkeypatch.setattr(http_clients, "shared_async_openai",
+                        lambda base_url, api_key, user_agent: AsyncOpenAI(
+                            api_key=api_key, base_url=base_url,
+                            default_headers={"User-Agent": user_agent},
+                            http_client=httpx.AsyncClient(transport=transport)))
+    return requests
+
+
+def _responses_sse(text, model):
+    """Minimal Responses SSE: one text delta, then a completed response."""
+    import httpx
+
+    def handle(request):
+        events = [
+            {"type": "response.output_text.delta", "sequence_number": 3,
+             "output_index": 0, "content_index": 0, "item_id": "msg_1", "delta": text},
+            {"type": "response.completed", "sequence_number": 4,
+             "response": {"id": "resp_test", "object": "response", "created_at": 0,
+                            "model": model, "status": "completed", "output": [],
+                            "tools": [], "tool_choice": "auto", "parallel_tool_calls": True,
+                            "usage": {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2,
+                                       "input_tokens_details": {"cached_tokens": 0},
+                                       "output_tokens_details": {"reasoning_tokens": 0}}}},
+        ]
+        body = "".join(f"data: {json.dumps(e)}\n\n" for e in events) + "data: [DONE]\n\n"
+        return httpx.Response(200, headers={"content-type": "text/event-stream"},
+                              content=body.encode())
+
+    return handle
+
+
+def _chat_sse(text, model):
+    """Minimal Chat Completions SSE: one content chunk, then done."""
+    import httpx
+
+    def handle(request):
+        event = {"id": "chat_1", "object": "chat.completion.chunk", "created": 0,
+                 "model": model, "choices": [{"index": 0,
+                     "delta": {"role": "assistant", "content": text}, "finish_reason": None}]}
+        body = f"data: {json.dumps(event)}\n\n" + "data: [DONE]\n\n"
+        return httpx.Response(200, headers={"content-type": "text/event-stream"},
+                              content=body.encode())
+
+    return handle
+
+
 @pytest.mark.parametrize("model,effort,thinking,host,path", [
     ("deepseek-v4.1-flash", "low", "", "opencode.ai", "/inference/go/openai/v1/chat/completions"),
     ("deepseek-v4.1-flash", "low", "disabled", "opencode.ai", "/inference/go/openai/v1/chat/completions"),
@@ -850,42 +910,24 @@ def test_model_spec_defaults_to_minimal_reasoning(tmp_path, monkeypatch):
     ("gemini-4-hydrogen", "medium", "", "generativelanguage.googleapis.com", "/v1beta/openai/chat/completions"),
     ("muse-spark-1.3-contributor", "minimal", "", "opencode.ai", "/inference/go/openai/v1/responses"),
 ])
-def test_page_model_wire_request(tmp_path, monkeypatch, model, effort, thinking, host, path):
-    """Exercise the real SDK serializer; the transport returns a recorded response shape."""
-    import httpx
-    import openai
+async def test_page_model_wire_request(tmp_path, monkeypatch, model, effort, thinking, host, path):
+    """Exercise the real SDK serializer over streaming; the transport answers SSE."""
 
     for name, value in {"SCREEN_MODEL": model, "SCREEN_REASONING": effort,
                         "SCREEN_THINKING": thinking, "SCREEN_API": "",
                         "GEMINI_API_KEY": "test-google", "OPENCODE_GO_API_KEY": "test-go"}.items():
         monkeypatch.setenv(name, value)
-    requests = []
-
-    def handle(request):
-        requests.append(request)
-        if path.endswith("responses"):
-            payload = {"id": "resp_test", "object": "response", "created_at": 0, "model": model,
-                       "output": [{"id": "msg_test", "type": "message", "role": "assistant",
-                                   "status": "completed", "content": [{"type": "output_text",
-                                       "text": "<h1>Hej</h1>", "annotations": []}]}]}
-        else:
-            payload = {"id": "chat_test", "object": "chat.completion", "created": 0, "model": model,
-                       "choices": [{"index": 0, "finish_reason": "stop", "message": {
-                           "role": "assistant", "content": "<h1>Hej</h1>"}}]}
-        return httpx.Response(200, json=payload)
-
-    real_client = openai.OpenAI
-    with httpx.Client(transport=httpx.MockTransport(handle)) as http:
-        monkeypatch.setattr(openai, "OpenAI", lambda **kw: real_client(**kw, http_client=http))
-        screen = make_screen(tmp_path)
-        assert screen._default_model_call("System", "Lesson", ["data:image/png;base64,AAA"], b"PNG") == "<h1>Hej</h1>"
+    handle = _responses_sse("<h1>Hej</h1>", model) if path.endswith("responses") else _chat_sse("<h1>Hej</h1>", model)
+    requests = _streaming_openai(monkeypatch, handle)
+    screen = make_screen(tmp_path)
+    assert await screen._default_model_call("System", "Lesson", ["data:image/png;base64,AAA"], b"PNG") == "<h1>Hej</h1>"
     assert len(requests) == 1
     request = requests[0]
     body = json.loads(request.content)
     assert request.url.host == host and request.url.path == path
     assert request.headers["authorization"] == ("Bearer test-google" if host.startswith("generative") else "Bearer test-go")
     assert ("x-opencode-session" in request.headers) == (host == "opencode.ai")
-    assert body["model"] == model
+    assert body["model"] == model and body["stream"] is True
     if path.endswith("responses"):
         assert body["reasoning"] == {"effort": "minimal"}
         parts = body["input"][0]["content"]
@@ -912,7 +954,7 @@ def test_page_model_rejects_incompatible_settings(tmp_path, monkeypatch, setting
         make_screen(tmp_path).model_spec()
 
 
-def test_gemini_page_never_uses_go_key_as_fallback(tmp_path, monkeypatch):
+async def test_gemini_page_never_uses_go_key_as_fallback(tmp_path, monkeypatch):
     monkeypatch.setenv("SCREEN_MODEL", "gemini-4-hydrogen")
     monkeypatch.setenv("SCREEN_REASONING", "low")
     monkeypatch.setenv("SCREEN_API", "")
@@ -920,7 +962,7 @@ def test_gemini_page_never_uses_go_key_as_fallback(tmp_path, monkeypatch):
     monkeypatch.setenv("OPENCODE_GO_API_KEY", "test-go")
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     with pytest.raises(RuntimeError, match="GEMINI_API_KEY is empty"):
-        make_screen(tmp_path)._default_model_call("system", "user", [], None)
+        await make_screen(tmp_path)._default_model_call("system", "user", [], None)
 
 
 async def test_patch_delivery_sends_only_latest_change_and_retains_history(tmp_path, monkeypatch):
@@ -1262,8 +1304,9 @@ async def test_primary_error_fails_over_and_records_it(tmp_path, monkeypatch, de
     await screen.aclose()
 
 
-async def test_primary_timeout_fails_over(tmp_path, monkeypatch):
-    monkeypatch.setenv("SCREEN_PRIMARY_TIMEOUT_S", "0.05")
+async def test_stalled_primary_loses_the_first_text_race(tmp_path, monkeypatch):
+    """A primary that trickles nothing loses to the backup after the hedge deadline."""
+    monkeypatch.setenv("SCREEN_HEDGE_AFTER_S", "0.05")
 
     async def slow(system, user, images, look_png):
         await asyncio.sleep(30)
@@ -1279,7 +1322,9 @@ async def test_primary_timeout_fails_over(tmp_path, monkeypatch):
     assert delivered["page"].body == "<h1>Backup</h1>"
     meta = job_meta(tmp_path)
     assert meta["provider"] == "cc" and meta["failover"] is True
-    assert meta["primary_error"] == "TimeoutError"
+    assert meta["hedged"] is True and meta["ttft_s"] is not None
+    # Slow, not errored: there is no primary error class to report.
+    assert "primary_error" not in meta
     await screen.aclose()
 
 
@@ -1356,31 +1401,16 @@ async def test_patch_failover_records_cc(tmp_path, monkeypatch):
 
 
 async def test_cc_fallback_wire_request(tmp_path, monkeypatch):
-    """The backup call reaches Command Code with its key, model and session header."""
-    import httpx
-    import openai
-
+    """The backup call streams Command Code with its key, model and session header."""
     monkeypatch.setenv("SCREEN_FALLBACK", "cc")
     monkeypatch.setenv("COMMAND_CODE_API_KEY", "test-cc")
-    requests = []
-
-    def handle(request):
-        requests.append(request)
-        payload = {"id": "resp_test", "object": "response", "created_at": 0,
-                   "model": "meta/muse-spark-1.3-contributor",
-                   "output": [{"id": "msg_test", "type": "message", "role": "assistant",
-                                 "status": "completed", "content": [{"type": "output_text",
-                                     "text": "<h1>Hej</h1>", "annotations": []}]}]}
-        return httpx.Response(200, json=payload)
+    requests = _streaming_openai(
+        monkeypatch, _responses_sse("<h1>Hej</h1>", "meta/muse-spark-1.3-contributor"))
 
     screen = make_screen(tmp_path)
-    real_client = openai.OpenAI
-    with httpx.Client(transport=httpx.MockTransport(handle)) as http:
-        monkeypatch.setattr(openai, "OpenAI",
-                            lambda **kw: real_client(**kw, http_client=http))
-        text = screen._run_blocking(screen.fallback_spec(), "System", "Lesson",
-                                    [], None, 10.0)
-    assert text == "<h1>Hej</h1>"
+    text, first_s = await screen._stream_spec(screen.fallback_spec(), "System", "Lesson",
+                                               [], None)
+    assert text == "<h1>Hej</h1>" and first_s is not None
     assert len(requests) == 1
     request = requests[0]
     assert request.url.host == "api.commandcode.ai"
@@ -1390,7 +1420,7 @@ async def test_cc_fallback_wire_request(tmp_path, monkeypatch):
     body = json.loads(request.content)
     assert body["model"] == "meta/muse-spark-1.3-contributor"
     assert body["reasoning"] == {"effort": "minimal"}
-    assert body["store"] is False
+    assert body["store"] is False and body["stream"] is True
     await screen.aclose()
 
 

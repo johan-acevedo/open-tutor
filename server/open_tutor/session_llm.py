@@ -13,6 +13,14 @@ Two rules shape everything here:
   after the decision is a failover to a route that does not need thought signatures.
 - **The child never waits on the race.** If their first turn arrives before the race
   decided, the request waits for the decision, which is bounded by the warm-up cap.
+
+A slow provider can still spike mid-session, after the race. Each turn therefore
+starts on the current primary route and, when hedging is enabled and safe, races
+an identical request on the other route past a short deadline (see
+``tutor_hedge_after_s``). The first stream to yield a chunk wins; nothing is
+forwarded before the winner is decided, so the child never hears a mixed reply.
+Hedging only runs between routes that both ignore thought signatures, and a
+secondary route that wins twice in a row becomes the primary (sticky preference).
 """
 
 from __future__ import annotations
@@ -20,6 +28,7 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import logging
+import os
 import time
 from typing import Any
 
@@ -37,6 +46,33 @@ WARM_UP_CAP_S = 5.0
 # and is thrown away after the first chunk. The system message is the real tutor prompt,
 # so the provider can cache that prefix while the greeting plays.
 WARM_UP_PROMPT = "Svara bara med ordet hej."
+
+# Hedged turns: how long the primary route gets the turn to itself before the same
+# request also starts on the other route. `TUTOR_LLM_HEDGE_AFTER_S` overrides it;
+# 0 or empty disables hedging (today's single-route turns). Parsed per turn, so
+# tests and the operator change it without restarting the session object.
+DEFAULT_HEDGE_AFTER_S = 2.5
+
+
+def tutor_hedge_after_s(environ: dict[str, str] | None = None) -> float | None:
+    """Seconds before a slow turn is hedged, or ``None`` when hedging is off.
+
+    Unset means the default; empty or ``0`` means off (today's single-route
+    turns); anything unparseable falls back to the default."""
+    if environ is None:
+        raw = os.environ.get("TUTOR_LLM_HEDGE_AFTER_S")
+    else:
+        raw = environ.get("TUTOR_LLM_HEDGE_AFTER_S")
+    if raw is None:
+        return DEFAULT_HEDGE_AFTER_S
+    raw = str(raw).strip()
+    if not raw:
+        return None
+    try:
+        value = float(raw)
+    except ValueError:
+        return DEFAULT_HEDGE_AFTER_S
+    return None if value <= 0 else value
 
 PREFERRED, FALLBACK = "preferred", "fallback"
 
@@ -76,8 +112,14 @@ def choice_reason(
     chosen: str,
     *,
     has_fallback: bool = True,
+    not_awaited: frozenset[str] | set[str] | None = None,
 ) -> str:
-    """A short, log-safe explanation of the choice (never contains speech)."""
+    """A short, log-safe explanation of the choice (never contains speech).
+
+    ``not_awaited`` names the routes whose warm-up was cancelled early because
+    the preferred route was already fast enough. That is not a failure: saying
+    "only the preferred route answered" would read as if the backup was down.
+    """
     if not has_fallback:
         return "single route"
     if preferred_ttft is None and fallback_ttft is None:
@@ -86,6 +128,11 @@ def choice_reason(
         if preferred_ttft is None:  # unreachable, kept for clarity
             return "preferred route"
         if fallback_ttft is None:
+            if not_awaited and "fallback" in not_awaited:
+                return (
+                    f"preferred route answered within {prefer_within:g} s; "
+                    "other route not awaited"
+                )
             return "only the preferred route answered"
         if preferred_ttft <= prefer_within:
             return f"preferred route answered within {prefer_within:g} s"
@@ -131,8 +178,15 @@ class SessionLLM(llm.LLM):
         if self._decided:
             self._decision.set()
         self._timings: dict[str, float | None] = {}
+        # Routes whose warm-up never finished because the preferred route was
+        # already fast enough (cancelled, not failed; see warm_up).
+        self._not_awaited: set[str] = set()
         self._choice: str = PREFERRED
         self._reason = "single route" if fallback is None else "not decided yet"
+        # Hedged-turn stats for the debug trail and analytics (see note_turn).
+        self._turn_stats: list[dict[str, Any]] = []
+        self._hedge_streak = 0  # consecutive turns the secondary route won
+        self._sticky_switches = 0
 
     # ---- what the session and its metrics see -----------------------------------
 
@@ -194,13 +248,19 @@ class SessionLLM(llm.LLM):
                     break
                 preferred_s = self._timings.get(self._preferred_route.name)
                 # A preferred route that is fast enough ends the race at once; no need
-                # to wait for the other route's answer.
+                # to wait for the other route's answer. The other warm-up is
+                # cancelled, not failed, and recorded as not awaited.
                 if preferred_s is not None and preferred_s <= self._prefer_within:
+                    for name in pending:
+                        self._not_awaited.add(
+                            "fallback" if name == self._fallback_route.name else name
+                        )
                     break
             preferred_ttft = self._timings.get(self._preferred_route.name)
             fallback_ttft = self._timings.get(self._fallback_route.name)
             choice = choose_route(preferred_ttft, fallback_ttft, self._prefer_within)
-            reason = choice_reason(preferred_ttft, fallback_ttft, self._prefer_within, choice)
+            reason = choice_reason(preferred_ttft, fallback_ttft, self._prefer_within,
+                                   choice, not_awaited=self._not_awaited)
             self._decide(
                 self._fallback if choice == FALLBACK else self._preferred, choice, reason
             )
@@ -261,9 +321,20 @@ class SessionLLM(llm.LLM):
         self._decision.set()
         self._record_choice()
 
+    def _describe_warm_up(self, name: str | None, ttft: float | None) -> str:
+        if name is None:
+            return "-"
+        if ttft is not None:
+            return f"{ttft:.2f} s"
+        short = "fallback" if self._fallback_route is not None and name == self._fallback_route.name else name
+        if short in self._not_awaited:
+            return "not awaited"
+        return "did not answer"
+
     def _record_choice(self) -> None:
         preferred = self._timings.get(self._preferred_route.name)
         fallback = self._timings.get(self._fallback_route.name)
+        fallback_name = self._fallback_route.name if self._fallback_route else None
         record_active(
             "llm_chosen",
             {
@@ -272,9 +343,12 @@ class SessionLLM(llm.LLM):
                 "choice": self._choice,
                 "reason": self._reason,
                 "preferred": self._preferred_route.name,
-                "fallback": self._fallback_route.name if self._fallback_route else None,
+                "fallback": fallback_name,
                 "preferred_s": None if preferred is None else round(preferred, 3),
                 "fallback_s": None if fallback is None else round(fallback, 3),
+                "fallback_not_awaited": bool(
+                    fallback_name and (fallback_name in self._not_awaited or "fallback" in self._not_awaited)
+                ),
                 "prefer_within_s": self._prefer_within,
                 "warm_up_cap_s": self._warm_up_cap,
             },
@@ -284,9 +358,9 @@ class SessionLLM(llm.LLM):
             self.chosen_route.name,
             self._reason,
             self._preferred_route.name,
-            "did not answer" if preferred is None else f"{preferred:.2f} s",
-            self._fallback_route.name if self._fallback_route else "-",
-            "did not answer" if fallback is None else f"{fallback:.2f} s",
+            self._describe_warm_up(self._preferred_route.name, preferred),
+            fallback_name if fallback_name else "-",
+            self._describe_warm_up(fallback_name, fallback),
         )
 
     def result(self) -> dict[str, Any]:
@@ -303,6 +377,7 @@ class SessionLLM(llm.LLM):
             "reason": self._reason,
             "preferred_s": None if preferred is None else round(preferred, 3),
             "fallback_s": None if fallback is None else round(fallback, 3),
+            "not_awaited": sorted(self._not_awaited),
             "decided": self._decided,
         }
 
@@ -361,6 +436,101 @@ class SessionLLM(llm.LLM):
         log.warning("tutor LLM failing over to %s for the rest of the session", target_route.name)
         return other
 
+    # ---- hedged turns ------------------------------------------------------------
+
+    def _name_of(self, model: llm.LLM) -> str:
+        """Which candidate route an LLM instance is (never message text)."""
+        if model is self._fallback:
+            return self._fallback_route.name if self._fallback_route else "fallback"
+        return self._preferred_route.name
+
+    def hedge_target(self, current: llm.LLM) -> llm.LLM | None:
+        """The other route for a hedged turn, or ``None`` to run unhedged.
+
+        Hedging only starts between routes that are safe to swap mid-conversation:
+        both must ignore thought signatures (never Gemini). With one route, with
+        hedging off, or with a signature-checking route, today's behaviour applies.
+        """
+        if self._fallback is None or self._fallback_route is None:
+            return None
+        if tutor_hedge_after_s() is None:
+            return None
+        current_route = self._fallback_route if current is self._fallback else self._preferred_route
+        other_route = self._preferred_route if current is self._fallback else self._fallback_route
+        if current_route.thought_signatures or other_route.thought_signatures:
+            return None
+        return self._other(current)
+
+    def note_turn(
+        self,
+        *,
+        primary: str,
+        winner: str | None,
+        hedged: bool,
+        ttft_s: float | None,
+        loser: str,
+        primary_ttft_s: float | None = None,
+        error: str | None = None,
+        failover: bool = False,
+    ) -> None:
+        """Record one served turn for the debug trail and the analytics summary.
+
+        ``loser`` is ``cancelled``/``error``/``none``; ``primary_ttft_s`` is the
+        primary's own first-chunk time when the secondary won but the primary
+        answered before it was cancelled (when observed). Only route names,
+        timings and error classes: never message text.
+        """
+        entry: dict[str, Any] = {
+            "primary": primary,
+            "winner": winner,
+            "hedged": hedged,
+            "ttft_s": None if ttft_s is None else round(ttft_s, 3),
+            "loser": loser,
+        }
+        if primary_ttft_s is not None:
+            entry["primary_ttft_s"] = round(primary_ttft_s, 3)
+        if error is not None:
+            entry["error"] = error
+        self._turn_stats.append(entry)
+        record_active("llm_turn", entry)
+        if error is None and not failover and winner is not None and winner != primary:
+            self._hedge_streak += 1
+            if self._hedge_streak >= 2:
+                self._switch_primary(winner)
+        else:
+            self._hedge_streak = 0
+
+    def _switch_primary(self, winner: str) -> None:
+        """The secondary route won twice running: it serves the following turns."""
+        from_name = self._name_of(self._current)
+        if winner == from_name:
+            self._hedge_streak = 0
+            return
+        self._current = self._fallback if self._current is self._preferred else self._preferred
+        self._hedge_streak = 0
+        self._sticky_switches += 1
+        self._reason = f"sticky switch to {winner} after 2 faster turns"
+        record_active("llm_sticky_switch", {"from": from_name, "to": winner})
+        log.info("tutor LLM sticky switch to %s for the following turns", winner)
+
+    @property
+    def turn_stats(self) -> list[dict[str, Any]]:
+        """One record per served turn (route names and timings only)."""
+        return list(self._turn_stats)
+
+    def hedge_summary_for_analytics(self) -> dict[str, Any]:
+        """Per-session hedge stats for ``tutor_session_ended`` (counts and
+        timings only; never text)."""
+        from .analytics import summarize_llm_turns
+
+        summary = summarize_llm_turns(self._turn_stats)
+        return {
+            "llm_turns_total": summary["turns_total"],
+            "llm_hedged_turns": summary["hedged_turns"],
+            "llm_sticky_switches": self._sticky_switches,
+            "llm_routes": summary["routes"],
+        }
+
     # ---- chat --------------------------------------------------------------------
 
     def chat(
@@ -386,6 +556,43 @@ class SessionLLM(llm.LLM):
         )
 
 
+class _TurnEnd:
+    """Sentinel: a pumped provider stream ended without further chunks."""
+
+    __slots__ = ()
+
+
+_TURN_END = _TurnEnd()
+
+
+class _TurnError:
+    """Sentinel: a pumped provider stream failed before finishing."""
+
+    __slots__ = ("error",)
+
+    def __init__(self, error: BaseException) -> None:
+        self.error = error
+
+
+async def _pump_stream(stream: llm.LLMStream, tag: str, queue: "asyncio.Queue[tuple[str, Any]]") -> None:
+    """Forward one provider stream into the shared race queue until it ends.
+
+    The pump is never cancelled while its stream is still needed: cancelling a
+    pending ``LLMStream.__anext__`` would kill that stream's tee leg for later
+    reads. Only a discarded (loser, or turn torn down) stream's pump is cancelled,
+    and its stream is closed right after.
+    """
+    try:
+        async for chunk in stream:
+            queue.put_nowait((tag, chunk))
+    except asyncio.CancelledError:
+        raise
+    except Exception as error:  # noqa: BLE001 - the race decides from the other side
+        queue.put_nowait((tag, _TurnError(error)))
+    else:
+        queue.put_nowait((tag, _TURN_END))
+
+
 class _RoutedStream(llm.LLMStream):
     """Forwards one request to the chosen route, with one failover attempt.
 
@@ -393,6 +600,12 @@ class _RoutedStream(llm.LLMStream):
     its single retry on that route, and the only extra attempt is the failover to the
     other candidate. A request that already delivered text or a tool call is not
     retried elsewhere, because the child has heard it.
+
+    When hedging is enabled and safe (see ``SessionLLM.hedge_target``), the turn
+    starts on the primary route and the same request starts on the other route if
+    the primary produced no first chunk within the hedge deadline. The first
+    stream to yield a chunk wins; nothing is forwarded before the winner is
+    decided, so the child never hears a mixed reply.
     """
 
     def __init__(
@@ -408,6 +621,7 @@ class _RoutedStream(llm.LLMStream):
         self._route_conn_options = conn_options
         self._call_kwargs = call_kwargs
         self._answered = False
+        self._ttft: float | None = None
         super().__init__(
             owner,
             chat_ctx=chat_ctx,
@@ -417,8 +631,18 @@ class _RoutedStream(llm.LLMStream):
 
     async def _run(self) -> None:
         target = await self._owner.pick()
+        other = self._owner.hedge_target(target)
+        if other is None:
+            await self._forward_with_failover(target)
+            return
+        await self._forward_hedged(target, other)
+
+    async def _forward_with_failover(self, target: llm.LLM) -> None:
+        """Today's behaviour: one route, failing over once when safe."""
+        owner = self._owner
+        primary_name = owner._name_of(target)
         try:
-            await self._forward(target, self._route_conn_options)
+            ttft = await self._forward(target, self._route_conn_options)
         except asyncio.CancelledError:
             raise
         except Exception as error:
@@ -426,18 +650,35 @@ class _RoutedStream(llm.LLMStream):
                 # Something already reached the child; a second route would repeat it.
                 record_active(
                     "llm_failed_after_output",
-                    {"route": self._owner.route_name, "error": type(error).__name__,
+                    {"route": owner.route_name, "error": type(error).__name__,
                      "message": str(error)[:300]},
                 )
+                owner.note_turn(primary=primary_name, winner=primary_name, hedged=False,
+                                 ttft_s=self._ttft, loser="none", error=type(error).__name__)
                 raise
-            replacement = self._owner.failover(target, error)
+            replacement = owner.failover(target, error)
             if replacement is None:
+                owner.note_turn(primary=primary_name, winner=None, hedged=False,
+                                 ttft_s=None, loser="error", error=type(error).__name__)
                 raise
-            await self._forward(
-                replacement, dataclasses.replace(self._route_conn_options, max_retry=0)
-            )
+            try:
+                ttft = await self._forward(
+                    replacement, dataclasses.replace(self._route_conn_options, max_retry=0)
+                )
+            except Exception as second_error:
+                owner.note_turn(primary=primary_name, winner=None, hedged=False,
+                                 ttft_s=None, loser="error", error=type(second_error).__name__,
+                                 failover=True)
+                raise
+            owner.note_turn(primary=primary_name, winner=owner._name_of(replacement),
+                             hedged=False, ttft_s=ttft, loser="error", failover=True)
+            return
+        owner.note_turn(primary=primary_name, winner=primary_name, hedged=False,
+                         ttft_s=ttft, loser="none")
 
-    async def _forward(self, target: llm.LLM, conn_options: APIConnectOptions) -> None:
+    async def _forward(self, target: llm.LLM, conn_options: APIConnectOptions) -> float | None:
+        """Stream one route to the child; returns seconds to its first chunk."""
+        started = time.perf_counter()
         inner = target.chat(
             chat_ctx=self._chat_ctx,
             tools=self._tools,
@@ -447,10 +688,217 @@ class _RoutedStream(llm.LLMStream):
         try:
             async for chunk in inner:
                 if chunk.has_response():
+                    if self._ttft is None:
+                        self._ttft = time.perf_counter() - started
                     self._answered = True
                 await self._event_ch.send(chunk)
         finally:
             try:
                 await inner.aclose()
+            except (Exception, asyncio.CancelledError):
+                pass
+        return self._ttft
+
+    async def _forward_hedged(self, primary_llm: llm.LLM, secondary_llm: llm.LLM) -> None:
+        """Race the same request on both routes; first chunk wins.
+
+        The primary runs alone until the hedge deadline. Past it, the secondary
+        joins and the first stream to yield a (text or tool call) chunk serves the
+        whole turn. Attempts stay within today's worst case: the primary keeps its
+        one same-route retry, the secondary gets none, and a turn both routes fail
+        raises instead of retrying (both were already tried).
+        """
+        owner = self._owner
+        primary_name = owner._name_of(primary_llm)
+        secondary_name = owner._name_of(secondary_llm)
+        names = {"primary": primary_name, "secondary": secondary_name}
+        hedge_after = tutor_hedge_after_s() or DEFAULT_HEDGE_AFTER_S
+        started = time.perf_counter()
+        queue: asyncio.Queue[tuple[str, Any]] = asyncio.Queue()
+        streams = {
+            "primary": primary_llm.chat(
+                chat_ctx=self._chat_ctx, tools=self._tools,
+                conn_options=self._route_conn_options, **self._call_kwargs),
+        }
+        pumps = {
+            "primary": asyncio.create_task(
+                _pump_stream(streams["primary"], "primary", queue), name="tutor-hedge-primary"),
+        }
+        secondary_started = False
+        buffered: dict[str, list[Any]] = {"primary": [], "secondary": []}
+        first_s: dict[str, float] = {}
+        errors: dict[str, BaseException] = {}
+        ended: set[str] = set()
+        winner: str | None = None
+        deciding: Any = None
+        try:
+            while winner is None:
+                if not secondary_started:
+                    remaining = hedge_after - (time.perf_counter() - started)
+                    if remaining <= 0:
+                        self._start_secondary(secondary_llm, streams, pumps, queue)
+                        secondary_started = True
+                        continue
+                    try:
+                        tag, item = await asyncio.wait_for(queue.get(), timeout=remaining)
+                    except TimeoutError:
+                        self._start_secondary(secondary_llm, streams, pumps, queue)
+                        secondary_started = True
+                        continue
+                else:
+                    tag, item = await queue.get()
+                if isinstance(item, _TurnError):
+                    errors[tag] = item.error
+                    if tag == "primary" and not secondary_started:
+                        # The primary is already dead; no point waiting out the deadline.
+                        self._start_secondary(secondary_llm, streams, pumps, queue)
+                        secondary_started = True
+                    elif set(errors) | ended == {"primary", "secondary"}:
+                        break  # both sides dead with no winner: today's error path
+                    continue
+                if item is _TURN_END:
+                    ended.add(tag)
+                    if set(errors) | ended == {"primary", "secondary"}:
+                        break  # both sides done with no winner
+                    continue
+                if item.has_response() and tag not in first_s:
+                    first_s[tag] = time.perf_counter() - started
+                if item.has_response():
+                    winner, deciding = tag, item
+                else:
+                    buffered[tag].append(item)
+            if winner is None:
+                # Both streams ended or failed before any chunk: deliver nothing.
+                # A failure raises the primary's error (today's error path); an
+                # empty pair of streams ends the turn quietly, as a single empty
+                # stream would.
+                for chunk in buffered["primary"]:
+                    await self._event_ch.send(chunk)
+                if errors:
+                    error = errors.get("primary", errors["secondary"])
+                    owner.note_turn(primary=primary_name, winner=None, hedged=secondary_started,
+                                     ttft_s=None, loser="error", error=type(error).__name__)
+                    raise error
+                owner.note_turn(primary=primary_name, winner=primary_name,
+                                 hedged=secondary_started, ttft_s=None, loser="none")
+                return
+            loser = "secondary" if winner == "primary" else "primary"
+            for chunk in buffered[winner]:
+                await self._event_ch.send(chunk)
+            await self._event_ch.send(deciding)
+            self._answered = True
+            # Stop the loser, then harvest anything it already produced: its
+            # first-chunk time counts when it arrived before the cancel.
+            await self._stop_side(loser, pumps, streams)
+            stragglers = self._drain_queue(queue)
+            for stag, sitem in stragglers:
+                if stag != winner and not isinstance(sitem, (_TurnError, _TurnEnd)):
+                    if sitem.has_response() and stag not in first_s:
+                        first_s[stag] = time.perf_counter() - started
+            winner_done = False
+            for stag, sitem in stragglers:
+                if stag != winner or isinstance(sitem, (_TurnError, _TurnEnd)):
+                    if stag == winner and isinstance(sitem, _TurnError):
+                        # The winner died between the decision and the cancel.
+                        record_active(
+                            "llm_failed_after_output",
+                            {"route": names[winner], "error": type(sitem.error).__name__,
+                             "message": str(sitem.error)[:300]},
+                        )
+                        raise sitem.error
+                    if stag == winner:
+                        winner_done = True  # its end marker was already drained
+                    continue  # a late loser straggler: never forwarded
+                await self._event_ch.send(sitem)
+            hedged = secondary_started
+            if loser == "secondary" and not secondary_started:
+                loser_state = "none"  # the secondary never started
+            else:
+                loser_state = "error" if loser in errors else "cancelled"
+            owner.note_turn(
+                primary=primary_name, winner=names[winner], hedged=hedged,
+                ttft_s=first_s.get(winner), loser=loser_state,
+                primary_ttft_s=first_s.get("primary") if winner == "secondary" else None,
+            )
+            if winner_done:
+                return
+            # The winner serves the rest of the turn on its own.
+            while True:
+                tag, item = await queue.get()
+                if tag != winner or isinstance(item, (_TurnError, _TurnEnd)):
+                    if isinstance(item, _TurnError):
+                        record_active(
+                            "llm_failed_after_output",
+                            {"route": names[winner], "error": type(item.error).__name__,
+                             "message": str(item.error)[:300]},
+                        )
+                        raise item.error
+                    if tag == winner:
+                        break  # the winner's stream ended
+                    continue  # a late loser straggler: never forwarded
+                await self._event_ch.send(item)
+        except asyncio.CancelledError:
+            raise
+        finally:
+            await self._stop_all(pumps, streams)
+
+    def _start_secondary(
+        self,
+        secondary_llm: llm.LLM,
+        streams: dict[str, llm.LLMStream],
+        pumps: dict[str, asyncio.Task[None]],
+        queue: "asyncio.Queue[tuple[str, Any]]",
+    ) -> None:
+        """Start the identical request on the other route (deadline passed)."""
+        streams["secondary"] = secondary_llm.chat(
+            chat_ctx=self._chat_ctx, tools=self._tools,
+            conn_options=dataclasses.replace(self._route_conn_options, max_retry=0),
+            **self._call_kwargs,
+        )
+        pumps["secondary"] = asyncio.create_task(
+            _pump_stream(streams["secondary"], "secondary", queue), name="tutor-hedge-secondary")
+
+    @staticmethod
+    def _drain_queue(queue: "asyncio.Queue[tuple[str, Any]]") -> list[tuple[str, Any]]:
+        items = []
+        while True:
+            try:
+                items.append(queue.get_nowait())
+            except asyncio.QueueEmpty:
+                return items
+
+    @staticmethod
+    async def _stop_side(
+        side: str,
+        pumps: dict[str, asyncio.Task[None]],
+        streams: dict[str, llm.LLMStream],
+    ) -> None:
+        """Cancel a discarded side's pump, then close its stream. No thread or
+        task is left running: the pump is awaited after the cancel."""
+        pump = pumps.pop(side, None)
+        if pump is not None and not pump.done():
+            pump.cancel()
+            try:
+                await pump
+            except (asyncio.CancelledError, Exception):
+                pass
+        stream = streams.pop(side, None)
+        if stream is not None:
+            try:
+                await stream.aclose()
+            except (Exception, asyncio.CancelledError):
+                pass
+
+    async def _stop_all(
+        self,
+        pumps: dict[str, asyncio.Task[None]],
+        streams: dict[str, llm.LLMStream],
+    ) -> None:
+        for side in list(pumps):
+            await self._stop_side(side, pumps, streams)
+        for side in list(streams):
+            stream = streams.pop(side)
+            try:
+                await stream.aclose()
             except (Exception, asyncio.CancelledError):
                 pass

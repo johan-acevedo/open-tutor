@@ -418,6 +418,14 @@ def _dump_error(event: Any) -> dict[str, Any]:
     return entry
 
 
+def _llm_turns_summary(events: list[dict[str, Any]]) -> dict[str, Any]:
+    # Lazy: analytics imports this module's summarize, so a top-level import
+    # would be circular.
+    from .analytics import summarize_llm_turns
+
+    return summarize_llm_turns([e for e in events if e["event"] == "llm_turn"])
+
+
 def summarize(events: list[dict[str, Any]]) -> dict[str, Any]:
     """Session counts for the debug report and for analytics (see analytics.py)."""
     child_turns = sum(1 for e in events if e["event"] == "child_speech" and e.get("final"))
@@ -480,6 +488,20 @@ def summarize(events: list[dict[str, Any]]) -> dict[str, Any]:
             {"at_s": e["t_rel_s"], "from": e.get("from"), "to": e.get("to"), "error": e.get("error")}
             for e in events
             if e["event"] == "llm_failover"
+        ],
+        # Hedged turns and sticky switches (session_llm.py). The same pure
+        # aggregation feeds the analytics summary, so the two never drift.
+        "llm_turns": _llm_turns_summary(events),
+        "llm_sticky_switches": [
+            {"at_s": e["t_rel_s"], "from": e.get("from"), "to": e.get("to")}
+            for e in events
+            if e["event"] == "llm_sticky_switch"
+        ],
+        "screen_hedges": [
+            {"at_s": e["t_rel_s"], "job": e.get("job"), "kind": e.get("kind"),
+             "winner": e.get("winner"), "ttft_s": e.get("ttft_s"), "loser": e.get("loser")}
+            for e in events
+            if e["event"] == "screen_hedge"
         ],
         "greeting_said": next(
             (e["t_rel_s"] for e in events if e["event"] == "greeting"), None

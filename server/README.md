@@ -88,6 +88,7 @@ The worker logs the route at the start of each session (`tutor TTS route elevenl
 | `TUTOR_LLM_FALLBACK` | Optional second candidate route (`go`, `go-deepseek`, `gemini`, `cc`). Empty (default): one route for the whole session, no warm-up race. Set: both routes answer a warm-up request while the greeting plays and the winner serves the session; see [the greeting and the session's voice](#the-greeting-and-the-sessions-voice) |
 | `TUTOR_LLM_PREFER_WITHIN_S` | Default `1.5`. The preferred route keeps the session if its warm-up answered within this many seconds, or if it was the faster of the two |
 | `TUTOR_LLM_TIMEOUT_S` | Default `5`. Timeout per LLM attempt (the framework default is 10 s), with one retry on the same route; then the failover or the spoken apology |
+| `TUTOR_LLM_HEDGE_AFTER_S` | Default `2.5`. Seconds a tutor turn runs on the primary route alone before the identical request also starts on the other route; the first stream to yield a chunk wins. `0` or empty disables hedging (today's single-route turns). Only between routes that both ignore thought signatures (never with `gemini`) |
 | `TUTOR_LLM_FALLBACK_BASE_URL` | Override only the fallback route's endpoint (for example a second provider in a test). `TUTOR_LLM_BASE_URL` keeps overriding the preferred route |
 | `OPENCODE_GO_API_KEY` | OpenCode Go API key (from the OpenCode console). Backend only |
 | `COMMAND_CODE_API_KEY` | Command Code API key (same Muse Spark model on another provider). Backend only |
@@ -110,8 +111,9 @@ The worker logs the route at the start of each session (`tutor TTS route elevenl
 | `TUTOR_FILLERS` | `1` lets the fox make one short pre-made sound when a reply to the child's turn is late. Off by default |
 | `TUTOR_FILLER_AFTER_S` | How long the child may wait for the reply before the sound (default `0.7`) |
 | `TUTOR_FILLER_CLIPS_DIR` | Parent directory for the cached clips (default `~/.cache/open-tutor/fillers`) |
-| `SCREEN_FALLBACK` | Optional Smart Screen backup (`cc` = the same Muse model family on Command Code). Empty (default): one provider per model call, today's behaviour. Set: a failed or timed-out primary is retried once on the backup within the job budget; see [the screen and its backup](../docs/smart-screen.md#command-code-backup-tutor-route-cc-and-screen-failover-2026-11-14) |
-| `SCREEN_PRIMARY_TIMEOUT_S` | Default `10`. Client timeout per screen model call before the fallback is tried |
+| `SCREEN_FALLBACK` | Optional Smart Screen backup (`cc` = the same Muse model family on Command Code). Empty (default): one provider per model call, today's behaviour. Set: a first-text hedge (below) races the backup against a slow primary within the job budget; without the backup key the fallback is disabled with one warning and the primary serves alone. See [the screen and its backup](../docs/smart-screen.md#command-code-backup-tutor-route-cc-and-screen-failover-2026-11-14) |
+| `SCREEN_HEDGE_AFTER_S` | Default `5`. Seconds a screen model call (page, look, retry) runs on the primary alone before the same call also starts on `SCREEN_FALLBACK`; first output text wins, the loser is cancelled and its stream closed. Empty keeps the older flat-timeout failover (`SCREEN_PRIMARY_TIMEOUT_S`); the hedge never starts with under 2 s left in the job or step |
+| `SCREEN_PRIMARY_TIMEOUT_S` | Default `10`. Only for the flat-timeout failover above: client timeout per screen model call before the fallback is tried, fitted inside the calling step's own budget |
 
 ### Password-free Sweden testing
 
@@ -367,6 +369,27 @@ words is not repeated; both fall to the existing apology path, which speaks one 
 without the LLM and ends the session instead of leaving silence with no event. 5 s fits a
 warm text prompt (2-3 s to first token here); a turn carrying a screenshot, or a provider
 under load, can need more, so raise `TUTOR_LLM_TIMEOUT_S` if sessions end with the apology.
+
+**Hedged turns.** A provider can spike mid-session, after the race. Each turn starts on
+the current primary route; if no first chunk (text or tool call) arrives within
+`TUTOR_LLM_HEDGE_AFTER_S` (default 2.5 s), the identical request also starts on the
+other route. The first stream to yield a chunk wins and serves the whole turn; the loser
+is cancelled and closed, and nothing is forwarded before the winner is decided, so the
+child never hears a mixed reply. One stream erroring before any chunk lets the other
+continue; both failing raises, as a single route would. Attempts never exceed today's
+worst case (the primary keeps its one same-route retry, the secondary gets none). Hedging
+only runs between routes that both ignore thought signatures (never with `gemini`); with
+one route, with hedging off, or with a signature-checking route, turns behave exactly as
+before. A secondary route that wins twice running becomes the primary for following
+turns (`llm_sticky_switch` in the log), symmetrically back again. Every turn records an
+`llm_turn` event (primary, winner, winner ttft, hedged, loser state) and feeds the
+`tutor_session_ended` analytics.
+
+**Warm connections.** The OpenAI SDK's default keep-alive expiry (5 s) meant most turns
+paid a fresh TLS handshake. The tutor and screen clients share one httpx transport per
+host with a ~120 s keep-alive (`open_tutor/http_clients.py`), so turns reuse warm
+connections across a lesson; worker prewarm opens one cheap request (the provider's model
+list) to each configured provider, bounded to ~5 s and never failing the worker.
 ## Material search proof
 
 `open_tutor/materials/search.py` builds an exact cosine index from passage records and

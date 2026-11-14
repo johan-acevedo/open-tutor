@@ -320,3 +320,33 @@ def test_summarize_counts_typed_only_at_the_typed_boundary(tmp_path):
     assert summarize(debug.events)["child_typed_turns"] == 0
     debug.record("chat_typed", {"text": "hej", "queued": False, "greeted": True})
     assert summarize(debug.events)["child_typed_turns"] == 1
+
+
+def test_summarize_aggregates_hedged_turns_and_switches(tmp_path):
+    """The debug report carries the hedge story: per-turn winners and ttfts,
+    sticky switches, and screen first-text races (same pure aggregation as
+    analytics, so the two never drift)."""
+    from open_tutor.debug_log import summarize
+
+    env, base = enabled_env(tmp_path)
+    debug = DebugLog.create("tutor-room11", LEARNER, "AJ_x", environ=env, base_dir=base)
+    debug.record("llm_turn", {"primary": "go", "winner": "go", "hedged": False,
+                              "ttft_s": 1.8, "loser": "none"})
+    debug.record("llm_turn", {"primary": "go", "winner": "cc", "hedged": True,
+                              "ttft_s": 2.6, "loser": "cancelled",
+                              "primary_ttft_s": 2.9})
+    debug.record("llm_turn", {"primary": "go", "winner": None, "hedged": True,
+                              "ttft_s": None, "loser": "error", "error": "RuntimeError"})
+    debug.record("llm_sticky_switch", {"from": "go", "to": "cc"})
+    debug.record("screen_hedge", {"job": "s1", "kind": "write", "winner": "cc",
+                                 "ttft_s": 5.1, "loser": "cancelled"})
+    summary = summarize(debug.events)
+    assert summary["llm_turns"] == {
+        "turns_total": 3, "hedged_turns": 2,
+        "routes": {"go": {"turns_won": 1, "median_ttft_s": 1.8, "max_ttft_s": 1.8},
+                   "cc": {"turns_won": 1, "median_ttft_s": 2.6, "max_ttft_s": 2.6}},
+    }
+    assert [s["from"] for s in summary["llm_sticky_switches"]] == ["go"]
+    assert summary["screen_hedges"][0]["winner"] == "cc"
+    # Route names and timings only: nothing to scrub, nothing scrubbed.
+    assert "1.8" in __import__("json").dumps(summary["llm_turns"])

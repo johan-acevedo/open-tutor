@@ -541,3 +541,57 @@ def test_typed_listener_attaches_before_the_chat_stream_handler():
                 wait = node.lineno
     assert attach is not None and register is not None and wait is not None
     assert attach < register < wait, (attach, register, wait)
+
+
+def test_hedge_and_screen_stats_reach_the_ended_event_shape():
+    """The ended event carries per-route turn/call wins with median/max ttft.
+
+    The shapes below are what entrypoint merges from the session objects; the
+    helpers stay pure so the debug report reuses the same aggregation.
+    """
+    from open_tutor.analytics import summarize_llm_turns, summarize_screen_calls
+
+    llm = summarize_llm_turns([
+        {"primary": "go", "winner": "go", "hedged": False, "ttft_s": 1.8, "loser": "none"},
+        {"primary": "go", "winner": "cc", "hedged": True, "ttft_s": 2.6, "loser": "cancelled"},
+        {"primary": "cc", "winner": "cc", "hedged": False, "ttft_s": 1.1, "loser": "none"},
+    ])
+    assert llm["turns_total"] == 3 and llm["hedged_turns"] == 1
+    assert llm["routes"]["go"]["turns_won"] == 1
+    assert llm["routes"]["cc"] == {"turns_won": 2, "median_ttft_s": 1.85,
+                                   "max_ttft_s": 2.6}
+    screen = summarize_screen_calls([
+        {"kind": "write", "provider": "go", "hedged": False, "ttft_s": 4.2, "loser": "none"},
+        {"kind": "look", "provider": "cc", "hedged": True, "ttft_s": 3.1, "loser": "cancelled"},
+        {"kind": "retry", "provider": None, "hedged": True, "ttft_s": None,
+         "loser": "error", "error": "RuntimeError"},
+    ])
+    assert screen["calls_total"] == 3 and screen["hedged_calls"] == 2
+    assert screen["provider_wins"] == {"go": 1, "cc": 1}
+    assert screen["calls"]["look"]["median_ttft_s"] == 3.1
+    assert set(screen["calls"]) == {"write", "look", "retry"}
+
+
+def test_entrypoint_merges_hedge_and_screen_stats_into_ended():
+    """entrypoint merges the session objects' hedge summaries into
+    tutor_session_ended and captures one tutor_llm_turn per turn: numbers and
+    route names only, never conversation text."""
+    tree = ast.parse((Path(__file__).parent.parent / "open_tutor" / "agent.py").read_text())
+    fn = _entrypoint(tree)
+    source = ast.dump(fn)
+    assert "hedge_summary_for_analytics" in source
+    assert "screen_stats_summary" in source
+    assert "tutor_llm_turn" in source
+    # The per-turn capture carries no text fields.
+    for node in ast.walk(fn):
+        if isinstance(node, ast.Call) and any(
+            isinstance(arg, ast.Constant) and arg.value == "tutor_llm_turn"
+            for arg in node.args
+        ):
+            props = node.args[-1]
+            assert isinstance(props, ast.Dict)
+            keys = {k.value for k in props.keys if isinstance(k, ast.Constant)}
+            assert keys <= {"room", "primary", "route", "winner", "ttft_s", "hedged"}, keys
+            break
+    else:
+        raise AssertionError("no tutor_llm_turn capture in entrypoint")

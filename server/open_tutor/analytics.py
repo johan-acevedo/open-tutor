@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import statistics
 import threading
 from typing import Any
 
@@ -120,6 +121,64 @@ def stable_distinct_id(device_id: Any, learner_name: Any, room: str) -> str:
     if not name:
         return f"device:{device}"
     return f"device:{device}:learner:{name}"
+
+
+def summarize_llm_turns(turns: list[dict[str, Any]] | None) -> dict[str, Any]:
+    """Aggregate per-turn ``llm_turn`` records into counts and timings.
+
+    Pure (no network, no text): the same function feeds the live session
+    summary and the debug report summary, so the two never drift apart.
+    Only route names, timings and error classes in, same out."""
+    won: dict[str, int] = {}
+    times: dict[str, list[float]] = {}
+    hedged = 0
+    for turn in turns or []:
+        if turn.get("hedged"):
+            hedged += 1
+        route = turn.get("winner")
+        if route is None:
+            continue
+        won[route] = won.get(route, 0) + 1
+        if turn.get("ttft_s") is not None:
+            times.setdefault(route, []).append(turn["ttft_s"])
+    routes = {}
+    for route, count in won.items():
+        entry: dict[str, Any] = {"turns_won": count}
+        if times.get(route):
+            entry["median_ttft_s"] = round(statistics.median(times[route]), 3)
+            entry["max_ttft_s"] = round(max(times[route]), 3)
+        routes[route] = entry
+    return {"turns_total": len(turns or []), "hedged_turns": hedged, "routes": routes}
+
+
+def summarize_screen_calls(calls: list[dict[str, Any]] | None) -> dict[str, Any]:
+    """Aggregate per-call screen records into counts and timings.
+
+    Pure, like ``summarize_llm_turns``: counts, hedges and first-text timings
+    per call kind, plus which provider served each call."""
+    by_kind: dict[str, dict[str, Any]] = {}
+    wins: dict[str, int] = {}
+    hedged = 0
+    for call in calls or []:
+        kind = str(call.get("kind") or "?")
+        slot = by_kind.setdefault(kind, {"calls": 0, "hedges": 0, "ttfts": []})
+        slot["calls"] += 1
+        if call.get("hedged"):
+            hedged += 1
+            slot["hedges"] += 1
+        if call.get("ttft_s") is not None:
+            slot["ttfts"].append(call["ttft_s"])
+        if call.get("provider"):
+            wins[call["provider"]] = wins.get(call["provider"], 0) + 1
+    kinds = {}
+    for kind, slot in by_kind.items():
+        entry: dict[str, Any] = {"calls": slot["calls"], "hedges": slot["hedges"]}
+        if slot["ttfts"]:
+            entry["median_ttft_s"] = round(statistics.median(slot["ttfts"]), 3)
+            entry["max_ttft_s"] = round(max(slot["ttfts"]), 3)
+        kinds[kind] = entry
+    return {"calls_total": len(calls or []), "hedged_calls": hedged,
+            "provider_wins": wins, "calls": kinds}
 
 
 class Analytics:

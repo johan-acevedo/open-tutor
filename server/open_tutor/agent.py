@@ -1155,6 +1155,53 @@ def safe_interrupt(session: AgentSession, where: str) -> None:
 server = AgentServer()
 
 
+def warm_provider_connections() -> None:
+    """Open one connection to each configured provider, bounded and never failing.
+
+    After a cold restart the first real request can stall (seen 2026-11-14: Go
+    did not answer the 5 s warm-up right after a restart, then was normal a
+    minute later). Warming DNS/TCP/TLS here moves that cost to worker start.
+    Provider keys stay in the backend environment and are never logged."""
+    import os
+
+    from .http_clients import warm_provider_connections as warm
+    from .screen import (
+        COMMAND_CODE_BASE_URL,
+        GEMINI_BASE_URL,
+        SCREEN_BASE_URL,
+        _spec_provider,
+        default_fallback_spec,
+        default_model_spec,
+    )
+    from .config import USER_AGENT, llm_fallback_route, llm_route
+
+    base_urls = {"cc": COMMAND_CODE_BASE_URL, "google": GEMINI_BASE_URL, "go": SCREEN_BASE_URL}
+    key_names = {"cc": "COMMAND_CODE_API_KEY", "google": "GEMINI_API_KEY", "go": "OPENCODE_GO_API_KEY"}
+    routes: list[tuple[str, str, str]] = []
+    try:
+        preferred = llm_route()
+        routes.append((f"tutor:{preferred.name}", preferred.base_url, preferred.api_key))
+        fallback = llm_fallback_route()
+        if fallback is not None:
+            routes.append((f"tutor:{fallback.name}", fallback.base_url, fallback.api_key))
+    except Exception as error:  # noqa: BLE001 - missing keys at prewarm: still try the screen
+        log.debug("tutor provider warm-up skipped its routes: %s", error)
+    try:
+        specs = [default_model_spec()]
+        fallback_spec = default_fallback_spec()
+        if fallback_spec is not None:
+            specs.append(fallback_spec)
+        for spec in specs:
+            provider = _spec_provider(spec)
+            key = os.environ.get(key_names.get(provider, "OPENCODE_GO_API_KEY"), "")
+            if key:
+                routes.append((f"screen:{spec['model']}",
+                               base_urls.get(provider, SCREEN_BASE_URL), key))
+    except Exception as error:  # noqa: BLE001 - a bad SCREEN_* value must not stop the worker
+        log.debug("screen provider warm-up skipped its specs: %s", error)
+    warm(routes, USER_AGENT)
+
+
 def prewarm(proc: JobProcess) -> None:
     # A misspelt TUTOR_NOISE_CANCELLATION must stop the worker at boot, not silently run
     # unfiltered while the operator believes the room is being cleaned. A configured
@@ -1167,6 +1214,9 @@ def prewarm(proc: JobProcess) -> None:
     # SDK; with a key set this moves that import to worker start. Without a key it
     # imports nothing and analytics stays fully off.
     warm_up_analytics()
+    # Open one connection per configured provider (tutor routes plus the screen
+    # specs): bounded to ~5 s, never failing the worker.
+    warm_provider_connections()
 
 
 server.setup_fnc = prewarm
@@ -1555,6 +1605,21 @@ async def entrypoint(ctx: JobContext) -> None:
             }
             if error_type is not None:
                 ended["error_type"] = error_type
+            # Hedged-turn and screen-call stats: counts and timings per route,
+            # never conversation text (see session_llm.note_turn, screen._note_call).
+            if isinstance(session_llm, SessionLLM):
+                for turn in session_llm.turn_stats:
+                    analytics.capture(distinct_id, "tutor_llm_turn", {
+                        "room": ctx.room.name,
+                        "primary": turn.get("primary"),
+                        "route": turn.get("winner"),
+                        "winner": turn.get("winner"),
+                        "ttft_s": turn.get("ttft_s"),
+                        "hedged": bool(turn.get("hedged")),
+                    })
+                ended.update(session_llm.hedge_summary_for_analytics())
+            if screen is not None:
+                ended.update(screen.screen_stats_summary())
             analytics.capture(distinct_id, "tutor_session_ended", ended)
         finally:
             # Off the event loop with a short timeout: a slow analytics

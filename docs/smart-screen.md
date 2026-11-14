@@ -691,16 +691,58 @@ Go's `x-opencode-session` header.
 - **Tutor:** `cc` is a fourth `TUTOR_LLM`/`TUTOR_LLM_FALLBACK` route (see
   `server/README.md`). It reuses the Responses client; the warm-up race and the
   signature-safe failover in `session_llm.py` treat it like any other route.
-- **Screen:** `SCREEN_FALLBACK=cc` (empty = off, today's behaviour) retries a failed or
-  timed-out primary once on Command Code -- page, look and retry calls all go through
-  it, never hedged. The primary runs under `SCREEN_PRIMARY_TIMEOUT_S` (default 10 s);
-  the fallback gets the remaining job budget, and starts only when at least 2 s are
-  left (otherwise the job fails as today, inside the 20 s `JOB_TIMEOUT_S`). Only `cc`
-  for Muse models is supported; anything else fails the job loudly at once.
+- **Screen:** `SCREEN_FALLBACK=cc` (empty = off, today's behaviour) hedges a slow or
+  failing primary with Command Code -- page, look and retry calls stream, and the
+  first side to produce output text serves the whole call while the other is
+  cancelled and its stream closed. The hedge fires at `SCREEN_HEDGE_AFTER_S`
+  (default 5 s), capped so both attempts fit inside the calling step's own budget
+  (a look/retry step's ~6 s deadline starts the hedge at ~3 s); no hedge starts
+  with under 2 s left, and the 20 s job limit always holds. Empty
+  `SCREEN_HEDGE_AFTER_S` keeps the older flat-timeout failover
+  (`SCREEN_PRIMARY_TIMEOUT_S`). Only `cc` for Muse models is supported; anything
+  else fails the job loudly at once, while a missing backup key disables the
+  fallback with one warning and the primary serves alone.
 - **Recorded per job:** `provider` (`go`/`google`/`cc` -- who wrote the delivered page
-  or patch), `failover: true` with the `primary_error` class when any call fell over,
-  in the page/patch `meta.json` and in the `screen_page`/`screen_patch` debug events
-  (plus a `screen_failover` event at the moment). Never a key.
+  or patch), `failover: true` with the `primary_error` class when a primary error
+  fell over, plus `hedged` and the write call's `ttft_s`, in the page/patch
+  `meta.json` and in the `screen_page`/`screen_patch` debug events (plus a
+  `screen_failover` event when the backup serves after a primary error and a
+  `screen_hedge` event for every raced call). Never a key.
+
+### Hedged LLM requests, first-text measurement and warm connections (2026-11-14)
+
+Providers sometimes spike mid-session: a request that normally starts in ~2 s can
+take 25 s. The warm-up race only picks the session's starting route, so a later
+spike hit every turn, and the flat screen failover only reacted after a 10 s timeout.
+This change hedges both (PR: hedged tutor turns, hedged screen calls) with these rules:
+
+- **Tutor:** each turn starts on the primary; past `TUTOR_LLM_HEDGE_AFTER_S`
+  (default 2.5 s, `0`/empty off) the identical request races on the other route.
+  First chunk wins, nothing is forwarded before the winner is decided, attempts
+  stay within today's worst case, and hedging never touches thought-signature
+  routes. A secondary that wins twice running becomes the primary (sticky,
+  symmetric, logged as `llm_sticky_switch`). Every turn records `llm_turn`.
+- **Screen:** page, look and retry calls stream (Responses and Chat both support
+  `stream=True`), so the first output text is observable; the hedge above replaces
+  the flat failover. Provider calls are async and cancellable with an absolute
+  deadline, and a cancelled stream is always closed: no screen model call outlives
+  its job, and a provider that trickles bytes forever cannot hold a thread (the old
+  blocking client did -- verified with a slow-trickling fake before the fix).
+  Optional steps pass their own remaining budget in, so the hedge fires at
+  `min(SCREEN_HEDGE_AFTER_S, half the step)` instead of being cut by the outer
+  timeout before the backup can start.
+- **Measurement:** `tutor_session_ended` gains per-route turn wins with median/max
+  ttft, hedge counts and sticky switches, and the same for screen calls; an optional
+  per-turn `tutor_llm_turn` event carries only route names, timings and flags.
+  Fully off without `TUTOR_POSTHOG_KEY`, as before.
+- **Warm connections:** one shared httpx transport per host with ~120 s keep-alive
+  for the tutor and screen clients, plus one cheap request per configured provider
+  at worker prewarm (bounded ~5 s, never failing the worker). This targets the cold
+  start seen 2026-11-14, when Go did not answer the 5 s warm-up right after a
+  restart and was normal a minute later.
+
+Production keeps `SCREEN_FALLBACK` unset until this is proven on the dev setup;
+`tutor` hedging only arms with `TUTOR_LLM_FALLBACK` set, as before.
 
 ## Work packages
 
