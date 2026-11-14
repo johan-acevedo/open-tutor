@@ -185,10 +185,13 @@ def test_tracker_counts_match_debug_summary_without_storing_text():
     tracker.record_sdk(events.UserInputTranscribedEvent(transcript="hej, visa ekvationer", is_final=True))
     tracker.record_sdk(events.ConversationItemAddedEvent(
         item=llm.ChatMessage(role="assistant", content=["Jag lägger upp det på tavlan."])))
+    # Spoken transcripts arrive as user conversation items too: spoken, never typed.
     tracker.record_sdk(events.ConversationItemAddedEvent(
-        item=llm.ChatMessage(role="user", content=["Visa hur man löser 3x + 5 = 20."])))
+        item=llm.ChatMessage(role="user", content=["hej, visa ekvationer"])))
     tracker.record_sdk(events.ConversationItemAddedEvent(
         item=llm.ChatMessage(role="user", content=["[Session event, not the child's words: greet.]"])))
+    # Typed turns arrive at the typed-input boundary, not as chat items.
+    tracker.record_typed_turn()
     tracker.record_sdk(SimpleNamespace(type="speech_created"))
     tracker.record_sdk(events.FunctionToolsExecutedEvent(
         function_calls=[llm.FunctionCall(call_id="c1", name="show_steps", arguments="{}")],
@@ -199,13 +202,13 @@ def test_tracker_counts_match_debug_summary_without_storing_text():
     tracker.record_sdk(events.CloseEvent(reason=events.CloseReason.TASK_COMPLETED))
     summary = tracker.summary()
     assert summary["child_final_turns"] == 1  # non-final transcript not counted
-    assert summary["child_typed_turns"] == 1  # injected prompt not counted
+    assert summary["child_typed_turns"] == 1  # the boundary turn, not the echoes above
     assert summary["tutor_replies"] == 1
     assert summary["tool_calls"] == 1 and summary["tool_errors"] == 0
     assert summary["provider_errors"] == 1
     assert summary["close_reason"] == "task_completed"
     # No conversation text, arguments or outputs anywhere in the stub events.
-    assert "3x" not in json.dumps(tracker.events) and "tavlan" not in json.dumps(tracker.events)
+    assert "ekvationer" not in json.dumps(tracker.events) and "tavlan" not in json.dumps(tracker.events)
 
 
 def test_tracker_never_raises_on_unknown_events():
@@ -391,3 +394,100 @@ def test_entrypoint_wires_tracker_to_tool_and_close_events():
         isinstance(n, ast.Name) and n.id == "tracker" and isinstance(n.ctx, ast.Load)
         for n in ast.walk(tools_handler)
     ), "tools_executed handler does not record to the tracker"
+
+
+def test_spoken_turn_is_not_counted_as_typed():
+    """One spoken turn -> spoken=1, typed=0; one typed turn -> typed=1, spoken=0.
+
+    LiveKit adds spoken transcripts as user conversation_item_added, so a
+    typed count derived from chat items double-counts every spoken turn.
+    """
+    tracker = SessionTracker()
+    tracker.record_sdk(events.UserInputTranscribedEvent(transcript="hej", is_final=True))
+    tracker.record_sdk(events.ConversationItemAddedEvent(
+        item=llm.ChatMessage(role="user", content=["hej"])))
+    assert tracker.summary()["child_final_turns"] == 1
+    assert tracker.summary()["child_typed_turns"] == 0
+    tracker.record_typed_turn()
+    assert tracker.summary()["child_typed_turns"] == 1
+    assert tracker.summary()["child_final_turns"] == 1  # unchanged
+
+
+def test_entrypoint_counts_typed_turns_at_the_typed_boundary():
+    """The tracker must count typed turns from TypedChat, not from SDK
+    conversation_item_added user messages: spoken transcripts also arrive
+    there, and one spoken turn would count as spoken=1 and typed=1."""
+    tree = ast.parse((Path(__file__).parent.parent / "open_tutor" / "agent.py").read_text())
+    fn = _entrypoint(tree)
+    assert any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "attach_typed_listener"
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "typed"
+        and any(
+            isinstance(arg, ast.Attribute)
+            and isinstance(arg.value, ast.Name)
+            and arg.value.id == "tracker"
+            for arg in node.args
+        )
+        for node in ast.walk(fn)
+    ), "entrypoint does not attach the tracker to the typed boundary"
+
+
+def test_from_env_builds_a_bounded_real_client():
+    """The worker-owned client carries a short request timeout and no retries:
+    a hung analytics backend must fail fast instead of parking teardown."""
+    analytics = Analytics.from_env({"TUTOR_POSTHOG_KEY": "phc_test"})
+    try:
+        assert analytics.enabled
+        assert analytics._client.timeout == 2.0
+        assert analytics._client.max_retries == 0
+    finally:
+        reset_analytics()
+        try:
+            analytics._client.shutdown()
+        except Exception:
+            pass
+
+
+def test_aclose_with_real_client_and_hung_transport_completes_within_budget(monkeypatch):
+    """The real posthog.Posthog client whose transport never answers.
+
+    Teardown must finish within ~2-3 s, and must not leave a non-daemon
+    thread behind for loop/process shutdown to join (the old asyncio.to_thread
+    flush returned on cancellation but kept the executor thread running).
+    """
+    import threading as thread_mod
+
+    import posthog.consumer as posthog_consumer
+    from posthog import Posthog
+
+    hung = thread_mod.Event()
+    transport_hit = thread_mod.Event()
+
+    def hanging_batch_post(*args, **kwargs):
+        transport_hit.set()
+        hung.wait(30)
+        raise AssertionError("the hung transport answered")
+
+    monkeypatch.setattr(posthog_consumer, "batch_post", hanging_batch_post)
+    bystanders = set(thread_mod.enumerate())
+    real = Posthog("phc_test", host="https://eu.i.posthog.com",
+                   timeout=0.2, max_retries=0)
+    try:
+        analytics = Analytics.from_env({"TUTOR_POSTHOG_KEY": "phc_test"}, client=real)
+        assert analytics.enabled
+        analytics.capture("device:dev-1", "tutor_session_started", {"room": "tutor-x"})
+        started = time.monotonic()
+        asyncio.run(analytics.aclose(timeout=1.0))
+        assert time.monotonic() - started < 5
+        assert transport_hit.is_set(), "the hung transport was never hit"
+        # Nothing the flush started may still hold the process open: the old
+        # non-daemon executor thread survived cancellation and delayed exit.
+        lingering = [t for t in thread_mod.enumerate()
+                     if t.is_alive() and not t.daemon and t not in bystanders
+                     and t is not thread_mod.main_thread()]
+        assert lingering == []
+    finally:
+        hung.set()

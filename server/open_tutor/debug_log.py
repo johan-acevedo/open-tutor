@@ -418,22 +418,14 @@ def _dump_error(event: Any) -> dict[str, Any]:
     return entry
 
 
-def _is_prompt_injection(text: str) -> bool:
-    """Worker-injected session events are user-role messages, not the child's words."""
-    return text.startswith("[Session event")
-
-
 def summarize(events: list[dict[str, Any]]) -> dict[str, Any]:
     """Session counts for the debug report and for analytics (see analytics.py)."""
     child_turns = sum(1 for e in events if e["event"] == "child_speech" and e.get("final"))
-    typed_turns = sum(
-        1
-        for e in events
-        if e["event"] == "chat_item"
-        and e.get("item") == "message"
-        and e.get("role") == "user"
-        and not _is_prompt_injection(e.get("text") or "")
-    )
+    # Typed turns are counted at the typed-input boundary (TypedChat records
+    # one ``chat_typed`` per message that arrives): LiveKit also adds spoken
+    # transcripts as user ``conversation_item_added``, so counting user chat
+    # items would count one spoken turn as spoken=1 AND typed=1.
+    typed_turns = sum(1 for e in events if e["event"] == "chat_typed")
     tutor_replies = sum(1 for e in events if e["event"] == "reply_started")
     assistant_texts = sum(
         1

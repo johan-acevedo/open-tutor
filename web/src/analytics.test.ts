@@ -30,7 +30,12 @@ import {
   stripKodFromUrl,
   turnSent,
 } from './analytics';
-import { consumeFamilyCodeFromUrl } from './useSession';
+import {
+  consumeFamilyCodeFromUrl,
+  familyCode,
+  rememberFamilyCode,
+  resetFamilyCodeForTests,
+} from './useSession';
 
 function configResponse(key: string | null) {
   return {
@@ -280,5 +285,164 @@ describe('analytics', () => {
     expect(analyticsEnabled()).toBe(false);
     expect(posthogMock.capture).not.toHaveBeenCalled();
     expect(posthogMock.identify).not.toHaveBeenCalled();
+  });
+});
+
+describe('kod scrubbing against the real posthog-js SDK', () => {
+  beforeEach(() => {
+    resetAnalytics();
+    posthogMock.init.mockClear();
+    posthogMock.capture.mockClear();
+    posthogMock.identify.mockClear();
+    localStorage.clear();
+    vi.unstubAllGlobals();
+  });
+  it('strips kod from $set/$set_once on identify, including a coded referrer', async () => {
+    const real = await vi.importActual<typeof import('posthog-js')>('posthog-js');
+    const ph = real.default;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const seen: Array<Record<string, any>> = [];
+    window.history.replaceState(null, '', '/?kod=SECRET123&foo=1');
+    Object.defineProperty(document, 'referrer', {
+      value: 'https://skola.se/sida?kod=SECRET123',
+      configurable: true,
+    });
+    try {
+      ph.init('phc_scrub_test', {
+        api_host: 'https://eu.i.posthog.com',
+        autocapture: false,
+        capture_pageview: false,
+        disable_session_recording: true,
+        advanced_disable_decide: true,
+        person_profiles: 'identified_only',
+        persistence: 'localStorage',
+        // Our hook on the real SDK's event shapes; returning null drops the
+        // event so the test sends nothing.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        before_send: (event: any) => {
+          const cleaned = sanitizePosthogEvent(event);
+          if (cleaned) seen.push(JSON.parse(JSON.stringify(cleaned)));
+          return null;
+        },
+      });
+      const device = getDeviceId();
+      ph.identify(stableLearnerId(device, 'Leo'));
+      ph.capture('turn_sent', { modality: 'typed' });
+
+      expect(seen.length).toBeGreaterThan(0);
+      const payload = JSON.stringify(seen);
+      expect(payload).not.toContain('SECRET123');
+      expect(payload).not.toContain('kod=');
+
+      // The regression: $identify keeps the page URL in top-level
+      // $set_once.$initial_current_url and a coded referrer in
+      // $set_once.$initial_referrer — both must be scrubbed, not dropped.
+      const identify = seen.find((e) => e.event === '$identify');
+      expect(identify).toBeDefined();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const setOnce = (identify as Record<string, any>)['$set_once'];
+      expect(setOnce).toBeDefined();
+      expect(setOnce['$initial_current_url']).toBe('http://localhost:3000/?foo=1');
+      expect(setOnce['$initial_referrer']).toBe('https://skola.se/sida');
+    } finally {
+      Object.defineProperty(document, 'referrer', { value: '', configurable: true });
+      window.history.replaceState(null, '', '/');
+    }
+  });
+});
+
+describe('pre-init queue ordering', () => {
+  beforeEach(() => {
+    resetAnalytics();
+    posthogMock.init.mockClear();
+    posthogMock.capture.mockClear();
+    posthogMock.identify.mockClear();
+    localStorage.clear();
+    vi.unstubAllGlobals();
+  });
+  it('replays identify transitions in order (A, A-events, B, B-events)', async () => {
+    let resolveConfig!: (value: unknown) => void;
+    const gate = new Promise((resolve) => {
+      resolveConfig = resolve;
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockReturnValue(gate.then(() => configResponse(POSTHOG_KEY))),
+    );
+    const ready = initAnalytics();
+    identifyLearner('Anna', 3);
+    turnSent();
+    identifyLearner('Bella', 4);
+    homeworkShared('image');
+    resolveConfig(undefined);
+    await ready;
+    expect(analyticsEnabled()).toBe(true);
+    const device = getDeviceId();
+    expect(posthogMock.identify).toHaveBeenCalledTimes(2);
+    expect(posthogMock.identify).toHaveBeenNthCalledWith(1, `device:${device}:learner:anna`, {
+      learner_name: 'Anna',
+      grade: 3,
+    });
+    expect(posthogMock.identify).toHaveBeenNthCalledWith(2, `device:${device}:learner:bella`, {
+      learner_name: 'Bella',
+      grade: 4,
+    });
+    expect(posthogMock.capture.mock.calls.map(([event]) => event)).toEqual([
+      'turn_sent',
+      'homework_shared',
+    ]);
+  });
+});
+
+describe('family code without storage', () => {
+  beforeEach(() => {
+    resetAnalytics();
+    localStorage.clear();
+    vi.unstubAllGlobals();
+    resetFamilyCodeForTests();
+  });
+  function blockStorage() {
+    const getItem = vi
+      .spyOn(Storage.prototype, 'getItem')
+      .mockImplementation(() => {
+        throw new Error('blocked');
+      });
+    const setItem = vi
+      .spyOn(Storage.prototype, 'setItem')
+      .mockImplementation(() => {
+        throw new Error('blocked');
+      });
+    return () => {
+      getItem.mockRestore();
+      setItem.mockRestore();
+    };
+  }
+
+  it('keeps the URL code in memory when storage throws', () => {
+    resetFamilyCodeForTests();
+    const unblock = blockStorage();
+    try {
+      window.history.replaceState(null, '', '/?kod=URLKOD123');
+      expect(familyCode()).toBe('URLKOD123'); // consumed from the URL...
+      expect(window.location.search).toBe(''); // ...and scrubbed from the URL
+      expect(familyCode()).toBe('URLKOD123'); // ...and remembered without storage
+    } finally {
+      unblock();
+      window.history.replaceState(null, '', '/');
+      resetFamilyCodeForTests();
+    }
+  });
+
+  it('keeps a typed prompt code in memory when storage throws', () => {
+    resetFamilyCodeForTests();
+    const unblock = blockStorage();
+    try {
+      rememberFamilyCode('PROMPTKOD');
+      expect(familyCode()).toBe('PROMPTKOD'); // the retry reuses it
+      expect(familyCode()).toBe('PROMPTKOD');
+    } finally {
+      unblock();
+      resetFamilyCodeForTests();
+    }
   });
 });

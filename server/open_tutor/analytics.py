@@ -28,16 +28,33 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 from typing import Any
 
 log = logging.getLogger("open-tutor")
 
 POSTHOG_HOST_DEFAULT = "https://eu.i.posthog.com"
 
-# Worker-injected session prompts are user-role messages, not the child's
-# words. Mirrors debug_log._is_prompt_injection; kept local so this module
-# never stores message text, only counts.
-_PROMPT_PREFIX = "[Session event"
+# Teardown budgets: analytics is best-effort and must never park a session.
+# The request timeout bounds one upload attempt; max_retries=0 drops a failed
+# batch instead of retrying it; the flush budget bounds the drain wait. All
+# three together mean a hung analytics backend costs a teardown ~2 s, not 10+.
+_FLUSH_BUDGET_S = 2.0
+_REQUEST_TIMEOUT_S = 2.0
+
+
+def _bounded_flush(flush: Any, budget: float) -> None:
+    """Drain the queue within ``budget`` seconds. Never raises.
+
+    Current posthog clients take a ``timeout_seconds`` budget; older ones
+    and test doubles take none — fall back to a bare call."""
+    try:
+        try:
+            flush(timeout_seconds=budget)
+        except TypeError:
+            flush()
+    except Exception as error:
+        log.debug("posthog flush failed: %s", error)
 
 
 def posthog_settings(environ: dict[str, str] | Any | None = None) -> dict[str, str] | None:
@@ -123,7 +140,8 @@ class Analytics:
         try:
             from posthog import Posthog
 
-            return cls(settings, Posthog(settings["key"], host=settings["host"]))
+            return cls(settings, Posthog(settings["key"], host=settings["host"],
+                                         timeout=_REQUEST_TIMEOUT_S, max_retries=0))
         except Exception as error:  # missing package, bad host: stay silent, stay off
             log.debug("posthog disabled, client could not start: %s", error)
             return cls(None)
@@ -151,31 +169,37 @@ class Analytics:
 
         Synchronous: only for tests and non-async paths. The session teardown
         in agent.py is async, so it uses ``aclose`` below and never parks the
-        event loop on the SDK's blocking flush.
+        event loop on the SDK's blocking flush. Bounded like ``aclose``: even
+        a hung backend costs ~2 s, not the SDK default of 10 s.
         """
         if not self.enabled:
             return
-        try:
-            flush = getattr(self._client, "flush", None)
-            if callable(flush):
-                flush()
-        except Exception as error:
-            log.debug("posthog flush failed: %s", error)
+        flush = getattr(self._client, "flush", None)
+        if callable(flush):
+            _bounded_flush(flush, _FLUSH_BUDGET_S)
 
     async def aclose(self, timeout: float = 2.0) -> None:
         """Flush off the event loop with a short timeout. Never raises.
 
-        The PostHog SDK flush is synchronous (its default drain waits up to
-        ~10 s). Run it in a worker thread and stop waiting after ``timeout``
-        seconds: a slow analytics backend must not delay a session teardown.
+        The flush itself runs in a daemon thread with its own budget, so a
+        slow analytics backend neither parks the event loop while awaited nor
+        delays process/loop shutdown after this returns: ``asyncio.to_thread``
+        (non-daemon executor threads, joined at loop close) left hung
+        teardowns waiting out the SDK default even after cancellation.
         """
         if not self.enabled:
             return
         flush = getattr(self._client, "flush", None)
         if not callable(flush):
             return
+        budget = max(0.1, min(float(timeout), _FLUSH_BUDGET_S))
+        thread = threading.Thread(target=_bounded_flush, args=(flush, budget),
+                                  name="posthog-flush", daemon=True)
+        thread.start()
         try:
-            await asyncio.wait_for(asyncio.to_thread(flush), timeout=timeout)
+            # The driver is a daemon thread: even if the backend hangs, this
+            # wait ends at the budget and nothing downstream parks on it.
+            await asyncio.wait_for(asyncio.to_thread(thread.join, budget), timeout=timeout)
         except Exception as error:
             log.debug("posthog flush failed: %s", error)
 
@@ -184,13 +208,23 @@ class SessionTracker:
     """Per-session counters that feed ``debug_log.summarize``.
 
     Subscribes to the same LiveKit SDK events as the debug log but keeps only
-    stub records (names and counts, never text, arguments or outputs), so the
-    ended-event properties match the debug report summary without writing any
-    files or keeping conversation content in memory.
+    stub records (names and counts, never text, arguments or outputs), plus
+    one stub per typed turn from the typed-input boundary (``TypedChat``),
+    so the ended-event properties match the debug report summary without
+    writing any files or keeping conversation content in memory.
     """
 
     def __init__(self) -> None:
         self.events: list[dict[str, Any]] = []
+
+    def record_typed_turn(self) -> None:
+        """One typed turn, called from the typed-input boundary (``TypedChat``).
+
+        Spoken transcripts also arrive as user ``conversation_item_added``,
+        so typed turns cannot be derived from SDK chat items: one spoken
+        turn would count as spoken=1 and typed=1. The turn is counted, never
+        stored — no text reaches this tracker."""
+        self.events.append({"event": "chat_typed"})
 
     def record_sdk(self, event: Any) -> None:
         try:
@@ -199,20 +233,11 @@ class SessionTracker:
                 if bool(getattr(event, "is_final", False)):
                     self.events.append({"event": "child_speech", "final": True})
             elif kind == "conversation_item_added":
-                item = getattr(event, "item", None)
-                if getattr(item, "type", None) != "message":
-                    return
-                if str(getattr(item, "role", "")) != "user":
-                    return
-                try:
-                    text = item.text_content  # a property, not a method
-                except Exception:
-                    return
-                if not text or str(text).startswith(_PROMPT_PREFIX):
-                    return
-                # Typed turn. The text is counted, never stored.
-                self.events.append({"event": "chat_item", "item": "message",
-                                    "role": "user", "text": ""})
+                # Deliberately not recorded: spoken transcripts AND typed
+                # echoes both arrive here as user messages, so any count
+                # derived from them double-counts spoken turns as typed.
+                # Typed turns come from record_typed_turn instead.
+                return
             elif kind == "speech_created":
                 self.events.append({"event": "reply_started"})
             elif kind == "function_tools_executed":

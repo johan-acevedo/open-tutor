@@ -237,3 +237,34 @@ async def test_the_debug_trail_can_be_read_back_as_json(tmp_path):
         assert typed_entries[0]["text"] == "Hej!"
     finally:
         clear_active()
+
+
+async def test_typed_listener_fires_once_per_message_with_no_text(debug):
+    """Analytics counts typed turns from this hook: one call per message that
+    arrives (no text, never stored), none for ignored senders or empty reads."""
+    session = FakeSession()
+    typed = make(debug, session)
+    calls: list[None] = []
+    typed.attach_typed_listener(lambda: calls.append(None))
+    await typed.start("Hälsa på barnet.", lambda text: None)
+    await deliver(typed, "Första frågan")
+    await deliver(typed, "Andra frågan")
+    await deliver(typed, "   ")  # empty: recorded as failed, not a turn
+    await deliver(typed, "Från någon annan", identity="observer-1")
+    assert len(calls) == 2
+    assert len(events(debug, "chat_typed")) == 2
+
+
+async def test_typed_listener_failure_never_breaks_the_turn(debug):
+    """A throwing analytics listener must not lose the child's message."""
+    session = FakeSession()
+    typed = make(debug, session)
+
+    def explode() -> None:
+        raise RuntimeError("analytics is down")
+
+    typed.attach_typed_listener(explode)
+    await typed.start("Hälsa på barnet.", lambda text: None)
+    await deliver(typed, "Hej")
+    assert len(session.replies) == 1
+    assert [entry["text"] for entry in events(debug, "chat_typed")] == ["Hej"]

@@ -1222,6 +1222,11 @@ async def entrypoint(ctx: JobContext) -> None:
     analytics = get_analytics()
     distinct_id = stable_distinct_id(device_id, learner.get("name"), ctx.room.name)
     tracker = SessionTracker()
+    # Typed turns are counted at the typed-input boundary, not from SDK chat
+    # items (spoken transcripts arrive there too and would double-count).
+    # Same synchronous stretch as attach_record above: the loop cannot
+    # deliver a message before this runs, so no turn is missed.
+    typed.attach_typed_listener(tracker.record_typed_turn)
 
     voice = build_tts()
     log.info("tutor TTS route %s", tts_route(voice))

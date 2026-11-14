@@ -1376,12 +1376,25 @@ export function captionTail(text: string, max = 140): string {
 
 const CODE_KEY = 'open-tutor-code';
 
-function rememberFamilyCode(code: string): void {
+/** The family code for this page load, set from the URL or the prompt.
+ *  localStorage below is only persistence across loads: when storage is
+ *  blocked the code still works for this load (and the session request),
+ *  instead of being lost with the stripped URL. */
+let memoryCode = '';
+
+export function rememberFamilyCode(code: string): void {
+  if (!code) return;
+  memoryCode = code;
   try {
     localStorage.setItem(CODE_KEY, code);
   } catch {
-    /* storage blocked: ask again next time */
+    /* storage blocked: memory still serves this page load */
   }
+}
+
+/** For tests: forget the page-load code so cases start clean. */
+export function resetFamilyCodeForTests(): void {
+  memoryCode = '';
 }
 
 /** Read ?kod= once and scrub it from the URL, remembering the code.
@@ -1392,11 +1405,7 @@ export function consumeFamilyCodeFromUrl(): string | null {
   try {
     const fromUrl = new URLSearchParams(window.location.search).get('kod');
     if (fromUrl) {
-      try {
-        localStorage.setItem(CODE_KEY, fromUrl);
-      } catch {
-        /* storage blocked: the code still applies to this page load */
-      }
+      rememberFamilyCode(fromUrl);
       window.history.replaceState(null, '', window.location.pathname);
       return fromUrl;
     }
@@ -1406,10 +1415,13 @@ export function consumeFamilyCodeFromUrl(): string | null {
   }
 }
 
-/** Family code from a shared link (?kod=…), remembered in this browser. */
+/** Family code from a shared link (?kod=…), remembered in this browser.
+ *  Memory first (URL, then the prompt), storage as fallback — so a blocked
+ *  localStorage loses neither the link code nor a typed one on retry. */
 export function familyCode(): string {
   const fromUrl = consumeFamilyCodeFromUrl();
   if (fromUrl) return fromUrl;
+  if (memoryCode) return memoryCode;
   try {
     return localStorage.getItem(CODE_KEY) ?? '';
   } catch {

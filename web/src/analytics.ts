@@ -88,18 +88,48 @@ export function stripKodFromUrl(raw: string): string {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type PostHogEvent = { properties?: Record<string, any> } & Record<string, any>;
 
-/** PostHog before_send hook: scrub ?kod= from every URL-like property
- *  ($current_url, $referrer, $initial_* and any other string carrying it).
- *  Second layer behind the startup strip; never drops the event. */
+/** Strip ?kod= from one value and everything nested inside it (objects,
+ *  arrays). Strings that carry no kod pass through by reference, so events
+ *  without the access code keep their shape and identity. */
+function sanitizeValue(value: unknown, seen: Set<object>): unknown {
+  if (typeof value === 'string') {
+    return value.includes('kod=') ? stripKodFromUrl(value) : value;
+  }
+  if (value === null || typeof value !== 'object') return value;
+  if (seen.has(value)) return value; // never loop on a cyclic payload
+  seen.add(value);
+  if (Array.isArray(value)) {
+    let changed = false;
+    const next = value.map((item) => {
+      const cleaned = sanitizeValue(item, seen);
+      if (cleaned !== item) changed = true;
+      return cleaned;
+    });
+    return changed ? next : value;
+  }
+  let changed = false;
+  const next: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(value)) {
+    const cleaned = sanitizeValue(item, seen);
+    if (cleaned !== item) changed = true;
+    next[key] = cleaned;
+  }
+  return changed ? next : value;
+}
+
+/** PostHog before_send hook: scrub ?kod= from every URL-like string in the
+ *  outgoing event — not just `properties`. posthog-js identify keeps the
+ *  page URL in top-level `$set_once.$initial_current_url`, and a coded
+ *  referrer survives as `$set_once.$initial_referrer` / `$referrer`
+ *  (nested as `$initial_person_info: {r, u}`); only this walk reaches all
+ *  of them. Second layer behind the startup strip; never drops the event. */
 export function sanitizePosthogEvent<T extends PostHogEvent>(event: T | null): T | null {
   if (!event) return event;
-  const props = event.properties;
-  if (props && typeof props === 'object') {
-    for (const key of Object.keys(props)) {
-      const value: unknown = props[key];
-      if (typeof value === 'string' && value.includes('kod=')) {
-        props[key] = stripKodFromUrl(value);
-      }
+  const seen = new Set<object>();
+  for (const section of ['properties', '$set', '$set_once'] as const) {
+    const value: unknown = (event as Record<string, unknown>)[section];
+    if (value !== null && typeof value === 'object') {
+      (event as Record<string, unknown>)[section] = sanitizeValue(value, seen);
     }
   }
   return event;
@@ -113,10 +143,14 @@ let initPromise: Promise<void> | null = null;
 let initSettled = false;
 /** page_opened fires exactly once per page load, even under StrictMode. */
 let pageOpenedSent = false;
-/** Identify requested before the SDK finished loading: applied after init. */
-let pendingIdentify: { name: string; grade: number | null } | null = null;
-/** Events fired before init completed: flushed after init, dropped when off. */
-let pendingEvents: Array<{ event: string; properties?: Record<string, string | number | boolean | null> }> = [];
+/** Identify transitions queued as entries in the same ordered queue, so a
+ *  replay preserves attribution: identify A, A's events, identify B,
+ *  B's events. A separate latest-wins slot would replay every pre-init
+ *  event under the latest identity. */
+type PendingEntry =
+  | { kind: 'identify'; name: string; grade: number | null }
+  | { kind: 'event'; event: string; properties?: Record<string, string | number | boolean | null> };
+let pendingQueue: PendingEntry[] = [];
 const MAX_PENDING = 32;
 
 async function loadClient(): Promise<PostHogClient | null> {
@@ -158,17 +192,14 @@ export function initAnalytics(): Promise<void> {
       client = loaded;
       initSettled = true;
       if (client) {
-        if (pendingIdentify) {
-          const { name, grade } = pendingIdentify;
-          pendingIdentify = null;
-          doIdentify(name, grade);
+        const queued = pendingQueue;
+        pendingQueue = [];
+        for (const entry of queued) {
+          if (entry.kind === 'identify') doIdentify(entry.name, entry.grade);
+          else track(entry.event, entry.properties);
         }
-        const queued = pendingEvents;
-        pendingEvents = [];
-        for (const { event, properties } of queued) track(event, properties);
       } else {
-        pendingIdentify = null;
-        pendingEvents = [];
+        pendingQueue = [];
       }
     });
   }
@@ -181,8 +212,7 @@ export function resetAnalytics(): void {
   initPromise = null;
   initSettled = false;
   pageOpenedSent = false;
-  pendingIdentify = null;
-  pendingEvents = [];
+  pendingQueue = [];
   cachedDeviceId = null;
 }
 
@@ -199,10 +229,10 @@ function track(event: string, properties?: Record<string, string | number | bool
     }
     return;
   }
-  // Init not finished: queue for the flush in initAnalytics. Init finished
-  // without a client means analytics is off: drop, never send later.
-  if (!initSettled && pendingEvents.length < MAX_PENDING) {
-    pendingEvents.push({ event, properties });
+  // Init not finished: queue in order for the flush in initAnalytics. Init
+  // finished without a client means analytics is off: drop, never send later.
+  if (!initSettled && pendingQueue.length < MAX_PENDING) {
+    pendingQueue.push({ kind: 'event', event, properties });
   }
 }
 
@@ -241,9 +271,13 @@ export function identifyLearner(name: string, grade: number | null): void {
     doIdentify(name, grade);
     return;
   }
-  // The SDK may still be loading while the session starts: remember the
-  // identify and apply it after init. When analytics is off it is dropped.
-  if (!initSettled) pendingIdentify = { name, grade };
+  // The SDK may still be loading while the session starts: queue the
+  // identify in order with the events, so the replay attributes each event
+  // to the identity that was current when it fired. When analytics is off
+  // the queue is dropped.
+  if (!initSettled && pendingQueue.length < MAX_PENDING) {
+    pendingQueue.push({ kind: 'identify', name, grade });
+  }
 }
 
 export function sessionStarted(room: string): void {
