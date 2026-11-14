@@ -91,6 +91,7 @@ async def test_requests_identify_the_app_and_carry_no_server_state(go_env):
         assert body["model"] == "muse-spark-1.3-contributor" and body["stream"] is True
         assert body["store"] is False and "previous_response_id" not in body
         assert body["reasoning"]["effort"] == "minimal"
+        assert "temperature" not in body  # Muse runs at its tuned default
     # The follow-up sends the whole turn: the structured call and its result, in order.
     follow_up = json.loads(requests[1].content)["input"]
     kinds = [item.get("type") for item in follow_up]
