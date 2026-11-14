@@ -6,8 +6,12 @@ on 2026-11-12 unless marked open.
 
 ## Where things run
 
-- Branch: `feat/smart-screen`, from `origin/main@97428a7`. Nothing is deployed from it.
-- Production: ThinkCentre, `main`. Do not touch it.
+- Trunk: `main`. The Smart Screen branch was merged on 2026-11-13 (PR #51); branch from `main`.
+- Production: ThinkCentre, `main`, Smart Screen on since 2026-11-13 (last deploy that day:
+  `411684c`). It is a public test: deploy only with Johan's go, and never restart during a call.
+- Development: dell5500, services `open-tutor-smart-dev-agent` and `-web`, run from a checkout
+  of `main`. Changes are tried here first.
+- New to the repository: start with `AGENTS.md`.
 - Reference only: `feat/browser-screen-agent` (draft PR #25). Do not build on it. Worth lifting
   as ideas: one page at a time, hidden answer with tutor-controlled reveal, the child's answer box.
 
