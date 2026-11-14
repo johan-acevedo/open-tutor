@@ -1035,6 +1035,7 @@ class Screen:
         pending = {"primary": p_task, "secondary": s_task}
         results: dict[str, tuple[str, float]] = {}
         errors: dict[str, BaseException] = {}
+        both_failed_noted = False
         try:
             while True:
                 remaining = deadline - time.monotonic()
@@ -1053,11 +1054,17 @@ class Screen:
                         continue
                     del pending[side]
                     try:
-                        results[side] = task.result()
+                        result = task.result()
                     except (asyncio.CancelledError, KeyboardInterrupt, SystemExit):
                         raise
                     except BaseException as error:  # noqa: BLE001 - the other side may still win
                         errors[side] = error
+                        continue
+                    if not str(result[0]).strip():
+                        # An empty answer is not a page: let the other side win.
+                        errors[side] = RuntimeError("screen provider returned no text")
+                        continue
+                    results[side] = result
                 if "primary" in results or "secondary" in results:
                     break  # first completion wins; ties prefer the primary
                 if not pending:
@@ -1071,6 +1078,7 @@ class Screen:
                 assert error is not None
                 self._note_call(kind, None, hedged=True, race=True, ttft_s=None,
                                 loser="error", error=type(error).__name__)
+                both_failed_noted = True
                 raise error
             winner = "primary" if "primary" in results else "secondary"
             loser = "secondary" if winner == "primary" else "primary"
@@ -1116,6 +1124,8 @@ class Screen:
                             loser_error=loser_error)
             return winner_text, time.monotonic() - t0
         except asyncio.TimeoutError:
+            if both_failed_noted:
+                raise  # a provider's own timeout, already recorded above
             # Neither side completed within the call's absolute deadline: both
             # attempts are stopped below; the timeout, not a provider, failed.
             self._note_call(kind, None, hedged=True, race=True, ttft_s=None,
@@ -1140,10 +1150,11 @@ class Screen:
                                    look_png, first, holder, base=base)
         else:
             async def _real() -> tuple[str, float]:
+                started = time.monotonic()
                 text, _first_s = await self._stream_spec(
                     fallback, system, user, images, look_png,
                     self._track_first(first, holder, base=base))
-                return text, 0.0
+                return text, time.monotonic() - started
             call = _real()
         return self._own_request(
             asyncio.create_task(call, name=f"screen-hedge-secondary-{kind}"),
@@ -1731,6 +1742,11 @@ class Screen:
                 async for event in stream:
                     if event.type == "response.output_text.delta":
                         note_text(event.delta or "")
+                    elif event.type in ("response.failed", "response.incomplete", "error"):
+                        # The SDK does not raise on a failed terminal event; a
+                        # failed or cut-off answer must never count as a page
+                        # (nor win a race against a healthy backup).
+                        raise RuntimeError(f"screen provider stream ended with {event.type}")
             finally:
                 self._request_streams.pop(request, None)
                 self._close_stream(stream)

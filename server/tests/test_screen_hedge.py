@@ -808,3 +808,34 @@ async def test_race_off_keeps_todays_shape(tmp_path, monkeypatch):
     summary = screen.screen_stats_summary()
     assert summary["screen_race_calls"] == 0
     await screen.aclose()
+
+
+async def test_race_empty_answer_does_not_win(tmp_path, monkeypatch):
+    """A fast empty answer is not a page: the slower real page wins."""
+    async def slow_fallback(system, user, images, look_png):
+        await asyncio.sleep(0.2)
+        return "<h1>Backup</h1>"
+
+    monkeypatch.setenv("SCREEN_RACE", "1")
+    screen = hedging_screen(tmp_path, monkeypatch,
+                            model_call=AsyncMock(return_value="   "),
+                            fallback_call=slow_fallback)
+    text, _ = await screen._call_model("System", "Lesson", kind="write")
+    assert text == "<h1>Backup</h1>"
+    (call,) = screen._call_stats
+    assert call["provider"] == "cc" and call["loser"] == "error"
+    await screen.aclose()
+
+
+async def test_race_both_providers_time_out_is_recorded_once(tmp_path, monkeypatch):
+    """A provider's own TimeoutError after both fail is one failed call, not two."""
+    monkeypatch.setenv("SCREEN_RACE", "1")
+    screen = hedging_screen(
+        tmp_path, monkeypatch,
+        model_call=AsyncMock(side_effect=TimeoutError("primary read timeout")),
+        fallback_call=AsyncMock(side_effect=RuntimeError("secondary down")))
+    with pytest.raises(TimeoutError):
+        await screen._call_model("System", "Lesson", kind="write")
+    summary = screen.screen_stats_summary()
+    assert summary["screen_calls_total"] == 1 and summary["screen_race_calls"] == 1
+    await screen.aclose()

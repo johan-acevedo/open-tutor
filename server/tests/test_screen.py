@@ -1459,3 +1459,31 @@ async def test_patch_preview_retains_renderer_exception_after_final_lint(tmp_pat
     png, issues = await screen._default_render_page("<h1>Prov</h1>", "bad patch", 370, 610)
     assert png == b"PNG"
     assert issues == ["patch failed: ValueError"]
+
+
+async def test_failed_responses_stream_raises_instead_of_returning_a_page(tmp_path, monkeypatch):
+    """A ``response.failed`` terminal event is an error, not a (partial) page."""
+    import httpx
+
+    monkeypatch.setenv("SCREEN_FALLBACK", "cc")
+    monkeypatch.setenv("COMMAND_CODE_API_KEY", "test-cc")
+
+    def handle(request):
+        events = [
+            {"type": "response.output_text.delta", "sequence_number": 3,
+             "output_index": 0, "content_index": 0, "item_id": "msg_1", "delta": "<h1>Hal"},
+            {"type": "response.failed", "sequence_number": 4,
+             "response": {"id": "resp_test", "object": "response", "created_at": 0,
+                            "model": "m", "status": "failed", "output": [],
+                            "tools": [], "tool_choice": "auto", "parallel_tool_calls": True,
+                            "error": {"code": "server_error", "message": "boom"}}},
+        ]
+        body = "".join(f"data: {json.dumps(e)}\n\n" for e in events) + "data: [DONE]\n\n"
+        return httpx.Response(200, headers={"content-type": "text/event-stream"},
+                              content=body.encode())
+
+    _streaming_openai(monkeypatch, handle)
+    screen = make_screen(tmp_path)
+    with pytest.raises(RuntimeError, match="response.failed"):
+        await screen._stream_spec(screen.fallback_spec(), "System", "Lesson", [], None)
+    await screen.aclose()
