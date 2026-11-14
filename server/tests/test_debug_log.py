@@ -342,7 +342,7 @@ def test_summarize_aggregates_hedged_turns_and_switches(tmp_path):
                                  "ttft_s": 5.1, "loser": "cancelled"})
     summary = summarize(debug.events)
     assert summary["llm_turns"] == {
-        "turns_total": 3, "hedged_turns": 2,
+        "turns_total": 3, "hedged_turns": 2, "turns_errored": 1,
         "routes": {"go": {"turns_won": 1, "median_ttft_s": 1.8, "max_ttft_s": 1.8},
                    "cc": {"turns_won": 1, "median_ttft_s": 2.6, "max_ttft_s": 2.6}},
     }

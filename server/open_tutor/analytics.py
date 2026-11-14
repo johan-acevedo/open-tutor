@@ -128,27 +128,44 @@ def summarize_llm_turns(turns: list[dict[str, Any]] | None) -> dict[str, Any]:
 
     Pure (no network, no text): the same function feeds the live session
     summary and the debug report summary, so the two never drift apart.
-    Only route names, timings and error classes in, same out."""
+    Only route names, timings and error classes in, same out.
+
+    Only turns served to completion count as wins: a partial-then-failed
+    secondary (``winner`` set with ``error`` set) counts as an error for its
+    route, never a win. Attempts stay visible via ``turns_errored`` (global)
+    and per-route ``turns_errored`` alongside ``turns_won``.
+    """
     won: dict[str, int] = {}
+    errored: dict[str, int] = {}
     times: dict[str, list[float]] = {}
     hedged = 0
+    turns_errored = 0
     for turn in turns or []:
         if turn.get("hedged"):
             hedged += 1
+        if turn.get("error") is not None:
+            turns_errored += 1
         route = turn.get("winner")
         if route is None:
+            continue
+        if turn.get("error") is not None:
+            # Served partially, then failed: an attempt and an error, not a win.
+            errored[route] = errored.get(route, 0) + 1
             continue
         won[route] = won.get(route, 0) + 1
         if turn.get("ttft_s") is not None:
             times.setdefault(route, []).append(turn["ttft_s"])
     routes = {}
-    for route, count in won.items():
-        entry: dict[str, Any] = {"turns_won": count}
+    for route in sorted(set(won) | set(errored)):
+        entry: dict[str, Any] = {"turns_won": won.get(route, 0)}
+        if errored.get(route):
+            entry["turns_errored"] = errored[route]
         if times.get(route):
             entry["median_ttft_s"] = round(statistics.median(times[route]), 3)
             entry["max_ttft_s"] = round(max(times[route]), 3)
         routes[route] = entry
-    return {"turns_total": len(turns or []), "hedged_turns": hedged, "routes": routes}
+    return {"turns_total": len(turns or []), "hedged_turns": hedged,
+            "turns_errored": turns_errored, "routes": routes}
 
 
 def summarize_screen_calls(calls: list[dict[str, Any]] | None) -> dict[str, Any]:

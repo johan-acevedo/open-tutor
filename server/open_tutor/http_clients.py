@@ -180,11 +180,18 @@ def warm_provider_connections(
 ) -> dict[str, bool]:
     """Open one connection per ``(label, base_url, api_key)`` route.
 
-    Synchronous, bounded by ``budget_s`` in total, never raises: worker prewarm
+    Synchronous, bounded by an absolute ``budget_s`` total deadline, never
+    raises: worker prewarm
     calls this and a dead provider must not stop the worker from starting.
     Loop-independent (sync clients, discarded after use): the shared async
     transports stay owned by the job loop that will use them. Returns which
     routes answered, for the log only.
+
+    Each warm-up runs in a daemon thread joined with the remaining budget:
+    httpx timeouts are inactivity timeouts, so a server trickling bytes
+    forever would otherwise outlive ``budget_s`` and stall worker init. A
+    timed-out warm-up counts as not answered; the orphaned daemon thread is
+    discarded and never blocks the worker.
     """
     started = time.monotonic()
     outcome: dict[str, bool] = {}
@@ -196,9 +203,30 @@ def warm_provider_connections(
             return outcome
         per_route = max(0.5, budget_s / max(1, len(deduped)))
         for label, base_url, key in deduped:
-            if time.monotonic() - started >= max(0.5, budget_s):
+            elapsed = time.monotonic() - started
+            remaining = max(0.5, budget_s) - elapsed
+            if remaining <= 0:
                 break
-            outcome[label] = _warm_one_sync(label, base_url, key, user_agent, per_route)
+            # Absolute deadline: the httpx timeouts bound inactivity, not the
+            # total; the thread join bounds the total even for tricklers.
+            join_timeout = max(0.1, min(per_route, remaining))
+            holder: dict[str, bool] = {}
+
+            def _target(label=label, base_url=base_url, key=key) -> None:
+                try:
+                    holder["ok"] = _warm_one_sync(label, base_url, key, user_agent, per_route)
+                except Exception:  # noqa: BLE001 - warmth is best-effort
+                    holder["ok"] = False
+
+            thread = threading.Thread(target=_target, name=f"prewarm-{label}", daemon=True)
+            thread.start()
+            thread.join(timeout=join_timeout)
+            if thread.is_alive():
+                log.debug("provider warm-up to %s timed out after %.1fs; continuing",
+                          label, join_timeout)
+                outcome[label] = False
+            else:
+                outcome[label] = bool(holder.get("ok", False))
     except Exception as error:  # noqa: BLE001 - prewarm must never fail the worker
         log.debug("provider warm-up skipped: %s", error)
     return outcome

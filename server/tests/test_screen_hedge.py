@@ -507,3 +507,50 @@ async def test_secondary_first_text_includes_hedge_wait(tmp_path, monkeypatch):
     ttft = screen.screen_stats_summary()["screen_calls"]["look"]["median_ttft_s"]
     assert ttft is not None and ttft >= 0.25  # includes the ~0.3 s hedge wait
     await screen.aclose()
+
+
+# ---- third fix round: caller cancel during loser teardown --------------------
+
+
+async def test_caller_cancel_during_loser_teardown_propagates(tmp_path, monkeypatch):
+    """P1: a caller cancellation landing in the loser's teardown propagates.
+
+    Fails on 7bfa963, where ``except BaseException`` around the loser's teardown
+    swallowed the caller's cancellation, then the call kept awaiting the
+    secondary and returned a page.
+    """
+    import time as _time
+
+    try:
+        from open_tutor.screen import SCREEN_LOSER_CLEANUP_BOUND_S
+    except ImportError:  # pragma: no cover - pre-fix code without the bound
+        SCREEN_LOSER_CLEANUP_BOUND_S = 2.0
+
+    async def slow_teardown_primary(system, user, images, look_png):
+        try:
+            await asyncio.sleep(30)
+            return "<h1>Sent</h1>"
+        except asyncio.CancelledError:
+            await asyncio.sleep(0.5)  # slow teardown: the cancel lands here
+            raise
+
+    async def fast_fallback(system, user, images, look_png):
+        return "<h1>Backup</h1>"
+
+    monkeypatch.setenv("SCREEN_HEDGE_AFTER_S", "0.05")
+    screen = hedging_screen(tmp_path, monkeypatch, model_call=slow_teardown_primary,
+                            fallback_call=fast_fallback)
+    task = asyncio.create_task(screen._call_model("System", "Lesson", kind="look"))
+    await asyncio.sleep(0.3)  # the secondary won; loser teardown in flight
+    started = _time.monotonic()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(task, timeout=SCREEN_LOSER_CLEANUP_BOUND_S + 3.0)
+    assert _time.monotonic() - started < SCREEN_LOSER_CLEANUP_BOUND_S + 3.0
+    lingering = [t.get_name() for t in asyncio.all_tasks()
+                 if t.get_name().startswith("screen-hedge-")]
+    assert lingering == []
+    # No page was served after the caller went away: the cancelled call counts
+    # nothing as a win.
+    assert screen.screen_stats_summary()["screen_calls_total"] == 0
+    await screen.aclose()

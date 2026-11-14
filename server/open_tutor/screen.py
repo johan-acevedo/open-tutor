@@ -41,6 +41,9 @@ SCREEN_BASE_URL = "https://opencode.ai/inference/go/openai/v1"
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 COMMAND_CODE_BASE_URL = "https://api.commandcode.ai/provider/v1"
 JOB_TIMEOUT_S = 20.0
+# A discarded screen side's cancel/close never delays the winner, the call or
+# shutdown: bounded the same way as the tutor's loser cleanup (log once).
+SCREEN_LOSER_CLEANUP_BOUND_S = 2.0
 # A fallback call that cannot run this long is not started: the page could not
 # be rendered and delivered in what is left anyway. The job then fails as it
 # does with no fallback configured.
@@ -723,6 +726,75 @@ class Screen:
 
         return on_first_text
 
+    @staticmethod
+    def _caller_cancels() -> int:
+        task = asyncio.current_task()
+        try:
+            return task.cancelling() if task is not None else 0
+        except AttributeError:  # pragma: no cover - Python < 3.11
+            return 0
+
+    @staticmethod
+    async def _bounded_reap_task(task: "asyncio.Task[Any]", *, label: str,
+                                 bound: float = SCREEN_LOSER_CLEANUP_BOUND_S) -> bool:
+        """Wait for a discarded side within ``bound`` (shielded, never raises).
+
+        A caller cancellation landing mid-reap does not abort the wait: the
+        shield keeps it alive up to the bound, then the side is
+        force-cancelled and reaped (log once). Returns True when a caller
+        cancellation was observed, so the caller re-raises it after the reap
+        instead of swallowing it as the loser's own ``CancelledError``.
+        Never waits longer than ``bound`` in total.
+        """
+        current = asyncio.current_task()
+        try:
+            before = current.cancelling() if current is not None else 0
+        except AttributeError:  # pragma: no cover - Python < 3.11
+            before = 0
+        deadline = time.monotonic() + max(0.0, bound)
+        while not task.done():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                log.warning("screen hedged call loser cleanup timed out; dropping it (%s)",
+                            label)
+                task.cancel()
+                try:
+                    await task
+                except BaseException:  # noqa: BLE001 - dropped, already logged
+                    pass
+                break
+            try:
+                await asyncio.wait_for(asyncio.shield(task), timeout=remaining)
+            except TimeoutError:
+                log.warning("screen hedged call loser cleanup timed out; dropping it (%s)",
+                            label)
+                task.cancel()
+                try:
+                    await task
+                except BaseException:  # noqa: BLE001 - dropped, already logged
+                    pass
+                break
+            except asyncio.CancelledError:
+                try:
+                    now = current.cancelling() if current is not None else 0
+                except AttributeError:  # pragma: no cover - Python < 3.11
+                    now = before + 1
+                if current is None or now <= before:
+                    break  # the loser itself ended cancelled
+                continue  # our caller wants out; the reap still finishes
+            except Exception:  # noqa: BLE001 - loser outcome is swallowed
+                break
+        try:
+            if not task.cancelled():
+                task.exception()
+        except BaseException:  # noqa: BLE001 - retrieved, never lost
+            pass
+        try:
+            after = current.cancelling() if current is not None else 0
+        except AttributeError:  # pragma: no cover - Python < 3.11
+            after = before
+        return after > before
+
     async def _call_model_hedged(self, system: str, user: str,
                                  look_png: bytes | None, kind: str, t0: float,
                                  fallback: dict[str, str], hedge_after: float,
@@ -827,12 +899,19 @@ class Screen:
                 loser, loser_task = "secondary", s_task
             else:
                 loser, loser_task = "primary", p_task
+            # Bounded loser teardown that never swallows the caller's
+            # cancellation: the loser's own CancelledError (from the cancel
+            # above) is swallowed, but a caller cancellation observed via the
+            # task's cancel count is re-raised before anything else is
+            # awaited, so no page is returned after the caller went away.
+            reap_before = self._caller_cancels()
             if loser_task is not None:
                 loser_task.cancel()
-                try:
-                    await loser_task
-                except BaseException:  # noqa: BLE001 - already recorded or cancelled
-                    pass
+                await self._bounded_reap_task(
+                    loser_task, label=f"{kind}-{loser}",
+                    bound=SCREEN_LOSER_CLEANUP_BOUND_S)
+            if self._caller_cancels() > reap_before:
+                raise asyncio.CancelledError()
             if loser == "primary" and "primary" in errors:
                 primary_error_class = type(errors["primary"]).__name__
             winner_task = p_task if winner == "primary" else s_task
@@ -915,10 +994,12 @@ class Screen:
                     task.cancel()
             for task in (p_task, s_task):
                 if task is not None:
-                    try:
-                        await task
-                    except BaseException:  # noqa: BLE001 - recorded above or cancelled
-                        pass
+                    # Bounded and shielded: no side outlives the call within
+                    # more than the loser-cleanup bound, and a caller
+                    # cancellation still propagates after the reap.
+                    await self._bounded_reap_task(
+                        task, label=f"{kind}-finally",
+                        bound=SCREEN_LOSER_CLEANUP_BOUND_S)
 
     def _start_screen_secondary(self, fallback: dict[str, str], system: str, user: str,
                                 images: list[str], look_png: bytes | None, kind: str,

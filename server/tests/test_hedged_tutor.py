@@ -352,8 +352,10 @@ async def test_hedge_summary_counts_turns_per_route(hedged):
 def test_empty_turn_list_summarizes_to_zero():
     from open_tutor.analytics import summarize_llm_turns
 
-    assert summarize_llm_turns([]) == {"turns_total": 0, "hedged_turns": 0, "routes": {}}
-    assert summarize_llm_turns(None) == {"turns_total": 0, "hedged_turns": 0, "routes": {}}
+    assert summarize_llm_turns([]) == {"turns_total": 0, "hedged_turns": 0,
+                                        "turns_errored": 0, "routes": {}}
+    assert summarize_llm_turns(None) == {"turns_total": 0, "hedged_turns": 0,
+                                          "turns_errored": 0, "routes": {}}
 
 
 
@@ -447,3 +449,123 @@ async def test_cancelled_cleanup_closes_provider_and_propagates(turns):
     assert stream._task.done()  # no provider task left running
     assert pump.done()
     assert pumps == {} and streams == {}  # ownership released after cleanup
+
+
+# ---- third fix round: bounded loser cleanup, wins-only-completed --------------
+
+
+class HangingCloseStream(ScriptedStream):
+    """A provider stream whose cancel/aclose hangs (slow peer, wedged close)."""
+
+    async def aclose(self) -> None:
+        await asyncio.sleep(30)  # hangs; must be force-cancelled within the bound
+        await super().aclose()
+
+
+class HangingFakeLLM(HedgeFakeLLM):
+    """A fake whose streams hang on close, like a wedged provider."""
+
+    def chat(self, *, chat_ctx=None, tools=None, conn_options=None, **kwargs):
+        self.calls += 1
+        stream = HangingCloseStream(self, chat_ctx or llm.ChatContext(), tools or [],
+                                    conn_options, script=list(self.script), error=self.error)
+        self.streams.append(stream)
+        return stream
+
+
+async def test_hanging_loser_close_does_not_delay_winner_or_aclose(hedged, turns):
+    """P1: a hanging loser cancel/aclose never delays the winner or shutdown.
+
+    Fails on 7bfa963, where the loser cleanup was awaited inline and unbounded:
+    the winner's remaining chunks stayed queued until the hanging close
+    finished, and wrapper aclose()/caller cancel waited on the shield.
+    """
+    import time as _time
+
+    try:
+        from open_tutor.session_llm import LOSER_CLEANUP_BOUND_S
+    except ImportError:  # pragma: no cover - pre-fix code without the bound
+        LOSER_CLEANUP_BOUND_S = 2.0
+
+    preferred = HangingFakeLLM("preferred", script=[(0.5, "slow")])  # loser, hangs on close
+    fallback = HedgeFakeLLM("fallback", script=[(0.01, "fast"), (0.01, " world")])
+    model = await warmed(preferred, fallback)
+
+    started = _time.monotonic()
+    text = await asyncio.wait_for(run_turn(model), timeout=10.0)
+    elapsed = _time.monotonic() - started
+    assert text == "fast world"  # the winner's full answer, no mixed reply
+    # Bounded, not 30 s: background cleanup is force-cancelled within the bound
+    # (plus slack for the winner race itself).
+    assert elapsed < LOSER_CLEANUP_BOUND_S + 3.0
+    lingering = [t for t in asyncio.all_tasks()
+                 if t.get_name().startswith("tutor-hedge-losercleanup-")]
+    assert lingering == []
+    (turn,) = llm_turns(turns)
+    assert turn["winner"] == "fallback" and turn["hedged"] is True
+
+
+async def test_caller_cancel_during_hedged_turn_returns_within_bound(hedged, turns):
+    """P1: caller cancellation never waits longer than the loser-cleanup bound.
+
+    Fails on 7bfa963, where the shielded inline cleanup waited out the hanging
+    close even after the caller went away.
+    """
+    import time as _time
+
+    try:
+        from open_tutor.session_llm import LOSER_CLEANUP_BOUND_S
+    except ImportError:  # pragma: no cover - pre-fix code without the bound
+        LOSER_CLEANUP_BOUND_S = 2.0
+
+    preferred = HangingFakeLLM("preferred", script=[(0.5, "slow")])
+    fallback = HedgeFakeLLM("fallback", script=[(0.01, "fast"), (0.05, " more")])
+    model = await warmed(preferred, fallback)
+
+    stream = model.chat(chat_ctx=llm.ChatContext())
+    collected = []
+
+    async def consume() -> str:
+        text = ""
+        async for chunk in stream:
+            if chunk.delta and chunk.delta.content:
+                text += chunk.delta.content
+                collected.append(chunk.delta.content)
+        return text
+
+    task = asyncio.create_task(consume())
+    await asyncio.sleep(0.3)  # the secondary won; hanging loser cleanup in flight
+    started = _time.monotonic()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(task, timeout=LOSER_CLEANUP_BOUND_S + 3.0)
+    assert _time.monotonic() - started < LOSER_CLEANUP_BOUND_S + 3.0
+    await asyncio.wait_for(stream.aclose(), timeout=LOSER_CLEANUP_BOUND_S + 3.0)
+    lingering = [t for t in asyncio.all_tasks()
+                 if t.get_name().startswith("tutor-hedge-losercleanup-")]
+    assert lingering == []
+
+
+def test_partial_then_failed_turns_are_not_counted_as_wins():
+    """P2: wins count only turns served to completion; errors stay separate.
+
+    Fails on 7bfa963, where a partial-then-failed secondary still counted as
+    ``turns_won`` for its route.
+    """
+    from open_tutor.analytics import summarize_llm_turns
+
+    summary = summarize_llm_turns([
+        {"primary": "go", "winner": "go", "hedged": False,
+         "ttft_s": 1.0, "loser": "none"},
+        {"primary": "go", "winner": "cc", "hedged": True,
+         "ttft_s": 2.0, "loser": "cancelled", "error": "RuntimeError"},
+        {"primary": "go", "winner": None, "hedged": True,
+         "ttft_s": None, "loser": "error", "error": "RuntimeError"},
+    ])
+    assert summary["turns_total"] == 3
+    assert summary["turns_errored"] == 2
+    assert summary["routes"]["go"] == {"turns_won": 1, "median_ttft_s": 1.0,
+                                       "max_ttft_s": 1.0}
+    # The failed secondary is an attempt and an error, never a win.
+    assert summary["routes"]["cc"]["turns_won"] == 0
+    assert summary["routes"]["cc"]["turns_errored"] == 1
