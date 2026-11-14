@@ -721,7 +721,10 @@ This change hedges both (PR: hedged tutor turns, hedged screen calls) with these
   First chunk wins, nothing is forwarded before the winner is decided, attempts
   stay within today's worst case, and hedging never touches thought-signature
   routes. A secondary that wins twice running becomes the primary (sticky,
-  symmetric, logged as `llm_sticky_switch`). Every turn records `llm_turn`.
+  symmetric, logged as `llm_sticky_switch`); only a winner that serves its turn
+  to the end counts, a failure or cancel resets the streak, and the loser's
+  cleanup always finishes before a caller cancellation propagates. Every turn
+  records `llm_turn`.
 - **Screen:** page, look and retry calls stream (Responses and Chat both support
   `stream=True`), so the first output text is observable; the hedge above replaces
   the flat failover. Provider calls are async and cancellable with an absolute
@@ -730,14 +733,21 @@ This change hedges both (PR: hedged tutor turns, hedged screen calls) with these
   blocking client did -- verified with a slow-trickling fake before the fix).
   Optional steps pass their own remaining budget in, so the hedge fires at
   `min(SCREEN_HEDGE_AFTER_S, half the step)` instead of being cut by the outer
-  timeout before the backup can start.
+  timeout before the backup can start. Every attempt runs under the call's
+  original absolute deadline, a caller cancellation always propagates instead of
+  starting a backup, an already attempted route is never requested twice in one
+  call, and every route's first-text time is measured from the call's start on
+  one clock (the backup's time includes the hedge wait).
 - **Measurement:** `tutor_session_ended` gains per-route turn wins with median/max
   ttft, hedge counts and sticky switches, and the same for screen calls; an optional
   per-turn `tutor_llm_turn` event carries only route names, timings and flags.
   Fully off without `TUTOR_POSTHOG_KEY`, as before.
-- **Warm connections:** one shared httpx transport per host with ~120 s keep-alive
-  for the tutor and screen clients, plus one cheap request per configured provider
-  at worker prewarm (bounded ~5 s, never failing the worker). This targets the cold
+- **Warm connections:** one shared httpx transport per (process, loop, host) with
+  ~120 s keep-alive for the tutor and screen clients -- an async transport is
+  bound to its loop, so each loop owns its clients and they are closed at
+  job/process shutdown (sharing one across loops raised `Event loop is closed`).
+  Worker prewarm does a loop-independent sync warm-up per configured provider
+  (bounded ~5 s, never failing the worker). This targets the cold
   start seen 2026-11-14, when Go did not answer the 5 s warm-up right after a
   restart and was normal a minute later.
 

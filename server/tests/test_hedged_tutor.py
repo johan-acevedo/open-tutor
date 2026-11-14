@@ -355,3 +355,95 @@ def test_empty_turn_list_summarizes_to_zero():
     assert summarize_llm_turns([]) == {"turns_total": 0, "hedged_turns": 0, "routes": {}}
     assert summarize_llm_turns(None) == {"turns_total": 0, "hedged_turns": 0, "routes": {}}
 
+
+
+# ---- review fixes --------------------------------------------------------------
+
+
+async def test_primary_failed_secondary_empty_surfaces_primary_error(hedged, turns):
+    """P2: a failed primary plus an empty secondary raises the primary's error.
+
+    The old ``errors.get(\"primary\", errors[\"secondary\"])`` evaluated the
+    default eagerly and raised ``KeyError('secondary')`` instead.
+    """
+    preferred = HedgeFakeLLM("preferred")
+    fallback = HedgeFakeLLM("fallback")
+    model = await warmed(preferred, fallback)
+    preferred.script = []
+    preferred.error = RuntimeError("primary down")
+    fallback.script = []  # ends without a chunk and without failing
+
+    with pytest.raises(RuntimeError, match="primary down"):
+        await run_turn(model)
+    (turn,) = llm_turns(turns)
+    assert turn["winner"] is None and turn["error"] == "RuntimeError"
+    assert turn["hedged"] is True
+
+
+async def test_partial_then_failed_secondary_is_never_promoted(hedged, turns):
+    """P2: the win is recorded only after the winner finishes the turn.
+
+    A secondary that wins the race but dies mid-answer counts as a failure,
+    never a win: two such turns must not trigger a sticky switch. The failure
+    arrives after the decision (a later chunk), which is the case the old
+    decision-time note promoted.
+    """
+    preferred = HedgeFakeLLM("preferred", script=[(0.6, "slow")])
+    fallback = HedgeFakeLLM("fallback", script=[(0.06, "partial"), (0.3, "more")],
+                            error=RuntimeError("backup died mid-answer"))
+    model = await warmed(preferred, fallback)
+
+    for _ in range(2):
+        with pytest.raises(RuntimeError, match="backup died mid-answer"):
+            await run_turn(model)
+
+    assert model.route_name == "preferred"  # no sticky switch on failed wins
+    assert not [event for event, _ in turns if event == "llm_sticky_switch"]
+    recorded = llm_turns(turns)
+    assert len(recorded) == 2
+    assert all(t["winner"] == "fallback" and t["error"] == "RuntimeError"
+               for t in recorded)
+
+
+async def test_cancelled_cleanup_closes_provider_and_propagates(turns):
+    """P1: a caller cancellation landing mid-close strands nothing and propagates.
+
+    The cleanup awaits are shielded, so the provider stream is still closed via
+    LiveKit's native ``LLMStream.aclose()`` semantics; the observed caller
+    cancellation is re-raised after every side is closed.
+    """
+    from open_tutor.session_llm import _RoutedStream
+
+    release = asyncio.Event()
+    entered = asyncio.Event()
+
+    class GatedCloseStream(ScriptedStream):
+        async def aclose(self):
+            entered.set()
+            await release.wait()  # the caller cancellation lands here
+            await super().aclose()
+
+    owner = HedgeFakeLLM("preferred")
+    stream = GatedCloseStream(owner, llm.ChatContext(), [],
+                              APIConnectOptions(), script=[])
+    pump = asyncio.create_task(asyncio.sleep(30))
+    pumps = {"primary": pump}
+    streams = {"primary": stream}
+
+    async def wait_closed() -> None:
+        await asyncio.wait_for(entered.wait(), timeout=5)
+        assert stream.closed is False  # still inside the shielded close
+
+    cleanup = asyncio.create_task(_RoutedStream._stop_all(pumps, streams))
+    await wait_closed()
+    assert not cleanup.done()
+    cleanup.cancel()  # the caller's cancellation, mid-close
+    await asyncio.sleep(0.05)
+    assert not cleanup.done()  # shielded: the close is still in flight
+    release.set()  # let the provider close finish
+    with pytest.raises(asyncio.CancelledError):
+        await cleanup  # ... then the cancellation propagates
+    assert stream.closed  # closed via the native aclose, not stranded
+    assert stream._task.done()  # no provider task left running
+    assert pump.done()
+    assert pumps == {} and streams == {}  # ownership released after cleanup

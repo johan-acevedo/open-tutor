@@ -376,3 +376,134 @@ def test_empty_call_list_summarizes_to_zero():
                                           "provider_wins": {}, "calls": {}}
     assert summarize_screen_calls(None)["calls_total"] == 0
 
+
+
+# ---- review fixes --------------------------------------------------------------
+
+
+async def test_caller_cancel_during_winner_does_not_start_backup(tmp_path, monkeypatch):
+    """P1: a caller cancellation while awaiting the winner propagates at once.
+
+    The old ``except BaseException`` caught the caller's ``CancelledError`` as
+    a provider failure and started a backup that outlived the caller's timeout.
+    """
+    monkeypatch.setenv("SCREEN_HEDGE_AFTER_S", "0.05")
+
+    async def hanging_primary(system, user, images, look_png, on_first_text=None):
+        if on_first_text is not None:
+            on_first_text()  # first text at once: the primary wins, no hedge
+        await asyncio.sleep(30)
+        return "<h1>Late</h1>"
+
+    fallback_calls = []
+
+    async def counting_fallback(system, user, images, look_png):
+        fallback_calls.append(1)
+        return "<h1>Backup</h1>"
+
+    screen = hedging_screen(tmp_path, monkeypatch, model_call=hanging_primary,
+                            fallback_call=counting_fallback)
+    task = asyncio.create_task(screen._call_model("System", "Lesson", kind="look"))
+    await asyncio.sleep(0.2)  # the primary won; the turn hangs mid-answer
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert fallback_calls == []  # no backup was started after the cancel
+    lingering = [t.get_name() for t in asyncio.all_tasks()
+                 if t.get_name().startswith("screen-hedge-")]
+    assert lingering == []
+    await screen.aclose()
+
+
+async def test_step_budget_is_shared_with_the_call(tmp_path, monkeypatch):
+    """P2: the optional step's capped budget reaches the call and the timeout.
+
+    The old ``_bounded`` passed the remaining job budget (tens of seconds) into
+    a call it cancelled after the 6 s step cap, so the hedge fired at 5 s and
+    the backup never finished before the cut.
+    """
+    received = []
+    started: dict[str, float] = {}
+    t0 = time.monotonic()
+
+    async def slow_primary(system, user, images, look_png):
+        started["primary"] = time.monotonic() - t0
+        await asyncio.sleep(30)
+        return "<h1>Sent</h1>"
+
+    async def slowish_fallback(system, user, images, look_png):
+        started["fallback"] = time.monotonic() - t0
+        await asyncio.sleep(1.5)
+        return "<h1>Backup</h1>"
+
+    monkeypatch.delenv("SCREEN_HEDGE_AFTER_S", raising=False)  # the 5 s default
+    screen = hedging_screen(tmp_path, monkeypatch, timeout=60.0,
+                            model_call=slow_primary, fallback_call=slowish_fallback)
+
+    async def make_call(budget):
+        received.append(budget)
+        return await screen._call_model("System", "Lesson", kind="look",
+                                        budget_s=budget)
+
+    (text, _call_s), _elapsed, why = await screen._bounded(t0, 3.0, make_call)
+    assert why == "" and text == "<h1>Backup</h1>"
+    assert received and max(received) <= 6.05  # the capped, not the ~57 s job, budget
+    assert started["fallback"] < 5.0  # the hedge fits inside the 6 s step
+    await screen.aclose()
+
+
+async def test_secondary_win_then_failure_does_not_restart_primary(tmp_path, monkeypatch):
+    """P2: when the secondary wins then dies, the cancelled primary is not restarted.
+
+    Both routes were already attempted in the hedged race; a third request on
+    the primary is never made. The winner's own error surfaces instead.
+    """
+    monkeypatch.setenv("SCREEN_FALLBACK", "cc")
+    monkeypatch.setenv("SCREEN_LOOK", "0")
+    monkeypatch.setenv("SCREEN_HEDGE_AFTER_S", "0.2")
+    monkeypatch.setenv("OPENCODE_GO_API_KEY", "test-go")
+    monkeypatch.setenv("COMMAND_CODE_API_KEY", "test-cc")
+    created = {"go": 0, "cc": 0}
+
+    def go_stream():
+        created["go"] += 1
+        return StubStream(stall=True)  # never any text; loses the race
+
+    def cc_stream():
+        created["cc"] += 1
+        return StubStream(deltas=["halv "],
+                          fail_after=RuntimeError("connection dropped"))
+
+    stub_openai(monkeypatch, {"muse-": go_stream, "meta/": cc_stream})
+    screen = make_screen(tmp_path, model_call=None)  # the real streaming calls
+    with pytest.raises(RuntimeError, match="connection dropped"):
+        await asyncio.wait_for(screen._call_model("System", "Lesson", kind="write"),
+                               timeout=10)
+    assert created == {"go": 1, "cc": 1}  # no restart of the already tried primary
+    summary = screen.screen_stats_summary()
+    assert summary["screen_calls_total"] == 1 and summary["screen_hedged_calls"] == 1
+    await screen.aclose()
+
+
+async def test_secondary_first_text_includes_hedge_wait(tmp_path, monkeypatch):
+    """P2: every route's first-text time is measured from the call's start.
+
+    The old code timed the backup from its own start, omitting the hedge wait
+    (up to 5 s) from the debug trail and analytics.
+    """
+    monkeypatch.setenv("SCREEN_HEDGE_AFTER_S", "0.3")
+
+    async def slow_primary(system, user, images, look_png):
+        await asyncio.sleep(30)
+        return "<h1>Sent</h1>"
+
+    async def fast_fallback(system, user, images, look_png):
+        return "<h1>Backup</h1>"
+
+    screen = hedging_screen(tmp_path, monkeypatch, model_call=slow_primary,
+                            fallback_call=fast_fallback)
+    text, _ = await screen._call_model("System", "Lesson", kind="look")
+    assert text == "<h1>Backup</h1>"
+    ttft = screen.screen_stats_summary()["screen_calls"]["look"]["median_ttft_s"]
+    assert ttft is not None and ttft >= 0.25  # includes the ~0.3 s hedge wait
+    await screen.aclose()

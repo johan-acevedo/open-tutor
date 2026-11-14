@@ -775,7 +775,12 @@ class _RoutedStream(llm.LLMStream):
                 for chunk in buffered["primary"]:
                     await self._event_ch.send(chunk)
                 if errors:
-                    error = errors.get("primary", errors["secondary"])
+                    # One side failed, the other ended empty: surface the side
+                    # that actually errored. (``errors.get("primary",
+                    # ``errors["secondary"])`` would evaluate the default
+                    # eagerly and raise ``KeyError`` when only the primary
+                    # failed.)
+                    error = errors["primary"] if "primary" in errors else errors["secondary"]
                     owner.note_turn(primary=primary_name, winner=None, hedged=secondary_started,
                                      ttft_s=None, loser="error", error=type(error).__name__)
                     raise error
@@ -788,56 +793,75 @@ class _RoutedStream(llm.LLMStream):
             await self._event_ch.send(deciding)
             self._answered = True
             # Stop the loser, then harvest anything it already produced: its
-            # first-chunk time counts when it arrived before the cancel.
-            await self._stop_side(loser, pumps, streams)
+            # first-chunk time counts when it arrived before the cancel. A
+            # caller cancellation landing here still aborts the turn, after
+            # the loser is closed.
+            if await self._stop_side(loser, pumps, streams):
+                raise asyncio.CancelledError()
             stragglers = self._drain_queue(queue)
-            for stag, sitem in stragglers:
-                if stag != winner and not isinstance(sitem, (_TurnError, _TurnEnd)):
-                    if sitem.has_response() and stag not in first_s:
-                        first_s[stag] = time.perf_counter() - started
             winner_done = False
-            for stag, sitem in stragglers:
-                if stag != winner or isinstance(sitem, (_TurnError, _TurnEnd)):
-                    if stag == winner and isinstance(sitem, _TurnError):
-                        # The winner died between the decision and the cancel.
-                        record_active(
-                            "llm_failed_after_output",
-                            {"route": names[winner], "error": type(sitem.error).__name__,
-                             "message": str(sitem.error)[:300]},
-                        )
-                        raise sitem.error
-                    if stag == winner:
-                        winner_done = True  # its end marker was already drained
-                    continue  # a late loser straggler: never forwarded
-                await self._event_ch.send(sitem)
             hedged = secondary_started
             if loser == "secondary" and not secondary_started:
                 loser_state = "none"  # the secondary never started
             else:
                 loser_state = "error" if loser in errors else "cancelled"
-            owner.note_turn(
-                primary=primary_name, winner=names[winner], hedged=hedged,
-                ttft_s=first_s.get(winner), loser=loser_state,
-                primary_ttft_s=first_s.get("primary") if winner == "secondary" else None,
-            )
-            if winner_done:
-                return
-            # The winner serves the rest of the turn on its own.
-            while True:
-                tag, item = await queue.get()
-                if tag != winner or isinstance(item, (_TurnError, _TurnEnd)):
-                    if isinstance(item, _TurnError):
-                        record_active(
-                            "llm_failed_after_output",
-                            {"route": names[winner], "error": type(item.error).__name__,
-                             "message": str(item.error)[:300]},
-                        )
-                        raise item.error
-                    if tag == winner:
-                        break  # the winner's stream ended
-                    continue  # a late loser straggler: never forwarded
-                await self._event_ch.send(item)
+            # The turn is recorded only once the winner has served it to the
+            # end: a winner that dies mid-answer counts as a failure, never a
+            # win, so a partial-then-failed secondary is never promoted and a
+            # cancelled turn resets the streak instead of keeping it.
+            turn_error: str | None = None
+            try:
+                for stag, sitem in stragglers:
+                    if stag != winner or isinstance(sitem, (_TurnError, _TurnEnd)):
+                        if stag != winner and not isinstance(sitem, (_TurnError, _TurnEnd)):
+                            # A late loser chunk: never forwarded, but its
+                            # first-chunk time counts when it arrived before
+                            # the cancel.
+                            if sitem.has_response() and stag not in first_s:
+                                first_s[stag] = time.perf_counter() - started
+                        if stag == winner and isinstance(sitem, _TurnError):
+                            # The winner died between the decision and the cancel.
+                            record_active(
+                                "llm_failed_after_output",
+                                {"route": names[winner], "error": type(sitem.error).__name__,
+                                 "message": str(sitem.error)[:300]},
+                            )
+                            raise sitem.error
+                        if stag == winner:
+                            winner_done = True  # its end marker was already drained
+                        continue  # a late loser straggler: never forwarded
+                    await self._event_ch.send(sitem)
+                if not winner_done:
+                    # The winner serves the rest of the turn on its own.
+                    while True:
+                        tag, item = await queue.get()
+                        if tag != winner or isinstance(item, (_TurnError, _TurnEnd)):
+                            if isinstance(item, _TurnError):
+                                record_active(
+                                    "llm_failed_after_output",
+                                    {"route": names[winner], "error": type(item.error).__name__,
+                                     "message": str(item.error)[:300]},
+                                )
+                                raise item.error
+                            if tag == winner:
+                                break  # the winner's stream ended
+                            continue  # a late loser straggler: never forwarded
+                        await self._event_ch.send(item)
+            except asyncio.CancelledError:
+                turn_error = "CancelledError"
+                raise
+            except BaseException as error:  # noqa: BLE001 - recorded below, then raised
+                turn_error = type(error).__name__
+                raise
+            finally:
+                owner.note_turn(
+                    primary=primary_name, winner=names[winner], hedged=hedged,
+                    ttft_s=first_s.get(winner), loser=loser_state,
+                    primary_ttft_s=first_s.get("primary") if winner == "secondary" else None,
+                    error=turn_error,
+                )
         except asyncio.CancelledError:
+            owner._hedge_streak = 0  # an unserved race promotes nothing
             raise
         finally:
             await self._stop_all(pumps, streams)
@@ -868,37 +892,80 @@ class _RoutedStream(llm.LLMStream):
                 return items
 
     @staticmethod
+    async def _shielded_close(awaitable) -> bool:
+        """Await ``awaitable`` to completion, swallowing its own outcome.
+
+        A caller cancellation landing mid-close does not abort the close: the
+        shield keeps it alive and the wait continues. Returns True when such a
+        cancellation was observed, so the caller re-raises it after everything
+        it owns is closed (distinguished from the awaited side's own outcome
+        via the task's cancel count).
+        """
+        current = asyncio.current_task()
+        before = current.cancelling() if current is not None else 0
+        inner = asyncio.ensure_future(awaitable)
+        try:
+            while not inner.done():
+                try:
+                    await asyncio.shield(inner)
+                except asyncio.CancelledError:
+                    if current is None or current.cancelling() <= before:
+                        break  # the awaited side itself ended cancelled
+                    continue  # our caller wants out; the close still finishes
+                except Exception:
+                    break  # the awaited side failed; its outcome is swallowed
+            if not inner.cancelled():
+                inner.exception()  # retrieve, so it is never reported as lost
+        except (asyncio.CancelledError, Exception):
+            pass
+        after = current.cancelling() if current is not None else 0
+        return after > before
+
+    @staticmethod
     async def _stop_side(
         side: str,
         pumps: dict[str, asyncio.Task[None]],
         streams: dict[str, llm.LLMStream],
-    ) -> None:
-        """Cancel a discarded side's pump, then close its stream. No thread or
-        task is left running: the pump is awaited after the cancel."""
-        pump = pumps.pop(side, None)
+    ) -> bool:
+        """Cancel a discarded side's pump, then close its stream.
+
+        Ownership stays in the dicts until the cleanup has finished, and the
+        cleanup runs to completion even when the caller is cancelled (see
+        ``_shielded_close``). Returns True when a caller cancellation was
+        observed, so the caller re-raises it after the close.
+        """
+        cancelled = False
+        pump = pumps.get(side)
         if pump is not None and not pump.done():
             pump.cancel()
-            try:
-                await pump
-            except (asyncio.CancelledError, Exception):
-                pass
-        stream = streams.pop(side, None)
+            if await _RoutedStream._shielded_close(pump):
+                cancelled = True
+        stream = streams.get(side)
         if stream is not None:
-            try:
-                await stream.aclose()
-            except (Exception, asyncio.CancelledError):
-                pass
+            if await _RoutedStream._shielded_close(stream.aclose()):
+                cancelled = True
+        pumps.pop(side, None)
+        streams.pop(side, None)
+        return cancelled
 
+    @staticmethod
     async def _stop_all(
-        self,
         pumps: dict[str, asyncio.Task[None]],
         streams: dict[str, llm.LLMStream],
     ) -> None:
+        """Close every side, even when the caller is being cancelled.
+
+        Each side's cleanup runs to completion (see ``_stop_side``); a
+        cancellation observed along the way is re-raised only after every
+        side is closed, so no provider task is left running after the wrapper
+        closes and the caller's cancellation still propagates.
+        """
+        cancelled = False
         for side in list(pumps):
-            await self._stop_side(side, pumps, streams)
+            if await _RoutedStream._stop_side(side, pumps, streams):
+                cancelled = True
         for side in list(streams):
-            stream = streams.pop(side)
-            try:
-                await stream.aclose()
-            except (Exception, asyncio.CancelledError):
-                pass
+            if await _RoutedStream._stop_side(side, pumps, streams):
+                cancelled = True
+        if cancelled:
+            raise asyncio.CancelledError()

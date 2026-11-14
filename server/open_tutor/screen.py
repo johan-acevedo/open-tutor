@@ -560,14 +560,18 @@ class Screen:
 
     async def _run_route(self, call: ModelCall, system: str, user: str,
                          images: list[str], look_png: bytes | None,
-                         first: asyncio.Event, holder: dict[str, float]) -> tuple[str, float]:
+                         first: asyncio.Event, holder: dict[str, float],
+                         base: float | None = None) -> tuple[str, float]:
         """Run one side of a (possibly hedged) call; signal its first text.
 
         Returns ``(full text, total seconds)``. A streaming call fires ``first``
         from its first output text; a plain seam call fires it on completion.
+        ``base`` is the perf-counter baseline the first-text time is measured
+        from; a hedged call passes its own start so every route's timing is on
+        the original call's clock instead of omitting the hedge wait.
         """
         t0 = time.monotonic()
-        base = time.perf_counter()
+        base = time.perf_counter() if base is None else base
         fired = False
 
         def on_first_text() -> None:
@@ -701,9 +705,13 @@ class Screen:
             return text, time.monotonic() - t0
 
     def _track_first(self, event: asyncio.Event,
-                     holder: dict[str, float]) -> Callable[[], None]:
-        """An ``on_first_text`` sink backed by an event and a timing holder."""
-        base = time.perf_counter()
+                     holder: dict[str, float],
+                     base: float | None = None) -> Callable[[], None]:
+        """An ``on_first_text`` sink backed by an event and a timing holder.
+
+        ``base`` is the perf-counter baseline the timing is measured from; a
+        hedged call passes its own start so the backup's wait is included."""
+        base = time.perf_counter() if base is None else base
         fired = False
 
         def on_first_text() -> None:
@@ -724,21 +732,29 @@ class Screen:
         The secondary starts when the primary produced no text within the hedge
         deadline; the winner serves the whole call and the loser is cancelled
         and its stream closed. One attempt per side: the hedge is the retry, so
-        attempts never exceed today's worst case. A winner that dies mid-answer
-        gets one failover-like attempt on the other side."""
+        attempts never exceed today's worst case, and an already attempted
+        route is never requested again within one call. A winner that dies
+        mid-answer gets one failover-like attempt on the other side, but only
+        when that side was never attempted. Every attempt runs under the
+        call's original absolute deadline, and a caller cancellation always
+        propagates instead of starting a backup that would outlive it."""
         images = self._homework_images()
         primary_provider = _spec_provider(self.model_spec())
         fallback_provider = _spec_provider(fallback)
         limit = self._fallback_budget()
         if budget_s is not None:
             limit = min(limit, budget_s)
+        # One clock for every route's first-text time: the backup's timing
+        # includes the hedge wait instead of starting at zero on its own start.
+        call_base = time.perf_counter()
         if limit < FALLBACK_MIN_S:
             # Too little time left for a backup call to deliver: serve alone.
             first: asyncio.Event = asyncio.Event()
             holder: dict[str, float] = {}
             try:
                 text, _elapsed = await self._run_route(
-                    self._model_call, system, user, images, look_png, first, holder)
+                    self._model_call, system, user, images, look_png, first, holder,
+                    base=call_base)
             except Exception as error:
                 self._note_call(kind, primary_provider, hedged=False,
                                 ttft_s=None, loser="none", error=type(error).__name__)
@@ -750,13 +766,16 @@ class Screen:
         # Both attempts must fit inside the step: the hedge fires at the deadline
         # or halfway through what is left, whichever comes first.
         hedge_deadline = min(hedge_after, limit / 2)
+        # The absolute monotonic deadline for every attempt in this call.
+        deadline = t0 + limit
         p_first: asyncio.Event = asyncio.Event()
         p_holder: dict[str, float] = {}
         s_first: asyncio.Event = asyncio.Event()
         s_holder: dict[str, float] = {}
+        attempted = {"primary"}
         p_task = asyncio.create_task(
             self._run_route(self._model_call, system, user, images, look_png,
-                            p_first, p_holder),
+                            p_first, p_holder, base=call_base),
             name=f"screen-hedge-primary-{kind}")
         s_task: asyncio.Task[tuple[str, float]] | None = None
         errors: dict[str, BaseException] = {}
@@ -774,18 +793,29 @@ class Screen:
                 if p_task.done():
                     try:
                         p_task.result()
+                    except (asyncio.CancelledError, KeyboardInterrupt, SystemExit):
+                        raise
                     except BaseException as error:
                         # The primary is already dead; the backup serves alone.
                         errors["primary"] = error
                         primary_error_class = type(error).__name__
             if winner is None:
                 s_task = self._start_screen_secondary(
-                    fallback, system, user, images, look_png, kind, s_first, s_holder)
+                    fallback, system, user, images, look_png, kind, s_first, s_holder,
+                    base=call_base)
+                attempted.add("secondary")
                 winner = await self._race_screen_first(
                     p_task, s_task, p_first, s_first, p_holder, s_holder, errors)
                 if winner is None:
                     # Both sides failed before any text: today's error path.
-                    error = errors.get("primary", errors.get("secondary"))
+                    # The primary's error surfaces when both failed, else the
+                    # one side that actually errored (no eager ``.get``
+                    # default: it would raise ``KeyError`` when only the
+                    # secondary failed).
+                    if "primary" in errors:
+                        error = errors["primary"]
+                    else:
+                        error = errors["secondary"]
                     assert error is not None
                     if "primary" in errors:
                         primary_error_class = type(errors["primary"]).__name__
@@ -808,13 +838,28 @@ class Screen:
             winner_task = p_task if winner == "primary" else s_task
             assert winner_task is not None
             try:
-                winner_text, _winner_elapsed = await winner_task
+                # Bounded by the call's original absolute deadline: a winner
+                # that never finishes must not outlive the caller's timeout.
+                winner_text, _winner_elapsed = await asyncio.wait_for(
+                    winner_task, timeout=max(0.0, deadline - time.monotonic()))
+            except (asyncio.CancelledError, KeyboardInterrupt, SystemExit):
+                # The caller went away: propagate at once instead of starting
+                # a backup that would outlive the caller's timeout.
+                raise
             except BaseException as winner_error:
                 # The winner died mid-answer: one failover-like attempt on the
-                # other side, unless it already failed.
+                # other side, unless that side was already attempted in this
+                # call (a hedged race tried both; restarting the cancelled
+                # loser would be a second request on one route).
                 if winner == "primary":
                     primary_error_class = type(winner_error).__name__
-                if loser in errors:
+                if loser in errors or loser in attempted:
+                    self._note_call(kind, None, hedged=True, ttft_s=None,
+                                    loser="error", error=type(winner_error).__name__)
+                    raise winner_error
+                remaining = deadline - time.monotonic()
+                if remaining < FALLBACK_MIN_S:
+                    # No time left for a backup call to deliver.
                     self._note_call(kind, None, hedged=True, ttft_s=None,
                                     loser="error", error=type(winner_error).__name__)
                     raise winner_error
@@ -822,18 +867,20 @@ class Screen:
                 # may already be set by the cancelled attempt.
                 other_first, other_holder = asyncio.Event(), {}
                 if loser == "secondary":
-                    if self._fallback_budget() < FALLBACK_MIN_S:
-                        raise winner_error
                     other_task: asyncio.Task[tuple[str, float]] = self._start_screen_secondary(
                         fallback, system, user, images, look_png, kind,
-                        other_first, other_holder)
+                        other_first, other_holder, base=call_base)
                 else:
                     other_task = asyncio.create_task(
                         self._run_route(self._model_call, system, user, images,
-                                       look_png, other_first, other_holder),
+                                       look_png, other_first, other_holder,
+                                       base=call_base),
                         name=f"screen-hedge-restart-{kind}")
                 try:
-                    winner_text, _winner_elapsed = await other_task
+                    winner_text, _winner_elapsed = await asyncio.wait_for(
+                        other_task, timeout=remaining)
+                except (asyncio.CancelledError, KeyboardInterrupt, SystemExit):
+                    raise
                 except BaseException as other_error:
                     self._note_call(kind, None, hedged=True, ttft_s=None,
                                     loser="error", error=type(winner_error).__name__)
@@ -875,17 +922,21 @@ class Screen:
 
     def _start_screen_secondary(self, fallback: dict[str, str], system: str, user: str,
                                 images: list[str], look_png: bytes | None, kind: str,
-                                first: asyncio.Event, holder: dict[str, float]
+                                first: asyncio.Event, holder: dict[str, float],
+                                base: float | None = None,
                                 ) -> "asyncio.Task[tuple[str, float]]":
-        """Start the identical call on the backup provider."""
+        """Start the identical call on the backup provider.
+
+        ``base`` is the call's first-text clock (see ``_call_model_hedged``).
+        """
         if self._fallback_call is not None:
             call = self._run_route(self._fallback_call, system, user, images,
-                                   look_png, first, holder)
+                                   look_png, first, holder, base=base)
         else:
             async def _real() -> tuple[str, float]:
                 text, _first_s = await self._stream_spec(
                     fallback, system, user, images, look_png,
-                    self._track_first(first, holder))
+                    self._track_first(first, holder, base=base))
                 return text, 0.0
             call = _real()
         return asyncio.create_task(call, name=f"screen-hedge-secondary-{kind}")
@@ -1263,17 +1314,17 @@ class Screen:
         """Run one optional model step inside the job budget; it never raises.
         Returns (result, seconds, why-not), with why-not empty on success.
 
-        ``make_call`` receives the step's own remaining seconds so a hedged
-        step fits both attempts inside its deadline instead of being cut by the
-        outer timeout before the backup can start."""
+        ``make_call`` receives the same capped budget the outer timeout
+        enforces, so a hedged step plans both attempts inside a deadline it
+        can actually meet instead of being cut before the backup can start."""
         started = time.monotonic()
         try:
             remaining = self._time_left(t0) - reserve_s
             if target_s is not None:
                 remaining = min(remaining, target_s - (started - t0) - reserve_s)
-            budget = max(0.0, remaining)
+            budget = max(0.0, min(OPTIONAL_STEP_LIMIT_S, remaining))
             result = await asyncio.wait_for(make_call(budget),
-                                            timeout=max(0.001, min(OPTIONAL_STEP_LIMIT_S, remaining)))
+                                            timeout=max(0.001, budget))
         except asyncio.TimeoutError:
             return None, time.monotonic() - started, "timed out"
         except Exception as error:  # noqa: BLE001 - the page still ships

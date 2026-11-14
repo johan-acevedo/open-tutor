@@ -1625,6 +1625,15 @@ async def entrypoint(ctx: JobContext) -> None:
             # Off the event loop with a short timeout: a slow analytics
             # backend must not delay the session teardown.
             await analytics.aclose()
+            # The shared loop-owned transports (tutor routes, screen calls)
+            # die with this job's loop: close them now so a later loop never
+            # reuses a transport bound to a closed one.
+            try:
+                from .http_clients import aclose_shared_clients
+
+                await aclose_shared_clients()
+            except Exception:  # noqa: BLE001 - shutdown hygiene, never fatal
+                log.debug("closing shared HTTP clients failed", exc_info=True)
         clear_active()
 
 
