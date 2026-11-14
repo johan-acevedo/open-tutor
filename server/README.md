@@ -89,6 +89,7 @@ The worker logs the route at the start of each session (`tutor TTS route elevenl
 | `TUTOR_LLM_PREFER_WITHIN_S` | Default `1.5`. The preferred route keeps the session if its warm-up answered within this many seconds, or if it was the faster of the two |
 | `TUTOR_LLM_TIMEOUT_S` | Default `5`. Timeout per LLM attempt (the framework default is 10 s), with one retry on the same route; then the failover or the spoken apology |
 | `TUTOR_LLM_HEDGE_AFTER_S` | Default `2.5`. Seconds a tutor turn runs on the primary route alone before the identical request also starts on the other route; the first stream to yield a chunk wins. `0` or empty disables hedging (today's single-route turns). Only between routes that both ignore thought signatures (never with `gemini`) |
+| `TUTOR_LLM_RACE` | Off by default. `1`/`true`: both routes start every hedged turn at once (hedge delay `0`) and the first chunk wins, so every turn gets min-of-two latency. Needs a hedge target: with `TUTOR_LLM_HEDGE_AFTER_S=0`/empty there is nothing to race and turns stay single-route. `llm_turn` gains `race: true` plus the loser's first-chunk time when it arrived before the cancel |
 | `TUTOR_LLM_FALLBACK_BASE_URL` | Override only the fallback route's endpoint (for example a second provider in a test). `TUTOR_LLM_BASE_URL` keeps overriding the preferred route |
 | `OPENCODE_GO_API_KEY` | OpenCode Go API key (from the OpenCode console). Backend only |
 | `COMMAND_CODE_API_KEY` | Command Code API key (same Muse Spark model on another provider). Backend only |
@@ -113,6 +114,7 @@ The worker logs the route at the start of each session (`tutor TTS route elevenl
 | `TUTOR_FILLER_CLIPS_DIR` | Parent directory for the cached clips (default `~/.cache/open-tutor/fillers`) |
 | `SCREEN_FALLBACK` | Optional Smart Screen backup (`cc` = the same Muse model family on Command Code). Empty (default): one provider per model call, today's behaviour. Set: a first-text hedge (below) races the backup against a slow primary within the job budget; without the backup key the fallback is disabled with one warning and the primary serves alone. See [the screen and its backup](../docs/smart-screen.md#command-code-backup-tutor-route-cc-and-screen-failover-2026-11-14) |
 | `SCREEN_HEDGE_AFTER_S` | Default `5`. Seconds a screen model call (page, look, retry) runs on the primary alone before the same call also starts on `SCREEN_FALLBACK`; first output text wins, the loser is cancelled and its stream closed. Empty keeps the older flat-timeout failover (`SCREEN_PRIMARY_TIMEOUT_S`); the hedge never starts with under 2 s left in the job or step |
+| `SCREEN_RACE` | Off by default. `1`/`true`: with `SCREEN_FALLBACK` set, both providers start every model call at once and the first *completed* call wins (not first text), so a provider that stalls mid-page loses to the one that finishes. One side erroring waits for the other within the call's deadline; both failing raises as today. `screen_hedge` and the per-call notes gain `race: true`, the winner's total time and the loser's time/error when known |
 | `SCREEN_PRIMARY_TIMEOUT_S` | Default `10`. Only for the flat-timeout failover above: client timeout per screen model call before the fallback is tried, fitted inside the calling step's own budget |
 
 ### Password-free Sweden testing
@@ -383,7 +385,9 @@ one route, with hedging off, or with a signature-checking route, turns behave ex
 before. A secondary route that wins twice running becomes the primary for following
 turns (`llm_sticky_switch` in the log), symmetrically back again. Every turn records an
 `llm_turn` event (primary, winner, winner ttft, hedged, loser state) and feeds the
-`tutor_session_ended` analytics.
+`tutor_session_ended` analytics. With `TUTOR_LLM_RACE=1`, both routes start every
+hedged turn at once (hedge delay `0`); first chunk still wins and the loser is still
+cancelled, so a slow primary never costs a turn its head start.
 
 **Warm connections.** The OpenAI SDK's default keep-alive expiry (5 s) meant most turns
 paid a fresh TLS handshake. The tutor and screen clients share one httpx transport per

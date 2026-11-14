@@ -556,3 +556,286 @@ async def test_caller_cancel_during_loser_teardown_propagates(tmp_path, monkeypa
     # nothing as a win.
     assert screen.screen_stats_summary()["screen_calls_total"] == 0
     await screen.aclose()
+
+
+# ---- race mode: both providers start at once, first completion wins ------------
+
+
+async def test_race_starts_both_and_first_completion_wins(tmp_path, monkeypatch,
+                                                          screen_events):
+    import time as _time
+
+    t0 = _time.monotonic()
+    started: dict[str, float] = {}
+    cancelled = []
+
+    async def slow_primary(system, user, images, look_png):
+        started["primary"] = _time.monotonic() - t0
+        try:
+            await asyncio.sleep(30)
+            return "<h1>Sent</h1>"
+        except asyncio.CancelledError:
+            cancelled.append("primary")
+            raise
+
+    async def fast_fallback(system, user, images, look_png):
+        started["fallback"] = _time.monotonic() - t0
+        return "<h1>Backup</h1>"
+
+    monkeypatch.setenv("SCREEN_HEDGE_AFTER_S", "30")  # the race must not wait for this
+    monkeypatch.setenv("SCREEN_RACE", "1")
+    screen = hedging_screen(tmp_path, monkeypatch, model_call=slow_primary,
+                            fallback_call=fast_fallback)
+    delivered = {}
+    screen.on_page = lambda p: delivered.setdefault("page", p)
+    wall = _time.monotonic()
+    screen.ask("En sida om bråk")
+    await screen.wait_idle()
+    wall = _time.monotonic() - wall
+
+    assert delivered["page"].body == "<h1>Backup</h1>"
+    assert started["fallback"] < 5  # started at once, not after the 30 s hedge wait
+    assert wall < 10
+    assert cancelled == ["primary"]  # the loser was cancelled, nothing left running
+    meta = job_meta(tmp_path)
+    assert meta["provider"] == "cc" and meta["failover"] is True
+    assert meta["hedged"] is True and meta["race"] is True
+    hedges = [data for event, data in screen_events if event == "screen_hedge"]
+    assert len(hedges) == 1
+    assert hedges[0]["winner"] == "cc" and hedges[0]["race"] is True
+    assert hedges[0]["loser"] == "cancelled"
+    assert hedges[0]["total_s"] is not None and hedges[0]["total_s"] < 5
+    assert "loser_error" not in hedges[0]
+    summary = screen.screen_stats_summary()
+    assert summary["screen_race_calls"] == 1 and summary["screen_hedged_calls"] == 1
+    assert summary["screen_provider_wins"] == {"cc": 1}
+    await screen.aclose()
+
+
+async def test_race_first_text_does_not_win(tmp_path, monkeypatch):
+    """A side that texts early but stalls mid-answer loses to the finisher.
+
+    The first-text hedge would serve the trickling primary and hang; the race
+    serves the backup that actually completes.
+    """
+    async def trickle_primary(system, user, images, look_png, on_first_text=None):
+        if on_first_text is not None:
+            on_first_text()  # first text at once...
+        await asyncio.sleep(30)  # ...then nothing ever again
+        return "<h1>Sent</h1>"
+
+    async def steady_fallback(system, user, images, look_png, on_first_text=None):
+        await asyncio.sleep(0.2)
+        if on_first_text is not None:
+            on_first_text()
+        return "<h1>Backup</h1>"
+
+    monkeypatch.setenv("SCREEN_RACE", "1")
+    screen = hedging_screen(tmp_path, monkeypatch, model_call=trickle_primary,
+                            fallback_call=steady_fallback)
+    text, _ = await screen._call_model("System", "Lesson", kind="look")
+
+    assert text == "<h1>Backup</h1>"
+    (call,) = screen._call_stats
+    assert call["provider"] == "cc" and call["race"] is True
+    assert call["loser"] == "cancelled" and call["winner_total_s"] is not None
+    summary = screen.screen_stats_summary()
+    assert summary["screen_provider_wins"] == {"cc": 1}
+    assert summary["screen_race_calls"] == 1
+    await screen.aclose()
+
+
+async def test_race_one_side_errors_the_other_wins(tmp_path, monkeypatch,
+                                                   screen_events):
+    started = []
+
+    async def dead_primary(system, user, images, look_png):
+        started.append("primary")
+        raise RuntimeError("primary down")
+
+    async def slowish_fallback(system, user, images, look_png):
+        started.append("fallback")
+        await asyncio.sleep(0.3)
+        return "<h1>Backup</h1>"
+
+    monkeypatch.setenv("SCREEN_RACE", "1")
+    screen = hedging_screen(tmp_path, monkeypatch, model_call=dead_primary,
+                            fallback_call=slowish_fallback)
+    text, _ = await screen._call_model("System", "Lesson", kind="write")
+
+    assert text == "<h1>Backup</h1>"
+    assert sorted(started) == ["fallback", "primary"]  # both started at once
+    (call,) = screen._call_stats
+    assert call["provider"] == "cc" and call["race"] is True
+    assert call["loser"] == "error" and call["loser_error"] == "RuntimeError"
+    assert call["winner_total_s"] is not None and call["winner_total_s"] >= 0.25
+    failovers = [data for event, data in screen_events if event == "screen_failover"]
+    assert len(failovers) == 1 and failovers[0]["error"] == "RuntimeError"
+    await screen.aclose()
+
+
+async def test_race_both_fail_raises_primary_error(tmp_path, monkeypatch):
+    monkeypatch.setenv("SCREEN_RACE", "1")
+    screen = hedging_screen(
+        tmp_path, monkeypatch,
+        model_call=AsyncMock(side_effect=RuntimeError("primary down")),
+        fallback_call=AsyncMock(side_effect=RuntimeError("secondary down")))
+    with pytest.raises(RuntimeError, match="primary down"):
+        await screen._call_model("System", "Lesson", kind="write")
+    (call,) = screen._call_stats
+    assert call["loser"] == "error" and call["error"] == "RuntimeError"
+    assert call["race"] is True
+    summary = screen.screen_stats_summary()
+    assert summary["screen_calls_total"] == 1 and summary["screen_race_calls"] == 1
+    await screen.aclose()
+
+
+async def test_race_tie_prefers_primary_and_records_loser_total(tmp_path, monkeypatch):
+    monkeypatch.setenv("SCREEN_RACE", "1")
+    screen = hedging_screen(
+        tmp_path, monkeypatch,
+        model_call=AsyncMock(return_value="<h1>Först</h1>"),
+        fallback_call=AsyncMock(return_value="<h1>Backup</h1>"))
+    text, _ = await screen._call_model("System", "Lesson", kind="write")
+
+    assert text == "<h1>Först</h1>"
+    (call,) = screen._call_stats
+    assert call["provider"] == "go" and call["race"] is True
+    assert call["loser"] == "completed" and call["loser_total_s"] is not None
+    assert call["winner_total_s"] is not None
+    await screen.aclose()
+
+
+async def test_race_trickling_loser_is_closed(tmp_path, monkeypatch):
+    """The real streaming path: with a 30 s hedge wait the backup could only win
+    by racing, and the trickling primary's stream is closed at once."""
+    monkeypatch.setenv("SCREEN_FALLBACK", "cc")
+    monkeypatch.setenv("SCREEN_LOOK", "0")
+    monkeypatch.setenv("SCREEN_HEDGE_AFTER_S", "30")
+    monkeypatch.setenv("SCREEN_RACE", "1")
+    monkeypatch.setenv("OPENCODE_GO_API_KEY", "test-go")
+    monkeypatch.setenv("COMMAND_CODE_API_KEY", "test-cc")
+    created = stub_openai(monkeypatch, {
+        "muse-": lambda: StubStream(stall=True),
+        "meta/": lambda: StubStream(deltas=["<h1>Backup</h1>"]),
+    })
+    import time as _time
+
+    threads_before = threading.enumerate()
+    tasks_before = {t.get_name() for t in asyncio.all_tasks()}
+    screen = make_screen(tmp_path, model_call=None)  # the real streaming calls
+    delivered = {}
+    screen.on_page = lambda p: delivered.setdefault("page", p)
+    wall = _time.monotonic()
+    screen.ask("En sida om bråk")
+    await screen.wait_idle()
+    wall = _time.monotonic() - wall
+
+    assert delivered["page"].body == "<h1>Backup</h1>"
+    assert wall < 10  # not the 30 s hedge wait
+    primary = [s for s in created if isinstance(s, StubStream)][0]
+    assert primary.closed  # the cancelled stream was closed, its task ended
+    lingering = [t.get_name() for t in asyncio.all_tasks()
+                 if t.get_name().startswith("screen-race-")]
+    assert lingering == []
+    assert {t.get_name() for t in asyncio.all_tasks()} == tasks_before
+    assert len(threading.enumerate()) == len(threads_before)
+    await screen.aclose()
+
+
+async def test_race_deadline_bounds_two_hung_providers(tmp_path, monkeypatch):
+    import time as _time
+
+    async def hung_primary(system, user, images, look_png):
+        await asyncio.sleep(30)
+        return "<h1>Sent</h1>"
+
+    async def hung_fallback(system, user, images, look_png):
+        await asyncio.sleep(30)
+        return "<h1>Backup</h1>"
+
+    monkeypatch.setenv("SCREEN_RACE", "1")
+    screen = hedging_screen(tmp_path, monkeypatch, model_call=hung_primary,
+                            fallback_call=hung_fallback)
+    started = _time.monotonic()
+    with pytest.raises(TimeoutError):
+        await screen._call_model("System", "Lesson", kind="look", budget_s=2.5)
+    assert _time.monotonic() - started < 5  # the absolute deadline, not the 30 s sleeps
+    (call,) = screen._call_stats
+    assert call["error"] == "TimeoutError" and call["race"] is True
+    summary = screen.screen_stats_summary()
+    assert summary["screen_calls_total"] == 1 and summary["screen_race_calls"] == 1
+    await screen.aclose()
+
+
+async def test_race_caller_cancel_propagates_without_a_note(tmp_path, monkeypatch):
+    async def hanging_primary(system, user, images, look_png, on_first_text=None):
+        await asyncio.sleep(30)
+        return "<h1>Late</h1>"
+
+    async def hanging_fallback(system, user, images, look_png):
+        await asyncio.sleep(30)
+        return "<h1>Backup</h1>"
+
+    monkeypatch.setenv("SCREEN_RACE", "1")
+    screen = hedging_screen(tmp_path, monkeypatch, model_call=hanging_primary,
+                            fallback_call=hanging_fallback)
+    task = asyncio.create_task(screen._call_model("System", "Lesson", kind="look"))
+    await asyncio.sleep(0.2)  # both sides started
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    # The caller went away: no winner was served and nothing was recorded.
+    assert screen.screen_stats_summary()["screen_calls_total"] == 0
+    lingering = [t.get_name() for t in asyncio.all_tasks()
+                 if t.get_name().startswith(("screen-race-", "screen-hedge-"))]
+    assert lingering == []
+    await screen.aclose()
+
+
+async def test_race_off_keeps_todays_shape(tmp_path, monkeypatch):
+    monkeypatch.delenv("SCREEN_RACE", raising=False)
+    screen = hedging_screen(
+        tmp_path, monkeypatch,
+        model_call=AsyncMock(return_value="<h1>Först</h1>"),
+        fallback_call=AsyncMock(return_value="<h1>Backup</h1>"))
+    text, _ = await screen._call_model("System", "Lesson", kind="write")
+
+    assert text == "<h1>Först</h1>"
+    (call,) = screen._call_stats
+    assert call["hedged"] is False and "race" not in call
+    assert "winner_total_s" not in call
+    summary = screen.screen_stats_summary()
+    assert summary["screen_race_calls"] == 0
+    await screen.aclose()
+
+
+async def test_race_empty_answer_does_not_win(tmp_path, monkeypatch):
+    """A fast empty answer is not a page: the slower real page wins."""
+    async def slow_fallback(system, user, images, look_png):
+        await asyncio.sleep(0.2)
+        return "<h1>Backup</h1>"
+
+    monkeypatch.setenv("SCREEN_RACE", "1")
+    screen = hedging_screen(tmp_path, monkeypatch,
+                            model_call=AsyncMock(return_value="   "),
+                            fallback_call=slow_fallback)
+    text, _ = await screen._call_model("System", "Lesson", kind="write")
+    assert text == "<h1>Backup</h1>"
+    (call,) = screen._call_stats
+    assert call["provider"] == "cc" and call["loser"] == "error"
+    await screen.aclose()
+
+
+async def test_race_both_providers_time_out_is_recorded_once(tmp_path, monkeypatch):
+    """A provider's own TimeoutError after both fail is one failed call, not two."""
+    monkeypatch.setenv("SCREEN_RACE", "1")
+    screen = hedging_screen(
+        tmp_path, monkeypatch,
+        model_call=AsyncMock(side_effect=TimeoutError("primary read timeout")),
+        fallback_call=AsyncMock(side_effect=RuntimeError("secondary down")))
+    with pytest.raises(TimeoutError):
+        await screen._call_model("System", "Lesson", kind="write")
+    summary = screen.screen_stats_summary()
+    assert summary["screen_calls_total"] == 1 and summary["screen_race_calls"] == 1
+    await screen.aclose()
