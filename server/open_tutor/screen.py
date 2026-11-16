@@ -192,6 +192,9 @@ class PageResult:
     total_s: float = 0.0
     directory: Path | None = None
     residual_issues: list[str] = field(default_factory=list)
+    # How the page reaches the child: "show" (on screen by itself as soon
+    # as it is ready) or "hold" (invisible until the tutor calls show_page).
+    reveal: str = "show"
 
 
 @dataclass
@@ -404,8 +407,14 @@ class Screen:
         self.on_failure: Callable[[str], Any] | None = None
         self._job_counter = 0
         self._page_counter = 0
-        self._pending: tuple[str, str] | None = None
+        self._pending: tuple[str, str, str] | None = None
         self._runner: asyncio.Task | None = None
+        # Progress the `screen_status` tool reports: the current phase plus
+        # when it started, the job it belongs to, and the last finished job.
+        self._phase = "idle"
+        self._phase_t0 = time.monotonic()
+        self._current_job: str | None = None
+        self._last_done: dict[str, Any] | None = None
         self._pw = None
         self._browser = None
         self._system: str | None = None  # static prefix, computed once so every
@@ -438,18 +447,86 @@ class Screen:
             self.visible_id = page_id
             self.visible_patches = []
 
+    # ---- progress --------------------------------------------------------
+
+    def _set_phase(self, phase: str) -> None:
+        """Move the job progress marker (read by ``status``/``status_line``)."""
+        self._phase = phase
+        self._phase_t0 = time.monotonic()
+
+    def status(self) -> dict[str, Any]:
+        """The current job's progress as plain data (for logs and tools)."""
+        return {
+            "job": self._current_job,
+            "phase": self._phase,
+            "elapsed_s": round(time.monotonic() - self._phase_t0, 1),
+            "queued": self._pending is not None,
+            "visible": self.visible_id,
+            "last": dict(self._last_done) if self._last_done else None,
+        }
+
+    def status_line(self, job_id: str | None = None) -> str:
+        """One line on what the screen is doing, for the tutor's voice.
+
+        Cheap on purpose: the fox calls it when the wait grows long or the
+        child asks, then tells the child in one short Swedish sentence and
+        keeps teaching. Never prompts, streams or image bytes -- only which
+        step the job is in and how long it has been there."""
+        if job_id is not None and job_id != self._current_job:
+            known = self._current_job or "none"
+            return (f"Unknown screen job '{job_id}' (current job: {known}). "
+                    "Keep teaching in words.")
+        if self._current_job is None:
+            if self._last_done is None:
+                return "The screen is idle: no page has been requested yet."
+            last = self._last_done
+            if last.get("state") == "failed":
+                return (f"Screen job {last.get('job')} failed "
+                        f"({last.get('reason', 'unknown reason')}). "
+                        "Explain in words instead.")
+            total = last.get("total_s", 0.0)
+            where = ("on screen now" if last.get("page") == self.visible_id
+                     else "waiting for show_page")
+            return (f"Screen job {last.get('job')} finished {last.get('kind')} "
+                    f"{last.get('page')} in {total:.1f} s ({where}).")
+        elapsed = time.monotonic() - self._phase_t0
+        step = {
+            "queued": "waiting behind the running job",
+            "writing": "writing the page",
+            "images": "finding and checking pictures",
+            "rendering": "rendering the page",
+            "review": "checking its own render",
+        }.get(self._phase, self._phase)
+        return (f"Screen job {self._current_job} ({elapsed:.0f} s in): {step}. "
+                "Keep teaching in words; it arrives on its own.")
+
     # ---- jobs ------------------------------------------------------------
 
-    def ask(self, text: str) -> str:
+    def ask(self, text: str, reveal: str = "auto") -> str:
         """Queue one screen job; returns the job id at once. Latest wins: an
-        ask waiting behind a running job is replaced by a newer one."""
+        ask waiting behind a running job is replaced by a newer one.
+
+        ``reveal`` decides how a finished page reaches the child: ``"show"``
+        (on screen by itself as soon as it is ready; the default) or
+        ``"hold"`` (stays invisible until the tutor calls ``show_page`` --
+        for pages that must not give away an answer before the child tries).
+        ``"auto"`` is ``"show"``. A change to the visible page always
+        applies at once, whatever the mode."""
         from .debug_log import record_active
 
+        mode = (reveal or "auto").strip().lower()
+        if mode == "auto":
+            mode = "show"
+        if mode not in ("show", "hold"):
+            raise ValueError(f"reveal must be 'auto', 'show' or 'hold', not {reveal!r}")
         self._job_counter += 1
         job_id = f"s{self._job_counter}"
-        record_active("screen_ask", {"job": job_id, "ask": (text or "")[:300]})
-        self._pending = (job_id, (text or "").strip())
-        if self._runner is None or self._runner.done():
+        record_active("screen_ask", {"job": job_id, "ask": (text or "")[:300],
+                                      "reveal": mode})
+        self._pending = (job_id, (text or "").strip(), mode)
+        if self._runner is not None and not self._runner.done():
+            self._set_phase("queued")
+        else:
             self._runner = asyncio.create_task(self._pump())
         return job_id
 
@@ -484,10 +561,10 @@ class Screen:
 
     async def _pump(self) -> None:
         while self._pending is not None:
-            job_id, text = self._pending
+            job_id, text, reveal = self._pending
             self._pending = None
             try:
-                await asyncio.wait_for(self._run_job(job_id, text), timeout=self.timeout)
+                await asyncio.wait_for(self._run_job(job_id, text, reveal), timeout=self.timeout)
             except asyncio.TimeoutError:
                 log.warning("screen job %s timed out", job_id)
                 await self._fail(job_id, "The screen took too long. Explain in words instead, briefly.")
@@ -499,6 +576,10 @@ class Screen:
         from .debug_log import record_active
 
         record_active("screen_failed", {"job": job_id, "message": message[:200]})
+        self._current_job = None
+        self._set_phase("failed")
+        self._last_done = {"job": job_id, "state": "failed",
+                             "reason": message[:200]}
         if self.on_failure is not None:
             result = self.on_failure(message)
             if inspect.isawaitable(result):
@@ -1318,11 +1399,13 @@ class Screen:
         raises instead of silently running unprotected."""
         return default_fallback_spec()
 
-    async def _run_job(self, job_id: str, ask: str) -> None:
+    async def _run_job(self, job_id: str, ask: str, reveal: str) -> None:
         from .debug_log import record_active
 
         t0 = time.monotonic()
         self._job_id = job_id
+        self._current_job = job_id
+        self._set_phase("writing")
         self._job_deadline = t0 + self.timeout
         self._job_write_provider = None
         self._job_failover = None
@@ -1346,7 +1429,7 @@ class Screen:
         if kind == "patch":
             await self._run_patch(job_id, ask, answer, model_s, t0)
         else:
-            await self._run_page(job_id, ask, answer, model_s, t0)
+            await self._run_page(job_id, ask, answer, model_s, t0, reveal)
 
     async def _run_patch(self, job_id: str, ask: str, patch: str,
                          model_s: float, t0: float) -> None:
@@ -1357,8 +1440,10 @@ class Screen:
                                      "Explain in words instead, briefly.")
             return
         visible = self.pages[self.visible_id]
+        self._set_phase("images")
         images = self._image_job(ask, t0)
         patch = await images.prepare(patch)
+        self._set_phase("rendering")
         png, issues, render_s = await self._render(visible.body, patch)
         errors = [issue_text(i) for i in issues
                   if issue_kind(i) == "patch" or str(i).startswith("patch failed:")]
@@ -1387,21 +1472,28 @@ class Screen:
         result = PatchResult(job_id=job_id, page_id=visible.page_id, patch=patch,
                              png=png, issues=issues, model_s=model_s,
                              render_s=render_s, total_s=total_s, directory=job_dir)
+        self._current_job = None
+        self._set_phase("ready")
+        self._last_done = {"job": job_id, "state": "ready", "kind": "patch",
+                             "page": visible.page_id, "total_s": round(total_s, 2)}
         if self.on_patch is not None:
             outcome = self.on_patch(result)
             if inspect.isawaitable(outcome):
                 await outcome
 
     async def _run_page(self, job_id: str, ask: str, body: str,
-                        model_s: float, t0: float) -> None:
+                        model_s: float, t0: float, reveal: str) -> None:
         from .debug_log import record_active
 
         self._page_counter += 1
         page_id = f"p{self._page_counter}"
         width, height = self._pane_size()
+        self._set_phase("images")
         images = self._image_job(ask, t0)
         body = await images.prepare(body)
+        self._set_phase("rendering")
         png, issues, render_s = await self._render(body, None)
+        self._set_phase("review")
         reserve_s = max(render_s, FINAL_RENDER_RESERVE_S)
         step_s = MIN_OPTIONAL_STEP_S
         look_s = retry_s = 0.0
@@ -1488,6 +1580,7 @@ class Screen:
                               "look_s": round(look_s, 2), "retry_s": round(retry_s, 2),
                               "total_s": round(total_s, 2), "issues": issues,
                               "residual_lint": residual, "repair": repair,
+                              "reveal": reveal,
                               "image_s": round(images.seconds, 2), "image_reviews": images.events})
         if images.events:
             record_active("screen_images", {"job": job_id, "seconds": round(images.seconds, 2),
@@ -1495,6 +1588,7 @@ class Screen:
         record_active("screen_page", {"job": job_id, "page": page_id,
                                       "total_s": round(total_s, 2), "issues": issues,
                                       "residual_lint": residual,
+                                      "reveal": reveal,
                                       "look": repair["look"], "repair_notes": repair["notes"],
                                       "retry": repair["retry"],
                                       "retry_applied": repair["retry_applied"],
@@ -1503,8 +1597,13 @@ class Screen:
                             title=page_title(body, page_id), body=body, png=png,
                             issues=issues, model_s=model_s, render_s=render_s,
                             look_s=look_s, retry_s=retry_s, total_s=total_s,
-                            directory=job_dir, residual_issues=residual)
+                            directory=job_dir, residual_issues=residual,
+                            reveal=reveal)
         self.pages[page_id] = result
+        self._current_job = None
+        self._set_phase("ready")
+        self._last_done = {"job": job_id, "state": "ready", "kind": "page",
+                             "page": page_id, "total_s": round(total_s, 2)}
         if self.on_page is not None:
             outcome = self.on_page(result)
             if inspect.isawaitable(outcome):
@@ -1528,6 +1627,11 @@ class Screen:
         return meta
 
     def _image_job(self, ask: str, t0: float) -> PageImages:
+        # Images may run past the 12 s soft page target: the voice turn is
+        # never blocked (the job runs in the background) and the fox can
+        # watch progress with screen_status, so the image step gets what is
+        # left of the whole job limit instead of what is left of the target.
+        # With the default 20 s limit that is about 17 s into the job.
         async def review(user: str, image: bytes | None, _deadline: float = 0.0) -> str:
             text, _ = await self._call_model(
                 "Choose an educational image for a Swedish school child. Inspect the actual picture with the lesson context. "
@@ -1536,7 +1640,7 @@ class Screen:
             return text
 
         deadline = min(time.monotonic() + IMAGE_BUDGET_S,
-                       t0 + min(self.timeout, PAGE_TARGET_S) - FINAL_RENDER_RESERVE_S - DELIVERY_RESERVE_S)
+                       t0 + self.timeout - FINAL_RENDER_RESERVE_S - DELIVERY_RESERVE_S)
 
         async def review_with_deadline(user: str, image: bytes | None) -> str:
             return await review(user, image, deadline)

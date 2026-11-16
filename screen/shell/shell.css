@@ -427,6 +427,7 @@ ot-map .ot-region-label:not(.ot-region-code) {
 
 @media (prefers-reduced-motion: reduce) {
   .ot-pointed { transition: none; }
+  .ot-loading-spin { animation: none; }
 }
 
 /* ---------- Shell mechanics ---------- */
@@ -440,5 +441,43 @@ ot-map > .ot-vis svg { overflow: hidden; }
 .ot-w-d { position: relative; }
 .ot-w-comma { position: absolute; right: -0.14em; bottom: 0; }
 .ot-node-box { overflow-wrap: normal; hyphens: manual; }
+/* ---------- Loading overlay (new subject) ---------- */
+/* The fox dims the finished page and shows "Laddar <ämne>…" at once while the
+   next page is being prepared. The veil covers the whole pane with a dim
+   backdrop; the pill carries the spinner and the Swedish label. Cleared by
+   ot.loading(null), which a successful patch also calls. */
+#ot-loading {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 13, 19, 0.62);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+.ot-loading-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  background: var(--surface-2);
+  border: 1px solid var(--border-2);
+  border-radius: 999px;
+  padding: 0.55em 1.1em;
+  font-size: 1.05em;
+  font-weight: 600;
+  color: var(--text);
+  box-shadow: 0 0.4em 1.4em rgba(0, 0, 0, 0.45);
+}
+.ot-loading-spin {
+  width: 1em;
+  height: 1em;
+  border-radius: 50%;
+  border: 0.16em solid var(--border-2);
+  border-top-color: var(--cyan);
+  animation: ot-spin 0.9s linear infinite;
+}
+@keyframes ot-spin { to { transform: rotate(360deg); } }
 /* worked steps never break a formula over two lines; the page shrinks instead */
 ot-step > .ot-s { white-space: nowrap; }

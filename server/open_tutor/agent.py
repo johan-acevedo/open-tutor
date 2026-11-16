@@ -946,20 +946,37 @@ class SmartTutor(Tutor):
         screen.set_pane_source(lambda: (self.board_w, self.board_h))
 
     @function_tool()
-    async def ask_screen(self, context: RunContext, ask: str) -> str:
+    async def ask_screen(self, context: RunContext, ask: str, show: str = "auto") -> str:
         """Ask the screen for a new page or a change to the visible one.
 
         Ask in terms of what the child needs right now (who they are, what was
         just said, what should land); the screen hears the whole lesson, so one
         short ask is enough. Returns at once: keep talking with the child in
         words while it works. Never announce a wait or describe the unseen page.
-        A finished page stays invisible until you call show_page; a change to
-        the visible page applies by itself and arrives with a note.
+        A finished page appears on the screen by itself as soon as it is ready
+        (show="show", the default); pass show="hold" when the page must stay
+        hidden until the child has tried, and bring it in later with show_page.
+        A change to the visible page applies by itself and arrives with a note.
 
         Args:
             ask: What the child needs, e.g. "En sida om klockan halv sju för åk 1".
+            show: "auto" (a finished page appears by itself), "show" (same),
+                or "hold" (stays invisible until show_page).
         """
-        job = self.screen.ask(ask)
+        mode = (show or "auto").strip().lower()
+        if mode == "auto":
+            mode = "show"
+        if mode not in ("show", "hold"):
+            return (f"Unknown show mode '{show}'. Use show=\"show\" (the page appears "
+                    "by itself) or show=\"hold\" (it stays hidden until show_page). "
+                    "Nothing was asked.")
+        job = self.screen.ask(ask, reveal=mode)
+        if mode == "show":
+            return ("The screen is working on it now "
+                    f"(job {job}). Keep talking with the child in words: explain, ask, "
+                    "or react to what they just said. Do not announce a wait. "
+                    "The finished page appears on the screen by itself as soon as it is "
+                    "ready; you get its source and a screenshot then.")
         return ("The screen is working on it now "
                 f"(job {job}). Keep talking with the child in words: explain, ask, "
                 "or react to what they just said. Do not announce a wait. "
@@ -970,6 +987,9 @@ class SmartTutor(Tutor):
     async def show_page(self, context: RunContext, page_id: str) -> str:
         """Put a finished screen page in front of the child.
 
+        Only needed for a page asked with show="hold"; other pages appear by
+        themselves. Calling it again for the page already on screen is harmless.
+
         Args:
             page_id: Which finished page, e.g. "p1" (from the ready note).
         """
@@ -978,18 +998,59 @@ class SmartTutor(Tutor):
             known = ", ".join(sorted(self.screen.pages)) or "none yet"
             return (f"Unknown page id '{page_id}'. Finished pages: {known}. "
                     "No page was shown. Explain in words instead, briefly.")
+        ok, note = await self._show_page_object(page)
+        return note
+
+    async def _show_page_object(self, page: Any) -> tuple[bool, str]:
+        """Deliver one finished page object to the browser (shared by the
+        show_page tool and the show-when-ready path in screen_page_ready)."""
         try:
             item = PageItem(id=page.page_id, title=page.title, body=page.body)
         except ValidationError:
-            return (f"Page {page.page_id} is too large to show. "
+            return (False, f"Page {page.page_id} is too large to show. "
                     "Explain in words instead, briefly.")
         shown = await self._rpc("board.show", item.model_dump(exclude_none=True))
         if not shown:
-            return (f"Page {page.page_id} could not be shown. "
+            return (False, f"Page {page.page_id} could not be shown. "
                     "Explain in words instead, briefly.")
         self.screen.mark_visible(page.page_id)
-        return (f"Page {page.page_id} is now visible. "
+        return (True, f"Page {page.page_id} is now visible. "
                 "Teach from what it actually shows, as its author.")
+
+    @function_tool()
+    async def screen_loading(self, context: RunContext, topic: str) -> str:
+        """Dim the visible page and show "Laddar <topic>…" at once.
+
+        Call it when you move to a new subject, so the child never reads the
+        old page while you talk about the new one. It clears by itself when new
+        content arrives; call with an empty topic to clear it sooner.
+
+        Args:
+            topic: The new subject in Swedish, e.g. "historia"; empty clears.
+        """
+        topic = (topic or "").strip()[:120]
+        if self.screen.visible_id is None:
+            return "No page is on screen yet. Nothing was dimmed."
+        ok = await self._rpc("board.loading",
+                             {"id": self.screen.visible_id, "topic": topic})
+        if not ok:
+            return ("The loading state could not be shown. "
+                    "Keep teaching in words instead, briefly.")
+        if topic:
+            return (f"The screen is dimmed and shows 'Laddar {topic}…'. "
+                    "Keep talking about the new subject in words until its page appears.")
+        return "The loading state is cleared."
+
+    @function_tool()
+    async def screen_status(self, context: RunContext) -> str:
+        """Ask what the screen is doing right now.
+
+        One cheap line: writing, pictures, checking, ready or shown, and how
+        long it has been there. Call it when the wait grows long or the child
+        asks how the page is going; tell the child in one short Swedish
+        sentence, then keep teaching in words.
+        """
+        return self.screen.status_line()
 
     @function_tool()
     async def reveal(self, context: RunContext, part_id: str) -> str:
@@ -1038,15 +1099,43 @@ class SmartTutor(Tutor):
         prompt_event(session, text)
 
     async def screen_page_ready(self, session: AgentSession, page: Any) -> None:
-        """A new page finished: add it to the context invisible, then prompt once."""
+        """A new page finished: show it at once, or hold it when asked.
+
+        The default reveal mode (``ask_screen`` without ``show="hold"``) puts
+        the page in front of the child immediately, so a new subject never
+        waits behind the old page until the tutor's next turn. A held page
+        keeps the old behaviour: added to the context invisible, then one
+        prompt once the tutor is free."""
         parts: list[Any] = []
         if getattr(page, "png", None):
             parts.append(llm.ImageContent(
                 image=f"data:image/png;base64,{base64.b64encode(page.png).decode()}",
                 inference_detail="high"))
-        text = (f"[Screen page {page.page_id} ('{page.title}') is ready but NOT visible. "
-                f"Source:\n{page.body}\nCall show_page('{page.page_id}') when it fits "
-                f"the lesson.]")
+        if getattr(page, "reveal", "show") == "show":
+            ok, note = await self._show_page_object(page)
+            if ok:
+                text = (f"[Screen page {page.page_id} ('{page.title}') is now ON SCREEN. "
+                        f"Source:\n{page.body}\nTeach from what it actually shows.]")
+                record_active("screen_ready", {"page": page.page_id, "title": page.title,
+                                                   "image": bool(getattr(page, 'png', None)),
+                                                   "shown": True})
+                ctx = self.chat_ctx.copy()
+                ctx.add_message(role="user", content=[text, *parts])
+                await self.update_chat_ctx(ctx)
+                asyncio.create_task(self._prompt_when_free(
+                    session, f"Screen page {page.page_id} ('{page.title}') is on screen now. "
+                              f"Teach from what it actually shows."))
+                return
+            # Auto-show failed: fall through to the held path so the tutor
+            # still gets the page and can bring it in with show_page.
+            text = (f"[Screen page {page.page_id} ('{page.title}') is ready but NOT visible "
+                    f"(it could not be shown by itself: {note}). "
+                    f"Source:\n{page.body}\nCall show_page('{page.page_id}') when it fits "
+                    f"the lesson.]")
+        else:
+            text = (f"[Screen page {page.page_id} ('{page.title}') is ready but NOT visible. "
+                    f"Source:\n{page.body}\nCall show_page('{page.page_id}') when it fits "
+                    f"the lesson.]")
         record_active("screen_ready", {"page": page.page_id, "title": page.title,
                                            "image": bool(getattr(page, 'png', None))})
         ctx = self.chat_ctx.copy()
@@ -1077,7 +1166,14 @@ class SmartTutor(Tutor):
         """A screen job failed: tell the tutor and let it say so once it is free.
 
         Quiet failure left the child waiting in silence (2026-11-13: 26 s until
-        the child asked "Hur går det?")."""
+        the child asked "Hur går det?"). A loading overlay from screen_loading
+        is cleared best-effort first, so no stale "Laddar …" stays on screen."""
+        if self.screen.visible_id is not None:
+            try:
+                await self._rpc("board.loading",
+                                 {"id": self.screen.visible_id, "topic": ""})
+            except Exception:  # noqa: BLE001 - the apology below still goes out
+                pass
         record_active("screen_failed", {"message": message[:200]})
         await self._prompt_when_free(
             session,

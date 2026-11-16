@@ -106,6 +106,7 @@ export const BOARD_RPC_REMOVE = 'board.remove';
 export const BOARD_RPC_PATCH = 'board.patch';
 export const BOARD_RPC_REVEAL = 'board.reveal';
 export const BOARD_RPC_POINT = 'board.point';
+export const BOARD_RPC_LOADING = 'board.loading';
 
 export const TOPIC_CHAT = 'lk.chat';
 export const TOPIC_TRANSCRIPTION = 'lk.transcription';
