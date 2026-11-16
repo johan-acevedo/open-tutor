@@ -296,8 +296,8 @@ class PageImages:
     async def _consume_prefetch(self, slot: ImageSlot) -> SlotDecision | None:
         """A finished prefetched verdict for this slot, else None.
 
-        In-flight prefetches are left running for the caller (``prepare``
-        awaits them, ``prepare_deferred`` lists them as pending)."""
+        In-flight prefetches are left running for the caller: ``prepare``
+        awaits them within the image deadline."""
         task = (self.prefetched or {}).get(slot_key(slot))
         if task is None or not task.done() or task.cancelled():
             return None
@@ -344,60 +344,3 @@ class PageImages:
             body = body[:slot.start] + replacement + body[slot.end:]
         self.seconds += time.monotonic() - started
         return body
-
-    async def prepare_deferred(self, body: str
-                             ) -> tuple[str, dict[SlotKey, tuple[str, ImageSlot,
-                                                              "asyncio.Task[SlotDecision]"]]]:
-        """Resolve what is ready; list the rest as pending instead of waiting.
-
-        Returns ``(html, pending)`` where ``pending`` maps a slot identity to
-        ``(slot id, slot, task)`` for prefetches still in flight. A pending slot
-        is kept verbatim in the HTML -- the shell renders it as a loading
-        picture placeholder until the fill patch replaces it -- so the served
-        page always shows exactly the slot the review judged. Only slots with an
-        id can be filled in later (a patch needs a target), so an in-flight
-        prefetch for an id-less slot is awaited inline like ``prepare`` does.
-        Slots with no prefetch at all resolve inline too."""
-        slots = image_slots(body)
-        if not slots:
-            return body, {}
-        started = time.monotonic()
-        replacements = []
-        pending: dict[SlotKey, tuple[str, ImageSlot, asyncio.Task[SlotDecision]]] = {}
-        for slot in slots:
-            key = slot_key(slot)
-            approved = self.approved.get(key)
-            if approved is None and "query" not in slot.attrs and slot.attrs.get("src", ""):
-                approved = self.rendered.get(key)
-            if approved:
-                replacements.append(_image_html(slot, approved))
-                continue
-            consumed = await self._consume_prefetch(slot)
-            if consumed is not None:
-                self.used_keys.add(slot_key(slot))
-                replacements.append(self.render(slot, consumed))
-                continue
-            task = (self.prefetched or {}).get(key)
-            if task is not None and not task.done() and slot.attrs.get("id", "").strip():
-                # Kept verbatim: the shell shows a loading picture placeholder
-                # for it, and the fill replaces exactly this slot on approval.
-                replacements.append(body[slot.start:slot.end])
-                pending[key] = (slot.attrs["id"].strip(), slot, task)
-                self.used_keys.add(key)
-                continue
-            if task is not None:
-                try:
-                    decision = await self._await_prefetch(key, task)
-                    self.used_keys.add(key)
-                    replacements.append(self.render(slot, decision))
-                    continue
-                except Exception as error:
-                    self.events.append({"query": slot.attrs.get("query", ""), "source": slot.attrs.get("src", ""),
-                                        "decision": "rejected", "reason": f"prefetched image unavailable: {type(error).__name__}"})
-                    replacements.append(_fallback_html(slot, self.alternates.get(key, "")))
-                    continue
-            replacements.append(await self._inline(slot))
-        for slot, replacement in reversed(list(zip(slots, replacements))):
-            body = body[:slot.start] + replacement + body[slot.end:]
-        self.seconds += time.monotonic() - started
-        return body, pending

@@ -326,11 +326,6 @@ ot-image .ot-img-wrap { position: absolute; inset: 0 0 1.4em 0; }
 ot-image img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; border-radius: var(--radius); }
 ot-image[fit="cover"] img { object-fit: cover; }
 ot-image .ot-credit { position: absolute; left: 0; right: 0; bottom: 0; height: 1.3em; font-size: 0.72em; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* A picture the server has not approved yet: reserved space with a loader. */
-ot-image .ot-img-pending { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 0.5em; min-height: 8em; color: var(--muted); border: 1.5px dashed var(--border-2); border-radius: var(--radius); }
-/* Labels belong to the picture: hidden until it loads, so pending slots show
-   only the loader. */
-ot-image:not([src]) > ot-label { display: none; }
 .ot-pin { position: absolute; width: 0.7em; height: 0.7em; margin: -0.35em 0 0 -0.35em; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 0 0.18em var(--bg); }
 .ot-pin-label { position: absolute; transform: translateY(-50%); background: var(--surface); border: 1px solid var(--cyan); color: var(--text); padding: 0.15em 0.5em; border-radius: 0.35em; font-weight: 650; white-space: nowrap; font-size: 0.95em; }
 

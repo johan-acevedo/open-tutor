@@ -301,6 +301,11 @@ class Tutor(Agent):
         self.ids = Ids()
         self.boards: dict[str, HtmlItem] = {}
         self._board_render_lock = asyncio.Lock()
+        # One serialized delivery path for every board change in the session:
+        # shows, updates, removes, patches, reveals, points, resources and
+        # loading states all go through _board_send, so no two changes
+        # interleave on the way to the browser.
+        self._board_lock = asyncio.Lock()
         self.current_board_id: str | None = None
         self.child_identity: str | None = None
         self.mode = "talking"
@@ -355,8 +360,13 @@ class Tutor(Agent):
                     self.update_board_size(ack_w, ack_h, board.get("device"))
         return ok
 
+    async def _board_send(self, method: str, payload: dict[str, Any]) -> bool:
+        """Send one board RPC; serialized with every other board change."""
+        async with self._board_lock:
+            return await self._rpc(method, payload)
+
     async def _show(self, item) -> str:
-        shown = await self._rpc("board.show", item.model_dump(exclude_none=True))
+        shown = await self._board_send("board.show", item.model_dump(exclude_none=True))
         if not shown:
             return f"The board could not show item {item.id}. Explain in words instead, briefly."
         return f"Item {item.id} is now visible on the board. You can talk about it."
@@ -382,7 +392,7 @@ class Tutor(Agent):
         """Publish a finished drawing: in place of its placeholder when announced."""
         if not pending_id:
             return await self._show(item)
-        shown = await self._rpc("board.update", item.model_dump(exclude_none=True))
+        shown = await self._board_send("board.update", item.model_dump(exclude_none=True))
         if shown:
             return f"Item {item.id} is now visible on the board. You can talk about it."
         await self._remove(pending_id)
@@ -431,7 +441,7 @@ class Tutor(Agent):
         # this design box to fit the current pane.
         try:
             ph = PendingItem(id=pid, title=(title or need)[:120], height=self.board_h)
-            await self._rpc("board.show", ph.model_dump(exclude_none=True))
+            await self._board_send("board.show", ph.model_dump(exclude_none=True))
         except Exception:
             pass
         design_w, design_h, design_device = self.board_w, self.board_h, self.board_device
@@ -455,7 +465,7 @@ class Tutor(Agent):
             await self._remove(pid)
             return (f"Invalid board: {error.errors()[0]['msg']} "
                     "The placeholder was removed. Explain in words instead.")
-        shown = await self._rpc("board.update", item.model_dump(exclude_none=True))
+        shown = await self._board_send("board.update", item.model_dump(exclude_none=True))
         if not shown:
             await self._remove(pid)
             return ("The drawing failed to appear "
@@ -513,7 +523,7 @@ class Tutor(Agent):
         return await self._edit_saved_board(self.boards[target], changes)
 
     async def _failed_board_edit(self, saved: HtmlItem, reason: str) -> str:
-        restored = await self._rpc("board.update", saved.model_dump(exclude_none=True))
+        restored = await self._board_send("board.update", saved.model_dump(exclude_none=True))
         outcome = (f"The original board {saved.id} was restored." if restored else
                    f"I could not confirm restoring board {saved.id} on screen. "
                    "Its previous source is retained for a later retry.")
@@ -528,7 +538,7 @@ class Tutor(Agent):
         edit_h = saved.height or self.board_h
         try:
             ph = PendingItem(id=target, title=(saved.title or changes)[:120], height=edit_h)
-            await self._rpc("board.update", ph.model_dump(exclude_none=True))
+            await self._board_send("board.update", ph.model_dump(exclude_none=True))
         except Exception:
             pass
         edit_device = self.board_device
@@ -547,7 +557,7 @@ class Tutor(Agent):
                             html=html, height=edit_h, width=edit_w)
         except ValidationError as error:
             return await self._failed_board_edit(saved, f"Invalid revised board: {error.errors()[0]['msg']}.")
-        shown = await self._rpc("board.update", item.model_dump(exclude_none=True))
+        shown = await self._board_send("board.update", item.model_dump(exclude_none=True))
         if not shown:
             return await self._failed_board_edit(saved, f"The revised drawing failed to appear (item {target}).")
         self.boards[target] = item
@@ -736,7 +746,7 @@ class Tutor(Agent):
         # load for this section. Anything else is a failure below. (_rpc
         # returns a bool; _show's string is always truthy, so it cannot gate
         # feedback here.)
-        acked = await self._rpc("board.show", item.model_dump(exclude_none=True))
+        acked = await self._board_send("board.show", item.model_dump(exclude_none=True))
         if not acked:
             record_active("material_show", {"ok": False, "section_id": key,
                                                 "board_id": item.id, "reason": "no_ack"})
@@ -944,17 +954,6 @@ class SmartTutor(Tutor):
         super().__init__(learner, room, board=board, greeting_note=greeting_note)
         # The Screen renders at the pane size the tutor keeps current.
         screen.set_pane_source(lambda: (self.board_w, self.board_h))
-        # One serialized delivery path for every board change in this session:
-        # tutor patches, image fills, show, reveal, point and loading all go
-        # through _board_send, so no two changes interleave. An image fill's
-        # final decision (Screen.claim_fill) runs inside the same critical
-        # section, immediately before its RPC is sent.
-        self._board_lock = asyncio.Lock()
-
-    async def _board_send(self, method: str, payload: dict[str, Any]) -> bool:
-        """Send one board RPC; serialized with every other board change."""
-        async with self._board_lock:
-            return await self._rpc(method, payload)
 
     @function_tool()
     async def ask_screen(self, context: RunContext, ask: str, show: str = "auto") -> str:
@@ -1183,37 +1182,16 @@ class SmartTutor(Tutor):
     async def screen_patch_ready(self, session: AgentSession, patch: Any) -> bool:
         """A change finished: apply it at once, add it to the context, no prompt.
 
-        Every board change is serialized through the delivery lock. A deferred
-        image fill (``quiet``) is claimed inside the same critical section,
-        immediately before its RPC is sent: only approvals whose slot is still
-        exactly there reach the child; anything else is dropped quietly. The
-        page already shows its text fallback, so a missed fill is only a
-        context note, never a spoken apology. Returns whether the change was
-        sent, so the Screen only records delivered patches in its history."""
+        Sent through the serialized delivery path, like every other board
+        change. Returns whether the change was sent, so the Screen only
+        records delivered patches in its history."""
         parts: list[Any] = []
         if getattr(patch, "png", None):
             parts.append(llm.ImageContent(
                 image=f"data:image/png;base64,{base64.b64encode(patch.png).decode()}",
                 inference_detail="high"))
-        async with self._board_lock:
-            if getattr(patch, "quiet", False):
-                ops = self.screen.claim_fill(patch.page_id, getattr(patch, "fill_slots", None))
-                if ops is None:
-                    record_active("screen_fill_dropped", {"page": patch.page_id})
-                    text = (f"[Screen image fill for page {patch.page_id} dropped: "
-                            f"its slot changed while the picture was approved. "
-                            f"The placeholder stays.]")
-                    ctx = self.chat_ctx.copy()
-                    ctx.add_message(role="user", content=[text, *parts])
-                    await self.update_chat_ctx(ctx)
-                    return False
-                patch.patch = ops  # send exactly what was claimed
-            ok = await self._rpc("board.patch", {"id": patch.page_id, "patch": patch.patch})
-        if getattr(patch, "quiet", False):
-            applied = ("filled in its approved pictures" if ok
-                       else "could NOT fill in its pictures; the text fallback stays")
-        else:
-            applied = "applied on the visible page" if ok else "could NOT be applied"
+        ok = await self._board_send("board.patch", {"id": patch.page_id, "patch": patch.patch})
+        applied = "applied on the visible page" if ok else "could NOT be applied"
         text = (f"[Screen change {applied} (page {patch.page_id}). "
                 f"Patch source:\n{patch.patch}\nThe screenshot shows the page now.]")
         record_active("screen_patched", {"page": patch.page_id, "ok": ok})

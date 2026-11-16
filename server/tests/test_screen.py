@@ -1711,11 +1711,12 @@ async def test_prefetch_starts_before_the_stream_ends(tmp_path, monkeypatch, com
     screen.on_patch = patches.append
     screen.ask("Visa valv i Rom")
     await screen.wait_idle()
-    # First paint is fast (the raw slot stays, the shell shows a loading
-    # picture placeholder); the approved picture fills in after.
-    assert len(pages) == 1 and '<ot-image id="bild" query="Colosseum"' in pages[0].body
-    assert len(patches) == 1 and "Diliff" in patches[0].patch
-    assert 'target="bild"' in patches[0].patch
+    # The review overlapped the writing; the delivered page carries the
+    # reviewed image, with no raw slot (no query, no model URL) left in it.
+    assert len(pages) == 1 and patches == []
+    body = pages[0].body
+    assert "query=" not in body and "Diliff" in body
+    assert body.count("<ot-image") == 1 and 'src="https://' in body
     await screen.aclose()
 
 
@@ -1747,11 +1748,10 @@ async def test_slots_resolve_concurrently_while_writing(tmp_path, monkeypatch, c
     screen.on_patch = patches.append
     screen.ask("Visa valv och forum")
     await screen.wait_idle()
-    assert started == {"a", "b"} and len(pages) == 1
-    # Both pictures arrive: in the first paint when the review won the race,
-    # otherwise in one fill patch right after. Either way nothing waits.
-    shown = pages[0].body + "".join(p.patch for p in patches)
-    assert shown.count("commons.wikimedia.org") == 2
+    assert started == {"a", "b"} and len(pages) == 1 and patches == []
+    # Both reviews overlapped the writing; both pictures ship in first paint.
+    assert pages[0].body.count("commons.wikimedia.org") == 2
+    assert "query=" not in pages[0].body
     await screen.aclose()
 
 
@@ -1796,19 +1796,20 @@ async def test_loser_prefetch_is_cancelled_and_dropped_slot_unused(tmp_path, mon
     screen.on_patch = patches.append
     screen.ask("Visa Colosseum fort")
     await screen.wait_idle()
-    assert len(pages) == 1 and '<ot-image id="fast" query="Colosseum"' in pages[0].body
+    # The winner's page ships with its reviewed image; the loser's review is
+    # cancelled at the decision and never reaches the page. No fill: images
+    # resolve before the page is shown.
+    assert len(pages) == 1 and patches == []
+    assert "query=" not in pages[0].body and "commons.wikimedia.org" in pages[0].body
     assert "slow" in started and "slow" not in completed  # cancelled mid-review
     assert "fast" in completed
-    assert len(patches) == 1  # the winner's own image filled in after showing
-    assert "commons.wikimedia.org" in patches[0].patch
-    assert 'target="fast"' in patches[0].patch
-    assert "slow" not in pages[0].body and "slow" not in patches[0].patch
     await screen.aclose()
 
 
 async def test_dropped_slot_result_is_never_shown(tmp_path, monkeypatch, commons_picture):
-    """A slot the lint retry changes away gets a fallback now; its late review
-    finds no target and fills nothing in."""
+    """A slot the lint retry changes away is gone: its review resolves inline
+    during the first prepare, and the retry drops the slot. Nothing unreviewed
+    ships, and no fill machinery is involved."""
     monkeypatch.setenv("SCREEN_LOOK", "0")
     reviewed: set[str] = set()
     first = ('<h1>Rom</h1><ot-image id="bild" query="Colosseum" alt="Valv">V</ot-image>')
@@ -1842,7 +1843,9 @@ async def test_dropped_slot_result_is_never_shown(tmp_path, monkeypatch, commons
 
 async def test_prefetch_beats_sequential_write_then_review(tmp_path, monkeypatch, commons_picture):
     """Overlapping search+download+review with the writing, against doing it
-    afterwards: the same sleeps, both sides, so the gap is the overlap."""
+    afterwards: the same sleeps, both sides, so the gap is the overlap. Both
+    deliver the reviewed image in first paint; the streamed side just gets
+    there sooner."""
     import time as time_mod
 
     monkeypatch.setenv("SCREEN_LOOK", "0")
@@ -1866,16 +1869,14 @@ async def test_prefetch_beats_sequential_write_then_review(tmp_path, monkeypatch
     async def run(model):
         screen = make_screen(tmp_path, model_call=model)
         screen._model_call = model  # reviews use the primary seam too
-        marks: dict[str, float] = {}
+        delivered: list = []
         started = time_mod.monotonic()
-        screen.on_page = lambda p: (marks.setdefault("page", time_mod.monotonic()),
-                                    screen.mark_visible(p.page_id))
-        screen.on_patch = lambda p: marks.setdefault("fill", time_mod.monotonic())
+        screen.on_page = delivered.append
         screen.ask("Visa valv")
         await screen.wait_idle()
         await screen.aclose()
-        # Image-visible time: the fill when progressive, else the first paint.
-        return marks.get("fill", marks["page"]) - started
+        assert len(delivered) == 1 and "commons.wikimedia.org" in delivered[0].body
+        return time_mod.monotonic() - started
 
     async def review_model(system, user, images, look_png, on_text=None):
         if look_png is not None:
@@ -1896,38 +1897,6 @@ async def test_prefetch_beats_sequential_write_then_review(tmp_path, monkeypatch
 
 # ---- review follow-ups: prefetch identity, budget, fills, shutdown, veil ----
 
-async def test_prefetch_shares_nothing_across_different_slots(tmp_path, monkeypatch, commons_picture):
-    """A loser that asked for the same picture with different labels (and no
-    `later`) must not decide the winner's hidden slot: keys are full slots,
-    and HTML is always built from the served slot. Real call order: the loser
-    streams first, the winner is served, the winner body is prepared."""
-    from open_tutor.screen import PrefetchPool, Reaper
-    from screen.tools import commons_images as commons
-    from screen.tools.page_images import PageImages
-
-    import time as time_mod
-
-    monkeypatch.setattr(commons, "search_images",
-                        AsyncMock(return_value=commons.SearchResult([commons_picture[0]])))
-    seen_labels: list[str] = []
-
-    async def review(user, image):
-        seen_labels.append(user)
-        return '{"accept":true,"reason":"Passar."}'
-
-    images = PageImages("ctx", review, time_mod.monotonic() + 30)
-    loser = '<ot-image query="Colosseum" alt="Valv">fasad</ot-image>'
-    winner = '<ot-image later query="Colosseum" alt="Valv">gissa svaret</ot-image>'
-    pool = PrefetchPool(images, Reaper(2.0))
-    pool.feed("loser", loser)
-    await asyncio.sleep(0)  # let the loser task start its search
-    out = await images.prepare("<h1>Rom</h1>" + winner)
-    pool.finish(images.used_keys)
-    assert "later" in out and "gissa svaret" in out and "fasad" not in out
-    assert any("fasad" in user for user in seen_labels)  # loser reviewed alone
-    assert any("gissa svaret" in user for user in seen_labels)  # winner reviewed alone
-
-
 async def test_identical_slots_share_one_review(tmp_path, monkeypatch, commons_picture):
     """Same full slot from two attempts: one search+download+review, used twice."""
     from screen.tools.page_images import PageImages
@@ -1945,104 +1914,6 @@ async def test_identical_slots_share_one_review(tmp_path, monkeypatch, commons_p
     assert "Diliff" in await images.prepare(body)
     assert "Diliff" in await images.prepare(body)
     assert len(reviews) == 1
-
-
-async def test_fill_does_not_overwrite_a_tutor_correction(tmp_path, monkeypatch, commons_picture):
-    """The fill checks the current visible state (body + applied patches): a
-    patch that replaced the pending image with corrected text while its
-    review ran wins, and the late approval is dropped. Real call order:
-    page shown, correction patch applied, review released."""
-    monkeypatch.setenv("SCREEN_LOOK", "0")
-    release_review = asyncio.Event()
-    verdict = '{"accept":true,"reason":"Passar."}'
-    first = '<h1>Rom</h1><ot-image id="bild" query="Colosseum" alt="Valv">V</ot-image>'
-    correction = '<ot-patch target="bild" do="replace"><p>Valvet bär upp.</p></ot-patch>'
-    writes = 0
-
-    async def model(system, user, images, look_png, on_text=None):
-        nonlocal writes
-        if look_png is not None:
-            await asyncio.wait_for(release_review.wait(), timeout=10)
-            return verdict
-        writes += 1
-        text = first if writes == 1 else correction
-        if on_text is not None:
-            on_text(text)
-        return text
-
-    screen = make_screen(tmp_path, model_call=model)
-    tutor_patches, fills, pages = [], [], []
-    screen.on_patch = lambda p: (fills if p.quiet else tutor_patches).append(p)
-    screen.on_page = lambda p: (pages.append(p), screen.mark_visible(p.page_id))
-    screen.ask("Visa valv")
-    for _ in range(200):
-        if pages and screen._pool is None:  # first job delivered, fill pending
-            break
-        await asyncio.sleep(0.05)
-    assert pages and screen._pool is None
-    screen.ask("Korrigera bilden till text")
-    for _ in range(200):
-        if tutor_patches:
-            break
-        await asyncio.sleep(0.05)
-    assert tutor_patches and "Valvet bär upp" in tutor_patches[0].patch
-    assert "bild" in screen._page_touched.get("p1", set())
-    release_review.set()
-    await screen.wait_idle()
-    # The Screen still emits the previewed fill, but the worker's claim --
-    # inside the board delivery lock, just before the send -- drops it: the
-    # slot no longer matches, the tutor correction owns `bild`.
-    assert len(fills) == 1
-    assert screen.claim_fill("p1", fills[0].fill_slots) is None
-    await screen.aclose()
-
-
-async def test_fill_dropped_when_another_page_took_the_screen(tmp_path, monkeypatch, commons_picture):
-    """Visibility is re-checked after the fill render: p2 shown during p1's
-    fill render must not gain p1's fill in its patch history. The fill render
-    is gated so the switch lands mid-render, deterministically."""
-    monkeypatch.setenv("SCREEN_LOOK", "0")
-    verdict = '{"accept":true,"reason":"Passar."}'
-    first = '<h1>Rom</h1><ot-image id="bild" query="Colosseum" alt="Valv">V</ot-image>'
-    renders = 0
-    release_render = asyncio.Event()
-
-    async def model(system, user, images, look_png, on_text=None):
-        if look_png is not None:
-            return verdict
-        if on_text is not None:
-            on_text(first)
-        return first if "andra" not in user else "<h1>Grekland</h1>"
-
-    async def render(body, patch, history, w, h):
-        nonlocal renders
-        renders += 1
-        if patch is not None and 'target="bild"' in patch:  # p1's fill preview
-            await asyncio.wait_for(release_render.wait(), timeout=10)
-        return (b"PNG", [])
-
-    screen = make_screen(tmp_path, model_call=model, render_page=render)
-    pages, fills = [], []
-    screen.on_page = pages.append
-    screen.on_patch = fills.append
-    screen.ask("Visa valv")
-    for _ in range(200):
-        if pages and screen._pool is None:
-            break
-        await asyncio.sleep(0.05)
-    screen.mark_visible("p1")
-    screen.ask("Visa något om andra världskriget")
-    for _ in range(200):
-        if len(pages) == 2:
-            break
-        await asyncio.sleep(0.05)
-    assert [p.page_id for p in pages] == ["p1", "p2"]
-    screen.mark_visible("p2")  # the switch lands while the fill renders
-    release_render.set()
-    await screen.wait_idle()
-    assert fills == []
-    assert screen.visible_patches == {"p1": [], "p2": []}
-    await screen.aclose()
 
 
 async def test_aclose_cancels_inflight_prefetches(tmp_path, monkeypatch, commons_picture):
@@ -2162,167 +2033,64 @@ async def test_canonical_src_reuse_needs_the_exact_reviewed_slot(tmp_path, monke
     assert len(reviews) == before
 
 
-async def test_fill_rechecks_targets_after_its_render(tmp_path, monkeypatch, commons_picture):
-    """The fill renderer is paused; a tutor correction replacing `bild` lands;
-    on resume the Screen still emits its previewed candidates, but the
-    worker's claim -- inside the board delivery lock, just before the send --
-    drops them, so the correction stands. Real call order with the fill
-    renderer gated."""
-    monkeypatch.setenv("SCREEN_LOOK", "0")
-    verdict = '{"accept":true,"reason":"Passar."}'
-    first = '<h1>Rom</h1><ot-image id="bild" query="Colosseum" alt="Valv">V</ot-image>'
-    correction = '<ot-patch target="bild" do="replace"><p>Valvet bär upp.</p></ot-patch>'
-    writes = 0
-    release_render = asyncio.Event()
-    render_entered = asyncio.Event()
-
-    async def model(system, user, images, look_png, on_text=None):
-        nonlocal writes
-        if look_png is not None:
-            return verdict
-        writes += 1
-        text = first if writes == 1 else correction
-        if on_text is not None:
-            on_text(text)
-        return text
-
-    async def render(body, patch, history, w, h):
-        if patch is not None and "<ot-image" in patch:  # the fill preview only
-            render_entered.set()
-            await asyncio.wait_for(release_render.wait(), timeout=10)
-        return (b"PNG", [])
-
-    screen = make_screen(tmp_path, model_call=model, render_page=render)
-    tutor_patches, fills, pages, outcomes = [], [], [], []
-
-    async def on_patch(p):
-        # Production miniature: the worker claims quiet fills inside the
-        # delivery lock just before sending; only sent patches join history.
-        (fills if p.quiet else tutor_patches).append(p)
-        ok = True
-        if p.quiet:
-            ok = screen.claim_fill(p.page_id, p.fill_slots) is not None
-        outcomes.append(ok)
-        return ok
-
-    screen.on_patch = on_patch
-    screen.on_page = lambda p: (pages.append(p), screen.mark_visible(p.page_id))
-    screen.ask("Visa valv")
-    for _ in range(200):
-        if render_entered.is_set():
-            break
-        await asyncio.sleep(0.05)
-    assert render_entered.is_set()  # fill preview paused mid-render
-    screen.ask("Korrigera bilden till text")
-    for _ in range(200):
-        if tutor_patches:
-            break
-        await asyncio.sleep(0.05)
-    assert tutor_patches and "Valvet bär upp" in tutor_patches[0].patch
-    release_render.set()  # resume: the correction is already delivered
-    await screen.wait_idle()
-    assert len(fills) == 1  # Screen-level candidates still emitted ...
-    assert outcomes == [True, False]  # ... correction sent, fill dropped at claim
-    assert screen.visible_patches == {"p1": [correction]}
-    await screen.aclose()
 
 
-async def test_retry_replacing_the_slot_discards_its_approval(tmp_path, monkeypatch, commons_picture):
-    """P1: a lint retry replaces the pending image with a corrected section
-    (same id). The approval was tied to the slot, not the id: with the slot
-    gone from the final body there is nothing to fill, and the late approval
-    never overwrites the correction. Real call order: write, lint, retry,
-    deliver, visible, wait."""
-    monkeypatch.setenv("SCREEN_LOOK", "0")
+async def test_delivered_html_never_contains_unreviewed_images(tmp_path, monkeypatch, commons_picture):
+    """Lead rule: nothing unresolved, no query, no model src, ever reaches the
+    browser. A query slot, a model-supplied src and a nested ot-image all
+    resolve to reviewed canonical HTML or a text fallback before delivery."""
     from screen.tools import commons_images as commons
+    from screen.tools.page_images import PageImages, image_slots
 
-    monkeypatch.setattr(commons, "search_images",
-                        AsyncMock(return_value=commons.SearchResult([commons_picture[0]])))
-    started = asyncio.Event()
-    verdict = '{"accept":true,"reason":"Passar."}'
-    first = '<h1>Rom</h1><ot-image id="bild" query="Colosseum" alt="Valv">V</ot-image>'
-    corrected = '<h1>Rom</h1><section id="bild"><p>Valvet bär upp.</p></section>'
-    writes = 0
+    import time as time_mod
 
-    async def model(system, user, images, look_png, on_text=None):
-        nonlocal writes
-        if look_png is not None:
-            started.set()
-            return verdict
-        writes += 1
-        text = first if writes == 1 else corrected
-        if on_text is not None:
-            on_text(text)
-        return text
+    candidate = commons_picture[0]
 
-    renders = [(b"PNG", [{"kind": "dense", "msg": "shorten text"}]), (b"PNG", [])]
+    async def lookup(src, client=None):
+        return commons.SearchResult([candidate], [])
 
-    async def render(body, patch, history, w, h):
-        return renders.pop(0)
+    monkeypatch.setattr(commons, "lookup_image", lookup)
+    reviews: list[str] = []
 
-    screen = make_screen(tmp_path, model_call=model, render_page=render)
-    pages, fills = [], []
-    screen.on_page = lambda p: (pages.append(p), screen.mark_visible(p.page_id))
-    screen.on_patch = fills.append
-    screen.ask("Visa valv")
-    await screen.wait_idle()
-    assert started.is_set()  # the approval existed; the slot did not survive
-    assert len(pages) == 1 and "Valvet bär upp" in pages[0].body
-    assert "<ot-image" not in pages[0].body
-    assert fills == []  # nothing pending: the retry dropped the approval
-    await screen.aclose()
+    async def review(user, image):
+        reviews.append(user)
+        if "Modellbild" in user:
+            return ('{"accept":false,"reason":"Hittar inte bilden.",'
+                    '"fallback":"<p>Vi beskriver valven i ord.</p>"}')
+        return '{"accept":true,"reason":"Passar."}'
+
+    images = PageImages("ctx", review, time_mod.monotonic() + 30)
+    body = ('<h1>Rom</h1>'
+            '<ot-image id="a" query="Colosseum" alt="Valv">etiketter</ot-image>'
+            '<ot-image id="b" src="https://example.invalid/x.jpg" alt="Modellbild">text</ot-image>'
+            '<ot-image id="c" query="Colosseum" alt="W">'
+            '<ot-image src="https://example.invalid/nested.jpg"></ot-image>etiketter</ot-image>')
+    out = await images.prepare(body)
+    assert len(reviews) == 3  # every slot judged, none slipped through
+    assert "query=" not in out
+    assert "example.invalid" not in out
+    assert candidate.image_url.split("?")[0] in out  # the reviewed canonical src
+    for slot in image_slots(out):
+        assert "<ot-image" not in slot.children  # no nested leftovers
+        assert "src" in slot.attrs  # every shipped slot resolved
 
 
-async def test_fill_claim_drops_superseded_page_in_production_wiring(tmp_path, monkeypatch, commons_picture):
-    """P2: a pending page-show ack switches visibility to p2 after the fill
-    preview but before the agent's claim runs: no board.patch is sent, the
-    drop is recorded, and p2's history is untouched. Production wiring:
-    on_patch schedules screen_patch_ready as a task; the switch lands in the
-    window between scheduling and execution."""
-    monkeypatch.setenv("SCREEN_LOOK", "0")
-    from screen.tools.page_images import SlotDecision, image_slots
-
-    screen = make_screen(tmp_path)
-    body = '<h1>Rom</h1><ot-image id="bild" query="Colosseum" alt="Valv">V</ot-image>'
-    screen.pages["p1"] = PageResult(job_id="s1", page_id="p1", title="Rom",
-                                    body=body, png=b"PNG")
-    screen.mark_visible("p1")
-    slot = image_slots(body)[0]
-    fill = PatchResult(job_id="s1", page_id="p1", patch="<preview ops>",
-                       png=b"PNG", quiet=True,
-                       fill_slots=[("bild", slot, SlotDecision(commons_picture[0], ""))])
-    room = FakeRoom()
-    tutor = smart_tutor(room, screen)
-    screen.pages["p2"] = PageResult(job_id="s9", page_id="p2", title="Grekland",
-                                    body="<h1>Grekland</h1>", png=b"PNG")
-
+async def test_board_changes_serialize_through_one_lock(tmp_path, monkeypatch):
+    """Every board change goes through the delivery lock: a patch RPC in flight
+    holds it, so a concurrent show cannot interleave or switch visibility
+    mid-send. Order is patch RPC, then show RPC, then the new visible page."""
     from unittest.mock import Mock
 
-    task = asyncio.create_task(tutor.screen_patch_ready(Mock(), fill))
-    screen.mark_visible("p2")  # the show ack lands before the claim runs
-    assert await task is False
-    assert [c for c in room.local_participant.calls if c[0] == "board.patch"] == []
-    assert screen.visible_patches == {"p1": [], "p2": []}
-    await screen.aclose()
-
-
-async def test_board_changes_serialize_through_one_lock(tmp_path, monkeypatch, commons_picture):
-    """Every board change goes through the delivery lock: a fill send holds it
-    across its RPC, so a concurrent show cannot interleave or switch visibility
-    mid-send. Order is patch RPC, then show RPC, then the new visible page."""
-    from screen.tools.page_images import SlotDecision, image_slots
-
     screen = make_screen(tmp_path)
-    body = '<h1>Rom</h1><ot-image id="bild" query="Colosseum" alt="Valv">V</ot-image>'
+    body = '<h1>Rom</h1><p>Text.</p>'
     screen.pages["p1"] = PageResult(job_id="s1", page_id="p1", title="Rom",
                                     body=body, png=b"PNG")
     screen.mark_visible("p1")
     screen.pages["p2"] = PageResult(job_id="s2", page_id="p2", title="Grekland",
                                     body="<h1>Grekland</h1>", png=b"PNG")
-    slot = image_slots(body)[0]
-    fill = PatchResult(job_id="s1", page_id="p1", patch="<preview ops>",
-                       png=b"PNG", quiet=True,
-                       fill_slots=[("bild", slot, SlotDecision(commons_picture[0], ""))])
+    patch = PatchResult(job_id="s2", page_id="p1",
+                        patch='<ot-patch target="t" do="text">Hej</ot-patch>',
+                        png=b"PNG")
     room = FakeRoom()
     tutor = smart_tutor(room, screen)
     order: list[str] = []
@@ -2341,10 +2109,7 @@ async def test_board_changes_serialize_through_one_lock(tmp_path, monkeypatch, c
         return out
 
     room.local_participant.perform_rpc = gated
-
-    from unittest.mock import Mock
-
-    t1 = asyncio.create_task(tutor.screen_patch_ready(Mock(), fill))
+    t1 = asyncio.create_task(tutor.screen_patch_ready(Mock(), patch))
     await asyncio.wait_for(entered.wait(), timeout=10)
     t2 = asyncio.create_task(tutor._show_page_object(screen.pages["p2"]))
     await asyncio.sleep(0.2)

@@ -747,32 +747,15 @@
     });
 
     // ---- ot-image: photo or illustration with credit; ot-label children make labelled parts
-    // A slot without `src` is still waiting for its review: it renders a loading
-    // picture placeholder, and the fill patch replaces the whole element later.
     define('ot-image', class extends Visual {
       build() {
         var wrap = document.createElement('div'); wrap.className = 'ot-img-wrap';
+        var img = document.createElement('img');
+        img.alt = this.getAttribute('alt') || '';
+        img.decoding = 'async';
+        img.referrerPolicy = 'no-referrer';
         var credit = document.createElement('div'); credit.className = 'ot-credit';
-        var img = null;
-        if (this.hasAttribute('src')) {
-          img = document.createElement('img');
-          img.alt = this.getAttribute('alt') || '';
-          img.decoding = 'async';
-          img.referrerPolicy = 'no-referrer';
-          wrap.appendChild(img);
-        } else {
-          var pending = document.createElement('div');
-          pending.className = 'ot-img-pending';
-          var spin = document.createElement('span');
-          spin.className = 'ot-loading-spin';
-          spin.setAttribute('aria-hidden', 'true');
-          var label = document.createElement('span');
-          label.textContent = 'Laddar bild …';
-          pending.appendChild(spin);
-          pending.appendChild(label);
-          pending.setAttribute('role', 'status');
-          wrap.appendChild(pending);
-        }
+        wrap.appendChild(img);
         this.append(wrap, credit);
         this._img = img; this._credit = credit;
         var self = this;

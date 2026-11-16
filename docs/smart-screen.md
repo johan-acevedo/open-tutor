@@ -650,61 +650,54 @@ fall back to text instead of failing the page. On top of that, image work now
 starts while the page is still being written: the write call's streamed text is
 scanned for complete `<ot-image>` slots (attrs plus child labels, which the
 vision review judges) and each slot's search + download + review starts at once,
-so slots resolve concurrently with the writing. Show-when-ready pages paint at
-once (text fallback for in-flight slots) and approved pictures fill into the
-shown page as one patch when they land; rejected reviews, lint-dropped slots,
-held and superseded pages never fill. Hedged/raced attempts share prefetch tasks
-by slot key (no double vision reviews); the loser's unique prefetches are
-cancelled at the decision, the rest at job end, bounded like the other loser
-cleanup. Synthetic timing with identical 0.6 s write + 0.6 s review sleeps:
-1.21 s sequential vs 0.61 s with prefetch; on live jobs the overlap is the whole
-multi-second review, and first paint never waits for it at all.
+so slots resolve concurrently with the writing -- and every slot is resolved to
+reviewed image HTML or a text fallback before the page is shown. Nothing
+unresolved, no query and no model-supplied URL ever ships; a slot the writer
+changes or drops resolves from the final body like any other slot. Hedged/raced
+attempts share prefetch tasks by full slot key (no double vision reviews); the
+loser's unique prefetches are cancelled at the decision, the rest at job end,
+bounded like the other loser cleanup. Synthetic timing with identical 0.6 s
+write + 0.6 s review sleeps: 1.21 s sequential vs 0.61 s with prefetch; on live
+jobs the overlapped review is the whole multi-second image step.
 
 **Not tested.** No live provider calls and no real session: prefetch against real
-Commons + a real review model, the fill patch landing mid-lesson, and one full
-live lesson are still open. Malformed streamed HTML (a slot that never closes)
-resolves inline at prepare, as before. A fill racing a tutor-asked patch to the
-same target is last-applied-wins, like two quick patches today.
+Commons + a real review model, and one full live lesson, are still open.
+Malformed streamed HTML (a slot that never closes) resolves inline at prepare,
+as before.
 
-Review follow-ups, same PR (all six reproduced by the reviewer, each with a
+Review follow-ups, same PR (reviewer-reproduced, each with a
 regression test in the real call order):
 
 - **Prefetches share verdicts, never HTML.** Slot keys are the full slot
   (every attribute plus child labels); the pool returns only the review
   verdict and every path renders from the served page's own slot, so a loser
   can no longer reveal a hidden slot or lend its labels. An already-rendered
-  body still re-prepares without re-review via a canonical-src index.
+  body still re-prepares without re-review via the `rendered` exact-slot index.
 - **The image deadline is the job limit minus reserves** (about 17 s),
   computed at job start -- no 6 s clamp that expired mid-write.
-- **A tutor correction beats a late fill.** Delivered patches record their
-  target ids per page; a fill whose slot was touched, or whose fallback is
-  gone from the current body, is dropped.
-- **A fill re-checks visibility after its preview render** and patch history
-  is keyed by page id, so a page switch mid-render corrupts nothing.
 - **`aclose` drops the prefetch pool** through the reaper bound: no
   `screen-prefetch-*` task survives shutdown.
 - **The veil clears at terminal states.** A held page ready clears the old
   page's veil (the fox reveals when it wants); auto-show clears the replaced
   frame's veil; failures already cleared.
-
-Second review, same PR: `rendered` replaces the canonical-src index (reuse
-only on exact full-slot match of our own output; a src-only match with
-different id/`later`/labels goes through review), and the fill re-checks
-touched/vanished targets and visibility after its preview render with no
-await before the delivery decision, so a correction applied mid-render wins.
-
-Third review, same PR (structural: no more race-patching). Pending slots stay
-verbatim in the delivered body -- the shell renders an unresolved `<ot-image>`
-as a loading picture placeholder ("Laddar bild …", labels hidden until the
-picture loads) -- so a retry or patch that replaces or changes the slot drops
-its approval by construction. One serialized delivery path:
-`SmartTutor._board_lock` guards every board RPC (tutor patches, image fills,
-show, reveal, point, loading); the fill's final decision (`Screen.claim_fill`:
-page still visible, exact full slot still present and untouched) runs inside
-the same critical section, immediately before the RPC send, with no await in
-between. Approvals are tied to slots (`_retain_pending` revalidates them
-against every look-fix/lint-rewrite). Evidence: `pending-placeholder-1000x700.png`
-in `screen/review/2026-11-16-loading/`.
+Fourth review, same PR: show-first-then-fill is dropped, for kept. Four rounds
+of races -- a loser deciding a hidden slot, corrections overwritten by late
+fills, a page switch mid-render, a parent replacement keeping the id,
+unreviewed model `src` and nested `<ot-image>` reaching the browser verbatim --
+showed the handoff cannot be made simply safe: every fix moved the race
+instead of removing it. Images resolve before the page is shown again, as on
+`main`: every `<ot-image>` is replaced by reviewed image HTML or the text
+fallback before delivery, and nothing unresolved, no query and no
+model-supplied URL ever reaches the browser. Kept from the rounds: the
+streaming prefetch (full-slot keys, loser cancellation, shutdown reaping,
+rendered exact-slot reuse), concurrent slots, the job-limit image deadline
+(~17 s), reveal modes, the `screen_loading` veil, `screen_status` (so the fox
+can talk and give an update while images take longer), the held-veil fix, and
+the serialized delivery path (`_board_lock` now also guards `share_resource`
+and every other board RPC). A later take that wants deferred images must
+answer: full-slot identity end to end, a single delivery critical section with
+the final check adjacent to the send, and no verbatim model markup on the
+wire at any point.
 
 ### What Johan's test calls settled (2026-11-13)
 
