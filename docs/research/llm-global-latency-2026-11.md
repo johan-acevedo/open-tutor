@@ -245,3 +245,108 @@ python3 ttft.py cc-spark   # 10 runs, reasoning.effort=minimal, max_output_token
 
 Raw probe outputs kept in the research session (`/tmp/gp*.json`, `/tmp/ttft*.log`); the medians
 and p90s above are computed over the 10 runs shown there.
+
+---
+
+## Measured global bake-off (2026-11-16)
+
+Follow-up to §§1–4: replace the §2 estimates with measurements. Tutor prompt
+(~280-token system + user turn, `max_tokens: 400`, `stream: true`), TTFT = first
+non-empty `content` delta. Full rig committed under `spikes/llm-bench/`
+(`worker.js`, `wrangler.toml`, `direct-baseline.py` + `direct-baseline.jsonl`,
+`run-global.py`, `README.md`).
+
+### Thinking-off knobs — confirmed (dell5500, 2026-11-16)
+
+- **A (Workers AI): `reasoning_effort: "none"` turns thinking fully off.**
+  The [model docs](https://developers.cloudflare.com/workers-ai/models/deepseek-v4.1-flash-1017/)
+  list Reasoning as `none` / `low` / `high` (**default**) / `max`, with aliases
+  `minimal`→`none`, `auto`→`high`. Verified via REST `ai/run`: default emits a
+  204-char `reasoning` field and burns all 60 tokens on reasoning (`finish: length`,
+  empty content); `"none"` (and alias `"minimal"`) return `reasoning` empty,
+  content immediately, 8 completion tokens, `finish: stop`; `"low"` still thinks
+  (212 chars reasoning, no content). **Reasoning tokens = 0 in all 10 baseline runs below.**
+- **B (Command Code chat completions): nothing disables thinking (as of ~10:45 UTC).**
+  `thinking: {type: disabled}`, `reasoning: {effort: none|minimal}`, and
+  `chat_template_kwargs: {enable_thinking: false}` are all **ignored**: tiny prompt
+  burns 60/60 tokens on reasoning with zero content with and without the flag;
+  `reasoning_effort` is rejected with 400. Usage reports `reasoning_tokens: 120–188`
+  on the tutor prompt. This contradicts the morning's 1.5 s “thinking disabled”
+  re-check — either Command Code changed routing mid-day or the morning runs hit a
+  different path. Backend B therefore ran **thinking-ON** in this bake-off.
+
+### Sweden direct baseline (dell5500, 10 runs/backend, same prompt as the Worker)
+
+| Backend | TTFT content med | TTFT range | Total med | Reasoning (med) | Content chars (med) |
+|---|---|---|---|---|---|
+| A: Workers AI REST, `reasoning_effort: none` | **2.1 s** (2068 ms; sorted: 1036–2776) | 1.0–2.8 s | 2.1 s | **0 tokens/chars ×10** | 215 |
+| B: Command Code chat, `thinking` disabled (ignored) | **3.4 s** (3374 ms; sorted: 2277–7743) | 2.3–7.7 s | 3.4 s | 120–188 tokens (rc med 590 chars) | 135 |
+
+Notes: prompt caching active on both after run 0 (A `cached_tokens` 192/256, B 256);
+A's fastest runs (1.0–1.1 s) were cache hits. On **both** REST paths `total ≈ TTFT`
+(all SSE chunks flushed in one burst after generation) — incremental streaming was not
+observed here; the Worker binding path may stream more granularly (verify post-deploy).
+**From Sweden today, A beats B by ~1.3 s median with zero reasoning overhead.**
+
+### Global leg: BLOCKED on token scope — method validated, rig ready
+
+- The Sorl `CLOUDFLARE_API_TOKEN` (homelab `cloudflare.env`) is Workers-AI-run +
+  read-only: `PUT …/workers/scripts/open-tutor-llm-bench` →
+  `No access to the specified resource` (raw API too, so it is token scope, not
+  wrangler). No other deploy credential exists (dell5500 has no CF key; johan-4070
+  holds the same single token, no wrangler). **No Worker was deployed; nothing in
+  the Sorl account was touched** (scripts list re-checked: only pre-existing
+  `pebble-match`, `sorl-api-demo`, `sorl-api-staging`, `sorl-site`).
+- Everything else validated end-to-end: 10/10 Globalping cities resolve
+  (Sydney, Phoenix, Ashburn, São Paulo — ã works, Singapore, Tokyo, Frankfurt,
+  Stockholm, Mumbai, Johannesburg); HTTP measurement schema confirmed
+  (`result.rawBody` = Worker JSON with server timings, `result.timings.total` =
+  probe-side total, query strings pass through, `cf-ray` header gives probe colo);
+  unauthenticated quota fits (plan = 200 probe runs < 250/hr; per city A,B,A,B ×
+  limit 5 = 10 runs/backend, interleaved against cache/time drift).
+- **Cheapest unblock:** grant `Workers Scripts:Edit` to the existing token (or run
+  the 3 deploy commands in `spikes/llm-bench/README.md`), then
+  `WORKER_BASE=… python3 run-global.py`, then `wrangler delete`. Until then the §2
+  estimates stand — the per-region winner table below is **not yet measured**.
+
+### Preliminary recommendation (Sweden-measured; global TBD)
+
+With thinking off, Workers AI is the best measured option from Sweden (2.1 s med,
+zero reasoning) **and** the best structural bet for Sydney (edge-routed
+inference). Recommend making A the primary voice-turn candidate and running the
+pending global leg before switching the app default — if Sydney TTFT ≈ Stockholm
+±0.3 s on A while B keeps a ~1 s+ reasoning tax everywhere, the choice is settled
+for both speed and simplicity (one backend worldwide, no per-region routing).
+
+### Appendix — Worker source (frozen 2026-11-16; canonical copy: `spikes/llm-bench/worker.js`)
+
+Deploy env (secrets, never in repo): `BENCH_PATH` = random 32-hex path segment,
+`COMMAND_CODE_API_KEY` = Command Code key; wrangler AI binding `env.AI`.
+`GET /<BENCH_PATH>/bench?backend=a|b` → JSON
+`{backend, colo, country, ttft_ms, ttft_reasoning_ms, total_ms, content_chars,
+content_chunks, reasoning_chars, usage, first60, model}`; anything else → 404;
+hard cap 600 calls → 429. Backend A uses `env.AI.run` with
+`reasoning_effort: "none"`; backend B POSTs to Command Code with
+`thinking: {type: disabled}` and `User-Agent: open-tutor-bench/0.1` (CC 403s
+default Python UAs); both parsed as SSE, TTFT = first non-empty content delta.
+
+```js
+// spikes/llm-bench/worker.js — see repo for the exact file (no secrets in it).
+// Behaviour: secret-path gate → 404 otherwise; cap 600; A = AI binding with
+// reasoning_effort "none"; B = fetch Command Code with thinking disabled;
+// SSE parse counting content vs reasoning/thinking deltas; JSON timings out.
+```
+
+Key commands (values redacted; full text in `spikes/llm-bench/README.md`):
+
+```bash
+# deploy (needs Workers:Edit — currently missing, see above)
+CLOUDFLARE_ACCOUNT_ID=76974d5ee42be1d512456fe96261ea49  # Sorl
+BENCH_PATH="$(openssl rand -hex 16)"                   # never commit value
+wrangler deploy
+wrangler secret put BENCH_PATH            # paste $BENCH_PATH
+wrangler secret put COMMAND_CODE_API_KEY # paste key (never in repo/logs)
+# global probes: WORKER_BASE=https://open-tutor-llm-bench.<sub>.workers.dev/$BENCH_PATH \
+#   python3 run-global.py     # 10 cities x A,B,A,B x limit 5 = 200 runs
+wrangler delete open-tutor-llm-bench      # cleanup + verify via API list
+```
