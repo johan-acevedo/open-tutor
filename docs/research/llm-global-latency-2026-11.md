@@ -275,12 +275,17 @@ non-empty `content` delta. Full rig committed under `spikes/llm-bench/`
   re-check — either Command Code changed routing mid-day or the morning runs hit a
   different path. Backend B therefore ran **thinking-ON** in this bake-off.
 
-### Sweden direct baseline (dell5500, 10 runs/backend, same prompt as the Worker)
+### Sweden direct baseline (dell5500, 20 runs/backend over two rounds ~10:35 + ~13:05 UTC, same prompt as the Worker)
 
-| Backend | TTFT content med | TTFT range | Total med | Reasoning (med) | Content chars (med) |
-|---|---|---|---|---|---|
-| A: Workers AI REST, `reasoning_effort: none` | **2.1 s** (2068 ms; sorted: 1036–2776) | 1.0–2.8 s | 2.1 s | **0 tokens/chars ×10** | 215 |
-| B: Command Code chat, `thinking` disabled (ignored) | **3.4 s** (3374 ms; sorted: 2277–7743) | 2.3–7.7 s | 3.4 s | 120–188 tokens (rc med 590 chars) | 135 |
+| Backend | TTFT content med | TTFT range | Reasoning | Content chars (med) |
+|---|---|---|---|---|
+| A: Workers AI REST, `reasoning_effort: none` | **2.2 s** (2228 ms; n=20) | 1.0–5.3 s | **0 chars ×20** | ~215 |
+| B: Command Code chat, `thinking` disabled (ignored) | **3.9 s** (3878 ms; n=20) | 2.3–11.1 s | 120–190 tokens every run (rc 471–959 chars) | ~135 |
+
+Raw: `spikes/llm-bench/direct-baseline.jsonl` (rounds split in
+`-round1`/`-round2`). **CC re-check ~13:00 UTC: UNCHANGED** — tiny prompt with
+`thinking: {type: disabled}` still burns 60/60 tokens on reasoning with zero
+content, identical to flag-omitted (190 vs 195 chars reasoning).
 
 Notes: prompt caching active on both after run 0 (A `cached_tokens` 192/256, B 256);
 A's fastest runs (1.0–1.1 s) were cache hits. On **both** REST paths `total ≈ TTFT`
@@ -304,10 +309,21 @@ observed here; the Worker binding path may stream more granularly (verify post-d
   probe-side total, query strings pass through, `cf-ray` header gives probe colo);
   unauthenticated quota fits (plan = 200 probe runs < 250/hr; per city A,B,A,B ×
   limit 5 = 10 runs/backend, interleaved against cache/time drift).
-- **Cheapest unblock:** grant `Workers Scripts:Edit` to the existing token (or run
-  the 3 deploy commands in `spikes/llm-bench/README.md`), then
-  `WORKER_BASE=… python3 run-global.py`, then `wrangler delete`. Until then the §2
-  estimates stand — the per-region winner table below is **not yet measured**.
+- **Deploy attempt 2026-11-16 ~12:30 UTC with the new `cloudflare-worker-test.env`
+  token (dell5500-local, expires 2026-11-23): FAILED before any write.** Exact errors:
+  `wrangler deploy` → `A request to the Cloudflare API
+  (/accounts/76974d5ee42be1d512456fe96261ea49/workers/scripts/open-tutor-llm-bench/secrets)
+  failed: No access to the specified resource`; raw `PUT …/workers/scripts/<name>` →
+  `403 Forbidden: No access to the specified resource`; and
+  `GET /accounts/76974d5ee42be1d512456fe96261ea49` → `9109 Unauthorized to access
+  requested resource` (account list empty, subdomain check skipped per brief).
+  **This token is not a member of the Sorl account at all** — no workaround attempted
+  on Sorl resources, per instruction; nothing was created, nothing to delete.
+- **Cheapest unblock:** a token (or OAuth login) that is actually a member of Sorl
+  with Workers Scripts:Edit + Secrets:Edit, then the 3 deploy commands in
+  `spikes/llm-bench/README.md`, `WORKER_BASE=… python3 run-global.py`, then
+  `wrangler delete`. Until then the §2 estimates stand — the per-region winner
+  table is **not yet measured**.
 
 ### Preliminary recommendation (Sweden-measured; global TBD)
 
