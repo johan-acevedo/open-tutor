@@ -7,8 +7,11 @@ on 2026-11-12 unless marked open.
 ## Where things run
 
 - Trunk: `main`. The Smart Screen branch was merged on 2026-11-13 (PR #51); branch from `main`.
-- Production: ThinkCentre, `main`, Smart Screen on since 2026-11-13 (last deploy that day:
-  `411684c`). It is a public test: deploy only with Johan's go, and never restart during a call.
+- Production: ThinkCentre (https://tutor.labtopia.dev), `main`, Smart Screen on since
+  2026-11-13. Last deploy 2026-11-16: `429b511` (PRs #69 and #70, tried on dev first),
+  `TUTOR_INTERRUPT_MIN_S=1.6`. It is a public test: deploy only with Johan's go, and never
+  restart during a call. `deploy/install.sh` over ssh reports a failed health check because
+  it probes 127.0.0.1 while the service binds the tailnet address; check that address instead.
 - Development: dell5500, services `open-tutor-smart-dev-agent` and `-web`, run from a checkout
   of `main`. Changes are tried here first.
 - New to the repository: start with `AGENTS.md`.
