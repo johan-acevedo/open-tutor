@@ -281,6 +281,7 @@ non-empty `content` delta. Full rig committed under `spikes/llm-bench/`
 |---|---|---|---|---|
 | A: Workers AI REST, `reasoning_effort: none` | **2.2 s** (2228 ms; n=20) | 1.0–5.3 s | **0 chars ×20** | ~215 |
 | B: Command Code chat, `thinking` disabled (ignored) | **3.9 s** (3878 ms; n=20) | 2.3–11.1 s | 120–190 tokens every run (rc 471–959 chars) | ~135 |
+| C: OpenCode Go chat, `thinking` disabled (works) | **3.0 s** (3040 ms; n=20) | 1.4–4.4 s | **0 chars ×20** (`reasoning_tokens: 0`) | ~200 |
 
 Raw: `spikes/llm-bench/direct-baseline.jsonl` (rounds split in
 `-round1`/`-round2`). **CC re-check ~13:00 UTC: UNCHANGED** — tiny prompt with
@@ -293,64 +294,76 @@ A's fastest runs (1.0–1.1 s) were cache hits. On **both** REST paths `total �
 observed here; the Worker binding path may stream more granularly (verify post-deploy).
 **From Sweden today, A beats B by ~1.3 s median with zero reasoning overhead.**
 
-### Global leg: BLOCKED on token scope — method validated, rig ready
+### Global leg: MEASURED 2026-11-16 (10 cities × A/B/C × 10 runs, n=304)
 
-- The Sorl `CLOUDFLARE_API_TOKEN` (homelab `cloudflare.env`) is Workers-AI-run +
-  read-only: `PUT …/workers/scripts/open-tutor-llm-bench` →
-  `No access to the specified resource` (raw API too, so it is token scope, not
-  wrangler). No other deploy credential exists (dell5500 has no CF key; johan-4070
-  holds the same single token, no wrangler). **No Worker was deployed; nothing in
-  the Sorl account was touched** (scripts list re-checked: only pre-existing
-  `pebble-match`, `sorl-api-demo`, `sorl-api-staging`, `sorl-site`).
-- Everything else validated end-to-end: 10/10 Globalping cities resolve
-  (Sydney, Phoenix, Ashburn, São Paulo — ã works, Singapore, Tokyo, Frankfurt,
-  Stockholm, Mumbai, Johannesburg); HTTP measurement schema confirmed
-  (`result.rawBody` = Worker JSON with server timings, `result.timings.total` =
-  probe-side total, query strings pass through, `cf-ray` header gives probe colo);
-  unauthenticated quota fits (plan = 200 probe runs < 250/hr; per city A,B,A,B ×
-  limit 5 = 10 runs/backend, interleaved against cache/time drift).
-- **Deploy attempt 2026-11-16 ~12:30 UTC with the new `cloudflare-worker-test.env`
-  token (dell5500-local, expires 2026-11-23): FAILED before any write.** Exact errors:
-  `wrangler deploy` → `A request to the Cloudflare API
-  (/accounts/76974d5ee42be1d512456fe96261ea49/workers/scripts/open-tutor-llm-bench/secrets)
-  failed: No access to the specified resource`; raw `PUT …/workers/scripts/<name>` →
-  `403 Forbidden: No access to the specified resource`; and
-  `GET /accounts/76974d5ee42be1d512456fe96261ea49` → `9109 Unauthorized to access
-  requested resource` (account list empty, subdomain check skipped per brief).
-  **This token is not a member of the Sorl account at all** — no workaround attempted
-  on Sorl resources, per instruction; nothing was created, nothing to delete.
-- **Cheapest unblock:** a token (or OAuth login) that is actually a member of Sorl
-  with Workers Scripts:Edit + Secrets:Edit, then the 3 deploy commands in
-  `spikes/llm-bench/README.md`, `WORKER_BASE=… python3 run-global.py`, then
-  `wrangler delete`. Until then the §2 estimates stand — the per-region winner
-  table is **not yet measured**.
+Deploy unblocked with the fixed Sorl-member token (`cloudflare-worker-test.env`,
+subdomain `sorl`): worker `open-tutor-llm-bench`, secrets `BENCH_PATH` +
+`COMMAND_CODE_API_KEY` + `OPENCODE_API_KEY`, backend C added (OpenCode Go,
+`thinking disabled`, `x-opencode-session` UUID per call). Two method fixes en
+route: Globalping percent-encodes `?` in `request.path`, so the Worker routes on
+the path segment (`/bench/<a|b|c>`, query as fallback); and the anonymous 250/hr
+quota 429'd mid-run (~1 hr pause; resume-by-tally added to `run-global.py`). The
+first 15 Sydney/Phoenix rows 404'd on the old query format and are excluded.
+Nothing else in Sorl touched; worker deleted after (end of this section).
 
-### Preliminary recommendation (Sweden-measured; global TBD)
+Per-city TTFT in ms, server-measured (tot = full-reply server ms; colo = Worker PoP):
 
-With thinking off, Workers AI is the best measured option from Sweden (2.1 s med,
-zero reasoning) **and** the best structural bet for Sydney (edge-routed
-inference). Recommend making A the primary voice-turn candidate and running the
-pending global leg before switching the app default — if Sydney TTFT ≈ Stockholm
-±0.3 s on A while B keeps a ~1 s+ reasoning tax everywhere, the choice is settled
-for both speed and simplicity (one backend worldwide, no per-region routing).
+| City | A: Workers AI med (p90) / tot | B: Command Code med (p90) / tot | C: OpenCode Go med (p90) / tot | Colo seen | Winner |
+|---|---|---|---|---|---|
+| Sydney | **1972** (3142) / 2556 | 5195 (6673) / 5528 | 2680 (3532) / 3416 | SYD×24 MEL×6 | **A** |
+| Phoenix | **1613** (2570) / 2198 | 4969 (5961) / 5454 | 2525 (4144) / 3488 | PHX×12 LAX×12 LAS×6 | **A** |
+| Ashburn | 2435 (2874) / 2932 | 6524 (9267) / 6666 | **1374** (5832) / 2222 | EWR×25 IAD×9 | **C** |
+| São Paulo | 2206 (5657) / 2708 | 4608 (8106) / 4902 | **1788** (2721) / 2623 | GRU×30 | **C** |
+| Singapore | **2500** (2954) / 3325 | 6170 (7242) / 6456 | 4332 (5260) / 5199 | SIN×30 | **A** |
+| Tokyo | **1966** (3260) / 2510 | 6971 (11066) / 7236 | 2878 (3795) / 3734 | NRT×30 | **A** |
+| Frankfurt | 1413 (2854) / 1900 | 4546 (5156) / 4780 | **1182** (1415) / 2029 | FRA×30 | **C** |
+| Stockholm | 2059 (2678) / 2709 | 5174 (6990) / 5494 | **1057** (1514) / 1817 | ARN×30 | **C** |
+| Mumbai | **2074** (5282) / 2682 | 5985 (6586) / 6306 | 2611 (4471) / 3386 | BOM×23 MRS×5 SIN×2 | **A** |
+| Johannesburg | **1635** (3360) / 2090 | 4830 (6776) / 5094 | 3181 (4008) / 3885 | JNB×30 | **A** |
+
+Raw: `spikes/llm-bench/global-results.jsonl` (first 10 valid rows per cell;
+Ashburn over-collected after the quota resume).
+
+**Did Workers AI run near the caller? Yes.** The Worker executed in the
+probe-local PoP in every city (SYD, PHX/LAX/LAS, GRU, SIN, NRT, FRA, ARN, JNB;
+Ashburn went mostly to EWR — still US-East; Mumbai spilled 2/30 to SIN). And it
+shows: A TTFT is flat worldwide (1.4–2.5 s med, Sydney ≈ Stockholm), confirming
+the §2 geography estimate's magnitude and removing the GPU-distance leg. C wins
+EU/US-East (FRA 1.2 s, ARN 1.1 s, IAD-area 1.4 s, GRU 1.8 s) but pays distance in
+Asia (SIN 4.3 s — its GPUs are not APAC-local). B is slowest everywhere
+(4.6–7.0 s med) — the undisablable reasoning tax dominates.
+
+### Recommendation (measured)
+
+1. **Primary: Workers AI (A)** — wins or ties 7/10 cities, flattest worldwide
+   (p90 ≤ 3.4 s except GRU/BOM outliers), zero reasoning, cheapest
+   ($0.30/$1.20, prompt caching observed), one backend everywhere.
+2. **EU/US-East fast path: OpenCode Go (C)** — beats A in Frankfurt, Stockholm,
+   Ashburn and São Paulo; keep as regional fallback, not default (SIN/TYO/JNB
+   2.9–4.3 s). Thinking-off verified (`reasoning_tokens: 0` in all 120 runs).
+3. **Drop Command Code (B) for voice turns** — thinking cannot be disabled on
+   chat completions, 2–4 s slower than A in every city.
+4. No per-region routing needed for A. If C serves EU users, route by continent
+   (EU+US-East → C, rest → A), not per city.
 
 ### Appendix — Worker source (frozen 2026-11-16; canonical copy: `spikes/llm-bench/worker.js`)
 
 Deploy env (secrets, never in repo): `BENCH_PATH` = random 32-hex path segment,
-`COMMAND_CODE_API_KEY` = Command Code key; wrangler AI binding `env.AI`.
-`GET /<BENCH_PATH>/bench?backend=a|b` → JSON
+`COMMAND_CODE_API_KEY` + `OPENCODE_API_KEY`; wrangler AI binding `env.AI`.
+`GET /<BENCH_PATH>/bench/<a|b|c>` (?backend= fallback) → JSON
 `{backend, colo, country, ttft_ms, ttft_reasoning_ms, total_ms, content_chars,
 content_chunks, reasoning_chars, usage, first60, model}`; anything else → 404;
-hard cap 600 calls → 429. Backend A uses `env.AI.run` with
-`reasoning_effort: "none"`; backend B POSTs to Command Code with
-`thinking: {type: disabled}` and `User-Agent: open-tutor-bench/0.1` (CC 403s
-default Python UAs); both parsed as SSE, TTFT = first non-empty content delta.
+hard cap 900 calls → 429. A = `env.AI.run` with `reasoning_effort: "none"`;
+B = POST Command Code with `thinking: {type: disabled}`; C = POST OpenCode Go with
+`thinking: {type: disabled}` + `x-opencode-session` UUID; all send
+`User-Agent: open-tutor-bench/0.1`; SSE parsed for content vs
+reasoning/thinking deltas, TTFT = first non-empty content delta.
 
 ```js
 // spikes/llm-bench/worker.js — see repo for the exact file (no secrets in it).
-// Behaviour: secret-path gate → 404 otherwise; cap 600; A = AI binding with
-// reasoning_effort "none"; B = fetch Command Code with thinking disabled;
-// SSE parse counting content vs reasoning/thinking deltas; JSON timings out.
+// Behaviour: secret-path gate → 404 otherwise; cap 900; A = AI binding,
+// reasoning_effort "none"; B/C = fetch with thinking disabled (+ session UUID
+// for C); SSE parse counting content vs reasoning/thinking deltas.
 ```
 
 Key commands (values redacted; full text in `spikes/llm-bench/README.md`):

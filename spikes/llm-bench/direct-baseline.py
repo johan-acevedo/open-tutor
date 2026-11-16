@@ -99,14 +99,38 @@ def run_b(key, messages):
     return {"ttft_c": ttft_c, "ttft_r": ttft_r, "total": time.perf_counter() - t0,
             "content": content, "rchars": rchars, "chunks": chunks, "usage": usage}
 
+def run_c(key, messages):
+    body = {"model": "deepseek-v4.1-flash", "messages": messages, "max_tokens": 400, "stream": True,
+            "thinking": {"type": "disabled"}, "stream_options": {"include_usage": True}}
+    import uuid
+    req = urllib.request.Request(
+        "https://opencode.ai/zen/go/v1/chat/completions", data=json.dumps(body).encode(),
+        headers={"Authorization": "Bearer " + key, "Content-Type": "application/json",
+                 "Accept": "text/event-stream", "User-Agent": "open-tutor-bench/0.1",
+                 "x-opencode-session": f"bench-{uuid.uuid4()}"})
+    t0 = time.perf_counter()
+    with urllib.request.urlopen(req, timeout=120) as r:
+        ttft_c, ttft_r, content, rchars, chunks, usage = read_sse(r, t0)
+    return {"ttft_c": ttft_c, "ttft_r": ttft_r, "total": time.perf_counter() - t0,
+            "content": content, "rchars": rchars, "chunks": chunks, "usage": usage}
+
 def main():
-    token = get_cf_token()
-    with open(os.path.expanduser("~/.config/homelab/secrets/agent-auth.env")) as f:
-        cc = next(l.split("=", 1)[1].strip() for l in f if l.startswith("COMMAND_CODE_API_KEY="))
+    want = set(sys.argv[1:]) or {"a", "b", "c"}
+    token = get_cf_token() if "a" in want else None
+    secrets = {}
+    if want & {"b", "c"}:
+        with open(os.path.expanduser("~/.config/homelab/secrets/agent-auth.env")) as f:
+            for l in f:
+                if l.startswith("COMMAND_CODE_API_KEY="):
+                    secrets["b"] = l.split("=", 1)[1].strip()
+                elif l.startswith("OPENCODE_API_KEY="):
+                    secrets["c"] = l.split("=", 1)[1].strip()
     messages = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": USER_TURN}]
-    out = open("direct-baseline.jsonl", "w")
+    out = open("direct-baseline.jsonl", "a")
     for i in range(10):
-        for backend, fn, cred in (("a", run_a, token), ("b", run_b, cc)):
+        for backend, fn, cred in (("a", run_a, token), ("b", run_b, secrets.get("b")), ("c", run_c, secrets.get("c"))):
+            if backend not in want:
+                continue
             try:
                 r = fn(cred, messages)
                 rec = {"run": i, "backend": backend,

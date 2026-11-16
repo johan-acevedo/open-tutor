@@ -1,23 +1,26 @@
 /**
  * open-tutor-llm-bench — temporary global TTFT bake-off worker (delete after 2026-11-16).
  *
- * GET /<BENCH_PATH>/bench?backend=a|b   (any other path -> 404)
+ * GET /<BENCH_PATH>/bench/<a|b|c>  (query ?backend= also accepted; else 404)
  *   a = Workers AI binding, @cf/deepseek-ai/deepseek-v4.1-flash-1017, reasoning_effort "none"
  *   b = Command Code Provider API, deepseek/deepseek-v4.1-flash, thinking disabled
+ *   c = OpenCode Go, deepseek-v4.1-flash, thinking disabled (+ x-opencode-session)
  *
  * The Worker itself measures TTFT (first non-empty content delta) so the
  * Worker->backend leg is isolated from the probe->Worker leg. Probes read the
  * JSON body (server timings) and Globalping's timings.total (client side).
  *
- * Secrets (never in repo): BENCH_PATH and COMMAND_CODE_API_KEY are Worker
- * secrets set at deploy time. Hard cap of 600 bench calls, then 429.
+ * Secrets (never in repo): BENCH_PATH, COMMAND_CODE_API_KEY and OPENCODE_API_KEY
+ * are Worker secrets set at deploy time. Hard cap of 900 bench calls, then 429.
  */
 
 const MODEL_A = "@cf/deepseek-ai/deepseek-v4.1-flash-1017";
 const CC_URL = "https://api.commandcode.ai/provider/v1/chat/completions";
 const MODEL_B = "deepseek/deepseek-v4.1-flash";
+const GO_URL = "https://opencode.ai/zen/go/v1/chat/completions";
+const MODEL_C = "deepseek-v4.1-flash";
 const MAX_TOKENS = 400;
-const MAX_REQUESTS = 600;
+const MAX_REQUESTS = 900;
 
 let count = 0;
 
@@ -83,7 +86,7 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const seg = url.pathname.split("/").filter(Boolean);
-    if (seg.length !== 2 || seg[1] !== "bench" || seg[0] !== env.BENCH_PATH) {
+    if (seg.length < 2 || seg.length > 3 || seg[1] !== "bench" || seg[0] !== env.BENCH_PATH) {
       return new Response("not found", { status: 404 });
     }
     if (request.method !== "GET") {
@@ -92,9 +95,10 @@ export default {
     if (++count > MAX_REQUESTS) {
       return Response.json({ error: "budget exhausted" }, { status: 429 });
     }
-    const backend = url.searchParams.get("backend");
-    if (backend !== "a" && backend !== "b") {
-      return Response.json({ error: "use ?backend=a|b" }, { status: 400 });
+    // Path segment wins (some probes percent-encode "?"), query is the fallback.
+    const backend = seg[2] || url.searchParams.get("backend");
+    if (backend !== "a" && backend !== "b" && backend !== "c") {
+      return Response.json({ error: "use /bench/a|b|c" }, { status: 400 });
     }
     const messages = [
       { role: "system", content: SYSTEM },
@@ -111,7 +115,7 @@ export default {
       });
       const body = s instanceof Response ? s.body : s;
       m = await readSSE(body, t0);
-    } else {
+    } else if (backend === "b") {
       const r = await fetch(CC_URL, {
         method: "POST",
         headers: {
@@ -122,6 +126,29 @@ export default {
         },
         body: JSON.stringify({
           model: MODEL_B,
+          messages,
+          max_tokens: MAX_TOKENS,
+          stream: true,
+          thinking: { type: "disabled" },
+          stream_options: { include_usage: true },
+        }),
+      });
+      if (!r.ok || !r.body) {
+        return Response.json({ error: "upstream " + r.status }, { status: 502 });
+      }
+      m = await readSSE(r.body, t0);
+    } else {
+      const r = await fetch(GO_URL, {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer " + env.OPENCODE_API_KEY,
+          "Content-Type": "application/json",
+          Accept: "text/event-stream",
+          "User-Agent": "open-tutor-bench/0.1",
+          "x-opencode-session": crypto.randomUUID(), // one per conversation
+        },
+        body: JSON.stringify({
+          model: MODEL_C,
           messages,
           max_tokens: MAX_TOKENS,
           stream: true,
@@ -147,7 +174,7 @@ export default {
       reasoning_chars: m.reasonChars,
       usage: m.usage,
       first60: m.content.slice(0, 60),
-      model: backend === "a" ? MODEL_A : MODEL_B,
+      model: backend === "a" ? MODEL_A : backend === "b" ? MODEL_B : MODEL_C,
     });
   },
 };

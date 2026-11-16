@@ -5,12 +5,12 @@ Prereqs: worker deployed (see README below), WORKER_BASE env =
   https://open-tutor-llm-bench.<subdomain>.workers.dev/<32hex>
 Usage: WORKER_BASE=... python3 run-global.py
 Writes global-results.jsonl (one line per probe run). No keys leave this machine:
-  probes only GET the secret path; the CC key stays inside the Worker.
+  probes only GET the secret path; provider keys stay inside the Worker.
 
-Design: per city, 4 measurements x limit 5, alternating A B A B
+Design: per city, 6 measurements x limit 5, alternating A B C A B C
   (10 runs/backend/city, interleaved against cache/time drift).
-  10 cities x 20 runs = 200 probe executions (< 250/hr free tier; run A/B
-  halves back-to-back if rate-limited).
+  10 cities x 30 runs = 300 probe executions; the create->poll cycle self-limits
+  below the 250/hr free tier, with 429 backoff just in case.
 """
 import json, os, sys, time, urllib.request
 
@@ -23,15 +23,24 @@ CITIES = [
 ]
 UA = {"Content-Type": "application/json", "User-Agent": "open-tutor-bench/0.1"}
 
-def api(method, path, body=None):
-    req = urllib.request.Request("https://api.globalping.io/v1" + path,
-        data=json.dumps(body).encode() if body is not None else None,
-        headers=UA, method=method)
-    return json.load(urllib.request.urlopen(req, timeout=60))
+def api(method, path, body=None, retries=25):
+    for attempt in range(retries):
+        req = urllib.request.Request("https://api.globalping.io/v1" + path,
+            data=json.dumps(body).encode() if body is not None else None,
+            headers=UA, method=method)
+        try:
+            return json.load(urllib.request.urlopen(req, timeout=60))
+        except urllib.error.HTTPError as e:
+            if e.code == 429 and attempt < retries - 1:
+                print(f"429 on {method} {path}, sleeping 180s (try {attempt+1}/{retries})", flush=True)
+                time.sleep(180)
+                continue
+            raise
 
 def create(city, backend):
     host = BASE.split("://", 1)[1].split("/", 1)[0]
-    path = "/" + BASE.split("://", 1)[1].split("/", 1)[1] + f"/bench?backend={backend}"
+    # Backend as a path segment: some probes percent-encode "?" in path.
+    path = "/" + BASE.split("://", 1)[1].split("/", 1)[1] + f"/bench/{backend}"
     b = {"type": "http", "target": host,
          "locations": [{"country": city[0], "city": city[1], "limit": 5}],
          "measurementOptions": {"request": {"method": "GET", "path": path}}}
@@ -46,10 +55,32 @@ def wait(mid, timeout=300):
             return m
     return m
 
+def tallies():
+    import collections
+    have = collections.Counter()
+    try:
+        for l in open("global-results.jsonl"):
+            try:
+                r = json.loads(l)
+            except Exception:
+                continue
+            w = r.get("worker", {})
+            if isinstance(w, dict) and w.get("ttft_ms"):
+                have[(r.get("city"), r.get("backend"))] += 1
+    except FileNotFoundError:
+        pass
+    return have
+
+
 def main():
     out = open("global-results.jsonl", "a")
+    have = tallies()
     for country, city in CITIES:
-        for backend in ("a", "b", "a", "b"):
+        for block, backend in enumerate(("a", "b", "c", "a", "b", "c")):
+            target = 5 if block < 3 else 10  # first pass fills 0-5, second 5-10
+            if have.get((city, backend), 0) >= target:
+                print(f"{city} {backend}: already have {have[(city, backend)]}, skipping block", flush=True)
+                continue
             try:
                 mid = create((country, city), backend)
                 m = wait(mid)

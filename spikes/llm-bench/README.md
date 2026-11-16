@@ -3,6 +3,11 @@
 Temporary rig. Compares, from 10 Globalping cities:
 - **A**: Workers AI `@cf/deepseek-ai/deepseek-v4.1-flash-1017`, `reasoning_effort: "none"`
 - **B**: Command Code `deepseek/deepseek-v4.1-flash`, `thinking: {type: disabled}`
+- **C**: OpenCode Go `deepseek-v4.1-flash`, `thinking: {type: disabled}` + `x-opencode-session`
+
+Backend as a **path segment** (`/bench/<a|b|c>`): Globalping percent-encodes `?`
+in `request.path`, so query strings do not route. `run-global.py` resumes by tally
+and backs off on 429 (anonymous quota is 250 tests/hr; 300-run A/B/C needs ~2 windows).
 
 ## Files
 - `worker.js` + `wrangler.toml` — bench Worker (measures TTFT server-side).
