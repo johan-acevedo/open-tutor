@@ -6,7 +6,8 @@ import { composePage } from '../shell';
 export type PageShellMessage =
   | { ot: 'patch'; html: string }
   | { ot: 'point'; id: string | null }
-  | { ot: 'reveal'; id: string };
+  | { ot: 'reveal'; id: string }
+  | { ot: 'loading'; topic: string };
 
 /** A submitted answer from ot-answer, ot-choice or ot-gap. */
 export type PageAnswer = { page: string; part: string; value: string; kind: string };

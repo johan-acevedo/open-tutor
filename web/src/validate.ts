@@ -225,6 +225,9 @@ export function validateBoardFocus(raw: unknown): FocusOk | FocusErr {
 export type PageOpOk = { ok: true; id: string; arg: string };
 export type PageOpErr = { ok: false; error: string };
 
+export type LoadingOk = { ok: true; id: string; topic: string };
+export type LoadingErr = { ok: false; error: string };
+
 /** Parse + validate a board.patch / board.reveal / board.point payload: { id, patch|part }. */
 export function validateBoardPageOp(raw: unknown, field: 'patch' | 'part'): PageOpOk | PageOpErr {
   if (!isRecord(raw)) return { ok: false, error: 'page op payload must be an object' };
@@ -232,6 +235,15 @@ export function validateBoardPageOp(raw: unknown, field: 'patch' | 'part'): Page
   const arg = raw[field];
   if (!isNonEmptyString(arg)) return { ok: false, error: `page op payload needs ${field} string` };
   return { ok: true, id: raw.id, arg };
+}
+
+/** Parse + validate a board.loading payload: { id, topic }. An empty topic clears. */
+export function validateBoardLoading(raw: unknown): LoadingOk | LoadingErr {
+  if (!isRecord(raw)) return { ok: false, error: 'loading payload must be an object' };
+  if (!isNonEmptyString(raw.id)) return { ok: false, error: 'loading payload needs id string' };
+  if (typeof raw.topic !== 'string') return { ok: false, error: 'loading payload needs topic string' };
+  if (raw.topic.length > 120) return { ok: false, error: 'loading topic must be at most 120 characters' };
+  return { ok: true, id: raw.id, topic: raw.topic };
 }
 
 /** Loose check for incoming note payloads (topic 'note'). */

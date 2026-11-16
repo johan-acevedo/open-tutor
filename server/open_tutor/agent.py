@@ -301,6 +301,11 @@ class Tutor(Agent):
         self.ids = Ids()
         self.boards: dict[str, HtmlItem] = {}
         self._board_render_lock = asyncio.Lock()
+        # One serialized delivery path for every board change in the session:
+        # shows, updates, removes, patches, reveals, points, resources and
+        # loading states all go through _board_send, so no two changes
+        # interleave on the way to the browser.
+        self._board_lock = asyncio.Lock()
         self.current_board_id: str | None = None
         self.child_identity: str | None = None
         self.mode = "talking"
@@ -355,8 +360,13 @@ class Tutor(Agent):
                     self.update_board_size(ack_w, ack_h, board.get("device"))
         return ok
 
+    async def _board_send(self, method: str, payload: dict[str, Any]) -> bool:
+        """Send one board RPC; serialized with every other board change."""
+        async with self._board_lock:
+            return await self._rpc(method, payload)
+
     async def _show(self, item) -> str:
-        shown = await self._rpc("board.show", item.model_dump(exclude_none=True))
+        shown = await self._board_send("board.show", item.model_dump(exclude_none=True))
         if not shown:
             return f"The board could not show item {item.id}. Explain in words instead, briefly."
         return f"Item {item.id} is now visible on the board. You can talk about it."
@@ -366,12 +376,13 @@ class Tutor(Agent):
         if not self.child_identity or not item_id:
             return
         try:
-            await self.room.local_participant.perform_rpc(
-                destination_identity=self.child_identity,
-                method="board.remove",
-                payload=json.dumps({"id": item_id}),
-                response_timeout=BOARD_RPC_TIMEOUT,
-            )
+            async with self._board_lock:
+                await self.room.local_participant.perform_rpc(
+                    destination_identity=self.child_identity,
+                    method="board.remove",
+                    payload=json.dumps({"id": item_id}),
+                    response_timeout=BOARD_RPC_TIMEOUT,
+                )
             record_active("board_ack", {"method": "board.remove", "id": item_id, "ok": True})
         except Exception as error:
             log.warning("board remove %s failed: %s", item_id, error)
@@ -382,7 +393,7 @@ class Tutor(Agent):
         """Publish a finished drawing: in place of its placeholder when announced."""
         if not pending_id:
             return await self._show(item)
-        shown = await self._rpc("board.update", item.model_dump(exclude_none=True))
+        shown = await self._board_send("board.update", item.model_dump(exclude_none=True))
         if shown:
             return f"Item {item.id} is now visible on the board. You can talk about it."
         await self._remove(pending_id)
@@ -431,7 +442,7 @@ class Tutor(Agent):
         # this design box to fit the current pane.
         try:
             ph = PendingItem(id=pid, title=(title or need)[:120], height=self.board_h)
-            await self._rpc("board.show", ph.model_dump(exclude_none=True))
+            await self._board_send("board.show", ph.model_dump(exclude_none=True))
         except Exception:
             pass
         design_w, design_h, design_device = self.board_w, self.board_h, self.board_device
@@ -455,7 +466,7 @@ class Tutor(Agent):
             await self._remove(pid)
             return (f"Invalid board: {error.errors()[0]['msg']} "
                     "The placeholder was removed. Explain in words instead.")
-        shown = await self._rpc("board.update", item.model_dump(exclude_none=True))
+        shown = await self._board_send("board.update", item.model_dump(exclude_none=True))
         if not shown:
             await self._remove(pid)
             return ("The drawing failed to appear "
@@ -513,7 +524,7 @@ class Tutor(Agent):
         return await self._edit_saved_board(self.boards[target], changes)
 
     async def _failed_board_edit(self, saved: HtmlItem, reason: str) -> str:
-        restored = await self._rpc("board.update", saved.model_dump(exclude_none=True))
+        restored = await self._board_send("board.update", saved.model_dump(exclude_none=True))
         outcome = (f"The original board {saved.id} was restored." if restored else
                    f"I could not confirm restoring board {saved.id} on screen. "
                    "Its previous source is retained for a later retry.")
@@ -528,7 +539,7 @@ class Tutor(Agent):
         edit_h = saved.height or self.board_h
         try:
             ph = PendingItem(id=target, title=(saved.title or changes)[:120], height=edit_h)
-            await self._rpc("board.update", ph.model_dump(exclude_none=True))
+            await self._board_send("board.update", ph.model_dump(exclude_none=True))
         except Exception:
             pass
         edit_device = self.board_device
@@ -547,7 +558,7 @@ class Tutor(Agent):
                             html=html, height=edit_h, width=edit_w)
         except ValidationError as error:
             return await self._failed_board_edit(saved, f"Invalid revised board: {error.errors()[0]['msg']}.")
-        shown = await self._rpc("board.update", item.model_dump(exclude_none=True))
+        shown = await self._board_send("board.update", item.model_dump(exclude_none=True))
         if not shown:
             return await self._failed_board_edit(saved, f"The revised drawing failed to appear (item {target}).")
         self.boards[target] = item
@@ -736,7 +747,7 @@ class Tutor(Agent):
         # load for this section. Anything else is a failure below. (_rpc
         # returns a bool; _show's string is always truthy, so it cannot gate
         # feedback here.)
-        acked = await self._rpc("board.show", item.model_dump(exclude_none=True))
+        acked = await self._board_send("board.show", item.model_dump(exclude_none=True))
         if not acked:
             record_active("material_show", {"ok": False, "section_id": key,
                                                 "board_id": item.id, "reason": "no_ack"})
@@ -946,20 +957,37 @@ class SmartTutor(Tutor):
         screen.set_pane_source(lambda: (self.board_w, self.board_h))
 
     @function_tool()
-    async def ask_screen(self, context: RunContext, ask: str) -> str:
+    async def ask_screen(self, context: RunContext, ask: str, show: str = "auto") -> str:
         """Ask the screen for a new page or a change to the visible one.
 
         Ask in terms of what the child needs right now (who they are, what was
         just said, what should land); the screen hears the whole lesson, so one
         short ask is enough. Returns at once: keep talking with the child in
         words while it works. Never announce a wait or describe the unseen page.
-        A finished page stays invisible until you call show_page; a change to
-        the visible page applies by itself and arrives with a note.
+        A finished page appears on the screen by itself as soon as it is ready
+        (show="show", the default); pass show="hold" when the page must stay
+        hidden until the child has tried, and bring it in later with show_page.
+        A change to the visible page applies by itself and arrives with a note.
 
         Args:
             ask: What the child needs, e.g. "En sida om klockan halv sju för åk 1".
+            show: "auto" (a finished page appears by itself), "show" (same),
+                or "hold" (stays invisible until show_page).
         """
-        job = self.screen.ask(ask)
+        mode = (show or "auto").strip().lower()
+        if mode == "auto":
+            mode = "show"
+        if mode not in ("show", "hold"):
+            return (f"Unknown show mode '{show}'. Use show=\"show\" (the page appears "
+                    "by itself) or show=\"hold\" (it stays hidden until show_page). "
+                    "Nothing was asked.")
+        job = self.screen.ask(ask, reveal=mode)
+        if mode == "show":
+            return ("The screen is working on it now "
+                    f"(job {job}). Keep talking with the child in words: explain, ask, "
+                    "or react to what they just said. Do not announce a wait. "
+                    "The finished page appears on the screen by itself as soon as it is "
+                    "ready; you get its source and a screenshot then.")
         return ("The screen is working on it now "
                 f"(job {job}). Keep talking with the child in words: explain, ask, "
                 "or react to what they just said. Do not announce a wait. "
@@ -970,6 +998,9 @@ class SmartTutor(Tutor):
     async def show_page(self, context: RunContext, page_id: str) -> str:
         """Put a finished screen page in front of the child.
 
+        Only needed for a page asked with show="hold"; other pages appear by
+        themselves. Calling it again for the page already on screen is harmless.
+
         Args:
             page_id: Which finished page, e.g. "p1" (from the ready note).
         """
@@ -978,18 +1009,60 @@ class SmartTutor(Tutor):
             known = ", ".join(sorted(self.screen.pages)) or "none yet"
             return (f"Unknown page id '{page_id}'. Finished pages: {known}. "
                     "No page was shown. Explain in words instead, briefly.")
+        ok, note = await self._show_page_object(page)
+        return note
+
+    async def _show_page_object(self, page: Any) -> tuple[bool, str]:
+        """Deliver one finished page object to the browser (shared by the
+        show_page tool and the show-when-ready path in screen_page_ready)."""
         try:
             item = PageItem(id=page.page_id, title=page.title, body=page.body)
         except ValidationError:
-            return (f"Page {page.page_id} is too large to show. "
+            return (False, f"Page {page.page_id} is too large to show. "
                     "Explain in words instead, briefly.")
-        shown = await self._rpc("board.show", item.model_dump(exclude_none=True))
-        if not shown:
-            return (f"Page {page.page_id} could not be shown. "
-                    "Explain in words instead, briefly.")
-        self.screen.mark_visible(page.page_id)
-        return (f"Page {page.page_id} is now visible. "
+        async with self._board_lock:
+            shown = await self._rpc("board.show", item.model_dump(exclude_none=True))
+            if not shown:
+                return (False, f"Page {page.page_id} could not be shown. "
+                        "Explain in words instead, briefly.")
+            self.screen.mark_visible(page.page_id)
+        return (True, f"Page {page.page_id} is now visible. "
                 "Teach from what it actually shows, as its author.")
+
+    @function_tool()
+    async def screen_loading(self, context: RunContext, topic: str) -> str:
+        """Dim the visible page and show "Laddar <topic>…" at once.
+
+        Call it when you move to a new subject, so the child never reads the
+        old page while you talk about the new one. It clears by itself when new
+        content arrives; call with an empty topic to clear it sooner.
+
+        Args:
+            topic: The new subject in Swedish, e.g. "historia"; empty clears.
+        """
+        topic = (topic or "").strip()[:120]
+        if self.screen.visible_id is None:
+            return "No page is on screen yet. Nothing was dimmed."
+        ok = await self._board_send("board.loading",
+                                    {"id": self.screen.visible_id, "topic": topic})
+        if not ok:
+            return ("The loading state could not be shown. "
+                    "Keep teaching in words instead, briefly.")
+        if topic:
+            return (f"The screen is dimmed and shows 'Laddar {topic}…'. "
+                    "Keep talking about the new subject in words until its page appears.")
+        return "The loading state is cleared."
+
+    @function_tool()
+    async def screen_status(self, context: RunContext) -> str:
+        """Ask what the screen is doing right now.
+
+        One cheap line: writing, pictures, checking, ready or shown, and how
+        long it has been there. Call it when the wait grows long or the child
+        asks how the page is going; tell the child in one short Swedish
+        sentence, then keep teaching in words.
+        """
+        return self.screen.status_line()
 
     @function_tool()
     async def reveal(self, context: RunContext, part_id: str) -> str:
@@ -1003,7 +1076,7 @@ class SmartTutor(Tutor):
             return "No part given. Nothing was revealed."
         if self.screen.visible_id is None:
             return "No page is on screen yet. Nothing was revealed."
-        ok = await self._rpc("board.reveal", {"id": self.screen.visible_id, "part": part})
+        ok = await self._board_send("board.reveal", {"id": self.screen.visible_id, "part": part})
         if not ok:
             return f"Part {part} could not be revealed. Explain in words instead, briefly."
         return f"Part {part} is now visible. Talk about what it shows."
@@ -1020,7 +1093,7 @@ class SmartTutor(Tutor):
             return "No part given. Nothing was highlighted."
         if self.screen.visible_id is None:
             return "No page is on screen yet. Nothing was highlighted."
-        ok = await self._rpc("board.point", {"id": self.screen.visible_id, "part": part})
+        ok = await self._board_send("board.point", {"id": self.screen.visible_id, "part": part})
         if not ok:
             return f"Part {part} could not be highlighted. Explain in words instead, briefly."
         return f"Part {part} is highlighted. Talk about it."
@@ -1037,16 +1110,66 @@ class SmartTutor(Tutor):
             pass
         prompt_event(session, text)
 
+    async def _clear_loading(self, page_id: str | None = None) -> bool:
+        """Clear a loading veil best-effort; True when the RPC went out.
+
+        Terminal job states (held page ready, failed job, replaced page) must
+        never leave a stale \"Laddar …\" on screen: the fox reveals a held
+        page when it wants, so the veil's job is done."""
+        target = page_id or (self.screen.visible_id if self.screen else None)
+        if target is None:
+            return False
+        try:
+            return await self._board_send("board.loading", {"id": target, "topic": ""})
+        except Exception:  # noqa: BLE001 - clearing is best-effort
+            return False
+
     async def screen_page_ready(self, session: AgentSession, page: Any) -> None:
-        """A new page finished: add it to the context invisible, then prompt once."""
+        """A new page finished: show it at once, or hold it when asked.
+
+        The default reveal mode (``ask_screen`` without ``show="hold"``) puts
+        the page in front of the child immediately, so a new subject never
+        waits behind the old page until the tutor's next turn. A held page
+        keeps the old behaviour: added to the context invisible, then one
+        prompt once the tutor is free."""
         parts: list[Any] = []
         if getattr(page, "png", None):
             parts.append(llm.ImageContent(
                 image=f"data:image/png;base64,{base64.b64encode(page.png).decode()}",
                 inference_detail="high"))
-        text = (f"[Screen page {page.page_id} ('{page.title}') is ready but NOT visible. "
-                f"Source:\n{page.body}\nCall show_page('{page.page_id}') when it fits "
-                f"the lesson.]")
+        if getattr(page, "reveal", "show") == "show":
+            old_id = self.screen.visible_id
+            ok, note = await self._show_page_object(page)
+            if ok:
+                if old_id is not None and old_id != page.page_id:
+                    # The old frame stays mounted for back-navigation: do not
+                    # leave its veil on.
+                    await self._clear_loading(old_id)
+                text = (f"[Screen page {page.page_id} ('{page.title}') is now ON SCREEN. "
+                        f"Source:\n{page.body}\nTeach from what it actually shows.]")
+                record_active("screen_ready", {"page": page.page_id, "title": page.title,
+                                                   "image": bool(getattr(page, 'png', None)),
+                                                   "shown": True})
+                ctx = self.chat_ctx.copy()
+                ctx.add_message(role="user", content=[text, *parts])
+                await self.update_chat_ctx(ctx)
+                asyncio.create_task(self._prompt_when_free(
+                    session, f"Screen page {page.page_id} ('{page.title}') is on screen now. "
+                              f"Teach from what it actually shows."))
+                return
+            # Auto-show failed: fall through to the held path so the tutor
+            # still gets the page and can bring it in with show_page.
+            text = (f"[Screen page {page.page_id} ('{page.title}') is ready but NOT visible "
+                    f"(it could not be shown by itself: {note}). "
+                    f"Source:\n{page.body}\nCall show_page('{page.page_id}') when it fits "
+                    f"the lesson.]")
+        else:
+            text = (f"[Screen page {page.page_id} ('{page.title}') is ready but NOT visible. "
+                    f"Source:\n{page.body}\nCall show_page('{page.page_id}') when it fits "
+                    f"the lesson.]")
+        # Terminal state: the veil's job is done whether the page shows now
+        # or the fox brings it in later with show_page.
+        await self._clear_loading()
         record_active("screen_ready", {"page": page.page_id, "title": page.title,
                                            "image": bool(getattr(page, 'png', None))})
         ctx = self.chat_ctx.copy()
@@ -1057,14 +1180,18 @@ class SmartTutor(Tutor):
                       f"If it fits the lesson now, call show_page('{page.page_id}'); "
                       f"otherwise keep teaching and bring it in later."))
 
-    async def screen_patch_ready(self, session: AgentSession, patch: Any) -> None:
-        """A change finished: apply it at once, add it to the context, no prompt."""
-        ok = await self._rpc("board.patch", {"id": patch.page_id, "patch": patch.patch})
+    async def screen_patch_ready(self, session: AgentSession, patch: Any) -> bool:
+        """A change finished: apply it at once, add it to the context, no prompt.
+
+        Sent through the serialized delivery path, like every other board
+        change. Returns whether the change was sent, so the Screen only
+        records delivered patches in its history."""
         parts: list[Any] = []
         if getattr(patch, "png", None):
             parts.append(llm.ImageContent(
                 image=f"data:image/png;base64,{base64.b64encode(patch.png).decode()}",
                 inference_detail="high"))
+        ok = await self._board_send("board.patch", {"id": patch.page_id, "patch": patch.patch})
         applied = "applied on the visible page" if ok else "could NOT be applied"
         text = (f"[Screen change {applied} (page {patch.page_id}). "
                 f"Patch source:\n{patch.patch}\nThe screenshot shows the page now.]")
@@ -1072,12 +1199,15 @@ class SmartTutor(Tutor):
         ctx = self.chat_ctx.copy()
         ctx.add_message(role="user", content=[text, *parts])
         await self.update_chat_ctx(ctx)
+        return ok
 
     async def screen_failed(self, session: AgentSession, message: str) -> None:
         """A screen job failed: tell the tutor and let it say so once it is free.
 
         Quiet failure left the child waiting in silence (2026-11-13: 26 s until
-        the child asked "Hur går det?")."""
+        the child asked "Hur går det?"). A loading overlay from screen_loading
+        is cleared best-effort first, so no stale "Laddar …" stays on screen."""
+        await self._clear_loading()
         record_active("screen_failed", {"message": message[:200]})
         await self._prompt_when_free(
             session,

@@ -27,6 +27,10 @@ The browser shows homework on the board itself as soon as the child adds it (kin
 | RPC to browser | `board.focus` | `{ "id", "step"?: number }` highlights one step of a `steps` item, or the whole item. Responds `{ "ok": true }`. |
 | RPC to browser | `board.update` | `BoardItem` with an existing `id` replaces it in place. New drawings replace their placeholder; edits replace the existing board. It returns the same acknowledgement and dimensions as `board.show`. |
 | RPC to browser | `board.remove` | `{ "id" }` removes that board item, for example a `pending` placeholder whose drawing failed. Responds `{ "ok": true }`. |
+| RPC to browser | `board.patch` | `{ "id", "patch" }` applies `<ot-patch>` HTML to that page's shell. Responds `{ "ok": true }`; rejects when no page frame with that id is mounted. |
+| RPC to browser | `board.reveal` | `{ "id", "part" }` uncovers a hidden answer or `later` part on that page. Responds `{ "ok": true }`. |
+| RPC to browser | `board.point` | `{ "id", "part" }` highlights one part of that page. Responds `{ "ok": true }`. |
+| RPC to browser | `board.loading` | `{ "id", "topic" }` dims that page and shows "Laddar <topic>…" at once while the next page is prepared; an empty topic clears it. A successful patch clears it too. Responds `{ "ok": true }`. |
 | Text stream | `note` | JSON `Note`. The browser saves it to the current profile in IndexedDB. |
 | Text stream | `lk.transcription` | Built-in agent captions, streamed in step with the audio. The browser shows the sentence being spoken. |
 | Participant attribute | `lk.agent.state` | Built-in: `initializing`, `listening`, `thinking`, `speaking`. |

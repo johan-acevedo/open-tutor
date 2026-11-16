@@ -9,6 +9,8 @@
  *
  * Parent -> frame (postMessage):  {ot:'patch', html}  {ot:'point', id|null}
  *                                  {ot:'reveal', id}   {ot:'restore', state}
+ *                                  {ot:'loading', topic} (dim the page and show
+ *                                    "Laddar <topic>…" at once; empty topic clears)
  *                                  {ot:'hello'}         (the frame posts its ready message again:
  *                                    at once when it is already ready, otherwise when it becomes ready)
  * Frame -> parent:                 {ot:'ready', fontPx, issues, w, h}
@@ -17,7 +19,7 @@
  *                                    name an id that does not exist)
  *                                  {ot:'answer', id, value}   (child pressed Skicka / chose)
  *                                  {ot:'input', id, value}    (draft text, for keeping state)
- * The same calls exist as window.ot.patch / point / reveal / restore.
+ * The same calls exist as window.ot.patch / point / reveal / restore / loading.
  */
 (function () {
   'use strict';
@@ -2589,6 +2591,38 @@
     return true;
   };
 
+  // Dim the finished page and show "Laddar <topic>…" at once, so the child
+  // never reads yesterday's page while the tutor talks about the new subject.
+  // An empty topic clears. A successful patch clears too: fresh content has
+  // arrived, so a stale overlay must not cover it. The topic travels as text
+  // (textContent), never HTML.
+  ot.loading = function (topic) {
+    var veil = document.getElementById('ot-loading');
+    if (topic == null || topic === '') {
+      if (veil && veil.parentNode) veil.parentNode.removeChild(veil);
+      return true;
+    }
+    if (!veil) {
+      veil = document.createElement('div');
+      veil.id = 'ot-loading';
+      veil.setAttribute('role', 'status');
+      var pill = document.createElement('div');
+      pill.className = 'ot-loading-pill';
+      var spin = document.createElement('span');
+      spin.className = 'ot-loading-spin';
+      spin.setAttribute('aria-hidden', 'true');
+      var label = document.createElement('span');
+      label.className = 'ot-loading-label';
+      pill.appendChild(spin);
+      pill.appendChild(label);
+      veil.appendChild(pill);
+      document.body.appendChild(veil);
+    }
+    var label = veil.querySelector('.ot-loading-label');
+    if (label) label.textContent = 'Laddar ' + topic + ' …';
+    return true;
+  };
+
   ot.reveal = function (id) {
     var el = document.getElementById(id);
     if (!el) { flushPatched(issue('reveal', 'nothing has id "' + id + '"')); return false; }
@@ -2672,6 +2706,8 @@
         if (reducedMotion() || !el.animate) { el.remove(); settle(true); return; }
         animEnd(el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 350, easing: 'ease-in', fill: 'forwards' }), 350, function () { el.remove(); settle(true); });
       });
+      // Fresh content has arrived: a stale "Laddar …" must not cover it.
+      ot.loading(null);
       return flushPatched();
     } catch (e) {
       issue('patch', 'patch failed: ' + (e && e.message || String(e)));
@@ -2691,6 +2727,7 @@
       if (m.ot === 'patch') ot.patch(m.html);
       else if (m.ot === 'point') ot.point(m.id || null);
       else if (m.ot === 'reveal') { ot.reveal(m.id); flushPatched(); }
+      else if (m.ot === 'loading') ot.loading(m.topic == null ? null : String(m.topic));
       else if (m.ot === 'restore') ot.restore(m.state);
     });
   }
