@@ -376,12 +376,13 @@ class Tutor(Agent):
         if not self.child_identity or not item_id:
             return
         try:
-            await self.room.local_participant.perform_rpc(
-                destination_identity=self.child_identity,
-                method="board.remove",
-                payload=json.dumps({"id": item_id}),
-                response_timeout=BOARD_RPC_TIMEOUT,
-            )
+            async with self._board_lock:
+                await self.room.local_participant.perform_rpc(
+                    destination_identity=self.child_identity,
+                    method="board.remove",
+                    payload=json.dumps({"id": item_id}),
+                    response_timeout=BOARD_RPC_TIMEOUT,
+                )
             record_active("board_ack", {"method": "board.remove", "id": item_id, "ok": True})
         except Exception as error:
             log.warning("board remove %s failed: %s", item_id, error)

@@ -275,8 +275,8 @@ class PrefetchPool:
     def finish(self, used: Iterable[SlotKey]) -> None:
         """End of the job: cancel every prefetch the final page did not use.
 
-        ``used`` holds consumed plus deferred (fill-later) keys; those tasks
-        stay alive for their owner. Buffers are dropped; the pool is done."""
+        ``used`` holds the keys the final page consumed. Buffers are dropped;
+        the pool is done."""
         self.discard_except(used)
         self._buffers.clear()
 
@@ -487,8 +487,8 @@ class Screen:
         self.answers: list[dict[str, str]] = []
         self.pages: dict[str, PageResult] = {}
         self.visible_id: str | None = None
-        # Applied patches and touched targets, keyed by page id: a fill or a
-        # preview for one page must never read or corrupt another's history.
+        # Applied patches, keyed by page id: a preview for one page must never
+        # read or corrupt another's history.
         self.visible_patches: dict[str, list[str]] = {}
         self.on_page: Callable[[PageResult], Any] | None = None
         self.on_patch: Callable[[PatchResult], Any] | None = None

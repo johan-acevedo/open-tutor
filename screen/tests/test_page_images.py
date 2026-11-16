@@ -157,3 +157,7 @@ def test_offsets_nested_and_unclosed_tags_keep_surrounding_teaching_text():
     broken = '<ot-image query="a"><p>Keep me</p>'
     slot = image_slots(broken)[0]
     assert broken[slot.end:] == '<p>Keep me</p>'
+    nested = '<ot-image query="a"><ot-image src="https://example.invalid/x.png"></ot-image><p>Kvar</p>'
+    slots = image_slots(nested)
+    assert [s.attrs for s in slots] == [{"query": "a"}, {"src": "https://example.invalid/x.png"}]
+    assert nested[slots[1].start:slots[1].end] == '<ot-image src="https://example.invalid/x.png"></ot-image>'

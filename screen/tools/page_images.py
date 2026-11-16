@@ -75,10 +75,18 @@ def image_slots(source: str) -> list[ImageSlot]:
     parser = _Images(source)
     parser.feed(source)
     parser.close()
-    # An unclosed custom tag must not swallow the rest of the teaching page.
+    # An unclosed custom tag must not swallow the rest of the teaching page:
+    # the slot ends at its start tag, and what followed is parsed again so a
+    # nested <ot-image> becomes a slot of its own (reviewed or replaced) and
+    # its src never reaches the browser unreviewed.
     if parser.open:
         slot, children_start = parser.open
         slot.end = children_start
+        rest = image_slots(source[children_start:])
+        for nested in rest:
+            nested.start += children_start
+            nested.end += children_start
+        return parser.slots + rest
     return parser.slots
 
 

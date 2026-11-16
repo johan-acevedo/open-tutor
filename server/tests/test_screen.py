@@ -2064,9 +2064,12 @@ async def test_delivered_html_never_contains_unreviewed_images(tmp_path, monkeyp
             '<ot-image id="a" query="Colosseum" alt="Valv">etiketter</ot-image>'
             '<ot-image id="b" src="https://example.invalid/x.jpg" alt="Modellbild">text</ot-image>'
             '<ot-image id="c" query="Colosseum" alt="W">'
-            '<ot-image src="https://example.invalid/nested.jpg"></ot-image>etiketter</ot-image>')
+            '<ot-image src="https://example.invalid/nested.jpg"></ot-image>etiketter</ot-image>'
+            # An unclosed outer slot must not let the nested src through untouched.
+            '<ot-image id="d" query="Colosseum" alt="Ytter">'
+            '<ot-image src="https://example.invalid/unreviewed.png" alt="Modellbild"></ot-image>')
     out = await images.prepare(body)
-    assert len(reviews) == 3  # every slot judged, none slipped through
+    assert len(reviews) == 5  # every slot judged, none slipped through
     assert "query=" not in out
     assert "example.invalid" not in out
     assert candidate.image_url.split("?")[0] in out  # the reviewed canonical src
@@ -2120,4 +2123,28 @@ async def test_board_changes_serialize_through_one_lock(tmp_path, monkeypatch):
     assert ok is True and screen.visible_id == "p2"
     assert order == ["board.patch start", "board.patch end",
                      "board.show start", "board.show end"]
+    await screen.aclose()
+
+
+async def test_board_remove_waits_for_the_delivery_lock(tmp_path):
+    """board.remove is a board change too: it may not reach the browser while
+    another delivery holds the lock."""
+    screen = make_screen(tmp_path)
+    room = FakeRoom()
+    tutor = smart_tutor(room, screen)
+    sent: list[str] = []
+    orig = room.local_participant.perform_rpc
+
+    async def record(*, destination_identity, method, payload, response_timeout):
+        sent.append(method)
+        return await orig(destination_identity=destination_identity, method=method,
+                          payload=payload, response_timeout=response_timeout)
+
+    room.local_participant.perform_rpc = record
+    async with tutor._board_lock:
+        task = asyncio.create_task(tutor._remove("ph1"))
+        await asyncio.sleep(0.1)
+        assert sent == []  # held back while the lock is taken
+    await asyncio.wait_for(task, timeout=5)
+    assert sent == ["board.remove"]
     await screen.aclose()
