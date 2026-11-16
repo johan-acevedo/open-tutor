@@ -167,10 +167,13 @@ class PageImages:
         self.context, self.review, self.deadline = context, review, deadline
         self.client = client
         self.approved: dict[SlotKey, commons.Candidate] = {}
-        # Already-resolved output (`src`, no `query`): re-preparing our own
-        # rendered body must not re-review. Keyed by canonical src + alt;
-        # model slots (which carry `query`) never consult it.
-        self.approved_by_src: dict[tuple[str, str], commons.Candidate] = {}
+        # Rendered output we produced ourselves: full slot identity (as served,
+        # src + canonical credit, no `query`) -> candidate. Re-preparing our own
+        # rendered body must not re-review -- but only an exact full-slot match
+        # reuses: a src-only match with different id/`later`/labels goes
+        # through review again (or falls back to text). Model output is
+        # untrusted; an image ships only under the exact slot it was judged for.
+        self.rendered: dict[SlotKey, commons.Candidate] = {}
         self.events: list[dict] = []
         self.alternates: dict[SlotKey, str] = {}
         self.seconds = 0.0
@@ -226,9 +229,17 @@ class PageImages:
                                 "sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data)})
             if accepted:
                 self.approved[key] = candidate
-                self.approved_by_src[(candidate.image_url, slot.attrs.get("alt", ""))] = candidate
+                self.rendered[self._rendered_key(slot, candidate)] = candidate
                 return SlotDecision(candidate, "")
         return SlotDecision(None, fallback)
+
+    @staticmethod
+    def _rendered_key(slot: ImageSlot, candidate: commons.Candidate) -> SlotKey:
+        """The full slot identity of the HTML `_image_html` would build."""
+        attrs = {key: value for key, value in slot.attrs.items()
+                 if key in {"id", "class", "alt", "later", "lang"}}
+        attrs.update(src=candidate.image_url, credit=candidate.credit)
+        return (tuple(sorted(attrs.items())), without_images(slot.children))
 
     @staticmethod
     def render(slot: ImageSlot, decision: SlotDecision) -> str:
@@ -304,8 +315,9 @@ class PageImages:
         for slot in slots:
             approved = self.approved.get(slot_key(slot))
             if approved is None and "query" not in slot.attrs and slot.attrs.get("src", ""):
-                approved = self.approved_by_src.get(
-                    (slot.attrs.get("src", ""), slot.attrs.get("alt", "")))
+                # Our own rendered output (never model input with a query):
+                # only an exact full-slot match reuses the verdict.
+                approved = self.rendered.get(slot_key(slot))
             if approved:
                 replacements.append(_image_html(slot, approved))
                 continue
@@ -353,8 +365,7 @@ class PageImages:
             key = slot_key(slot)
             approved = self.approved.get(key)
             if approved is None and "query" not in slot.attrs and slot.attrs.get("src", ""):
-                approved = self.approved_by_src.get(
-                    (slot.attrs.get("src", ""), slot.attrs.get("alt", "")))
+                approved = self.rendered.get(key)
             if approved:
                 replacements.append(_image_html(slot, approved))
                 continue

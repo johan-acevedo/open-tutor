@@ -687,6 +687,12 @@ regression test in the real call order):
   page's veil (the fox reveals when it wants); auto-show clears the replaced
   frame's veil; failures already cleared.
 
+Second review, same PR: `rendered` replaces the canonical-src index (reuse
+only on exact full-slot match of our own output; a src-only match with
+different id/`later`/labels goes through review), and the fill re-checks
+touched/vanished targets and visibility after its preview render with no
+await before the delivery decision, so a correction applied mid-render wins.
+
 ### What Johan's test calls settled (2026-11-13)
 
 Three real calls on the dev setup (Johan alone, with Lucas, and alone again). Decisions:

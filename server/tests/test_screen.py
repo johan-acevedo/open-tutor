@@ -2115,3 +2115,92 @@ async def test_held_page_ready_clears_the_loading_veil(tmp_path, monkeypatch):
               if c == ("board.loading", {"id": "p1", "topic": ""})]
     assert len(clears) == 2  # held-ready clear + old-frame clear on show
     await screen.aclose()
+
+
+async def test_canonical_src_reuse_needs_the_exact_reviewed_slot(tmp_path, monkeypatch, commons_picture):
+    """Owner rule: an image ships only under the exact slot it was reviewed
+    for. Approving a hidden `later` image must not let a lint retry emit its
+    canonical URL with the same alt, a different id, no `later` and changed
+    labels ship visibly without re-review. Re-preparing our own rendered body
+    still reuses without new requests."""
+    from screen.tools.page_images import PageImages
+
+    import time as time_mod
+
+    from screen.tools import commons_images as commons
+
+    monkeypatch.setattr(commons, "search_images",
+                        AsyncMock(return_value=commons.SearchResult([commons_picture[0]])))
+    reviews: list[str] = []
+
+    async def review(user, image):
+        reviews.append(user)
+        return '{"accept":true,"reason":"Passar."}'
+
+    images = PageImages("ctx", review, time_mod.monotonic() + 30)
+    hidden = '<ot-image later id="gömd" query="Colosseum" alt="Valv">hemliga etiketter</ot-image>'
+    out = await images.prepare("<h1>Rom</h1>" + hidden)
+    assert "later" in out and len(reviews) == 1
+
+    retry = (f'<ot-image id="synlig" src="{commons_picture[0].image_url}" '
+             'alt="Valv">andra etiketter</ot-image>')
+    out2 = await images.prepare("<h1>Rom</h1>" + retry)
+    assert len(reviews) == 2  # reviewed again, not reused without review
+    assert any("andra etiketter" in user for user in reviews)
+    assert "later" not in out2  # the retry slot was never hidden
+
+    before = len(reviews)
+    assert await images.prepare(out) == out  # our own output reuses freely
+    assert await images.prepare(out2) == out2
+    assert len(reviews) == before
+
+
+async def test_fill_rechecks_targets_after_its_render(tmp_path, monkeypatch, commons_picture):
+    """The fill renderer is paused; a tutor correction replacing `bild` lands;
+    on resume the stale image replacement is dropped after the await, with no
+    await between the re-check and the delivery decision."""
+    monkeypatch.setenv("SCREEN_LOOK", "0")
+    verdict = '{"accept":true,"reason":"Passar."}'
+    first = '<h1>Rom</h1><ot-image id="bild" query="Colosseum" alt="Valv">V</ot-image>'
+    correction = '<ot-patch target="bild" do="replace"><p>Valvet bär upp.</p></ot-patch>'
+    writes = 0
+    release_render = asyncio.Event()
+    render_entered = asyncio.Event()
+
+    async def model(system, user, images, look_png, on_text=None):
+        nonlocal writes
+        if look_png is not None:
+            return verdict
+        writes += 1
+        text = first if writes == 1 else correction
+        if on_text is not None:
+            on_text(text)
+        return text
+
+    async def render(body, patch, history, w, h):
+        if patch is not None and "<ot-image" in patch:  # the fill preview only
+            render_entered.set()
+            await asyncio.wait_for(release_render.wait(), timeout=10)
+        return (b"PNG", [])
+
+    screen = make_screen(tmp_path, model_call=model, render_page=render)
+    tutor_patches, fills, pages = [], [], []
+    screen.on_patch = lambda p: (fills if p.quiet else tutor_patches).append(p)
+    screen.on_page = lambda p: (pages.append(p), screen.mark_visible(p.page_id))
+    screen.ask("Visa valv")
+    for _ in range(200):
+        if render_entered.is_set():
+            break
+        await asyncio.sleep(0.05)
+    assert render_entered.is_set()  # fill preview paused mid-render
+    screen.ask("Korrigera bilden till text")
+    for _ in range(200):
+        if tutor_patches:
+            break
+        await asyncio.sleep(0.05)
+    assert tutor_patches and "Valvet bär upp" in tutor_patches[0].patch
+    release_render.set()  # resume: the correction is already delivered
+    await screen.wait_idle()
+    assert fills == []
+    assert screen.visible_patches == {"p1": [correction]}
+    await screen.aclose()

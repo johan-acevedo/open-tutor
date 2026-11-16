@@ -1895,9 +1895,24 @@ class Screen:
                 for slot_id, replacement in approvals)
             png, issues, render_s = await self._render(
                 current.body, ops, list(self.visible_patches.get(page_id, [])))
-            if self.visible_id != page_id:
-                return  # another page took the screen during the render:
-                # its history must not gain this page's fill.
+            # Delivery decision, with no await in between: a tutor correction
+            # applied while the preview rendered must win over the stale fill.
+            # `current.body` never changes, but `_page_touched` does -- a patch
+            # that replaced the fallback section is recorded there the moment
+            # it is delivered.
+            current = self.pages.get(page_id)
+            touched = self._page_touched.get(page_id, set())
+            approvals = [(slot_id, replacement) for slot_id, replacement in approvals
+                         if current is not None
+                         and self.visible_id == page_id
+                         and f'id="{slot_id}"' in current.body
+                         and slot_id not in touched]
+            if not approvals:
+                return  # corrected, vanished or superseded while rendering
+            ops = "".join(
+                f'<ot-patch target="{html.escape(slot_id, quote=True)}" '
+                f'do="replace">{replacement}</ot-patch>'
+                for slot_id, replacement in approvals)
             errors = [issue_text(i) for i in issues
                       if issue_kind(i) == "patch" or str(i).startswith("patch failed:")]
             if errors:
