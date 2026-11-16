@@ -585,6 +585,29 @@ turn-taking problem, not a filter problem — a level or distance gate on the ch
 longer `TUTOR_INTERRUPT_MIN_S`, is where it would be solved. Changing interruption thresholds was
 explicitly out of scope here.
 
+### What a public test call showed (2026-11-16)
+
+Two production calls by one test learner (upper secondary), 3 and 4.5 minutes, both ended by
+the learner, no tool or provider errors. Tutor first audio: median 1.4-1.5 s, slowest 2.8 s.
+Johan sat beside the learner. Findings and decisions:
+
+- **Interruption threshold 2.0 s -> 1.6 s** (`TUTOR_INTERRUPT_MIN_S`), on dev and production
+  the same day. 2.0 s felt too long: the fox kept talking over the learner.
+- **Portraits failed to load.** A history page asked twice for a portrait of a Swedish king.
+  First call: the image step had about 1 s left of the 12 s page target and timed out.
+  Second call: Commons found three Nationalmuseum portraits, all stored as TIFF, and all were
+  rejected as `image/tiff`. Commons serves those as JPEG thumbnails, but we never requested
+  `thumbmime`, so the original's type decided. Fixed by requesting it (checked against the live
+  API: the portraits now download as JPEG). Many museum scans on Commons are TIFF.
+- **Stale screen after a subject change.** When the learner moved from maths to history, the
+  old maths page stayed up while the fox spoke about history: 27 s, 21 s and 15 s. In each
+  case the new page was ready for part of that time (18 s, 11 s, 6 s) but stayed hidden
+  until the fox's next turn called `show_page`. Open: a reveal mode ("show when ready" or
+  "hold until I say so") and a way to blur the old page or show "Loading <subject>".
+- **Open: the 12 s page target squeezes images.** Images are fetched only after the page is
+  written, from what is left of the target. Johan: a longer wait is fine as long as the fox
+  keeps talking about the material and can check progress.
+
 ### What Johan's test calls settled (2026-11-13)
 
 Three real calls on the dev setup (Johan alone, with Lucas, and alone again). Decisions:
