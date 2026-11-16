@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { validateBoardFocus, validateBoardItem, validateBoardPageOp } from './validate';
+import { validateBoardFocus, validateBoardItem, validateBoardLoading, validateBoardPageOp } from './validate';
 
 describe('validateBoardItem', () => {
   it('accepts a minimal text item', () => {
@@ -159,6 +159,25 @@ describe('validateBoardPageOp', () => {
     expect(validateBoardPageOp({ id: 'p1', part: 42 }, 'part').ok).toBe(false);
     expect(validateBoardPageOp({ id: '', patch: 'x' }, 'patch').ok).toBe(false);
     expect(validateBoardPageOp(null, 'patch').ok).toBe(false);
+  });
+});
+
+describe('validateBoardLoading', () => {
+  it('accepts a topic and an empty topic that clears', () => {
+    expect(validateBoardLoading({ id: 'p1', topic: 'historia' })).toEqual({
+      ok: true,
+      id: 'p1',
+      topic: 'historia',
+    });
+    expect(validateBoardLoading({ id: 'p1', topic: '' }).ok).toBe(true);
+  });
+
+  it('rejects bad shapes', () => {
+    expect(validateBoardLoading({ id: 'p1' }).ok).toBe(false);
+    expect(validateBoardLoading({ id: 'p1', topic: 42 }).ok).toBe(false);
+    expect(validateBoardLoading({ id: '', topic: 'historia' }).ok).toBe(false);
+    expect(validateBoardLoading({ id: 'p1', topic: 'x'.repeat(121) }).ok).toBe(false);
+    expect(validateBoardLoading(null).ok).toBe(false);
   });
 });
 

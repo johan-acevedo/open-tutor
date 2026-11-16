@@ -7,6 +7,7 @@ import {
   ATTR_AGENT_STATE,
   ATTR_TUTOR_MODE,
   BOARD_RPC_FOCUS,
+  BOARD_RPC_LOADING,
   BOARD_RPC_PATCH,
   BOARD_RPC_POINT,
   BOARD_RPC_REMOVE,
@@ -36,7 +37,7 @@ import {
   turnSent,
 } from './analytics';
 import { AgentGate } from './agentGate';
-import { isNoteLike, validateBoardFocus, validateBoardItem, validateBoardPageOp } from './validate';
+import { isNoteLike, validateBoardFocus, validateBoardItem, validateBoardLoading, validateBoardPageOp } from './validate';
 import { dataUrlToBytes, downscaleImage } from './image';
 import { useWakeLock } from './useWakeLock';
 import { audioElementBusy } from './audioTracks';
@@ -398,6 +399,7 @@ export function useSession(mobile = false) {
       BOARD_RPC_PATCH,
       BOARD_RPC_REVEAL,
       BOARD_RPC_POINT,
+      BOARD_RPC_LOADING,
     ])
       unregisterRpc(room, m);
     try {
@@ -765,6 +767,22 @@ export function useSession(mobile = false) {
       registerRpc(room, BOARD_RPC_PATCH, pageOp('patch', BOARD_RPC_PATCH));
       registerRpc(room, BOARD_RPC_REVEAL, pageOp('part', BOARD_RPC_REVEAL));
       registerRpc(room, BOARD_RPC_POINT, pageOp('part', BOARD_RPC_POINT));
+
+      registerRpc(room, BOARD_RPC_LOADING, async (data) => {
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(data.payload);
+        } catch {
+          throw new RpcError(1500, 'board.loading payload is not JSON');
+        }
+        const v = validateBoardLoading(parsed);
+        if (!v.ok) throw new RpcError(1500, v.error);
+        const send = pageSendsRef.current.get(v.id);
+        if (!send) throw new RpcError(1501, `no page frame is mounted for id ${v.id}`);
+        // An empty topic clears: the shell removes the veil again.
+        send({ ot: 'loading', topic: v.topic });
+        return '{"ok":true}';
+      });
 
       registerRpc(room, BOARD_RPC_FOCUS, async (data) => {
         let parsed: unknown;

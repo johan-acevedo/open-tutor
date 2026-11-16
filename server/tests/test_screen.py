@@ -695,17 +695,19 @@ def test_non_smart_mode_still_exposes_boards():
 
 def test_smart_mode_exposes_screen_tools_instead_of_boards():
     assert tool_names(SmartTutor) == {"ask_screen", "show_page", "reveal", "point",
+                                      "screen_loading", "screen_status",
                                       "find_resources", "share_resource", "start_quiet_work",
                                       "stay_quiet", "save_note"}
 
 
-def test_smart_prompt_teaches_the_four_tools():
+def test_smart_prompt_teaches_the_six_tools():
     text = smart_instructions({"name": "Leo", "grade": 3})
-    for word in ("ask_screen", "show_page", "reveal", "point"):
+    for word in ("ask_screen", "show_page", "reveal", "point",
+                 "screen_loading", "screen_status"):
         assert word in text
     assert "commission_board" not in text and "edit_board" not in text
     assert "Never read out a hidden answer" in text
-    assert "until you call `show_page`" in text
+    assert "appears on the screen by itself" in text
 
 
 class FakeParticipant:
@@ -1487,3 +1489,402 @@ async def test_failed_responses_stream_raises_instead_of_returning_a_page(tmp_pa
     with pytest.raises(RuntimeError, match="response.failed"):
         await screen._stream_spec(screen.fallback_spec(), "System", "Lesson", [], None)
     await screen.aclose()
+
+
+# ---- reveal mode: show-when-ready is the default ----------------------------
+
+async def test_finished_page_shows_by_default_and_holds_when_asked(tmp_path, monkeypatch):
+    monkeypatch.setenv("SCREEN_LOOK", "0")
+    screen = make_screen(tmp_path, model_call=AsyncMock(return_value="<h1>Hej</h1>"))
+    pages = []
+    screen.on_page = pages.append
+    screen.ask("En sida om klockan")
+    await screen.wait_idle()
+    assert pages[0].reveal == "show"
+    assert json.loads((pages[0].directory / "meta.json").read_text())["reveal"] == "show"
+
+    screen2 = make_screen(tmp_path, model_call=AsyncMock(return_value="<h1>Hej</h1>"))
+    held = []
+    screen2.on_page = held.append
+    screen2.ask("En sida med facit", reveal="hold")
+    await screen2.wait_idle()
+    assert held[0].reveal == "hold"
+    await screen.aclose()
+    await screen2.aclose()
+
+
+def test_ask_rejects_an_unknown_reveal_mode(tmp_path):
+    screen = make_screen(tmp_path)
+    with pytest.raises(ValueError, match="reveal"):
+        screen.ask("En sida", reveal="ladda")
+
+
+async def test_show_mode_reaches_the_browser_at_once(tmp_path, monkeypatch):
+    """The stale-screen fix: a show-when-ready page is delivered by the ready
+    callback itself, instead of waiting hidden for the next show_page turn."""
+    monkeypatch.setenv("SCREEN_LOOK", "0")
+    screen = make_screen(tmp_path, model_call=AsyncMock(return_value="<h1>Hej</h1>"))
+    room = FakeRoom()
+    tutor = smart_tutor(room, screen)
+    pages = []
+    screen.on_page = lambda p: pages.append(p)
+
+    from unittest.mock import Mock
+
+    class FakeSession:
+        agent_state = "listening"
+        user_state = "listening"
+        generate_reply = Mock()
+
+    screen.ask("En sida om klockan")
+    await screen.wait_idle()
+    await tutor.screen_page_ready(FakeSession(), pages[0])
+    assert screen.visible_id == "p1"
+    method, payload = room.local_participant.calls[0]
+    assert method == "board.show" and payload["id"] == "p1"
+    await asyncio.sleep(0)  # let the prompt task run
+    assert "on screen now" in FakeSession.generate_reply.call_args.kwargs["user_input"]
+    await screen.aclose()
+
+
+async def test_held_page_stays_invisible_until_show_page(tmp_path, monkeypatch):
+    monkeypatch.setenv("SCREEN_LOOK", "0")
+    screen = make_screen(tmp_path, model_call=AsyncMock(return_value="<h1>Facit</h1>"))
+    room = FakeRoom()
+    tutor = smart_tutor(room, screen)
+    pages = []
+    screen.on_page = lambda p: pages.append(p)
+
+    from unittest.mock import Mock
+
+    class FakeSession:
+        agent_state = "listening"
+        user_state = "listening"
+        generate_reply = Mock()
+
+    screen.ask("En sida med facit", reveal="hold")
+    await screen.wait_idle()
+    await tutor.screen_page_ready(FakeSession(), pages[0])
+    await asyncio.sleep(0)  # let the prompt task run
+    assert screen.visible_id is None
+    assert room.local_participant.calls == []
+    assert "show_page('p1')" in FakeSession.generate_reply.call_args.kwargs["user_input"]
+    assert "now visible" in await tutor.show_page(AsyncMock(), page_id="p1")
+    assert screen.visible_id == "p1"
+    await screen.aclose()
+
+
+async def test_ask_screen_tool_offers_show_and_hold(tmp_path, monkeypatch):
+    monkeypatch.setenv("SCREEN_LOOK", "0")
+    screen = make_screen(tmp_path, model_call=AsyncMock(return_value="<h1>Hej</h1>"))
+    tutor = smart_tutor(FakeRoom(), screen)
+    default = await tutor.ask_screen(AsyncMock(), ask="En sida")
+    assert "appears on the screen by itself" in default
+    held = await tutor.ask_screen(AsyncMock(), ask="En sida med facit", show="hold")
+    assert "stays invisible until you call show_page" in held
+    bad = await tutor.ask_screen(AsyncMock(), ask="En sida", show="smyg")
+    assert "Unknown show mode" in bad and "Nothing was asked" in bad
+    await screen.wait_idle()
+    await screen.aclose()
+
+
+# ---- loading overlay and progress --------------------------------------------
+
+async def test_screen_loading_dims_through_board_loading(tmp_path, monkeypatch):
+    screen = await ready_page(tmp_path, monkeypatch)
+    room = FakeRoom()
+    tutor = smart_tutor(room, screen)
+    assert "Laddar historia" in await tutor.screen_loading(AsyncMock(), topic="historia")
+    method, payload = room.local_participant.calls[0]
+    assert method == "board.loading" and payload == {"id": "p1", "topic": "historia"}
+    assert "cleared" in await tutor.screen_loading(AsyncMock(), topic="")
+    assert room.local_participant.calls[1] == ("board.loading", {"id": "p1", "topic": ""})
+    await screen.aclose()
+
+
+async def test_screen_loading_without_a_visible_page_does_nothing(tmp_path, monkeypatch):
+    monkeypatch.setenv("SCREEN_LOOK", "0")
+    screen = make_screen(tmp_path)
+    tutor = smart_tutor(FakeRoom(), screen)
+    assert "No page is on screen" in await tutor.screen_loading(AsyncMock(), topic="historia")
+    await screen.aclose()
+
+
+async def test_screen_failed_clears_the_loading_overlay(tmp_path, monkeypatch):
+    screen = await ready_page(tmp_path, monkeypatch)
+    room = FakeRoom()
+    tutor = smart_tutor(room, screen)
+
+    from unittest.mock import Mock
+
+    class FakeSession:
+        agent_state = "listening"
+        user_state = "listening"
+        generate_reply = Mock()
+
+    await tutor.screen_failed(FakeSession(), "boom")
+    assert ("board.loading", {"id": "p1", "topic": ""}) in room.local_participant.calls
+    assert "picture did not work" in FakeSession.generate_reply.call_args.kwargs["user_input"]
+    await screen.aclose()
+
+
+async def test_screen_status_reports_phase_and_finish(tmp_path, monkeypatch):
+    monkeypatch.setenv("SCREEN_LOOK", "0")
+    assert "no page has been requested" in make_screen(tmp_path).status_line()
+    release = asyncio.Event()
+
+    async def model(system, user, images, look_png):
+        await release.wait()
+        return "<h1>Hej</h1>"
+
+    screen = make_screen(tmp_path, model_call=model)
+    screen.ask("En sida om klockan")
+    await asyncio.sleep(0.2)
+    assert "writing the page" in screen.status_line()
+    release.set()
+    await screen.wait_idle()
+    line = screen.status_line()
+    assert "finished page p1" in line and "waiting for show_page" in line
+    screen.mark_visible("p1")
+    assert "on screen now" in screen.status_line()
+    assert "Unknown screen job" in screen.status_line("s9")
+    await screen.aclose()
+
+
+def test_image_deadline_uses_the_job_limit_not_the_page_target(tmp_path):
+    import time as time_mod
+
+    screen = make_screen(tmp_path)
+    # Eight seconds into the default 20 s job (page still being written): the
+    # old 12 s soft target would have left under a second for images.
+    t0 = time_mod.monotonic() - 8.0
+    job = screen._image_job("Visa valv", t0)
+    assert job.deadline - time_mod.monotonic() == pytest.approx(6.0, abs=1.0)
+    assert job.deadline - t0 > 12.0
+
+
+# ---- streaming image prefetch ------------------------------------------------
+
+def test_complete_slots_waits_for_the_closing_tag():
+    from screen.tools.page_images import complete_slots
+
+    full = ('<h1>Rom</h1><ot-image id="a" query="Colosseum" alt="Valv">etikett</ot-image>'
+            '<p>slut</p>')
+    assert [s.attrs["id"] for s in complete_slots(full)] == ["a"]
+    assert complete_slots(full[: full.index("</ot-image>")]) == []
+    assert complete_slots('<h1>Rom</h1><ot-image id="a" query="Colos') == []
+    two = full + '<ot-image id="b" query="Forum" alt="F">x'
+    assert [s.attrs["id"] for s in complete_slots(two)] == ["a"]
+
+
+async def test_prefetch_starts_before_the_stream_ends(tmp_path, monkeypatch, commons_picture):
+    """The search for a complete slot starts while the page model is still
+    writing, not after its full text arrived."""
+    from screen.tools import commons_images as commons
+
+    monkeypatch.setenv("SCREEN_LOOK", "0")
+    search_started = asyncio.Event()
+    base_search = commons.search_images
+
+    async def slow_search(query, client=None):
+        search_started.set()
+        return await base_search(query, client=client)
+
+    monkeypatch.setattr(commons, "search_images", slow_search)
+    head = '<h1>Rom</h1><ot-image id="bild" query="Colosseum" alt="Valv">Valv</ot-image>'
+
+    async def model(system, user, images, look_png, on_text=None):
+        if look_png is not None:
+            return '{"accept":true,"reason":"Relevant architecture."}'
+        assert on_text is not None  # the write call feeds the prefetch pool
+        on_text(head)
+        await asyncio.wait_for(search_started.wait(), timeout=5)  # still streaming
+        on_text("<p>Slutet.</p>")
+        return head + "<p>Slutet.</p>"
+
+    screen = make_screen(tmp_path, model_call=model)
+    pages, patches = [], []
+    screen.on_page = lambda p: (pages.append(p), screen.mark_visible(p.page_id))
+    screen.on_patch = patches.append
+    screen.ask("Visa valv i Rom")
+    await screen.wait_idle()
+    # First paint is fast (text fallback); the approved picture fills in after.
+    assert len(pages) == 1 and '<section id="bild">' in pages[0].body
+    assert len(patches) == 1 and "Diliff" in patches[0].patch
+    assert 'target="bild"' in patches[0].patch
+    await screen.aclose()
+
+
+async def test_slots_resolve_concurrently_while_writing(tmp_path, monkeypatch, commons_picture):
+    """Two image slots review at the same time: a sequential pipeline would
+    deadlock this test (the first review waits for the second to start)."""
+    monkeypatch.setenv("SCREEN_LOOK", "0")
+    started: set[str] = set()
+    both = asyncio.Event()
+    page = ('<h1>Rom</h1>'
+            '<ot-image id="a" query="Colosseum" alt="Valv">V</ot-image>'
+            '<ot-image id="b" query="Forum Romanum" alt="Forum">F</ot-image>')
+
+    async def model(system, user, images, look_png, on_text=None):
+        if look_png is not None:
+            which = "a" if "'id': 'a'" in user else "b"
+            started.add(which)
+            if len(started) == 2:
+                both.set()
+            await asyncio.wait_for(both.wait(), timeout=5)
+            return '{"accept":true,"reason":"Passar."}'
+        if on_text is not None:
+            on_text(page)
+        return page
+
+    screen = make_screen(tmp_path, model_call=model)
+    pages, patches = [], []
+    screen.on_page = lambda p: (pages.append(p), screen.mark_visible(p.page_id))
+    screen.on_patch = patches.append
+    screen.ask("Visa valv och forum")
+    await screen.wait_idle()
+    assert started == {"a", "b"} and len(pages) == 1
+    # Both pictures arrive: in the first paint when the review won the race,
+    # otherwise in one fill patch right after. Either way nothing waits.
+    shown = pages[0].body + "".join(p.patch for p in patches)
+    assert shown.count("commons.wikimedia.org") == 2
+    await screen.aclose()
+
+
+async def test_loser_prefetch_is_cancelled_and_dropped_slot_unused(tmp_path, monkeypatch, commons_picture):
+    """Raced write, loser streams a slot the winner does not have: its vision
+    review is cancelled at the decision and never reaches the page."""
+    monkeypatch.setenv("SCREEN_LOOK", "0")
+    monkeypatch.setenv("SCREEN_FALLBACK", "cc")
+    monkeypatch.setenv("SCREEN_RACE", "1")
+    started: set[str] = set()
+    completed: set[str] = set()
+    verdict = '{"accept":true,"reason":"Passar."}'
+    slow_page = '<h1>Långsam</h1><ot-image id="slow" query="Colosseum" alt="S">S</ot-image>'
+    fast_page = '<h1>Snabb</h1><ot-image id="fast" query="Colosseum" alt="F">F</ot-image>'
+    release_slow_review = asyncio.Event()
+
+    async def primary(system, user, images, look_png, on_text=None):
+        if look_png is not None:
+            which = "slow" if "'id': 'slow'" in user else "fast"
+            started.add(which)
+            if which == "slow":
+                await release_slow_review.wait()  # never released: must be cancelled
+            else:
+                await asyncio.sleep(0.3)
+            completed.add(which)
+            return verdict
+        if on_text is not None:
+            on_text(slow_page)
+        await asyncio.sleep(5)
+        return slow_page
+
+    async def secondary(system, user, images, look_png, on_text=None):
+        assert look_png is None  # reviews always run on the primary seam
+        if on_text is not None:
+            on_text(fast_page)
+        await asyncio.sleep(0.05)
+        return fast_page
+
+    screen = make_screen(tmp_path, model_call=primary, fallback_call=secondary)
+    pages, patches = [], []
+    screen.on_page = lambda p: (pages.append(p), screen.mark_visible(p.page_id))
+    screen.on_patch = patches.append
+    screen.ask("Visa Colosseum fort")
+    await screen.wait_idle()
+    assert len(pages) == 1 and '<section id="fast">' in pages[0].body
+    assert "slow" in started and "slow" not in completed  # cancelled mid-review
+    assert "fast" in completed
+    assert len(patches) == 1  # the winner's own image filled in after showing
+    assert "commons.wikimedia.org" in patches[0].patch
+    assert 'target="fast"' in patches[0].patch
+    assert "slow" not in pages[0].body and "slow" not in patches[0].patch
+    await screen.aclose()
+
+
+async def test_dropped_slot_result_is_never_shown(tmp_path, monkeypatch, commons_picture):
+    """A slot the lint retry changes away gets a fallback now; its late review
+    finds no target and fills nothing in."""
+    monkeypatch.setenv("SCREEN_LOOK", "0")
+    reviewed: set[str] = set()
+    first = ('<h1>Rom</h1><ot-image id="bild" query="Colosseum" alt="Valv">V</ot-image>')
+    fixed = "<h1>Rom</h1><p>Utan bild.</p>"
+
+    async def model(system, user, images, look_png, on_text=None):
+        if look_png is not None:
+            reviewed.add("bild")
+            await asyncio.sleep(1)
+            return '{"accept":true,"reason":"Sen."}'
+        if on_text is not None:
+            on_text(first)
+        return first if "It still reports" not in user else fixed
+
+    renders = [(b"PNG", [{"kind": "dense", "msg": "shorten text"}]), (b"PNG", [])]
+
+    async def render(body, patch, w, h):
+        return renders.pop(0)
+
+    screen = make_screen(tmp_path, model_call=model, render_page=render)
+    pages, patches = [], []
+    screen.on_page = lambda p: (pages.append(p), screen.mark_visible(p.page_id))
+    screen.on_patch = patches.append
+    screen.ask("Visa valv")
+    await screen.wait_idle()
+    assert reviewed == {"bild"}  # the review ran, too late
+    assert len(pages) == 1 and "ot-image" not in pages[0].body
+    assert patches == []  # no target left: nothing filled in
+    await screen.aclose()
+
+
+async def test_prefetch_beats_sequential_write_then_review(tmp_path, monkeypatch, commons_picture):
+    """Overlapping search+download+review with the writing, against doing it
+    afterwards: the same sleeps, both sides, so the gap is the overlap."""
+    import time as time_mod
+
+    monkeypatch.setenv("SCREEN_LOOK", "0")
+    body = '<h1>Rom</h1><ot-image id="bild" query="Colosseum" alt="Valv">V</ot-image>'
+    verdict = '{"accept":true,"reason":"Relevant."}'
+
+    async def review(system, user, images, look_png):
+        await asyncio.sleep(0.6)
+        return verdict
+
+    async def sequential(system, user, images, look_png):
+        await asyncio.sleep(0.6)  # the writing, all at once, no streaming
+        return body
+
+    async def streamed(system, user, images, look_png, on_text=None):
+        if on_text is not None:
+            on_text(body)
+        await asyncio.sleep(0.6)  # the rest of the writing
+        return body
+
+    async def run(model):
+        screen = make_screen(tmp_path, model_call=model)
+        screen._model_call = model  # reviews use the primary seam too
+        marks: dict[str, float] = {}
+        started = time_mod.monotonic()
+        screen.on_page = lambda p: (marks.setdefault("page", time_mod.monotonic()),
+                                    screen.mark_visible(p.page_id))
+        screen.on_patch = lambda p: marks.setdefault("fill", time_mod.monotonic())
+        screen.ask("Visa valv")
+        await screen.wait_idle()
+        await screen.aclose()
+        # Image-visible time: the fill when progressive, else the first paint.
+        return marks.get("fill", marks["page"]) - started
+
+    async def review_model(system, user, images, look_png, on_text=None):
+        if look_png is not None:
+            return await review(system, user, images, look_png)
+        return await sequential(system, user, images, look_png)
+
+    # Sequential: the model fake takes no on_text, so the pool stays empty.
+    slow = await run(review_model)
+
+    async def streamed_model(system, user, images, look_png, on_text=None):
+        if look_png is not None:
+            return await review(system, user, images, look_png)
+        return await streamed(system, user, images, look_png, on_text=on_text)
+
+    fast = await run(streamed_model)
+    assert fast + 0.3 < slow, f"prefetch {fast:.2f}s should beat sequential {slow:.2f}s"

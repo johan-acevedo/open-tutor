@@ -310,6 +310,9 @@ names what was still loading (`libraries`, `map data and fonts` and/or `images`)
 (kind + message + element) is reported once, however often later patches re-trigger it.
 - `point`/`reveal` to an id that does not exist posts `{ot:'patched', issues:[…]}` at once, with a
 "no element with id" issue, instead of sending nothing.
+- `{ot:'loading', topic}` (2026-11-16) dims the page and shows "Laddar <topic>…" at once; an
+  empty topic clears. The topic travels as text, never HTML. A successful `ot.patch` clears a
+  stale veil by itself, so new content never arrives under yesterday's overlay.
 - A patch that itself throws still posts `patched`, with the error as its issue.
 - A patch keeps typed answers: drafts go back onto every input that still exists by id. A `replace` keeps
 the target's id whatever id the replacement arrived with. Replaced graphs and charts free their

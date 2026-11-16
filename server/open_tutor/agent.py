@@ -1147,14 +1147,22 @@ class SmartTutor(Tutor):
                       f"otherwise keep teaching and bring it in later."))
 
     async def screen_patch_ready(self, session: AgentSession, patch: Any) -> None:
-        """A change finished: apply it at once, add it to the context, no prompt."""
+        """A change finished: apply it at once, add it to the context, no prompt.
+
+        A deferred image fill (``quiet``) is not asked for and must not worry
+        the child when it fails: the page already shows its text fallback, so
+        a missed fill is only a context note, never a spoken apology."""
         ok = await self._rpc("board.patch", {"id": patch.page_id, "patch": patch.patch})
         parts: list[Any] = []
         if getattr(patch, "png", None):
             parts.append(llm.ImageContent(
                 image=f"data:image/png;base64,{base64.b64encode(patch.png).decode()}",
                 inference_detail="high"))
-        applied = "applied on the visible page" if ok else "could NOT be applied"
+        if getattr(patch, "quiet", False):
+            applied = ("filled in its approved pictures" if ok
+                       else "could NOT fill in its pictures; the text fallback stays")
+        else:
+            applied = "applied on the visible page" if ok else "could NOT be applied"
         text = (f"[Screen change {applied} (page {patch.page_id}). "
                 f"Patch source:\n{patch.patch}\nThe screenshot shows the page now.]")
         record_active("screen_patched", {"page": patch.page_id, "ok": ok})

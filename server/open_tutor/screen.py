@@ -16,6 +16,7 @@ browser. The real paths import the static prompt and the render helpers from
 from __future__ import annotations
 
 import asyncio
+import html
 import inspect
 import json
 import logging
@@ -37,7 +38,11 @@ if str(_REPO_ROOT) not in sys.path:
 
 from screen.tools import prompt as screen_prompt  # noqa: E402
 from screen.tools import screenkit as screenkit  # noqa: E402
-from screen.tools.page_images import PageImages  # noqa: E402
+from screen.tools.page_images import (  # noqa: E402
+    PageImages,
+    complete_slots,
+    slot_key,
+)
 
 SCREEN_BASE_URL = "https://opencode.ai/inference/go/openai/v1"
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
@@ -52,6 +57,14 @@ SCREEN_LOSER_CLEANUP_BOUND_S = 2.0
 FALLBACK_MIN_S = 2.0
 PAGE_TARGET_S = 12.0
 OPTIONAL_STEP_LIMIT_S = 6.0
+# At most this many image slots resolve in the background while the page is
+# still being written; further slots resolve inline afterwards, as before.
+PREFETCH_MAX_SLOTS = 6
+# How long a deferred image fill waits for its slot, and for the whole fill:
+# background work that must never hold the visible page hostage.
+FILL_SLOT_WAIT_S = 10.0
+FILL_BUDGET_S = 20.0
+VISIBLE_WAIT_S = 10.0
 # Defaults: Muse Spark on Responses with minimal reasoning. DeepSeek models use
 # Chat Completions with low reasoning. SCREEN_MODEL / SCREEN_REASONING override;
 # the model itself is never changed by the timing work (see docs/smart-screen.md).
@@ -208,6 +221,72 @@ class PatchResult:
     render_s: float = 0.0
     total_s: float = 0.0
     directory: Path | None = None
+    # A deferred image fill, not an asked-for change: the worker stays quiet
+    # when it cannot be applied (the page already shows its text fallback).
+    quiet: bool = False
+
+
+class PrefetchPool:
+    """Start image work while the page is still being written.
+
+    The write call feeds each attempt's text chunks in; the first time a
+    complete image slot appears in an attempt's buffer, its search + download
+    + vision review starts in the background. Several slots thus resolve
+    concurrently with the writing instead of one after another afterwards.
+    Attempts share tasks by slot key, so a hedged or raced second attempt
+    never pays for a vision review twice. Only slots still present in the
+    final page are consumed (``PageImages`` looks them up by the same key);
+    the rest are cancelled here, bounded like the existing loser cleanup.
+    """
+
+    def __init__(self, images: PageImages, reaper: Reaper) -> None:
+        self._images = images
+        self._reaper = reaper
+        self._buffers: dict[str, str] = {}
+        self._tasks: dict[tuple[str, str], asyncio.Task[str]] = {}
+
+    def sink(self, attempt: str) -> Callable[[str], None]:
+        """An ``on_text`` callback feeding one attempt's stream into the pool."""
+        def _feed(chunk: str) -> None:
+            self.feed(attempt, chunk)
+        return _feed
+
+    def feed(self, attempt: str, chunk: str) -> None:
+        """Add streamed text; start work for each newly complete slot."""
+        buf = self._buffers.get(attempt, "") + (chunk or "")
+        self._buffers[attempt] = buf
+        for slot in complete_slots(buf):
+            key = slot_key(slot)
+            if key in self._tasks or len(self._tasks) >= PREFETCH_MAX_SLOTS:
+                continue
+            self._tasks[key] = asyncio.create_task(
+                self._images.resolve_slot(slot),
+                name=f"screen-prefetch-{attempt}")
+            self._images.prefetched[key] = self._tasks[key]
+
+    def discard_except(self, keys: Iterable[tuple[str, str]]) -> None:
+        """Cancel prefetches for slots the winning text does not have.
+
+        Called once the served attempt's full text is known (a hedged or raced
+        write): the loser's unique slots are dropped at once instead of
+        running their vision reviews to the deadline. Surviving tasks stay
+        shared by key, whoever's stream first asked for them."""
+        keep = set(keys)
+        drop = [task for key, task in self._tasks.items() if key not in keep]
+        for key, task in list(self._tasks.items()):
+            if key not in keep:
+                del self._tasks[key]
+                self._images.prefetched.pop(key, None)
+        if drop:
+            self._reaper.stop("screen-prefetch", drop)
+
+    def finish(self, used: Iterable[tuple[str, str]]) -> None:
+        """End of the job: cancel every prefetch the final page did not use.
+
+        ``used`` holds consumed plus deferred (fill-later) keys; those tasks
+        stay alive for their owner. Buffers are dropped; the pool is done."""
+        self.discard_except(used)
+        self._buffers.clear()
 
 
 # Injectable seams. The model call gets the static system prompt, the lesson
@@ -239,6 +318,25 @@ def _accepts_first_text(fn: Callable[..., Any]) -> bool:
 
 
 def _screen_float(name: str, default: float) -> float:
+    try:
+        return float(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        return default
+
+
+def _accepts_on_text(fn: Callable[..., Any]) -> bool:
+    """Whether a model-call seam function takes an ``on_text`` keyword.
+
+    Same contract as ``_accepts_first_text``: the real streaming
+    implementation declares it; plain fakes are fed the finished text instead
+    (their images then resolve inline, as before -- no prefetch, no harm)."""
+    try:
+        parameters = inspect.signature(fn).parameters
+    except (TypeError, ValueError):
+        return False
+    return "on_text" in parameters or any(
+        p.kind == inspect.Parameter.VAR_KEYWORD for p in parameters.values()
+    )
     try:
         return float(os.environ.get(name, default))
     except (TypeError, ValueError):
@@ -415,6 +513,12 @@ class Screen:
         self._phase_t0 = time.monotonic()
         self._current_job: str | None = None
         self._last_done: dict[str, Any] | None = None
+        # The write call's prefetch pool (cleaned up by _fail when the job
+        # dies mid-flight; _run_page/_run_patch finish it on success) and
+        # deferred image fills still running after their page was shown.
+        self._pool: PrefetchPool | None = None
+        self._fills: set[asyncio.Task[None]] = set()
+        self._closed = False
         self._pw = None
         self._browser = None
         self._system: str | None = None  # static prefix, computed once so every
@@ -487,8 +591,13 @@ class Screen:
             total = last.get("total_s", 0.0)
             where = ("on screen now" if last.get("page") == self.visible_id
                      else "waiting for show_page")
-            return (f"Screen job {last.get('job')} finished {last.get('kind')} "
+            line = (f"Screen job {last.get('job')} finished {last.get('kind')} "
                     f"{last.get('page')} in {total:.1f} s ({where}).")
+            fills = sum(1 for task in self._fills if not task.done())
+            if fills:
+                line += (f" {fills} approved picture(s) still arriving; "
+                         "they fill into the page by themselves.")
+            return line
         elapsed = time.monotonic() - self._phase_t0
         step = {
             "queued": "waiting behind the running job",
@@ -531,20 +640,30 @@ class Screen:
         return job_id
 
     async def wait_idle(self) -> None:
-        while (self._runner is not None and not self._runner.done()) or self._pending is not None:
-            try:
-                if self._runner is not None:
+        while True:
+            if self._runner is not None and not self._runner.done():
+                try:
                     await self._runner
-                else:
-                    await asyncio.sleep(0.01)
+                except Exception:
+                    pass
+            elif self._pending is not None:
+                await asyncio.sleep(0.01)
+            else:
+                break
+        for fill in list(self._fills):
+            try:
+                await fill
             except Exception:
                 pass
 
     async def aclose(self) -> None:
+        self._closed = True
         for task, route in list(self._requests.items()):
             self._stop_request(task, route)
         for stream in list(self._streams):
             self._close_stream(stream)
+        for fill in list(self._fills):
+            fill.cancel()
         await self._reaper.wait()
         if self._browser is not None:
             try:
@@ -576,6 +695,10 @@ class Screen:
         from .debug_log import record_active
 
         record_active("screen_failed", {"job": job_id, "message": message[:200]})
+        pool, self._pool = self._pool, None
+        if pool is not None:
+            # The job died mid-flight: drop every prefetch with it.
+            pool.finish(set())
         self._current_job = None
         self._set_phase("failed")
         self._last_done = {"job": job_id, "state": "failed",
@@ -645,19 +768,24 @@ class Screen:
 
     async def _invoke(self, fn: ModelCall, system: str, user: str,
                     images: list[str], look_png: bytes | None,
-                    on_first_text: Callable[[], None] | None = None) -> str:
+                    on_first_text: Callable[[], None] | None = None,
+                      on_text: Callable[[str], None] | None = None) -> str:
         """Run one model-call seam function and return its full text.
 
         The seam stays ``(system, user, images, look_png) -> text`` so tests keep
         injecting plain fakes. The real implementation streams and signals its
         first output text through ``on_first_text``; a seam function that declares
         an ``on_first_text`` keyword gets it, anything else is called as before
-        (and its completion counts as its first text)."""
+        (and its completion counts as its first text). ``on_text`` carries every
+        text delta to the prefetch pool; seam functions that do not declare it
+        are fed nothing until their full text returns."""
         if inspect.iscoroutinefunction(fn):
+            kwargs: dict[str, Any] = {}
             if on_first_text is not None and _accepts_first_text(fn):
-                result = await fn(system, user, images, look_png, on_first_text=on_first_text)
-            else:
-                result = await fn(system, user, images, look_png)
+                kwargs["on_first_text"] = on_first_text
+            if on_text is not None and _accepts_on_text(fn):
+                kwargs["on_text"] = on_text
+            result = await fn(system, user, images, look_png, **kwargs)
         else:
             # Blocking seam doubles (tests only): off the event loop. Production
             # provider calls are async streaming and never touch a thread.
@@ -667,7 +795,8 @@ class Screen:
     async def _run_route(self, call: ModelCall, system: str, user: str,
                          images: list[str], look_png: bytes | None,
                          first: asyncio.Event, holder: dict[str, float],
-                         base: float | None = None) -> tuple[str, float]:
+                         base: float | None = None,
+                         on_text: Callable[[str], None] | None = None) -> tuple[str, float]:
         """Run one side of a (possibly hedged) call; signal its first text.
 
         Returns ``(full text, total seconds)``. A streaming call fires ``first``
@@ -688,7 +817,7 @@ class Screen:
                 first.set()
 
         text = await self._invoke(call, system, user, images, look_png,
-                                  on_first_text=on_first_text)
+                                  on_first_text=on_first_text, on_text=on_text)
         if not fired:
             # A non-streaming call (plain seam function): completion is its text.
             holder["t"] = time.perf_counter() - base
@@ -698,7 +827,8 @@ class Screen:
     async def _call_model(self, system: str, user: str,
                           look_png: bytes | None = None,
                           kind: str = "write",
-                          budget_s: float | None = None) -> tuple[str, float]:
+                          budget_s: float | None = None,
+                          prefetch: PrefetchPool | None = None) -> tuple[str, float]:
         """One model call (``kind``: write|look|retry|image), hedged when armed.
 
         Without ``SCREEN_FALLBACK`` this is today's single-provider call. With it,
@@ -712,6 +842,11 @@ class Screen:
         Cancellation still propagates, so the job limit in ``_pump`` keeps
         working; provider calls are async and streaming, so a cancelled call
         closes its stream instead of outliving its job in a thread.
+
+        ``prefetch`` (write calls only) receives every attempt's streamed text
+        so image search+download+review starts while the page is still being
+        written; attempts share prefetch tasks by slot key, so a second
+        attempt never pays for a vision review twice.
         """
         t0 = time.monotonic()
         fallback = self._fallback_ready()
@@ -721,7 +856,8 @@ class Screen:
             try:
                 result = await self._request_with_timeout(
                     self._run_route(self._model_call, system, user,
-                                    self._homework_images(), look_png, first, holder),
+                                    self._homework_images(), look_png, first, holder,
+                                    on_text=prefetch.sink("primary") if prefetch else None),
                     route=_spec_provider(self.model_spec()), timeout=budget_s)
             except Exception as error:
                 self._note_call(kind, _spec_provider(self.model_spec()), hedged=False,
@@ -734,16 +870,19 @@ class Screen:
             return text, time.monotonic() - t0
         hedge_after = _screen_hedge_after_s()
         if hedge_after is None:
-            return await self._call_model_legacy(system, user, look_png, kind, t0, budget_s)
+            return await self._call_model_legacy(system, user, look_png, kind, t0,
+                                                 budget_s, prefetch)
         if _screen_race():
             return await self._call_model_raced(system, user, look_png, kind, t0,
-                                                fallback, budget_s)
+                                                fallback, budget_s, prefetch)
         return await self._call_model_hedged(system, user, look_png, kind, t0,
-                                             fallback, hedge_after, budget_s)
+                                             fallback, hedge_after, budget_s,
+                                             prefetch)
 
     async def _call_model_legacy(self, system: str, user: str,
                                  look_png: bytes | None, kind: str, t0: float,
-                                 budget_s: float | None) -> tuple[str, float]:
+                                 budget_s: float | None,
+                                 prefetch: PrefetchPool | None = None) -> tuple[str, float]:
         """The #64 flat-timeout failover (``SCREEN_HEDGE_AFTER_S`` empty).
 
         The primary runs under ``SCREEN_PRIMARY_TIMEOUT_S``, fitted inside the
@@ -765,7 +904,8 @@ class Screen:
         try:
             text, _elapsed = await self._request_with_timeout(
                 self._run_route(self._model_call, system, user, images, look_png,
-                                first, holder),
+                                first, holder,
+                                on_text=prefetch.sink("primary") if prefetch else None),
                 route=primary_provider, timeout=primary_timeout,
             )
             self._note_provider(kind, primary_provider, failed=False)
@@ -792,13 +932,15 @@ class Screen:
                 if self._fallback_call is not None:
                     text, _elapsed = await self._request_with_timeout(
                         self._run_route(self._fallback_call, system, user, images,
-                                       look_png, fallback_first, fallback_holder),
+                                       look_png, fallback_first, fallback_holder,
+                                       on_text=prefetch.sink("secondary") if prefetch else None),
                         route=_spec_provider(fallback), timeout=remaining,
                     )
                 else:
                     text, _fallback_first_s = await self._request_with_timeout(
                         self._stream_spec(fallback, system, user, images, look_png,
-                                        self._track_first(fallback_first, fallback_holder)),
+                                        self._track_first(fallback_first, fallback_holder),
+                                        on_text=prefetch.sink("secondary") if prefetch else None),
                         route=_spec_provider(fallback), timeout=remaining,
                     )
             except asyncio.CancelledError:
@@ -813,6 +955,10 @@ class Screen:
                                 error_class=error_class)
             self._note_call(kind, _spec_provider(fallback), hedged=False,
                             ttft_s=fallback_holder.get("t"), loser="error")
+            if prefetch is not None:
+                # The primary's partial stream may have started prefetches for
+                # slots the served text does not have: drop those at once.
+                prefetch.discard_except(slot_key(s) for s in complete_slots(text))
             return text, time.monotonic() - t0
 
     def _track_first(self, event: asyncio.Event,
@@ -871,7 +1017,8 @@ class Screen:
     async def _call_model_hedged(self, system: str, user: str,
                                  look_png: bytes | None, kind: str, t0: float,
                                  fallback: dict[str, str], hedge_after: float,
-                                 budget_s: float | None) -> tuple[str, float]:
+                                 budget_s: float | None,
+                                 prefetch: PrefetchPool | None = None) -> tuple[str, float]:
         """Race the same call on both providers; first output text wins.
 
         The secondary starts when the primary produced no text within the hedge
@@ -899,7 +1046,8 @@ class Screen:
             try:
                 text, _elapsed = await self._request_with_timeout(
                     self._run_route(self._model_call, system, user, images, look_png, first, holder,
-                                    base=call_base), route=primary_provider, timeout=budget_s)
+                                    base=call_base,
+                                    on_text=prefetch.sink("primary") if prefetch else None), route=primary_provider, timeout=budget_s)
             except Exception as error:
                 self._note_call(kind, primary_provider, hedged=False,
                                 ttft_s=None, loser="none", error=type(error).__name__)
@@ -920,7 +1068,8 @@ class Screen:
         attempted = {"primary"}
         p_task = asyncio.create_task(
             self._run_route(self._model_call, system, user, images, look_png,
-                            p_first, p_holder, base=call_base),
+                            p_first, p_holder, base=call_base,
+                            on_text=prefetch.sink("primary") if prefetch else None),
             name=f"screen-hedge-primary-{kind}")
         self._own_request(p_task, primary_provider)
         s_task: asyncio.Task[tuple[str, float]] | None = None
@@ -949,7 +1098,8 @@ class Screen:
             if winner is None:
                 s_task = self._start_screen_secondary(
                     fallback, system, user, images, look_png, kind, s_first, s_holder,
-                    base=call_base)
+                    base=call_base,
+                    on_text=prefetch.sink("secondary") if prefetch else None)
                 attempted.add("secondary")
                 winner = await self._race_screen_first(
                     p_task, s_task, p_first, s_first, p_holder, s_holder, errors)
@@ -1012,12 +1162,14 @@ class Screen:
                 if loser == "secondary":
                     other_task: asyncio.Task[tuple[str, float]] = self._start_screen_secondary(
                         fallback, system, user, images, look_png, kind,
-                        other_first, other_holder, base=call_base)
+                        other_first, other_holder, base=call_base,
+                        on_text=prefetch.sink("secondary") if prefetch else None)
                 else:
                     other_task = asyncio.create_task(
                         self._run_route(self._model_call, system, user, images,
                                        look_png, other_first, other_holder,
-                                       base=call_base),
+                                       base=call_base,
+                                       on_text=prefetch.sink("primary") if prefetch else None),
                         name=f"screen-hedge-restart-{kind}")
                 self._own_request(other_task, fallback_provider if loser == "secondary" else primary_provider)
                 try:
@@ -1033,6 +1185,10 @@ class Screen:
                 winner_first_t = other_holder.get("t")
             else:
                 winner_first_t = (p_holder if winner == "primary" else s_holder).get("t")
+            if prefetch is not None:
+                # The served text is whole: drop prefetches for slots it does
+                # not have, so a discarded attempt's vision reviews stop now.
+                prefetch.discard_except(slot_key(s) for s in complete_slots(winner_text))
             winner_provider = primary_provider if winner == "primary" else fallback_provider
             served_by_fallback = winner == "secondary"
             self._note_provider(kind, winner_provider, failed=served_by_fallback,
@@ -1061,7 +1217,8 @@ class Screen:
     async def _call_model_raced(self, system: str, user: str,
                                  look_png: bytes | None, kind: str, t0: float,
                                  fallback: dict[str, str],
-                                 budget_s: float | None) -> tuple[str, float]:
+                                 budget_s: float | None,
+                                 prefetch: PrefetchPool | None = None) -> tuple[str, float]:
         """Race the same call on both providers; first COMPLETED call wins.
 
         Both sides start at once (``SCREEN_RACE``). Unlike the first-text
@@ -1090,7 +1247,8 @@ class Screen:
             try:
                 text, _elapsed = await self._request_with_timeout(
                     self._run_route(self._model_call, system, user, images, look_png, first, holder,
-                                    base=call_base), route=primary_provider, timeout=budget_s)
+                                    base=call_base,
+                                    on_text=prefetch.sink("primary") if prefetch else None), route=primary_provider, timeout=budget_s)
             except Exception as error:
                 self._note_call(kind, primary_provider, hedged=False,
                                 ttft_s=None, loser="none", error=type(error).__name__)
@@ -1107,12 +1265,14 @@ class Screen:
         s_holder: dict[str, float] = {}
         p_task = asyncio.create_task(
             self._run_route(self._model_call, system, user, images, look_png,
-                            p_first, p_holder, base=call_base),
+                            p_first, p_holder, base=call_base,
+                            on_text=prefetch.sink("primary") if prefetch else None),
             name=f"screen-race-primary-{kind}")
         self._own_request(p_task, primary_provider)
         s_task = self._start_screen_secondary(
             fallback, system, user, images, look_png, kind, s_first, s_holder,
-            base=call_base)
+            base=call_base,
+            on_text=prefetch.sink("secondary") if prefetch else None)
         pending = {"primary": p_task, "secondary": s_task}
         results: dict[str, tuple[str, float]] = {}
         errors: dict[str, BaseException] = {}
@@ -1164,6 +1324,10 @@ class Screen:
             winner = "primary" if "primary" in results else "secondary"
             loser = "secondary" if winner == "primary" else "primary"
             winner_text, winner_elapsed = results[winner]
+            if prefetch is not None:
+                # The served text is whole: drop prefetches for slots it does
+                # not have, so the losing attempt's vision reviews stop now.
+                prefetch.discard_except(slot_key(s) for s in complete_slots(winner_text))
             loser_provider = fallback_provider if loser == "secondary" else primary_provider
             loser_task = s_task if loser == "secondary" else p_task
             self._stop_request(loser_task, loser_provider)
@@ -1221,6 +1385,7 @@ class Screen:
                                 images: list[str], look_png: bytes | None, kind: str,
                                 first: asyncio.Event, holder: dict[str, float],
                                 base: float | None = None,
+                                on_text: Callable[[str], None] | None = None,
                                 ) -> "asyncio.Task[tuple[str, float]]":
         """Start the identical call on the backup provider.
 
@@ -1228,13 +1393,15 @@ class Screen:
         """
         if self._fallback_call is not None:
             call = self._run_route(self._fallback_call, system, user, images,
-                                   look_png, first, holder, base=base)
+                                   look_png, first, holder, base=base,
+                                   on_text=on_text)
         else:
             async def _real() -> tuple[str, float]:
                 started = time.monotonic()
                 text, _first_s = await self._stream_spec(
                     fallback, system, user, images, look_png,
-                    self._track_first(first, holder, base=base))
+                    self._track_first(first, holder, base=base),
+                    on_text=on_text)
                 return text, time.monotonic() - started
             call = _real()
         return self._own_request(
@@ -1417,9 +1584,16 @@ class Screen:
             return
         system = self.system_prompt()
         user = self._build_user_text(ask)
+        # Image work starts while the page is still being written: the pool
+        # feeds on the write call's streamed text (see PrefetchPool), and the
+        # same PageImages job resolves what is left during prepare.
+        images = self._image_job(ask, t0)
+        pool = PrefetchPool(images, self._reaper)
+        self._pool = pool
         generation_time = self.timeout - min(2.0, self.timeout * 0.2)
         answer, model_s = await asyncio.wait_for(
-            self._call_model(system, user, budget_s=self._fallback_budget()),
+            self._call_model(system, user, budget_s=self._fallback_budget(),
+                             prefetch=pool),
             timeout=generation_time)
         answer = strip_fences(answer)
         if not answer:
@@ -1427,12 +1601,13 @@ class Screen:
             return
         kind = classify_answer(answer)
         if kind == "patch":
-            await self._run_patch(job_id, ask, answer, model_s, t0)
+            await self._run_patch(job_id, ask, answer, model_s, t0, images, pool)
         else:
-            await self._run_page(job_id, ask, answer, model_s, t0, reveal)
+            await self._run_page(job_id, ask, answer, model_s, t0, reveal, images, pool)
 
     async def _run_patch(self, job_id: str, ask: str, patch: str,
-                         model_s: float, t0: float) -> None:
+                         model_s: float, t0: float,
+                         images: PageImages, pool: PrefetchPool) -> None:
         from .debug_log import record_active
 
         if self.visible_id is None or self.visible_id not in self.pages:
@@ -1441,8 +1616,9 @@ class Screen:
             return
         visible = self.pages[self.visible_id]
         self._set_phase("images")
-        images = self._image_job(ask, t0)
         patch = await images.prepare(patch)
+        pool.finish(images.used_keys)
+        self._pool = None
         self._set_phase("rendering")
         png, issues, render_s = await self._render(visible.body, patch)
         errors = [issue_text(i) for i in issues
@@ -1482,15 +1658,22 @@ class Screen:
                 await outcome
 
     async def _run_page(self, job_id: str, ask: str, body: str,
-                        model_s: float, t0: float, reveal: str) -> None:
+                        model_s: float, t0: float, reveal: str,
+                        images: PageImages, pool: PrefetchPool) -> None:
         from .debug_log import record_active
 
         self._page_counter += 1
         page_id = f"p{self._page_counter}"
         width, height = self._pane_size()
         self._set_phase("images")
-        images = self._image_job(ask, t0)
-        body = await images.prepare(body)
+        if reveal == "show":
+            # Show the page first: slots whose prefetch already resolved are
+            # used, the rest get a text fallback now; in-flight prefetches for
+            # id-bearing slots are filled in after delivery (see below).
+            body, pending = await images.prepare_deferred(body)
+        else:
+            body = await images.prepare(body)
+            pending = {}
         self._set_phase("rendering")
         png, issues, render_s = await self._render(body, None)
         self._set_phase("review")
@@ -1608,6 +1791,104 @@ class Screen:
             outcome = self.on_page(result)
             if inspect.isawaitable(outcome):
                 await outcome
+        # The final page decides which prefetches live: consumed and deferred
+        # (fill-later) keys stay, the rest -- loser attempts, dropped slots --
+        # are cancelled now, bounded like the existing loser cleanup.
+        pool.finish(set(images.used_keys) | set(pending))
+        self._pool = None
+        if pending and reveal == "show":
+            fill = asyncio.create_task(
+                self._fill_pending_images(job_id, page_id, images, pending, t0),
+                name=f"screen-fill-{page_id}")
+            self._fills.add(fill)
+            fill.add_done_callback(self._fills.discard)
+
+    async def _fill_pending_images(self, job_id: str, page_id: str,
+                                     images: PageImages,
+                                     pending: dict[tuple[str, str],
+                                                   tuple[str, "asyncio.Task[str]"]],
+                                     t0: float) -> None:
+        """Fill approved late images into the already shown page.
+
+        Only runs when the page is actually on screen (the show-when-ready
+        path): a held or superseded page keeps its text fallback. Each slot
+        resolves to one ``<ot-patch target do=replace>`` op; all approvals go
+        out as a single patch so the tutor gets one note, not one per picture.
+        A slot that cannot be filled (rejected review, missing target, failed
+        preview) is quietly dropped -- the child already reads the fallback.
+        """
+        from .debug_log import record_active
+
+        try:
+            for _ in range(int(VISIBLE_WAIT_S * 10)):
+                if self.visible_id == page_id:
+                    break
+                await asyncio.sleep(0.1)
+            else:
+                return  # never shown (hold mode, failed show, superseded)
+            approvals: list[tuple[str, str]] = []  # (slot id, ot-image html)
+            try:
+                async with asyncio.timeout(FILL_BUDGET_S):
+                    for key, (slot_id, task) in pending.items():
+                        if self.visible_id != page_id:
+                            return  # superseded while filling
+                        try:
+                            async with asyncio.timeout(FILL_SLOT_WAIT_S):
+                                replacement = await task
+                        except asyncio.TimeoutError:
+                            task.cancel()
+                            continue  # this slot was too slow; fill the rest
+                        except asyncio.CancelledError:
+                            if self._closed:
+                                raise  # our own shutdown: propagate (finally cancels the rest)
+                            continue  # that slot died: fill the rest
+                        except Exception:  # noqa: BLE001 - one slot must not sink the rest
+                            continue
+                        if "<ot-image" not in replacement:
+                            continue  # rejected review: the fallback stays
+                        current = self.pages.get(page_id)
+                        if current is None or self.visible_id != page_id:
+                            return
+                        if f'id="{slot_id}"' not in current.body:
+                            continue  # a later patch changed the slot away
+                        approvals.append((slot_id, replacement))
+            except asyncio.TimeoutError:
+                pass  # fill what approved in time; the rest stays text
+            if not approvals or self.visible_id != page_id:
+                return
+            current = self.pages.get(page_id)
+            if current is None:
+                return
+            ops = "".join(
+                f'<ot-patch target="{html.escape(slot_id, quote=True)}" '
+                f'do="replace">{replacement}</ot-patch>'
+                for slot_id, replacement in approvals)
+            png, issues, render_s = await self._render(current.body, ops)
+            errors = [issue_text(i) for i in issues
+                      if issue_kind(i) == "patch" or str(i).startswith("patch failed:")]
+            if errors:
+                log.info("screen fill for %s dropped: %s", page_id, "; ".join(errors)[:200])
+                return
+            total_s = time.monotonic() - t0
+            job_dir = self.pages_dir / job_id
+            job_dir.mkdir(parents=True, exist_ok=True)
+            (job_dir / f"fill-{page_id}.html").write_text(ops, encoding="utf-8")
+            (job_dir / f"fill-{page_id}.png").write_bytes(png)
+            record_active("screen_fill", {"job": job_id, "page": page_id,
+                                            "slots": len(approvals),
+                                            "total_s": round(total_s, 2)})
+            self.visible_patches.append(ops)
+            result = PatchResult(job_id=job_id, page_id=page_id, patch=ops,
+                                 png=png, issues=issues, total_s=total_s,
+                                 render_s=render_s, directory=job_dir, quiet=True)
+            if self.on_patch is not None:
+                outcome = self.on_patch(result)
+                if inspect.isawaitable(outcome):
+                    await outcome
+        finally:
+            for _key, (_slot_id, task) in pending.items():
+                if not task.done():
+                    task.cancel()
 
     def _provider_meta(self) -> dict[str, Any]:
         """Who served this job's model calls: the write-call provider, whether
@@ -1732,21 +2013,25 @@ class Screen:
 
     async def _default_model_call(self, system: str, user: str,
                                  images: list[str], look_png: bytes | None,
-                                 on_first_text: Callable[[], None] | None = None) -> str:
+                                 on_first_text: Callable[[], None] | None = None,
+                                 on_text: Callable[[str], None] | None = None) -> str:
         """Async streaming call. Gemini uses Google, `meta/` models use Command
         Code, other models use Go. SCREEN_THINKING controls DeepSeek's toggle.
 
         The call streams so its first output text is observable for the hedge;
         the stream is always closed, so a cancelled call never outlives its job
         in a thread (the old blocking client is gone). The transport is shared
-        per host with a long keep-alive (see http_clients.py)."""
+        per host with a long keep-alive (see http_clients.py). Every text delta
+        is also offered to ``on_text`` (the image prefetch pool)."""
         text, _first_s = await self._stream_spec(
-            self.model_spec(), system, user, images, look_png, on_first_text)
+            self.model_spec(), system, user, images, look_png, on_first_text,
+            on_text=on_text)
         return text
 
     async def _stream_spec(self, spec: dict[str, str], system: str, user: str,
                            images: list[str], look_png: bytes | None,
-                           on_first_text: Callable[[], None] | None = None
+                           on_first_text: Callable[[], None] | None = None,
+                           on_text: Callable[[str], None] | None = None
                            ) -> tuple[str, float | None]:
         """Stream one provider call; returns ``(full text, seconds to first text)``.
 
@@ -1787,6 +2072,8 @@ class Screen:
             nonlocal announced
             if text:
                 parts.append(text)
+                if on_text is not None:
+                    on_text(text)
                 if not announced:
                     announced = True
                     if on_first_text is not None:

@@ -88,6 +88,29 @@ def without_images(source: str) -> str:
     return source
 
 
+def complete_slots(source: str) -> list[ImageSlot]:
+    """Image slots whose element is fully present in ``source``.
+
+    For incremental parsing of a streamed page: a slot counts only once its
+    start tag is whole (attrs) and its end tag has arrived (child labels),
+    because the vision review judges the requested labels too. A trailing
+    unclosed slot -- or a half-written start tag -- is not returned yet."""
+    parser = _Images(source)
+    parser.feed(source)
+    parser.close()
+    if parser.open is not None:
+        # The trailing slot is still open (its end was faked by the parser).
+        open_slot, _ = parser.open
+        return [slot for slot in parser.slots if slot is not open_slot]
+    return list(parser.slots)
+
+
+def slot_key(slot: ImageSlot) -> tuple[str, str]:
+    """The reuse key for a slot: what was asked, and for which label."""
+    return (slot.attrs.get("src") or slot.attrs.get("query", ""),
+            slot.attrs.get("alt", ""))
+
+
 def _image_html(slot: ImageSlot, candidate: commons.Candidate) -> str:
     attrs = {key: value for key, value in slot.attrs.items() if key in {"id", "class", "alt", "later", "lang"}}
     attrs.update(src=candidate.image_url, credit=candidate.credit)
@@ -127,6 +150,13 @@ class PageImages:
         self.events: list[dict] = []
         self.alternates: dict[tuple[str, str], str] = {}
         self.seconds = 0.0
+        # Prefetched slot resolutions, filled by the streaming prefetch pool
+        # (server/open_tutor/screen.py) while the page is still being written:
+        # slot key -> task returning the replacement HTML for that slot.
+        self.prefetched: dict[tuple[str, str], asyncio.Task[str]] = {}
+        # Slot keys whose prefetch task this job consumed (finished or
+        # awaited); the pool cancels the rest when the job ends.
+        self.used_keys: set[tuple[str, str]] = set()
 
     async def _inspect(self, slot: ImageSlot, candidate: commons.Candidate, data: bytes):
         description = f"{candidate.title}\n{candidate.source_url}\n{candidate.credit}"
@@ -173,6 +203,61 @@ class PageImages:
                 return _image_html(slot, candidate)
         return _fallback_html(slot, fallback)
 
+    async def resolve_slot(self, slot: ImageSlot) -> str:
+        """Resolve one slot outside ``prepare`` (the streaming prefetch pool)."""
+        return await self._resolve(slot)
+
+    async def _await_prefetch(self, key: tuple[str, str],
+                              task: "asyncio.Task[str]") -> str:
+        """Await a prefetched slot; fall back when it cannot deliver in budget.
+
+        A task this job is not waiting on anymore (discarded attempt, dropped
+        slot) was already cancelled by the pool: it falls back quietly. Our
+        own cancellation (the job budget going off) still propagates, so the
+        job limit keeps working."""
+        if task.done():
+            if task.cancelled():
+                raise TimeoutError("prefetch was discarded")
+            return task.result()
+        try:
+            remaining = self.deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError("image budget exhausted")
+            return await asyncio.wait_for(asyncio.shield(task), timeout=remaining)
+        except asyncio.TimeoutError:
+            task.cancel()
+            raise
+        except asyncio.CancelledError:
+            if not task.done():
+                task.cancel()
+            raise
+
+    async def _inline(self, slot: ImageSlot) -> str:
+        """Resolve one slot right now, within the job's image deadline."""
+        try:
+            if time.monotonic() >= self.deadline:
+                raise TimeoutError("image budget exhausted")
+            async with asyncio.timeout_at(self.deadline):
+                return await self._resolve(slot)
+        except Exception as error:  # network/model failure must not discard a usable page
+            self.events.append({"query": slot.attrs.get("query", ""), "source": slot.attrs.get("src", ""),
+                                "decision": "rejected", "reason": f"image preparation failed: {type(error).__name__}"})
+            fallback = self.alternates.get((slot.attrs.get("query") or slot.attrs.get("src", ""), slot.attrs.get("alt", "")), "")
+            return _fallback_html(slot, fallback)
+
+    async def _consume_prefetch(self, slot: ImageSlot) -> str | None:
+        """A finished prefetched resolution for this slot, else None.
+
+        In-flight prefetches are left running for the caller (``prepare``
+        awaits them, ``prepare_deferred`` lists them as pending)."""
+        task = (self.prefetched or {}).get(slot_key(slot))
+        if task is None or not task.done() or task.cancelled():
+            return None
+        try:
+            return task.result()
+        except Exception:  # a failed prefetch resolves like a failed inline one
+            return None
+
     async def prepare(self, body: str) -> str:
         slots = image_slots(body)
         if not slots:
@@ -180,21 +265,76 @@ class PageImages:
         started = time.monotonic()
         replacements = []
         for slot in slots:
-            approved = self.approved.get((slot.attrs.get("src") or slot.attrs.get("query", ""), slot.attrs.get("alt", "")))
+            approved = self.approved.get(slot_key(slot))
             if approved:
                 replacements.append(_image_html(slot, approved))
                 continue
-            try:
-                if time.monotonic() >= self.deadline:
-                    raise TimeoutError("image budget exhausted")
-                async with asyncio.timeout_at(self.deadline):
-                    replacements.append(await self._resolve(slot))
-            except Exception as error:  # network/model failure must not discard a usable page
-                self.events.append({"query": slot.attrs.get("query", ""), "source": slot.attrs.get("src", ""),
-                                    "decision": "rejected", "reason": f"image preparation failed: {type(error).__name__}"})
-                fallback = self.alternates.get((slot.attrs.get("query") or slot.attrs.get("src", ""), slot.attrs.get("alt", "")), "")
-                replacements.append(_fallback_html(slot, fallback))
+            consumed = await self._consume_prefetch(slot)
+            if consumed is not None:
+                self.used_keys.add(slot_key(slot))
+                replacements.append(consumed)
+                continue
+            task = (self.prefetched or {}).get(slot_key(slot))
+            if task is not None:
+                try:
+                    replacements.append(await self._await_prefetch(slot_key(slot), task))
+                    self.used_keys.add(slot_key(slot))
+                    continue
+                except Exception as error:  # a discarded or late prefetch falls back like an inline failure
+                    self.events.append({"query": slot.attrs.get("query", ""), "source": slot.attrs.get("src", ""),
+                                        "decision": "rejected", "reason": f"prefetched image unavailable: {type(error).__name__}"})
+                    fallback = self.alternates.get(slot_key(slot), "")
+                    replacements.append(_fallback_html(slot, fallback))
+                    continue
+            replacements.append(await self._inline(slot))
         for slot, replacement in reversed(list(zip(slots, replacements))):
             body = body[:slot.start] + replacement + body[slot.end:]
         self.seconds += time.monotonic() - started
         return body
+
+    async def prepare_deferred(self, body: str) -> tuple[str, dict[tuple[str, str], tuple[str, "asyncio.Task[str]"]]]:
+        """Resolve what is ready; list the rest as pending instead of waiting.
+
+        Returns ``(html, pending)`` where ``pending`` maps a slot key to
+        ``(slot id, task)`` for prefetches still in flight. Only slots with an
+        id can be filled in later (a patch needs a target), so an in-flight
+        prefetch for an id-less slot is awaited inline like ``prepare`` does.
+        Slots with no prefetch at all resolve inline too."""
+        slots = image_slots(body)
+        if not slots:
+            return body, {}
+        started = time.monotonic()
+        replacements = []
+        pending: dict[tuple[str, str], tuple[str, asyncio.Task[str]]] = {}
+        for slot in slots:
+            key = slot_key(slot)
+            approved = self.approved.get(key)
+            if approved:
+                replacements.append(_image_html(slot, approved))
+                continue
+            consumed = await self._consume_prefetch(slot)
+            if consumed is not None:
+                self.used_keys.add(slot_key(slot))
+                replacements.append(consumed)
+                continue
+            task = (self.prefetched or {}).get(key)
+            if task is not None and not task.done() and slot.attrs.get("id", "").strip():
+                replacements.append(_fallback_html(slot, self.alternates.get(key, "")))
+                pending[key] = (slot.attrs["id"].strip(), task)
+                self.used_keys.add(key)
+                continue
+            if task is not None:
+                try:
+                    replacements.append(await self._await_prefetch(key, task))
+                    self.used_keys.add(key)
+                    continue
+                except Exception as error:
+                    self.events.append({"query": slot.attrs.get("query", ""), "source": slot.attrs.get("src", ""),
+                                        "decision": "rejected", "reason": f"prefetched image unavailable: {type(error).__name__}"})
+                    replacements.append(_fallback_html(slot, self.alternates.get(key, "")))
+                    continue
+            replacements.append(await self._inline(slot))
+        for slot, replacement in reversed(list(zip(slots, replacements))):
+            body = body[:slot.start] + replacement + body[slot.end:]
+        self.seconds += time.monotonic() - started
+        return body, pending

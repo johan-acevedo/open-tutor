@@ -290,15 +290,19 @@ animations are unchanged. Synthetic browser evidence at both pane sizes is in
 
 | Tool | Does | Speed |
 |---|---|---|
-| `ask_screen(ask)` | asks for a new page or a change to the visible one; returns at once | page 5–15 s, change 1–7 s |
-| `show_page(page_id)` | puts a finished page in front of the child | instant |
+| `ask_screen(ask, show="auto")` | asks for a new page or a change to the visible one; returns at once | page 5–15 s, change 1–7 s |
+| `show_page(page_id)` | puts a held page (`show="hold"`) in front of the child | instant |
 | `reveal(part_id)` | uncovers a hidden answer or a `later` part on the visible page | instant |
 | `point(part_id)` | highlights one part of the visible page | instant |
+| `screen_loading(topic)` | dims the visible page and shows "Laddar <topic>…" at once; empty clears | instant |
+| `screen_status()` | one cheap line on what the screen is doing (writing / pictures / ready / shown) | instant |
 
-- **A new page stays invisible until the tutor calls `show_page`.** When it is ready the tutor's
+- **A finished page appears on the screen by itself as soon as it is ready** (2026-11-16;
+  `show="hold"` keeps the old invisible behaviour). When it is shown the tutor's
   chat context gets the screenshot, the page source (so it knows the ids) and a line saying the
-  page is ready but not visible. If the tutor is silent and the child is not speaking, the
+  page is on screen. If the tutor is silent and the child is not speaking, the
   worker prompts it once; if it is speaking, the prompt waits until it has finished.
+  A failed auto-show falls back to the invisible path with a note.
 - **A change (patch) is applied as soon as it is ready**, since the tutor asked for it. The tutor
   gets the patch source and a fresh screenshot in its context, without a prompt.
 - **A child's answer** from `ot-answer`, `ot-choice` or `ot-gap` reaches the tutor as a session
@@ -602,11 +606,65 @@ Johan sat beside the learner. Findings and decisions:
 - **Stale screen after a subject change.** When the learner moved from maths to history, the
   old maths page stayed up while the fox spoke about history: 27 s, 21 s and 15 s. In each
   case the new page was ready for part of that time (18 s, 11 s, 6 s) but stayed hidden
-  until the fox's next turn called `show_page`. Open: a reveal mode ("show when ready" or
-  "hold until I say so") and a way to blur the old page or show "Loading <subject>".
+  until the fox's next turn called `show_page`. Fixed 2026-11-16 (see below): show-when-ready
+  is the default, the fox can dim the old page at once, and the 12 s target no longer cuts
+  image reviews off.
 - **Open: the 12 s page target squeezes images.** Images are fetched only after the page is
   written, from what is left of the target. Johan: a longer wait is fine as long as the fox
-  keeps talking about the material and can check progress.
+  keeps talking about the material and can check progress. Fixed 2026-11-16 (see below):
+  image work starts while the page is still being written and may run to the job limit.
+
+### Reveal mode, loading state, progress, longer images (2026-11-16)
+
+Branch `t3/screen-ready-image-progress`. The 16 Nov stale-screen and image-timeout
+findings above, plus the follow-up that image work should start while the page is
+still being written. Server, shell, web and prompt; tests on all four.
+
+**Reveal mode.** `ask_screen` takes `show="auto"` (default), `"show"` or `"hold"`.
+A finished page appears on the screen by itself as soon as it is ready; the ready
+callback delivers it through the same path as the `show_page` tool (and falls back
+to the old invisible-plus-prompt path when auto-show fails), so a new subject no
+longer waits behind the old page for the fox's next turn. `show="hold"` keeps
+the old behaviour for pages that must not give away an answer before the child
+tries. Owner decision to confirm: show-when-ready as the default (Johan's steer
+was "probably show-when-ready for a new topic"; `auto` is exactly that today,
+with no topic detection -- the fox picks `hold` when it matters).
+
+**Loading state.** `screen_loading(topic)` dims the visible page and shows
+"Laddar <topic>…" at once (`board.loading` RPC, shell veil with spinner;
+empty topic clears). A successful patch clears a stale veil by itself, and a
+failed job clears it best-effort, so no "Laddar …" survives. Screenshots (real
+shell, phone + wide): `screen/review/2026-11-16-loading/`. The prompt tells the
+fox to dim first when it moves to a new subject, and never to teach from, point
+at or describe a page about another subject than the one discussed.
+
+**Progress.** `screen_status` reports one cheap line (writing / pictures /
+rendering / checking / ready / shown, plus elapsed and whether pictures are
+still arriving). The Screen tracks a phase per job; the fox is told to say one
+short Swedish sentence and keep teaching.
+
+**Longer images.** The image deadline is the job limit (about 17 s of a 20 s job)
+minus render reserves, not the 12 s soft page target minus reserves; the voice
+turn stays non-blocking as before, and images that cannot finish in budget still
+fall back to text instead of failing the page. On top of that, image work now
+starts while the page is still being written: the write call's streamed text is
+scanned for complete `<ot-image>` slots (attrs plus child labels, which the
+vision review judges) and each slot's search + download + review starts at once,
+so slots resolve concurrently with the writing. Show-when-ready pages paint at
+once (text fallback for in-flight slots) and approved pictures fill into the
+shown page as one patch when they land; rejected reviews, lint-dropped slots,
+held and superseded pages never fill. Hedged/raced attempts share prefetch tasks
+by slot key (no double vision reviews); the loser's unique prefetches are
+cancelled at the decision, the rest at job end, bounded like the other loser
+cleanup. Synthetic timing with identical 0.6 s write + 0.6 s review sleeps:
+1.21 s sequential vs 0.61 s with prefetch; on live jobs the overlap is the whole
+multi-second review, and first paint never waits for it at all.
+
+**Not tested.** No live provider calls and no real session: prefetch against real
+Commons + a real review model, the fill patch landing mid-lesson, and one full
+live lesson are still open. Malformed streamed HTML (a slot that never closes)
+resolves inline at prepare, as before. A fill racing a tutor-asked patch to the
+same target is last-applied-wins, like two quick patches today.
 
 ### What Johan's test calls settled (2026-11-13)
 
