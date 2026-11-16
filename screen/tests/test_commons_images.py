@@ -98,7 +98,7 @@ class SearchTest(CommonsCase):
         self.assertEqual(request.url.params["gsrnamespace"], "6")
         self.assertEqual(request.url.params["gsrlimit"], "3")
         self.assertEqual(request.url.params["gsrsearch"], "filetype:bitmap Colosseum Rome")
-        self.assertEqual(request.url.params["iiprop"], "url|extmetadata|size|mime")
+        self.assertEqual(request.url.params["iiprop"], "url|extmetadata|size|mime|thumbmime")
         self.assertEqual(request.url.params["iiurlwidth"], "800")
 
         self.assertEqual([c.title for c in result.candidates], [
