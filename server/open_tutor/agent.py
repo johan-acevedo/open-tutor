@@ -944,6 +944,17 @@ class SmartTutor(Tutor):
         super().__init__(learner, room, board=board, greeting_note=greeting_note)
         # The Screen renders at the pane size the tutor keeps current.
         screen.set_pane_source(lambda: (self.board_w, self.board_h))
+        # One serialized delivery path for every board change in this session:
+        # tutor patches, image fills, show, reveal, point and loading all go
+        # through _board_send, so no two changes interleave. An image fill's
+        # final decision (Screen.claim_fill) runs inside the same critical
+        # section, immediately before its RPC is sent.
+        self._board_lock = asyncio.Lock()
+
+    async def _board_send(self, method: str, payload: dict[str, Any]) -> bool:
+        """Send one board RPC; serialized with every other board change."""
+        async with self._board_lock:
+            return await self._rpc(method, payload)
 
     @function_tool()
     async def ask_screen(self, context: RunContext, ask: str, show: str = "auto") -> str:
@@ -1009,11 +1020,12 @@ class SmartTutor(Tutor):
         except ValidationError:
             return (False, f"Page {page.page_id} is too large to show. "
                     "Explain in words instead, briefly.")
-        shown = await self._rpc("board.show", item.model_dump(exclude_none=True))
-        if not shown:
-            return (False, f"Page {page.page_id} could not be shown. "
-                    "Explain in words instead, briefly.")
-        self.screen.mark_visible(page.page_id)
+        async with self._board_lock:
+            shown = await self._rpc("board.show", item.model_dump(exclude_none=True))
+            if not shown:
+                return (False, f"Page {page.page_id} could not be shown. "
+                        "Explain in words instead, briefly.")
+            self.screen.mark_visible(page.page_id)
         return (True, f"Page {page.page_id} is now visible. "
                 "Teach from what it actually shows, as its author.")
 
@@ -1031,8 +1043,8 @@ class SmartTutor(Tutor):
         topic = (topic or "").strip()[:120]
         if self.screen.visible_id is None:
             return "No page is on screen yet. Nothing was dimmed."
-        ok = await self._rpc("board.loading",
-                             {"id": self.screen.visible_id, "topic": topic})
+        ok = await self._board_send("board.loading",
+                                    {"id": self.screen.visible_id, "topic": topic})
         if not ok:
             return ("The loading state could not be shown. "
                     "Keep teaching in words instead, briefly.")
@@ -1064,7 +1076,7 @@ class SmartTutor(Tutor):
             return "No part given. Nothing was revealed."
         if self.screen.visible_id is None:
             return "No page is on screen yet. Nothing was revealed."
-        ok = await self._rpc("board.reveal", {"id": self.screen.visible_id, "part": part})
+        ok = await self._board_send("board.reveal", {"id": self.screen.visible_id, "part": part})
         if not ok:
             return f"Part {part} could not be revealed. Explain in words instead, briefly."
         return f"Part {part} is now visible. Talk about what it shows."
@@ -1081,7 +1093,7 @@ class SmartTutor(Tutor):
             return "No part given. Nothing was highlighted."
         if self.screen.visible_id is None:
             return "No page is on screen yet. Nothing was highlighted."
-        ok = await self._rpc("board.point", {"id": self.screen.visible_id, "part": part})
+        ok = await self._board_send("board.point", {"id": self.screen.visible_id, "part": part})
         if not ok:
             return f"Part {part} could not be highlighted. Explain in words instead, briefly."
         return f"Part {part} is highlighted. Talk about it."
@@ -1108,7 +1120,7 @@ class SmartTutor(Tutor):
         if target is None:
             return False
         try:
-            return await self._rpc("board.loading", {"id": target, "topic": ""})
+            return await self._board_send("board.loading", {"id": target, "topic": ""})
         except Exception:  # noqa: BLE001 - clearing is best-effort
             return False
 
@@ -1168,18 +1180,35 @@ class SmartTutor(Tutor):
                       f"If it fits the lesson now, call show_page('{page.page_id}'); "
                       f"otherwise keep teaching and bring it in later."))
 
-    async def screen_patch_ready(self, session: AgentSession, patch: Any) -> None:
+    async def screen_patch_ready(self, session: AgentSession, patch: Any) -> bool:
         """A change finished: apply it at once, add it to the context, no prompt.
 
-        A deferred image fill (``quiet``) is not asked for and must not worry
-        the child when it fails: the page already shows its text fallback, so
-        a missed fill is only a context note, never a spoken apology."""
-        ok = await self._rpc("board.patch", {"id": patch.page_id, "patch": patch.patch})
+        Every board change is serialized through the delivery lock. A deferred
+        image fill (``quiet``) is claimed inside the same critical section,
+        immediately before its RPC is sent: only approvals whose slot is still
+        exactly there reach the child; anything else is dropped quietly. The
+        page already shows its text fallback, so a missed fill is only a
+        context note, never a spoken apology. Returns whether the change was
+        sent, so the Screen only records delivered patches in its history."""
         parts: list[Any] = []
         if getattr(patch, "png", None):
             parts.append(llm.ImageContent(
                 image=f"data:image/png;base64,{base64.b64encode(patch.png).decode()}",
                 inference_detail="high"))
+        async with self._board_lock:
+            if getattr(patch, "quiet", False):
+                ops = self.screen.claim_fill(patch.page_id, getattr(patch, "fill_slots", None))
+                if ops is None:
+                    record_active("screen_fill_dropped", {"page": patch.page_id})
+                    text = (f"[Screen image fill for page {patch.page_id} dropped: "
+                            f"its slot changed while the picture was approved. "
+                            f"The placeholder stays.]")
+                    ctx = self.chat_ctx.copy()
+                    ctx.add_message(role="user", content=[text, *parts])
+                    await self.update_chat_ctx(ctx)
+                    return False
+                patch.patch = ops  # send exactly what was claimed
+            ok = await self._rpc("board.patch", {"id": patch.page_id, "patch": patch.patch})
         if getattr(patch, "quiet", False):
             applied = ("filled in its approved pictures" if ok
                        else "could NOT fill in its pictures; the text fallback stays")
@@ -1191,6 +1220,7 @@ class SmartTutor(Tutor):
         ctx = self.chat_ctx.copy()
         ctx.add_message(role="user", content=[text, *parts])
         await self.update_chat_ctx(ctx)
+        return ok
 
     async def screen_failed(self, session: AgentSession, message: str) -> None:
         """A screen job failed: tell the tutor and let it say so once it is free.

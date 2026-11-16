@@ -693,6 +693,19 @@ different id/`later`/labels goes through review), and the fill re-checks
 touched/vanished targets and visibility after its preview render with no
 await before the delivery decision, so a correction applied mid-render wins.
 
+Third review, same PR (structural: no more race-patching). Pending slots stay
+verbatim in the delivered body -- the shell renders an unresolved `<ot-image>`
+as a loading picture placeholder ("Laddar bild …", labels hidden until the
+picture loads) -- so a retry or patch that replaces or changes the slot drops
+its approval by construction. One serialized delivery path:
+`SmartTutor._board_lock` guards every board RPC (tutor patches, image fills,
+show, reveal, point, loading); the fill's final decision (`Screen.claim_fill`:
+page still visible, exact full slot still present and untouched) runs inside
+the same critical section, immediately before the RPC send, with no await in
+between. Approvals are tied to slots (`_retain_pending` revalidates them
+against every look-fix/lint-rewrite). Evidence: `pending-placeholder-1000x700.png`
+in `screen/review/2026-11-16-loading/`.
+
 ### What Johan's test calls settled (2026-11-13)
 
 Three real calls on the dev setup (Johan alone, with Lucas, and alone again). Decisions:

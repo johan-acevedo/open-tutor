@@ -60,6 +60,23 @@ def check(browser, body: str, size: tuple[int, int], out: pathlib.Path, tag: str
         page.close()
 
 
+def pending_shot(browser, body: str, out: pathlib.Path) -> None:
+    """An unresolved image slot renders a loading picture placeholder."""
+    page = browser.new_page(viewport={"width": 1000, "height": 700})
+    try:
+        page.set_content(screenkit.host_page(screenkit.compose(body)))
+        page.wait_for_function("() => frames.length === 1")
+        frame = page.frames[1]
+        frame.wait_for_function("() => document.documentElement.dataset.otReady === '1'")
+        label = frame.evaluate(
+            "() => document.querySelector('ot-image .ot-img-pending').textContent")
+        assert "Laddar bild" in label, label
+        assert frame.evaluate("() => document.querySelectorAll('ot-image img').length") == 0
+        page.screenshot(path=str(out / "pending-placeholder-1000x700.png"))
+    finally:
+        page.close()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", default="/tmp/screen-loading")
@@ -69,11 +86,16 @@ def main() -> None:
     root = pathlib.Path(__file__).resolve().parents[1]
     body = (root / "examples" / "klockan.html").read_text()
     body = body.replace("<h1>", '<h1 id="rubrik">', 1)
+    pending = ('<h1>Romarriket</h1><p>Forum Romanum, hjärtat i antikens Rom.</p>'
+               '<ot-image id="forum" query="Forum Romanum" alt="Forum">'
+               '<ot-label at="20,30">templen</ot-label>'
+               '<ot-label at="70,60">triumfbågarna</ot-label></ot-image>')
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
         try:
             check(browser, body, (370, 610), out, "klockan")
             check(browser, body, (1000, 700), out, "klockan")
+            pending_shot(browser, pending, out)
         finally:
             browser.close()
     print(f"screenshots in {out}")

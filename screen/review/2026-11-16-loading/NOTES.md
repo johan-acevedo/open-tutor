@@ -27,6 +27,9 @@ Screenshots (real shell, example page `klockan.html`, `check_loading.py`):
 
 - `klockan-loading-370x610.png` / `klockan-loading-1000x700.png`: dimmed page
   with the "Laddar historia …" pill, phone and wide.
+- `pending-placeholder-1000x700.png`: an unresolved `<ot-image>` slot renders
+  a loading picture placeholder (dashed box, "Laddar bild …"); labels stay
+  hidden until the picture loads.
 - `klockan-cleared-370x610.png` / `klockan-cleared-1000x700.png`: after clear
   + patch (patch auto-clear path).
 
@@ -95,3 +98,17 @@ Screenshots (real shell, example page `klockan.html`, `check_loading.py`):
   re-checks visibility after its preview render.
 - `aclose` finishes the pool through the reaper bound; held-ready and
   auto-show clear the veil (`SmartTutor._clear_loading`).
+
+## Structural fill fix (third review, same PR)
+
+- Pending slots stay verbatim in the delivered body; the shell renders an
+  unresolved `<ot-image>` as a loading picture placeholder (labels hidden
+  until the picture loads). Show first, fill when approved.
+- One serialized delivery path: `SmartTutor._board_lock` guards every board
+  RPC (tutor patches, image fills, show, reveal, point, loading). The fill's
+  final decision (`Screen.claim_fill`: page still visible, exact full slot
+  still present and untouched) runs inside the same critical section,
+  immediately before the RPC send, with no await in between.
+- Approvals are tied to slots: look-fix/lint-retry revalidate pending
+  approvals against the rewritten body (`_retain_pending`); changed or
+  dropped slots lose their approval, consumed ones are not filled twice.

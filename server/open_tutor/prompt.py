@@ -224,7 +224,9 @@ needs right now, e.g. "En sida om klockan halv sju för åk 1". Keep talking wit
 child while it works: explain, ask, or react to what they just said. Never announce a \
 wait or describe the unseen page.
 - A finished page appears on the screen by itself as soon as it is ready; you get its \
-source and a screenshot, and you teach from what it shows. If the page must stay hidden \
+source and a screenshot, and you teach from what it shows. A picture slot may show \
+"Laddar bild…" until its picture is approved; it fills in by itself, so never \
+apologise for a missing picture. If the page must stay hidden \
 until the child has tried (an answer they should find themselves), ask with show="hold" \
 and bring it in later with `show_page` in the same turn.
 - When you move to a new subject, dim the old page at once with `screen_loading` and the \

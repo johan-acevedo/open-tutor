@@ -44,6 +44,7 @@ from screen.tools.page_images import (  # noqa: E402
     SlotDecision,
     SlotKey,
     complete_slots,
+    image_slots,
     slot_key,
 )
 
@@ -226,6 +227,10 @@ class PatchResult:
     # A deferred image fill, not an asked-for change: the worker stays quiet
     # when it cannot be applied (the page already shows its text fallback).
     quiet: bool = False
+    # The fill's candidates: (slot id, served slot, review verdict). The
+    # worker claims them inside the board delivery lock just before sending;
+    # only survivors reach the child (see Screen.claim_fill).
+    fill_slots: list[tuple[str, ImageSlot, SlotDecision]] | None = None
 
 
 class PrefetchPool:
@@ -562,12 +567,62 @@ class Screen:
     def _note_patch_targets(self, page_id: str, patch_html: str) -> None:
         """Remember which elements a delivered patch changed on its page.
 
-        A deferred image fill later checks this: when the tutor replaced the
-        fallback section with corrected text, the fill must not put the
-        picture back over the correction."""
+        A deferred image fill later drops slots a patch touched: filling the
+        approved picture back over a tutor correction must never happen. Noted
+        optimistically (before the send): on a failed send the ids only make
+        a later fill more conservative, never wrong."""
         if patch_html:
             self._page_touched.setdefault(page_id, set()).update(
                 self._patch_targets(patch_html))
+
+    def claim_fill(self, page_id: str,
+                   fill_slots: list[tuple[str, ImageSlot, SlotDecision]] | None) -> str | None:
+        """The fill's final decision: which approvals may be sent right now.
+
+        Runs inside the board delivery lock, immediately before the RPC send,
+        with no await in between. The page must still be visible, and every
+        surviving target must still contain exactly the `<ot-image>` slot the
+        review approved (full slot match against the served body, minus elements
+        a later patch touched) -- never a bare id match. Returns the patch ops
+        for the survivors, or None to drop the fill."""
+        if self.visible_id != page_id or page_id not in self.pages:
+            return None
+        body = self.pages[page_id].body
+        present = {slot_key(slot) for slot in image_slots(body)}
+        touched = self._page_touched.get(page_id, set())
+        ops: list[str] = []
+        for slot_id, slot, decision in fill_slots or []:
+            if decision.candidate is None:
+                continue  # rejected review: the placeholder stays
+            if slot_key(slot) not in present:
+                continue  # a retry or patch replaced or changed the slot
+            if slot_id in touched:
+                continue  # a tutor correction owns this element now
+            if f'id="{slot_id}"' not in body:
+                continue
+            ops.append(
+                f'<ot-patch target="{html.escape(slot_id, quote=True)}" '
+                f'do="replace">{PageImages.render(slot, decision)}</ot-patch>')
+        if not ops:
+            return None
+        self._note_patch_targets(page_id, "".join(ops))
+        return "".join(ops)
+
+    @staticmethod
+    def _retain_pending(body: str,
+                        pending: dict[SlotKey, tuple[str, ImageSlot, "asyncio.Task[SlotDecision]"]],
+                        used: set[SlotKey]
+                        ) -> dict[SlotKey, tuple[str, ImageSlot, "asyncio.Task[SlotDecision]"]]:
+        """Drop pending approvals the final body no longer holds raw.
+
+        A look-fix or lint retry rewrites the body and resolves images inline:
+        consumed reviews must not fill twice, and slots the rewrite changed or
+        dropped lose their approval with it. What survives is exactly the set
+        of still-unresolved `<ot-image>` slots (query, no src yet)."""
+        raw = {slot_key(slot) for slot in image_slots(body)
+               if slot.attrs.get("query") and not slot.attrs.get("src")}
+        return {key: value for key, value in pending.items()
+                if key in raw and key not in used}
 
     # ---- progress --------------------------------------------------------
 
@@ -1669,7 +1724,6 @@ class Screen:
             await self._fail(job_id, "The screen change was not applied: " + "; ".join(errors)[:400]
                              + ". Ask for a corrected change or a new page; explain in words meanwhile.")
             return
-        self.visible_patches.setdefault(visible.page_id, []).append(patch)
         self._note_patch_targets(visible.page_id, patch)
         result = PatchResult(job_id=job_id, page_id=visible.page_id, patch=patch,
                              png=png, issues=issues, model_s=model_s,
@@ -1680,8 +1734,9 @@ class Screen:
                              "page": visible.page_id, "total_s": round(total_s, 2)}
         if self.on_patch is not None:
             outcome = self.on_patch(result)
-            if inspect.isawaitable(outcome):
-                await outcome
+            delivered = await outcome if inspect.isawaitable(outcome) else True
+            if delivered:
+                self.visible_patches.setdefault(visible.page_id, []).append(patch)
 
     async def _run_page(self, job_id: str, ask: str, body: str,
                         model_s: float, t0: float, reveal: str,
@@ -1727,6 +1782,7 @@ class Screen:
                         repair["notes"].append("look fix not rendered: no time left")
                     else:
                         fixed = await images.prepare(fixed)
+                        pending = self._retain_pending(fixed, pending, images.used_keys)
                         rendered, why = await self._render_optional(fixed, t0)
                         if rendered is None:
                             repair["notes"].append(f"look fix dropped: {why}")
@@ -1754,6 +1810,7 @@ class Screen:
                     repair["notes"].append(f"lint retry {why}")
                 elif corrected and corrected != body:
                     corrected = await images.prepare(corrected)
+                    pending = self._retain_pending(corrected, pending, images.used_keys)
                     rendered, why = await self._render_optional(corrected, t0)
                     if rendered is None:
                         repair["notes"].append(f"lint retry dropped: {why}")
@@ -1837,11 +1894,14 @@ class Screen:
         """Fill approved late images into the already shown page.
 
         Only runs when the page is actually on screen (the show-when-ready
-        path): a held or superseded page keeps its text fallback. Each slot
-        resolves to one ``<ot-patch target do=replace>`` op; all approvals go
-        out as a single patch so the tutor gets one note, not one per picture.
-        A slot that cannot be filled (rejected review, missing target, failed
-        preview) is quietly dropped -- the child already reads the fallback.
+        path): a held or superseded page keeps its placeholder. Approvals are
+        previewed here, but the delivery decision runs in the worker, inside
+        the board delivery lock just before the RPC send (see
+        ``SmartTutor.screen_patch_ready`` -> ``Screen.claim_fill``): no board
+        change can interleave between the final check and the send. A slot
+        that cannot be filled (rejected review, missing target, failed
+        preview) is quietly dropped -- the child already reads the
+        placeholder.
         """
         from .debug_log import record_active
 
@@ -1852,14 +1912,12 @@ class Screen:
                 await asyncio.sleep(0.1)
             else:
                 return  # never shown (hold mode, failed show, superseded)
-            approvals: list[tuple[str, str]] = []  # (slot id, fill patch html)
+            candidates: list[tuple[str, ImageSlot, SlotDecision]] = []
             try:
                 async with asyncio.timeout(FILL_BUDGET_S):
                     for key, (slot_id, slot, task) in pending.items():
                         if self.visible_id != page_id:
                             return  # superseded while filling
-                        if slot_id in self._page_touched.get(page_id, set()):
-                            continue  # the tutor changed that element since
                         try:
                             async with asyncio.timeout(FILL_SLOT_WAIT_S):
                                 decision = await task
@@ -1873,46 +1931,23 @@ class Screen:
                         except Exception:  # noqa: BLE001 - one slot must not sink the rest
                             continue
                         if decision.candidate is None:
-                            continue  # rejected review: the fallback stays
-                        current = self.pages.get(page_id)
-                        if current is None or self.visible_id != page_id:
-                            return
-                        if f'id="{slot_id}"' not in current.body:
-                            continue  # a later patch changed the slot away
-                        if slot_id in self._page_touched.get(page_id, set()):
-                            continue  # corrected while its review was running
-                        approvals.append((slot_id, PageImages.render(slot, decision)))
+                            continue  # rejected review: the placeholder stays
+                        candidates.append((slot_id, slot, decision))
             except asyncio.TimeoutError:
                 pass  # fill what approved in time; the rest stays text
-            if not approvals or self.visible_id != page_id:
+            if not candidates or self.visible_id != page_id:
                 return
             current = self.pages.get(page_id)
             if current is None:
                 return
-            ops = "".join(
+            preview = "".join(
                 f'<ot-patch target="{html.escape(slot_id, quote=True)}" '
-                f'do="replace">{replacement}</ot-patch>'
-                for slot_id, replacement in approvals)
+                f'do="replace">{PageImages.render(slot, decision)}</ot-patch>'
+                for slot_id, slot, decision in candidates)
             png, issues, render_s = await self._render(
-                current.body, ops, list(self.visible_patches.get(page_id, [])))
-            # Delivery decision, with no await in between: a tutor correction
-            # applied while the preview rendered must win over the stale fill.
-            # `current.body` never changes, but `_page_touched` does -- a patch
-            # that replaced the fallback section is recorded there the moment
-            # it is delivered.
-            current = self.pages.get(page_id)
-            touched = self._page_touched.get(page_id, set())
-            approvals = [(slot_id, replacement) for slot_id, replacement in approvals
-                         if current is not None
-                         and self.visible_id == page_id
-                         and f'id="{slot_id}"' in current.body
-                         and slot_id not in touched]
-            if not approvals:
-                return  # corrected, vanished or superseded while rendering
-            ops = "".join(
-                f'<ot-patch target="{html.escape(slot_id, quote=True)}" '
-                f'do="replace">{replacement}</ot-patch>'
-                for slot_id, replacement in approvals)
+                current.body, preview, list(self.visible_patches.get(page_id, [])))
+            if self.visible_id != page_id:
+                return  # another page took the screen during the render
             errors = [issue_text(i) for i in issues
                       if issue_kind(i) == "patch" or str(i).startswith("patch failed:")]
             if errors:
@@ -1921,20 +1956,22 @@ class Screen:
             total_s = time.monotonic() - t0
             job_dir = self.pages_dir / job_id
             job_dir.mkdir(parents=True, exist_ok=True)
-            (job_dir / f"fill-{page_id}.html").write_text(ops, encoding="utf-8")
+            (job_dir / f"fill-{page_id}.html").write_text(preview, encoding="utf-8")
             (job_dir / f"fill-{page_id}.png").write_bytes(png)
             record_active("screen_fill", {"job": job_id, "page": page_id,
-                                            "slots": len(approvals),
+                                            "slots": len(candidates),
                                             "total_s": round(total_s, 2)})
-            self.visible_patches.setdefault(page_id, []).append(ops)
-            self._note_patch_targets(page_id, ops)
-            result = PatchResult(job_id=job_id, page_id=page_id, patch=ops,
+            result = PatchResult(job_id=job_id, page_id=page_id, patch=preview,
                                  png=png, issues=issues, total_s=total_s,
-                                 render_s=render_s, directory=job_dir, quiet=True)
+                                 render_s=render_s, directory=job_dir, quiet=True,
+                                 fill_slots=candidates)
             if self.on_patch is not None:
                 outcome = self.on_patch(result)
-                if inspect.isawaitable(outcome):
-                    await outcome
+                delivered = await outcome if inspect.isawaitable(outcome) else True
+                if delivered:
+                    # Only what the worker actually sent (see claim_fill) joins
+                    # this page's history.
+                    self.visible_patches.setdefault(page_id, []).append(result.patch)
         finally:
             for _key, (_slot_id, _slot, task) in pending.items():
                 if not task.done():
@@ -2011,7 +2048,7 @@ class Screen:
             remaining = self._time_left(t0) - DELIVERY_RESERVE_S
             if remaining <= 0:
                 return None, "no time left for render"
-            png, issues, render_s = await asyncio.wait_for(self._render(body, None), timeout=remaining)
+            png, issues, render_s = await asyncio.wait_for(self._render(body, None, []), timeout=remaining)
         except asyncio.TimeoutError:
             return None, "render timed out"
         except Exception as error:  # noqa: BLE001 - a usable page is not dropped

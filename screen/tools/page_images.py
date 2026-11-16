@@ -351,7 +351,10 @@ class PageImages:
         """Resolve what is ready; list the rest as pending instead of waiting.
 
         Returns ``(html, pending)`` where ``pending`` maps a slot identity to
-        ``(slot id, slot, task)`` for prefetches still in flight. Only slots with an
+        ``(slot id, slot, task)`` for prefetches still in flight. A pending slot
+        is kept verbatim in the HTML -- the shell renders it as a loading
+        picture placeholder until the fill patch replaces it -- so the served
+        page always shows exactly the slot the review judged. Only slots with an
         id can be filled in later (a patch needs a target), so an in-flight
         prefetch for an id-less slot is awaited inline like ``prepare`` does.
         Slots with no prefetch at all resolve inline too."""
@@ -376,7 +379,9 @@ class PageImages:
                 continue
             task = (self.prefetched or {}).get(key)
             if task is not None and not task.done() and slot.attrs.get("id", "").strip():
-                replacements.append(_fallback_html(slot, self.alternates.get(key, "")))
+                # Kept verbatim: the shell shows a loading picture placeholder
+                # for it, and the fill replaces exactly this slot on approval.
+                replacements.append(body[slot.start:slot.end])
                 pending[key] = (slot.attrs["id"].strip(), slot, task)
                 self.used_keys.add(key)
                 continue
