@@ -72,22 +72,26 @@ class _Images(HTMLParser):
 
 
 def image_slots(source: str) -> list[ImageSlot]:
-    parser = _Images(source)
-    parser.feed(source)
-    parser.close()
     # An unclosed custom tag must not swallow the rest of the teaching page:
     # the slot ends at its start tag, and what followed is parsed again so a
     # nested <ot-image> becomes a slot of its own (reviewed or replaced) and
-    # its src never reaches the browser unreviewed.
-    if parser.open:
+    # its src never reaches the browser unreviewed. Iterative, so a deeply
+    # nested page cannot exhaust the stack.
+    slots: list[ImageSlot] = []
+    offset = 0
+    while True:
+        parser = _Images(source[offset:])
+        parser.feed(source[offset:])
+        parser.close()
+        for slot in parser.slots:
+            slot.start += offset
+            slot.end += offset
+        slots.extend(parser.slots)
+        if not parser.open:
+            return slots
         slot, children_start = parser.open
-        slot.end = children_start
-        rest = image_slots(source[children_start:])
-        for nested in rest:
-            nested.start += children_start
-            nested.end += children_start
-        return parser.slots + rest
-    return parser.slots
+        slot.end = offset + children_start  # children_start is relative to this pass
+        offset = slot.end
 
 
 def without_images(source: str) -> str:
