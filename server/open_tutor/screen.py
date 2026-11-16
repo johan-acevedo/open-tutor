@@ -39,7 +39,10 @@ if str(_REPO_ROOT) not in sys.path:
 from screen.tools import prompt as screen_prompt  # noqa: E402
 from screen.tools import screenkit as screenkit  # noqa: E402
 from screen.tools.page_images import (  # noqa: E402
+    ImageSlot,
     PageImages,
+    SlotDecision,
+    SlotKey,
     complete_slots,
     slot_key,
 )
@@ -75,7 +78,6 @@ MAX_HOMEWORK_IMAGES = 4
 FINAL_RENDER_RESERVE_S = 3.0
 DELIVERY_RESERVE_S = 0.2
 MIN_OPTIONAL_STEP_S = 2.0
-IMAGE_BUDGET_S = 6.0
 # The shell's `dense` minimum is 16 px below 600 px wide (screen/shell/shell.js).
 NARROW_PANE_WIDTH = 600
 NARROW_PANE_HEIGHT = 640
@@ -243,7 +245,7 @@ class PrefetchPool:
         self._images = images
         self._reaper = reaper
         self._buffers: dict[str, str] = {}
-        self._tasks: dict[tuple[str, str], asyncio.Task[str]] = {}
+        self._tasks: dict[SlotKey, asyncio.Task[SlotDecision]] = {}
 
     def sink(self, attempt: str) -> Callable[[str], None]:
         """An ``on_text`` callback feeding one attempt's stream into the pool."""
@@ -264,7 +266,7 @@ class PrefetchPool:
                 name=f"screen-prefetch-{attempt}")
             self._images.prefetched[key] = self._tasks[key]
 
-    def discard_except(self, keys: Iterable[tuple[str, str]]) -> None:
+    def discard_except(self, keys: Iterable[SlotKey]) -> None:
         """Cancel prefetches for slots the winning text does not have.
 
         Called once the served attempt's full text is known (a hedged or raced
@@ -280,7 +282,7 @@ class PrefetchPool:
         if drop:
             self._reaper.stop("screen-prefetch", drop)
 
-    def finish(self, used: Iterable[tuple[str, str]]) -> None:
+    def finish(self, used: Iterable[SlotKey]) -> None:
         """End of the job: cancel every prefetch the final page did not use.
 
         ``used`` holds consumed plus deferred (fill-later) keys; those tasks
@@ -295,7 +297,7 @@ class PrefetchPool:
 # body (plus a patch, when the model answered one) and the child's pane size,
 # and returns the screenshot bytes plus the shell's issues.
 ModelCall = Callable[[str, str, list[str], bytes | None], Any]
-RenderPage = Callable[[str, str | None, int, int], Any]
+RenderPage = Callable[[str, str | None, list[str], int, int], Any]
 
 
 def _screen_env(name: str, default: str) -> str:
@@ -337,10 +339,6 @@ def _accepts_on_text(fn: Callable[..., Any]) -> bool:
     return "on_text" in parameters or any(
         p.kind == inspect.Parameter.VAR_KEYWORD for p in parameters.values()
     )
-    try:
-        return float(os.environ.get(name, default))
-    except (TypeError, ValueError):
-        return default
 
 
 # First-text hedge: how long the primary screen call gets before the same call
@@ -499,7 +497,10 @@ class Screen:
         self.answers: list[dict[str, str]] = []
         self.pages: dict[str, PageResult] = {}
         self.visible_id: str | None = None
-        self.visible_patches: list[str] = []
+        # Applied patches and touched targets, keyed by page id: a fill or a
+        # preview for one page must never read or corrupt another's history.
+        self.visible_patches: dict[str, list[str]] = {}
+        self._page_touched: dict[str, set[str]] = {}
         self.on_page: Callable[[PageResult], Any] | None = None
         self.on_patch: Callable[[PatchResult], Any] | None = None
         self.on_failure: Callable[[str], Any] | None = None
@@ -549,7 +550,24 @@ class Screen:
     def mark_visible(self, page_id: str) -> None:
         if page_id in self.pages and page_id != self.visible_id:
             self.visible_id = page_id
-            self.visible_patches = []
+            self.visible_patches[page_id] = []
+            self._page_touched[page_id] = set()
+
+    @staticmethod
+    def _patch_targets(patch_html: str) -> set[str]:
+        """Element ids one patch batch addresses (its ``<ot-patch target>``s)."""
+        return set(re.findall(r"<ot-patch\b[^>]*\btarget\s*=\s*['\"]([^'\"]*)['\"]",
+                              patch_html or ""))
+
+    def _note_patch_targets(self, page_id: str, patch_html: str) -> None:
+        """Remember which elements a delivered patch changed on its page.
+
+        A deferred image fill later checks this: when the tutor replaced the
+        fallback section with corrected text, the fill must not put the
+        picture back over the correction."""
+        if patch_html:
+            self._page_touched.setdefault(page_id, set()).update(
+                self._patch_targets(patch_html))
 
     # ---- progress --------------------------------------------------------
 
@@ -658,6 +676,11 @@ class Screen:
 
     async def aclose(self) -> None:
         self._closed = True
+        pool, self._pool = self._pool, None
+        if pool is not None:
+            # A job still writing holds prefetches: drop them with it,
+            # bounded like the other loser cleanup (reaper.wait below).
+            pool.finish(set())
         for task, route in list(self._requests.items()):
             self._stop_request(task, route)
         for stream in list(self._streams):
@@ -1514,10 +1537,11 @@ class Screen:
             record_active("screen_failover", {"job": self._job_id, "kind": kind,
                                                 "to": provider, "error": error_class})
 
-    async def _render(self, body: str, patch: str | None) -> tuple[bytes, list, float]:
+    async def _render(self, body: str, patch: str | None,
+                      history: list[str] | None = None) -> tuple[bytes, list, float]:
         width, height = self._pane_size()
         t0 = time.monotonic()
-        result = self._render_page(body, patch, width, height)
+        result = self._render_page(body, patch, list(history or []), width, height)
         if inspect.isawaitable(result):
             result = await result
         png, issues = result
@@ -1620,7 +1644,8 @@ class Screen:
         pool.finish(images.used_keys)
         self._pool = None
         self._set_phase("rendering")
-        png, issues, render_s = await self._render(visible.body, patch)
+        history = list(self.visible_patches.get(self.visible_id, []))
+        png, issues, render_s = await self._render(visible.body, patch, history)
         errors = [issue_text(i) for i in issues
                   if issue_kind(i) == "patch" or str(i).startswith("patch failed:")]
         total_s = time.monotonic() - t0
@@ -1644,7 +1669,8 @@ class Screen:
             await self._fail(job_id, "The screen change was not applied: " + "; ".join(errors)[:400]
                              + ". Ask for a corrected change or a new page; explain in words meanwhile.")
             return
-        self.visible_patches.append(patch)
+        self.visible_patches.setdefault(visible.page_id, []).append(patch)
+        self._note_patch_targets(visible.page_id, patch)
         result = PatchResult(job_id=job_id, page_id=visible.page_id, patch=patch,
                              png=png, issues=issues, model_s=model_s,
                              render_s=render_s, total_s=total_s, directory=job_dir)
@@ -1675,7 +1701,7 @@ class Screen:
             body = await images.prepare(body)
             pending = {}
         self._set_phase("rendering")
-        png, issues, render_s = await self._render(body, None)
+        png, issues, render_s = await self._render(body, None, [])
         self._set_phase("review")
         reserve_s = max(render_s, FINAL_RENDER_RESERVE_S)
         step_s = MIN_OPTIONAL_STEP_S
@@ -1805,8 +1831,8 @@ class Screen:
 
     async def _fill_pending_images(self, job_id: str, page_id: str,
                                      images: PageImages,
-                                     pending: dict[tuple[str, str],
-                                                   tuple[str, "asyncio.Task[str]"]],
+                                     pending: dict[SlotKey,
+                                                   tuple[str, ImageSlot, "asyncio.Task[SlotDecision]"]],
                                      t0: float) -> None:
         """Fill approved late images into the already shown page.
 
@@ -1826,15 +1852,17 @@ class Screen:
                 await asyncio.sleep(0.1)
             else:
                 return  # never shown (hold mode, failed show, superseded)
-            approvals: list[tuple[str, str]] = []  # (slot id, ot-image html)
+            approvals: list[tuple[str, str]] = []  # (slot id, fill patch html)
             try:
                 async with asyncio.timeout(FILL_BUDGET_S):
-                    for key, (slot_id, task) in pending.items():
+                    for key, (slot_id, slot, task) in pending.items():
                         if self.visible_id != page_id:
                             return  # superseded while filling
+                        if slot_id in self._page_touched.get(page_id, set()):
+                            continue  # the tutor changed that element since
                         try:
                             async with asyncio.timeout(FILL_SLOT_WAIT_S):
-                                replacement = await task
+                                decision = await task
                         except asyncio.TimeoutError:
                             task.cancel()
                             continue  # this slot was too slow; fill the rest
@@ -1844,14 +1872,16 @@ class Screen:
                             continue  # that slot died: fill the rest
                         except Exception:  # noqa: BLE001 - one slot must not sink the rest
                             continue
-                        if "<ot-image" not in replacement:
+                        if decision.candidate is None:
                             continue  # rejected review: the fallback stays
                         current = self.pages.get(page_id)
                         if current is None or self.visible_id != page_id:
                             return
                         if f'id="{slot_id}"' not in current.body:
                             continue  # a later patch changed the slot away
-                        approvals.append((slot_id, replacement))
+                        if slot_id in self._page_touched.get(page_id, set()):
+                            continue  # corrected while its review was running
+                        approvals.append((slot_id, PageImages.render(slot, decision)))
             except asyncio.TimeoutError:
                 pass  # fill what approved in time; the rest stays text
             if not approvals or self.visible_id != page_id:
@@ -1863,7 +1893,11 @@ class Screen:
                 f'<ot-patch target="{html.escape(slot_id, quote=True)}" '
                 f'do="replace">{replacement}</ot-patch>'
                 for slot_id, replacement in approvals)
-            png, issues, render_s = await self._render(current.body, ops)
+            png, issues, render_s = await self._render(
+                current.body, ops, list(self.visible_patches.get(page_id, [])))
+            if self.visible_id != page_id:
+                return  # another page took the screen during the render:
+                # its history must not gain this page's fill.
             errors = [issue_text(i) for i in issues
                       if issue_kind(i) == "patch" or str(i).startswith("patch failed:")]
             if errors:
@@ -1877,7 +1911,8 @@ class Screen:
             record_active("screen_fill", {"job": job_id, "page": page_id,
                                             "slots": len(approvals),
                                             "total_s": round(total_s, 2)})
-            self.visible_patches.append(ops)
+            self.visible_patches.setdefault(page_id, []).append(ops)
+            self._note_patch_targets(page_id, ops)
             result = PatchResult(job_id=job_id, page_id=page_id, patch=ops,
                                  png=png, issues=issues, total_s=total_s,
                                  render_s=render_s, directory=job_dir, quiet=True)
@@ -1886,7 +1921,7 @@ class Screen:
                 if inspect.isawaitable(outcome):
                     await outcome
         finally:
-            for _key, (_slot_id, task) in pending.items():
+            for _key, (_slot_id, _slot, task) in pending.items():
                 if not task.done():
                     task.cancel()
 
@@ -1908,11 +1943,12 @@ class Screen:
         return meta
 
     def _image_job(self, ask: str, t0: float) -> PageImages:
-        # Images may run past the 12 s soft page target: the voice turn is
-        # never blocked (the job runs in the background) and the fox can
-        # watch progress with screen_status, so the image step gets what is
-        # left of the whole job limit instead of what is left of the target.
-        # With the default 20 s limit that is about 17 s into the job.
+        # Images run to the job limit minus render reserves, not to a soft
+        # page target: the voice turn is never blocked (the job runs in the
+        # background) and the fox can watch progress with screen_status, so a
+        # slot that arrives while the page is still being written still gets
+        # its search + download + review. With the default 20 s limit that is
+        # about 17 s into the job.
         async def review(user: str, image: bytes | None, _deadline: float = 0.0) -> str:
             text, _ = await self._call_model(
                 "Choose an educational image for a Swedish school child. Inspect the actual picture with the lesson context. "
@@ -1920,8 +1956,7 @@ class Screen:
                 kind="image", budget_s=max(0.0, _deadline - time.monotonic()))
             return text
 
-        deadline = min(time.monotonic() + IMAGE_BUDGET_S,
-                       t0 + self.timeout - FINAL_RENDER_RESERVE_S - DELIVERY_RESERVE_S)
+        deadline = t0 + self.timeout - FINAL_RENDER_RESERVE_S - DELIVERY_RESERVE_S
 
         async def review_with_deadline(user: str, image: bytes | None) -> str:
             return await review(user, image, deadline)
@@ -2155,6 +2190,7 @@ class Screen:
     # ---- real renderer ----------------------------------------------------
 
     async def _default_render_page(self, body: str, patch: str | None,
+                                   history: list[str],
                                    width: int, height: int) -> tuple[bytes, list]:
         """Render with the shell the way the app does, in headless Chromium.
         One browser per session, shared across jobs; pages open and close.
@@ -2188,7 +2224,7 @@ class Screen:
             if patch:
                 # Replay distinct batches: removals must finish before the next patch.
                 # Reduced motion makes the preview final immediately, saving the old 1 s wait.
-                for change in [*self.visible_patches, patch]:
+                for change in [*history, patch]:
                     try:
                         await frame.evaluate("(p) => ot.patch(p)", change)
                     except Exception as error:  # noqa: BLE001 - rejected before child delivery

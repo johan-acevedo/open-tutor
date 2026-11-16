@@ -666,6 +666,27 @@ live lesson are still open. Malformed streamed HTML (a slot that never closes)
 resolves inline at prepare, as before. A fill racing a tutor-asked patch to the
 same target is last-applied-wins, like two quick patches today.
 
+Review follow-ups, same PR (all six reproduced by the reviewer, each with a
+regression test in the real call order):
+
+- **Prefetches share verdicts, never HTML.** Slot keys are the full slot
+  (every attribute plus child labels); the pool returns only the review
+  verdict and every path renders from the served page's own slot, so a loser
+  can no longer reveal a hidden slot or lend its labels. An already-rendered
+  body still re-prepares without re-review via a canonical-src index.
+- **The image deadline is the job limit minus reserves** (about 17 s),
+  computed at job start -- no 6 s clamp that expired mid-write.
+- **A tutor correction beats a late fill.** Delivered patches record their
+  target ids per page; a fill whose slot was touched, or whose fallback is
+  gone from the current body, is dropped.
+- **A fill re-checks visibility after its preview render** and patch history
+  is keyed by page id, so a page switch mid-render corrupts nothing.
+- **`aclose` drops the prefetch pool** through the reaper bound: no
+  `screen-prefetch-*` task survives shutdown.
+- **The veil clears at terminal states.** A held page ready clears the old
+  page's veil (the fox reveals when it wants); auto-show clears the replaced
+  frame's veil; failures already cleared.
+
 ### What Johan's test calls settled (2026-11-13)
 
 Three real calls on the dev setup (Johan alone, with Lucas, and alone again). Decisions:

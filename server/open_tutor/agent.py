@@ -1098,6 +1098,20 @@ class SmartTutor(Tutor):
             pass
         prompt_event(session, text)
 
+    async def _clear_loading(self, page_id: str | None = None) -> bool:
+        """Clear a loading veil best-effort; True when the RPC went out.
+
+        Terminal job states (held page ready, failed job, replaced page) must
+        never leave a stale \"Laddar …\" on screen: the fox reveals a held
+        page when it wants, so the veil's job is done."""
+        target = page_id or (self.screen.visible_id if self.screen else None)
+        if target is None:
+            return False
+        try:
+            return await self._rpc("board.loading", {"id": target, "topic": ""})
+        except Exception:  # noqa: BLE001 - clearing is best-effort
+            return False
+
     async def screen_page_ready(self, session: AgentSession, page: Any) -> None:
         """A new page finished: show it at once, or hold it when asked.
 
@@ -1112,8 +1126,13 @@ class SmartTutor(Tutor):
                 image=f"data:image/png;base64,{base64.b64encode(page.png).decode()}",
                 inference_detail="high"))
         if getattr(page, "reveal", "show") == "show":
+            old_id = self.screen.visible_id
             ok, note = await self._show_page_object(page)
             if ok:
+                if old_id is not None and old_id != page.page_id:
+                    # The old frame stays mounted for back-navigation: do not
+                    # leave its veil on.
+                    await self._clear_loading(old_id)
                 text = (f"[Screen page {page.page_id} ('{page.title}') is now ON SCREEN. "
                         f"Source:\n{page.body}\nTeach from what it actually shows.]")
                 record_active("screen_ready", {"page": page.page_id, "title": page.title,
@@ -1136,6 +1155,9 @@ class SmartTutor(Tutor):
             text = (f"[Screen page {page.page_id} ('{page.title}') is ready but NOT visible. "
                     f"Source:\n{page.body}\nCall show_page('{page.page_id}') when it fits "
                     f"the lesson.]")
+        # Terminal state: the veil's job is done whether the page shows now
+        # or the fox brings it in later with show_page.
+        await self._clear_loading()
         record_active("screen_ready", {"page": page.page_id, "title": page.title,
                                            "image": bool(getattr(page, 'png', None))})
         ctx = self.chat_ctx.copy()
@@ -1176,12 +1198,7 @@ class SmartTutor(Tutor):
         Quiet failure left the child waiting in silence (2026-11-13: 26 s until
         the child asked "Hur går det?"). A loading overlay from screen_loading
         is cleared best-effort first, so no stale "Laddar …" stays on screen."""
-        if self.screen.visible_id is not None:
-            try:
-                await self._rpc("board.loading",
-                                 {"id": self.screen.visible_id, "topic": ""})
-            except Exception:  # noqa: BLE001 - the apology below still goes out
-                pass
+        await self._clear_loading()
         record_active("screen_failed", {"message": message[:200]})
         await self._prompt_when_free(
             session,

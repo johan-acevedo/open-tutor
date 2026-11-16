@@ -82,3 +82,16 @@ Screenshots (real shell, example page `klockan.html`, `check_loading.py`):
   closes): the slot never completes, resolves inline at prepare as before.
 - Fill races with a tutor-asked patch to the same target: both are plain
   patches; last applied wins, same as two quick patches today.
+
+## Review follow-ups (same PR)
+
+- Slot keys are full slots (every attribute + child labels); the pool returns
+  only `SlotDecision`, and `PageImages.render` builds every HTML from the
+  served slot. A resolved body re-prepares without re-review via
+  `approved_by_src` (canonical src, no `query` = our own output).
+- Image deadline = job start + limit − render reserves (about 17 s).
+- Delivered patches record target ids per page (`_page_touched`); fills drop
+  touched or vanished slots. Patch history is per page id; the fill
+  re-checks visibility after its preview render.
+- `aclose` finishes the pool through the reaper bound; held-ready and
+  auto-show clear the veil (`SmartTutor._clear_loading`).

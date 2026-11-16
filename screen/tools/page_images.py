@@ -105,10 +105,30 @@ def complete_slots(source: str) -> list[ImageSlot]:
     return list(parser.slots)
 
 
-def slot_key(slot: ImageSlot) -> tuple[str, str]:
-    """The reuse key for a slot: what was asked, and for which label."""
-    return (slot.attrs.get("src") or slot.attrs.get("query", ""),
-            slot.attrs.get("alt", ""))
+def slot_key(slot: ImageSlot) -> tuple[tuple[tuple[str, str], ...], str]:
+    """The reuse identity for a slot: every attribute plus the child labels.
+
+    The vision review judges the requested labels (and ``later`` changes what
+    the child may see), so two slots that differ in any attribute or label
+    are different keys: sharing a prefetched result across them would show
+    the loser's labels -- or reveal a hidden answer -- on the winner's page.
+    Replacement HTML is always built from the served page's own slot; the
+    shared result only carries the review decision."""
+    return (tuple(sorted(slot.attrs.items())), slot.children)
+
+
+SlotKey = tuple[tuple[tuple[str, str], ...], str]
+
+
+@dataclass
+class SlotDecision:
+    """A vision review's verdict, without any page HTML.
+
+    Rendering always happens from the served page's own slot (``_image_html``
+    / ``_fallback_html``); the decision only says which candidate won, or
+    what inner teaching block to show instead."""
+    candidate: commons.Candidate | None
+    fallback: str = ""
 
 
 def _image_html(slot: ImageSlot, candidate: commons.Candidate) -> str:
@@ -146,17 +166,22 @@ class PageImages:
                  *, client: httpx.AsyncClient | None = None):
         self.context, self.review, self.deadline = context, review, deadline
         self.client = client
-        self.approved: dict[tuple[str, str], commons.Candidate] = {}
+        self.approved: dict[SlotKey, commons.Candidate] = {}
+        # Already-resolved output (`src`, no `query`): re-preparing our own
+        # rendered body must not re-review. Keyed by canonical src + alt;
+        # model slots (which carry `query`) never consult it.
+        self.approved_by_src: dict[tuple[str, str], commons.Candidate] = {}
         self.events: list[dict] = []
-        self.alternates: dict[tuple[str, str], str] = {}
+        self.alternates: dict[SlotKey, str] = {}
         self.seconds = 0.0
-        # Prefetched slot resolutions, filled by the streaming prefetch pool
+        # Prefetched slot decisions, filled by the streaming prefetch pool
         # (server/open_tutor/screen.py) while the page is still being written:
-        # slot key -> task returning the replacement HTML for that slot.
-        self.prefetched: dict[tuple[str, str], asyncio.Task[str]] = {}
-        # Slot keys whose prefetch task this job consumed (finished or
+        # full slot identity -> task returning the review's verdict. Rendering
+        # always uses the served page's own slot (see SlotDecision).
+        self.prefetched: dict[SlotKey, asyncio.Task[SlotDecision]] = {}
+        # Slot identities whose prefetch task this job consumed (finished or
         # awaited); the pool cancels the rest when the job ends.
-        self.used_keys: set[tuple[str, str]] = set()
+        self.used_keys: set[SlotKey] = set()
 
     async def _inspect(self, slot: ImageSlot, candidate: commons.Candidate, data: bytes):
         description = f"{candidate.title}\n{candidate.source_url}\n{candidate.credit}"
@@ -172,8 +197,10 @@ class PageImages:
                 "Do not disclose the answer to a question the child should solve. No image tags or scripts in the fallback.")
         return _verdict(await self.review(user, data))
 
-    async def _resolve(self, slot: ImageSlot) -> str:
+    async def _decide(self, slot: ImageSlot) -> SlotDecision:
+        """Search, download and review one slot; return only the verdict."""
         query, src = slot.attrs.get("query", ""), slot.attrs.get("src", "")
+        key = slot_key(slot)
         result = await commons.lookup_image(src, client=self.client) if src else await commons.search_images(query, client=self.client)
         self.events.extend({**entry, "decision": "rejected"} for entry in result.rejected)
         if not result.candidates and not result.rejected:
@@ -193,22 +220,32 @@ class PageImages:
                 continue
             fallback = alternate or fallback
             if fallback:
-                self.alternates[(query or src, slot.attrs.get("alt", ""))] = fallback
+                self.alternates[key] = fallback
             self.events.append({"title": candidate.title, "source": candidate.source_url,
                                 "decision": "accepted" if accepted else "rejected", "reason": reason,
                                 "sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data)})
             if accepted:
-                self.approved[(candidate.image_url, slot.attrs.get("alt", ""))] = candidate
-                self.approved[(src or query, slot.attrs.get("alt", ""))] = candidate
-                return _image_html(slot, candidate)
-        return _fallback_html(slot, fallback)
+                self.approved[key] = candidate
+                self.approved_by_src[(candidate.image_url, slot.attrs.get("alt", ""))] = candidate
+                return SlotDecision(candidate, "")
+        return SlotDecision(None, fallback)
 
-    async def resolve_slot(self, slot: ImageSlot) -> str:
-        """Resolve one slot outside ``prepare`` (the streaming prefetch pool)."""
-        return await self._resolve(slot)
+    @staticmethod
+    def render(slot: ImageSlot, decision: SlotDecision) -> str:
+        """Build the slot's HTML from the served page's own slot."""
+        if decision.candidate is not None:
+            return _image_html(slot, decision.candidate)
+        return _fallback_html(slot, decision.fallback)
 
-    async def _await_prefetch(self, key: tuple[str, str],
-                              task: "asyncio.Task[str]") -> str:
+    async def _resolve(self, slot: ImageSlot) -> str:
+        return self.render(slot, await self._decide(slot))
+
+    async def resolve_slot(self, slot: ImageSlot) -> SlotDecision:
+        """Decide one slot outside ``prepare`` (the streaming prefetch pool)."""
+        return await self._decide(slot)
+
+    async def _await_prefetch(self, key: SlotKey,
+                              task: "asyncio.Task[SlotDecision]") -> SlotDecision:
         """Await a prefetched slot; fall back when it cannot deliver in budget.
 
         A task this job is not waiting on anymore (discarded attempt, dropped
@@ -242,11 +279,11 @@ class PageImages:
         except Exception as error:  # network/model failure must not discard a usable page
             self.events.append({"query": slot.attrs.get("query", ""), "source": slot.attrs.get("src", ""),
                                 "decision": "rejected", "reason": f"image preparation failed: {type(error).__name__}"})
-            fallback = self.alternates.get((slot.attrs.get("query") or slot.attrs.get("src", ""), slot.attrs.get("alt", "")), "")
+            fallback = self.alternates.get(slot_key(slot), "")
             return _fallback_html(slot, fallback)
 
-    async def _consume_prefetch(self, slot: ImageSlot) -> str | None:
-        """A finished prefetched resolution for this slot, else None.
+    async def _consume_prefetch(self, slot: ImageSlot) -> SlotDecision | None:
+        """A finished prefetched verdict for this slot, else None.
 
         In-flight prefetches are left running for the caller (``prepare``
         awaits them, ``prepare_deferred`` lists them as pending)."""
@@ -266,19 +303,23 @@ class PageImages:
         replacements = []
         for slot in slots:
             approved = self.approved.get(slot_key(slot))
+            if approved is None and "query" not in slot.attrs and slot.attrs.get("src", ""):
+                approved = self.approved_by_src.get(
+                    (slot.attrs.get("src", ""), slot.attrs.get("alt", "")))
             if approved:
                 replacements.append(_image_html(slot, approved))
                 continue
             consumed = await self._consume_prefetch(slot)
             if consumed is not None:
                 self.used_keys.add(slot_key(slot))
-                replacements.append(consumed)
+                replacements.append(self.render(slot, consumed))
                 continue
             task = (self.prefetched or {}).get(slot_key(slot))
             if task is not None:
                 try:
-                    replacements.append(await self._await_prefetch(slot_key(slot), task))
+                    decision = await self._await_prefetch(slot_key(slot), task)
                     self.used_keys.add(slot_key(slot))
+                    replacements.append(self.render(slot, decision))
                     continue
                 except Exception as error:  # a discarded or late prefetch falls back like an inline failure
                     self.events.append({"query": slot.attrs.get("query", ""), "source": slot.attrs.get("src", ""),
@@ -292,11 +333,13 @@ class PageImages:
         self.seconds += time.monotonic() - started
         return body
 
-    async def prepare_deferred(self, body: str) -> tuple[str, dict[tuple[str, str], tuple[str, "asyncio.Task[str]"]]]:
+    async def prepare_deferred(self, body: str
+                             ) -> tuple[str, dict[SlotKey, tuple[str, ImageSlot,
+                                                              "asyncio.Task[SlotDecision]"]]]:
         """Resolve what is ready; list the rest as pending instead of waiting.
 
-        Returns ``(html, pending)`` where ``pending`` maps a slot key to
-        ``(slot id, task)`` for prefetches still in flight. Only slots with an
+        Returns ``(html, pending)`` where ``pending`` maps a slot identity to
+        ``(slot id, slot, task)`` for prefetches still in flight. Only slots with an
         id can be filled in later (a patch needs a target), so an in-flight
         prefetch for an id-less slot is awaited inline like ``prepare`` does.
         Slots with no prefetch at all resolve inline too."""
@@ -305,28 +348,32 @@ class PageImages:
             return body, {}
         started = time.monotonic()
         replacements = []
-        pending: dict[tuple[str, str], tuple[str, asyncio.Task[str]]] = {}
+        pending: dict[SlotKey, tuple[str, ImageSlot, asyncio.Task[SlotDecision]]] = {}
         for slot in slots:
             key = slot_key(slot)
             approved = self.approved.get(key)
+            if approved is None and "query" not in slot.attrs and slot.attrs.get("src", ""):
+                approved = self.approved_by_src.get(
+                    (slot.attrs.get("src", ""), slot.attrs.get("alt", "")))
             if approved:
                 replacements.append(_image_html(slot, approved))
                 continue
             consumed = await self._consume_prefetch(slot)
             if consumed is not None:
                 self.used_keys.add(slot_key(slot))
-                replacements.append(consumed)
+                replacements.append(self.render(slot, consumed))
                 continue
             task = (self.prefetched or {}).get(key)
             if task is not None and not task.done() and slot.attrs.get("id", "").strip():
                 replacements.append(_fallback_html(slot, self.alternates.get(key, "")))
-                pending[key] = (slot.attrs["id"].strip(), task)
+                pending[key] = (slot.attrs["id"].strip(), slot, task)
                 self.used_keys.add(key)
                 continue
             if task is not None:
                 try:
-                    replacements.append(await self._await_prefetch(key, task))
+                    decision = await self._await_prefetch(key, task)
                     self.used_keys.add(key)
+                    replacements.append(self.render(slot, decision))
                     continue
                 except Exception as error:
                     self.events.append({"query": slot.attrs.get("query", ""), "source": slot.attrs.get("src", ""),
