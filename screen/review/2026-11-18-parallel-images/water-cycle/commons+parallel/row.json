@@ -1,0 +1,26 @@
+{
+  "ask": "water-cycle",
+  "mode": "commons+parallel",
+  "wall_s": 12.21,
+  "failures": [],
+  "total_s": 12.21,
+  "issues": [],
+  "strategy": "commons+parallel",
+  "image_s": 8.43,
+  "parallel": {
+    "available": true,
+    "reason": "",
+    "retry_in_s": 0.0
+  },
+  "accepted": {
+    "image_source": "parallel",
+    "title": "Vattnets Kretslopp för Skolo, The Water Cycle for Schools, Swedish",
+    "credit": "",
+    "latency_s": 0.92,
+    "reason": "Tydlig och åldersanpassad svensk illustration av vattnets kretslopp från USGS som visar huvudstegen som avdunstning, kondens, nederbörd och ytavrinning."
+  },
+  "ships_query": false,
+  "ships_src": [
+    "<ot-image alt=\"Illustration av vattnets kretslopp\" src=\"https://d9-wret.s3.us-west-2.amazonaws.com/assets/palladium/production/s3fs-public/styles/full_width/public/thumbnails/image/water-cycle-schools-swedish.jpg?itok=hnpH7rFE\" credit=\"Källa: www.usgs.gov\">"
+  ]
+}

@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 
 from .config import AGENT_NAME
 from .analytics import posthog_settings
+from .reviewed_images import find_reviewed_image, media_type_for, sessions_base_dir
 
 WEB_DIST = Path(os.environ.get("TUTOR_WEB_DIST", Path(__file__).resolve().parents[2] / "web" / "dist"))
 TOKEN_TTL = timedelta(hours=3)
@@ -104,6 +105,24 @@ def create_app(environ: dict[str, str] | None = None) -> FastAPI:
     @app.get("/api/health")
     async def health() -> dict[str, Any]:
         return {"ok": True, "livekit": bool(env.get("LIVEKIT_URL"))}
+
+    images_base = sessions_base_dir(env)
+
+    @app.get("/api/images/{name}")
+    async def reviewed_image(name: str) -> FileResponse:
+        """Serve one vision-reviewed Parallel image by its content hash.
+
+        Only bytes the page pipeline approved are ever stored, under an
+        unguessable ``<sha256>.<ext>`` name; anything else answers 404.
+        Immutable content: cached for a year, never sniffed as anything else.
+        """
+        media_type = media_type_for(name)
+        path = find_reviewed_image(images_base, name) if media_type else None
+        if path is None:
+            raise HTTPException(status_code=404, detail="Not found")
+        return FileResponse(path, media_type=media_type,
+                            headers={"Cache-Control": "public, max-age=31536000, immutable",
+                                     "X-Content-Type-Options": "nosniff"})
 
     @app.post("/api/session")
     async def create_session(body: SessionRequest, request: Request) -> dict[str, str]:

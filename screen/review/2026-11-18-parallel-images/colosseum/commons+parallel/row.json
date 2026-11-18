@@ -1,0 +1,17 @@
+{
+  "ask": "colosseum",
+  "mode": "commons+parallel",
+  "wall_s": 17.83,
+  "failures": [],
+  "total_s": 17.83,
+  "issues": [],
+  "strategy": "commons+parallel",
+  "image_s": 15.31,
+  "parallel": {
+    "available": true,
+    "reason": "",
+    "retry_in_s": 0.0
+  },
+  "ships_query": false,
+  "ships_src": []
+}

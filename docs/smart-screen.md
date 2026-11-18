@@ -746,6 +746,74 @@ answer: full-slot identity end to end, a single delivery critical section with
 the final check adjacent to the send, and no verbatim model markup on the
 wire at any point.
 
+### Parallel Image Search, second image source (2026-11-18)
+
+`SCREEN_IMAGES` picks the source a page job searches: `commons` (default,
+today's Wikimedia-only behaviour), `commons+parallel` (both at once via the
+Parallel Images API in fast mode; the review judges Commons candidates first
+and takes the first candidate it accepts), or `parallel`. The vision review of
+the actual picture stays the gate; Parallel results carry no licence data, so
+Johan's call is a plain site credit, `Källa: <domain>`, rendered like the
+Commons credit. Set on dev (`~/.config/open-tutor-smart-dev/env`) the same day;
+it takes effect when the code deploys there.
+
+- **Server-resolved, like Commons.** The search answers titles, direct image
+  URLs and source page URLs. Downloads stay bounded (2 MiB, JPEG/PNG/WebP
+  sniffed, short timeout) but accept any public `https` host: every hop's
+  hostname is resolved and refused unless all its addresses are public (no
+  private, loopback, link-local, CGN/tailnet, multicast or reserved space),
+  re-checked on each of at most 3 redirect hops, which are followed manually.
+  Each hop then connects only to its validated addresses (pinned: no second
+  DNS lookup at connect time, proxies off) while TLS still verifies the
+  hostname. Plain-`http` file URLs, which Parallel returns often, are offered
+  over TLS and refused when the host does not serve valid `https`.
+- **Approved bytes are served by us, never the remote URL.** A Parallel
+  approval stores the reviewed bytes under the session (`<session>/images/`)
+  and the page ships `/api/images/<sha256>.<ext>` from our own web app
+  (correct Content-Type, year-long immutable cache, nosniff): the original
+  URL could later redirect to unreviewed content. The site-relative URL
+  inherits the page's own origin, so the frame CSP (`img-src data: https:`)
+  needs no widening, and the 15 kB RPC limit still holds (no data URIs).
+  Commons keeps its canonical remote URLs. Only reviewed bytes are ever
+  stored; unknown hashes answer 404.
+- **Graceful failure.** No key, auth/credit/quota failures (401/402/403/429 or
+  quota words in the body) and rate limits cool Parallel down for 10 min;
+  timeouts, 5xx, any transport error and broken payloads for 1 min. Commons
+  candidates are reviewed as soon as the Commons search returns; Parallel is
+  awaited only when Commons yields no accepted image, within the remaining
+  image deadline, and its still-running search is then cancelled and drained.
+  Each source's failure becomes a rejection, never a page failure: while
+  cooling down the job silently falls back to Commons-only (or a text
+  fallback in `parallel` mode). Nothing Parallel does can fail a page or
+  block the tutor.
+- **Records.** Every image event carries `image_source` (commons/parallel),
+  `query` and search `latency_s` with the verdict and reason; Parallel
+  acceptances also carry `served_as` (our `/api/images/…` URL). Page/patch
+  `meta.json` gains an `images` section (strategy, Parallel cool-down state,
+  reviews) next to the existing `image_reviews`.
+- **Live comparison** (`screen/review/2026-11-18-parallel-images/`, six asks,
+  scripted body, streaming writer so prefetch runs as in production): both
+  king portraits, the Colosseum and the Roman map accept the same Commons
+  picture first in both modes (Parallel costs ~1 overlapped search, no download
+  or review); the water cycle accepts a Swedish USGS illustration from
+  Parallel where Commons had nothing; the flower correctly rejects bad Commons
+  pictures on both modes and falls back to text. Caveat: a slot gets ~17 s of
+  search + review, so six sequential vision reviews do not fit when both
+  sources return full lists and the provider is slow -- review concurrency is
+  the follow-up if real lessons hit this. No cool-down triggered; error paths
+  are unit-tested with recorded responses, including private-IP and
+  redirect-to-private refusals.
+- **Security review (GPT-6.1 Sol, 2026-11-18, all five reproduced and fixed
+  on `t3/parallel-image-search`).** DNS rebinding between validation and
+  connect (now pinned per hop, proxies off); the shipped remote URL able to
+  redirect elsewhere after review (now our own content-addressed bytes);
+  a slow Parallel search eating the Commons review budget (now Commons-first
+  with the remaining deadline); transport errors escaping the Parallel
+  boundary and orphaning the sibling (now all `HTTPError` cool down
+  briefly, per-source isolation, cancel and drain); malformed 2xx JSON never
+  cooling down (now a transient failure; a legitimate empty `results: []`
+  stays a normal empty result).
+
 ### What Johan's test calls settled (2026-11-13)
 
 Three real calls on the dev setup (Johan alone, with Lucas, and alone again). Decisions:

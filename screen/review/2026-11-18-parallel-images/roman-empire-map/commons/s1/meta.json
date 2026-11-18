@@ -1,0 +1,68 @@
+{
+ "job": "s1",
+ "kind": "page",
+ "page": "p1",
+ "title": "Romarriket",
+ "model": "gemini-4-hydrogen",
+ "api": "chat",
+ "reasoning": "low",
+ "pane": [
+  370,
+  610
+ ],
+ "provider": "google",
+ "failover": false,
+ "hedged": false,
+ "ttft_s": 0.0,
+ "model_s": 1.5,
+ "render_s": 1.16,
+ "look_s": 2.83,
+ "retry_s": 0.0,
+ "total_s": 8.25,
+ "issues": [],
+ "residual_lint": [],
+ "repair": {
+  "look": true,
+  "look_fix": false,
+  "retry": false,
+  "retry_applied": false,
+  "notes": []
+ },
+ "reveal": "show",
+ "image_s": 2.76,
+ "image_reviews": [
+  {
+   "title": "File:Roman empire at its greatest extent.JPG",
+   "source": "https://commons.wikimedia.org/wiki/File:Roman_empire_at_its_greatest_extent.JPG",
+   "decision": "accepted",
+   "reason": "Tydlig historisk karta som visar Romarrikets utbredning runt Medelhavet när det var som störst.",
+   "sha256": "10729c4b7cfb167e4f4cd0d3f682b68b42d98c84e1688064d84a2bba74595df2",
+   "bytes": 207967,
+   "image_source": "commons",
+   "query": "Roman Empire greatest extent historical map",
+   "latency_s": 0.11
+  }
+ ],
+ "images": {
+  "strategy": "commons",
+  "seconds": 2.76,
+  "parallel": {
+   "available": true,
+   "reason": "",
+   "retry_in_s": 0.0
+  },
+  "reviews": [
+   {
+    "title": "File:Roman empire at its greatest extent.JPG",
+    "source": "https://commons.wikimedia.org/wiki/File:Roman_empire_at_its_greatest_extent.JPG",
+    "decision": "accepted",
+    "reason": "Tydlig historisk karta som visar Romarrikets utbredning runt Medelhavet när det var som störst.",
+    "sha256": "10729c4b7cfb167e4f4cd0d3f682b68b42d98c84e1688064d84a2bba74595df2",
+    "bytes": 207967,
+    "image_source": "commons",
+    "query": "Roman Empire greatest extent historical map",
+    "latency_s": 0.11
+   }
+  ]
+ }
+}

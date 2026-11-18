@@ -47,6 +47,7 @@ class Candidate:
     image_url: str
     mime_type: str
     credit: str
+    source: str = "commons"  # or "parallel": which search found it (and which downloader fetches it)
 
 
 @dataclass
