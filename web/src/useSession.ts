@@ -476,6 +476,7 @@ export function useSession(mobile = false, band: BandId = 'primary') {
       preparedRoomRef.current = null;
       intentionalEndRef.current = false;
       pendingPrefillRef.current = null;
+      goProfilesAfterEndRef.current = false;
       setPrefillId(null);
       setProfilesOpen(false);
       // A new generation: callbacks from the previous session (delayed
@@ -611,6 +612,9 @@ export function useSession(mobile = false, band: BandId = 'primary') {
         const prefill = pendingPrefillRef.current;
         if (prefill) {
           pendingPrefillRef.current = null;
+          // The switch prefill wins over a simultaneous menu leave: consume
+          // that flag too, or B's own later Avsluta would skip B's end card.
+          goProfilesAfterEndRef.current = false;
           trackSessionEnd('switched');
           diag.note('connection', { kind: 'disconnected-switch', reason: String(reason ?? '') });
           cleanupRoom();
