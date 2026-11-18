@@ -29,16 +29,15 @@ describe('bandFromSearch', () => {
 
 describe('currentBand', () => {
   it('lets ?band= win over the host', () => {
-    localStorage.clear();
     expect(currentBand('tutor2.example.se', '?band=upper')).toBe('upper');
   });
-  it('remembers the override for the next visit', () => {
+  it('never persists ?band=: the next load without it falls back to the host', () => {
     localStorage.clear();
-    currentBand('tutor.example.se', '?band=middle');
-    expect(currentBand('tutor3.example.se', '')).toBe('middle');
+    expect(currentBand('tutor.example.se', '?band=middle')).toBe('middle');
+    expect(localStorage.getItem('open-tutor-band')).toBeNull();
+    expect(currentBand('tutor3.example.se', '')).toBe('upper');
   });
   it('falls back to the host with no override', () => {
-    localStorage.clear();
     expect(currentBand('tutor3.example.se', '')).toBe('upper');
   });
 });

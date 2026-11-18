@@ -157,7 +157,7 @@ class Probe:
         session = client.post(
             "/api/session",
             json={"learner": {"name": "Nils", "grade": 7, "notes": []}},
-            headers={"x-tutor-code": os.environ.get("TUTOR_ACCESS_CODE", "")},
+            headers={},
         ).json()
         room = rtc.Room()
 

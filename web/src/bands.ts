@@ -40,7 +40,6 @@ export type BandConfig = {
     landingTitle: string;
     namePrompt: string;
     startButton: string;
-    returningStart: (name: string) => string;
     switchStudent: string;
     newStudent: string;
   };
@@ -58,7 +57,6 @@ export const BANDS: Record<BandId, BandConfig> = {
       landingTitle: 'Vad heter du?',
       namePrompt: 'Förnamn',
       startButton: 'Starta',
-      returningStart: (name) => `Hej ${name}, starta`,
       switchStudent: 'Byt elev',
       newStudent: 'Ny elev',
     },
@@ -73,7 +71,6 @@ export const BANDS: Record<BandId, BandConfig> = {
       landingTitle: 'Vad heter du?',
       namePrompt: 'Förnamn',
       startButton: 'Starta',
-      returningStart: (name) => `Hej ${name}, starta`,
       switchStudent: 'Byt elev',
       newStudent: 'Ny elev',
     },
@@ -88,7 +85,6 @@ export const BANDS: Record<BandId, BandConfig> = {
       landingTitle: 'Vad heter du?',
       namePrompt: 'Förnamn',
       startButton: 'Starta',
-      returningStart: (name) => `Hej ${name}, starta`,
       switchStudent: 'Byt person',
       newStudent: 'Ny person',
     },
@@ -97,8 +93,6 @@ export const BANDS: Record<BandId, BandConfig> = {
 };
 
 export const BAND_IDS: BandId[] = ['primary', 'middle', 'upper'];
-
-const BAND_STORAGE_KEY = 'open-tutor-band';
 
 /** Band from a hostname alone. Unknown hosts (localhost, tailnet dev URLs)
  *  default to primary (åk 1–6). */
@@ -126,37 +120,17 @@ export function bandFromSearch(search: string): BandId | null {
   }
 }
 
-/** Synchronous band for this page load: ?band= wins (and is remembered for
- *  the next visit), otherwise the remembered choice, otherwise the host. */
+/** Band for this page load only: ?band= wins, otherwise the host. Deliberately
+ *  not persisted — a testing override must not leak into later visits. */
 export function currentBand(hostname: string, search: string): BandId {
-  const override = bandFromSearch(search);
-  if (override) {
-    try {
-      localStorage.setItem(BAND_STORAGE_KEY, override);
-    } catch {
-      /* storage blocked: the URL param still applies to this load */
-    }
-    return override;
-  }
-  try {
-    const remembered = localStorage.getItem(BAND_STORAGE_KEY);
-    if (remembered === 'primary' || remembered === 'middle' || remembered === 'upper') return remembered;
-  } catch {
-    /* fall through to the host */
-  }
-  return bandFromHostname(hostname);
+  return bandFromSearch(search) ?? bandFromHostname(hostname);
 }
 
 /** Server-advertised default band (TUTOR_BAND, via /api/config): only for
- *  testing on hosts whose name picks no band. Applied when the page carries
- *  no ?band= and remembers no choice. */
+ *  testing on hosts whose name picks no band. Applies when the page carries
+ *  no ?band=. */
 export function applyServerBand(band: string | null | undefined, hasOverride: boolean): BandId | null {
   if (hasOverride) return null;
-  try {
-    if (localStorage.getItem(BAND_STORAGE_KEY)) return null;
-  } catch {
-    /* storage blocked: still honour the server default */
-  }
   if (band === 'primary' || band === 'middle' || band === 'upper') return band;
   return null;
 }

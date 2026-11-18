@@ -9,6 +9,8 @@ type Props = {
   onPick: (profile: Profile) => void;
   starting: boolean;
   onStartGesture?: () => void;
+  /** Open the switch/add list directly (menu leave flow). */
+  startOpen?: boolean;
 };
 
 function gradeLabel(grade: number | null): string | null {
@@ -19,10 +21,10 @@ function gradeLabel(grade: number | null): string | null {
 /** Name-only start. First visit asks only "Vad heter du?"; later visits
  *  assume the same student ("Hej <name>, starta"). "Byt elev" switches or
  *  adds a student. Profiles stay in browser storage, no accounts. */
-export default function Welcome({ profiles, band, onPick, starting, onStartGesture }: Props) {
+export default function Welcome({ profiles, band, onPick, starting, onStartGesture, startOpen }: Props) {
   const lastId = getLastProfileId();
   const assumed = profiles.find((p) => p.id === lastId) ?? profiles[0] ?? null;
-  const [switching, setSwitching] = useState(false);
+  const [switching, setSwitching] = useState(startOpen ?? false);
   const [name, setName] = useState('');
   const [creating, setCreating] = useState(false);
   const startPending = useRef(false);
@@ -70,7 +72,7 @@ export default function Welcome({ profiles, band, onPick, starting, onStartGestu
               disabled={starting}
               onClick={() => void begin(assumed)}
             >
-              {starting ? 'Startar…' : copy.returningStart(assumed.name)}
+              {starting ? 'Startar…' : copy.startButton}
             </button>
             <p className="ot-profiles-note">
               <button type="button" className="ot-link-btn" onClick={() => setSwitching(true)}>

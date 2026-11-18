@@ -17,13 +17,19 @@ Companion art/themes for bands 2–3 are placeholders (fox + distinct tokens) un
 design thread lands `design/bands/<band>/` — wiring points in `design/bands/README.md`.
 - **Name-only start.** First visit asks only "Vad heter du?"; no grid, no grade picker.
 Next visit assumes the same student ("Hej <name>, starta"); "Byt elev" is in the menu.
-- **The tutor learns the grade** (`set_learner_grade` → browser topic `profile` → stored
-profile) and **switches student in-call** (`switch_student` → browser switches/creates the
-profile and returns their notes as a `profile-switched` session-event). On band 3 the tutor
+- **The tutor learns the grade** (`learner.setGrade` RPC → serialized browser queue →
+stored profile; stale targets rejected, failed calls change nothing) and **switches
+student in-call as end-and-restart** (`learner.switch` RPC resolves/creates the profile
+and acks with its id; the worker then ends this lesson exactly like Avsluta and the
+browser reconnects fresh — nothing of lesson A survives; failed calls keep A and say so,
+with a `learner.cancelSwitch` disarm). On band 3 the tutor
 finds out naturally whether the learner is a gymnasiet student (which year) or an adult;
 only adults skip the grade. Unknown grades default to the band in the tutor and screen prompts.
-- **No access code.** The gate is gone from page and server; Sweden-only check
-(`cf-ipcountry`) and `TUTOR_MAX_SESSIONS_PER_HOUR` stay. Same voice on all bands.
+- **No access code.** The gate is gone from page and server (incl. `?kod=` links and
+probe headers); Sweden-only check (`cf-ipcountry`) and `TUTOR_MAX_SESSIONS_PER_HOUR` stay.
+The header is forgeable by direct-origin callers, so the web service must only be reachable
+through the Cloudflare tunnel (production binds a tailnet address) — no ingress auth is
+built; see `server/README.md` and `deploy/README.md`. Same voice on all bands.
 - Docs: PRD (bands, onboarding, grade learning, switching, adults + companions in
 scope), AGENTS.md users line, README, `docs/protocol.md`, `server/README.md` settings.
 

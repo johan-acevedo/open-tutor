@@ -36,11 +36,13 @@ export type BoardFocusPayload = {
 };
 
 export type SessionLearner = {
+  /** Browser profile id, so the worker's learner RPCs can name their target. */
+  id?: string;
   name: string;
   /** School year 1-12, or null when the tutor has not learned it yet. */
   grade: number | null;
   notes: Note[];
-  /** Age band for this page load (middle | high | adult). */
+  /** Age band for this page load (primary | middle | upper). */
   band?: string;
 };
 
@@ -67,7 +69,6 @@ export type DiagWireEvent = {
 
 export type SessionEvent =
   | { type: 'end' }
-  | { type: 'profile-switched'; learner: SessionLearner }
   | { type: 'resource-closed'; id: string }
   | { type: 'board-size'; w: number; h: number; device: string }
   | { type: 'quiet'; on: boolean }
@@ -101,11 +102,24 @@ export const TOPIC_HOMEWORK = 'homework';
 export const TOPIC_HOMEWORK_TEXT = 'homework-text';
 export const TOPIC_SESSION_EVENT = 'session-event';
 export const TOPIC_NOTE = 'note';
-/** Server → browser: the tutor's learner tools (set_learner_grade,
- *  switch_student). The browser owns the profiles, applies the change and
- *  answers a switch with a profile-switched session-event carrying notes.
- *  Payload: { grade: number } or { switchTo: name }. */
-export const TOPIC_PROFILE = 'profile';
+/** Worker → browser RPCs for the tutor's learner tools. Acknowledged
+ *  request/response (the tool returns only after the browser answers):
+ *
+ *  - learner.setGrade { profileId, grade }: the browser applies the grade
+ *    only when profileId is still the active profile, else rejects as stale.
+ *    Replies { ok, grade }.
+ *  - learner.switch { name }: the browser resolves or creates that student's
+ *    profile (serialized; one profile per name), arms an end-and-restart with
+ *    it, and replies { ok, profile: { id, name, grade } }. The worker then
+ *    ends this lesson exactly like Avsluta; on disconnect the browser starts
+ *    a fresh session as the new student — nothing of the old lesson survives.
+ *  - learner.cancelSwitch {}: disarms a switch whose acknowledgement never
+ *    reached the worker (failed tool call), so a later disconnect cannot
+ *    restart as the wrong student. Replies { ok }.
+ */
+export const LEARNER_RPC_SET_GRADE = 'learner.setGrade';
+export const LEARNER_RPC_SWITCH = 'learner.switch';
+export const LEARNER_RPC_CANCEL_SWITCH = 'learner.cancelSwitch';
 
 export const ATTR_AGENT_STATE = 'lk.agent.state';
 export const ATTR_TUTOR_MODE = 'tutor.mode';

@@ -120,6 +120,11 @@ in a reverse proxy). Country checks cover the page, assets
 and session creation. The session-start cap still applies. IP geolocation is
 approximate and VPNs affect it.
 
+The `CF-IPCountry` header is forgeable by anyone who can reach the origin
+directly, so this check is only as strong as the ingress: keep the web service
+reachable solely through the Cloudflare tunnel (production binds a tailnet
+address) and never expose the origin itself.
+
 This restriction trusts Cloudflare's `CF-IPCountry` header. Enable Cloudflare IP
 Geolocation and keep the origin private behind its tunnel; a publicly reachable
 origin would allow clients to forge that header. The current origin binds to

@@ -252,14 +252,6 @@ BAND_REGISTER_HINT = {
 }
 
 
-def switched_student_context(learner: dict[str, Any]) -> str:
-    """What the tutor is told when the browser has switched profiles mid-call."""
-    lines = [learner_context(learner)]
-    lines.append("This student just took over the screen. Greet them by name and continue "
-                 "from their notes above; do not ask about the previous student.")
-    return "\n".join(lines)
-
-
 END_INSTRUCTION = (
     "The child pressed Avsluta. First call save_note for this session. Then say goodbye in one or two "
     "short sentences in the language you have been speaking (Swedish by default) that sum up what "

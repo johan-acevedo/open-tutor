@@ -18,11 +18,14 @@ import {
   TOPIC_HOMEWORK,
   TOPIC_HOMEWORK_TEXT,
   TOPIC_NOTE,
-  TOPIC_PROFILE,
   TOPIC_SESSION_EVENT,
   TOPIC_TRANSCRIPTION,
+  LEARNER_RPC_CANCEL_SWITCH,
+  LEARNER_RPC_SET_GRADE,
+  LEARNER_RPC_SWITCH,
 } from './protocol';
-import { appendNote, createProfile, listProfiles, rememberLastProfileId, resolveProfileSwitch, updateProfile } from './db';
+import { appendNote, enqueueProfileGrade, enqueueProfileSwitch, rememberLastProfileId } from './db';
+import { handleCancelSwitch, handleSetGrade, handleSwitch } from './learnerRpc';
 import type { Profile } from './db';
 import {
   getDeviceId,
@@ -222,6 +225,15 @@ export function useSession(mobile = false, band: BandId = 'primary') {
   // session request always sends the current band without re-wiring start.
   const bandRef = useRef<BandId>(band);
   bandRef.current = band;
+  // In-call student switch (learner.switch RPC): the next lesson's profile.
+  // Armed by the RPC handler; consumed when the worker ends this lesson,
+  // which restarts fresh as the new student. A failed tool call disarms it
+  // (learner.cancelSwitch) so a later disconnect cannot restart wrongly.
+  const pendingSwitchRef = useRef<Profile | null>(null);
+  const startRef = useRef<((p: Profile) => Promise<void>) | null>(null);
+  // Menu "leave" flow: end this lesson properly, then open the name entry.
+  const goProfilesAfterEndRef = useRef(false);
+  const [profilesOpen, setProfilesOpen] = useState(false);
   const pageSendsRef = useRef(new Map<string, (msg: PageShellMessage) => void>());
   const preparedRoomRef = useRef<Room | null>(null);
   const profileRef = useRef<Profile | null>(null);
@@ -403,6 +415,9 @@ export function useSession(mobile = false, band: BandId = 'primary') {
       BOARD_RPC_REVEAL,
       BOARD_RPC_POINT,
       BOARD_RPC_LOADING,
+      LEARNER_RPC_SET_GRADE,
+      LEARNER_RPC_SWITCH,
+      LEARNER_RPC_CANCEL_SWITCH,
     ])
       unregisterRpc(room, m);
     try {
@@ -412,11 +427,6 @@ export function useSession(mobile = false, band: BandId = 'primary') {
     }
     try {
       room.unregisterTextStreamHandler(TOPIC_NOTE);
-    } catch {
-      /* ignore */
-    }
-    try {
-      room.unregisterTextStreamHandler(TOPIC_PROFILE);
     } catch {
       /* ignore */
     }
@@ -458,6 +468,8 @@ export function useSession(mobile = false, band: BandId = 'primary') {
       if (!room) return;
       preparedRoomRef.current = null;
       intentionalEndRef.current = false;
+      pendingSwitchRef.current = null;
+      setProfilesOpen(false);
       profileRef.current = p;
       setProfile(p);
       setItems([]);
@@ -504,7 +516,7 @@ export function useSession(mobile = false, band: BandId = 'primary') {
           return fetch('/api/session', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ learner: { name: p.name, grade: p.grade, notes, band: bandRef.current },
+            body: JSON.stringify({ learner: { id: p.id, name: p.name, grade: p.grade, notes, band: bandRef.current },
               board, device_id: getDeviceId() }),
           });
         };
@@ -582,6 +594,18 @@ export function useSession(mobile = false, band: BandId = 'primary') {
         diag.note('connection', { kind: 'state', state: String(state) });
       });
       room.on(RoomEvent.Disconnected, (reason) => {
+        // In-call switch: the worker ended A's lesson after the learner.switch
+        // ack. Start a fresh lesson as B: nothing of A (history, board,
+        // homework, notes, end card) survives the restart.
+        const next = pendingSwitchRef.current;
+        if (next) {
+          pendingSwitchRef.current = null;
+          trackSessionEnd('switched');
+          diag.note('connection', { kind: 'disconnected-switch', reason: String(reason ?? '') });
+          cleanupRoom();
+          void startRef.current?.(next);
+          return;
+        }
         if (intentionalEndRef.current) return;
         trackSessionEnd('disconnected');
         setConnBanner('disconnected');
@@ -744,6 +768,34 @@ export function useSession(mobile = false, band: BandId = 'primary') {
       registerRpc(room, BOARD_RPC_REVEAL, pageOp('part', BOARD_RPC_REVEAL));
       registerRpc(room, BOARD_RPC_POINT, pageOp('part', BOARD_RPC_POINT));
 
+      // Learner RPCs for the tutor's set_learner_grade / switch_student tools.
+      // Acknowledged: the tool returns only after the browser answers, so a
+      // failed call leaves the call exactly as it was. Handlers are pure
+      // (learnerRpc.ts); this only wires real browser state. Profile writes
+      // run through one serialized queue (db.ts); stale targets are rejected.
+      // Read the active id at execution time: a switch that lands first makes
+      // a grade write stale.
+      const learnerDeps = {
+        applyGrade: async (profileId: string, grade: number) => {
+          const updated = await enqueueProfileGrade(
+            profileId, grade, () => profileRef.current?.id ?? null,
+          );
+          if (updated) {
+            profileRef.current = updated;
+            setProfile(updated);
+          }
+          return updated;
+        },
+        resolveStudent: (name: string) => enqueueProfileSwitch(name),
+        rememberLast: rememberLastProfileId,
+        armSwitch: (next: Profile | null) => {
+          pendingSwitchRef.current = next;
+        },
+      };
+      registerRpc(room, LEARNER_RPC_SET_GRADE, (data) => handleSetGrade(data, learnerDeps));
+      registerRpc(room, LEARNER_RPC_SWITCH, (data) => handleSwitch(data, learnerDeps));
+      registerRpc(room, LEARNER_RPC_CANCEL_SWITCH, () => handleCancelSwitch(learnerDeps));
+
       registerRpc(room, BOARD_RPC_LOADING, async (data) => {
         let parsed: unknown;
         try {
@@ -789,42 +841,6 @@ export function useSession(mobile = false, band: BandId = 'primary') {
           }
         } catch {
           /* ignore */
-        }
-      });
-
-      // Profile updates from the tutor's tools (set_learner_grade,
-      // switch_student): the browser owns the profiles, so the tutor sends
-      // a wish and the browser applies it. See docs/protocol.md.
-      room.registerTextStreamHandler(TOPIC_PROFILE, async (reader) => {
-        try {
-          const data: unknown = JSON.parse(await reader.readAll());
-          if (typeof data !== 'object' || data === null) return;
-          const msg = data as { grade?: unknown; switchTo?: unknown };
-          if (typeof msg.switchTo === 'string' && msg.switchTo.trim()) {
-            const wanted = msg.switchTo.trim().slice(0, 40);
-            const stored = await listProfiles();
-            let next = resolveProfileSwitch(stored, wanted);
-            if (!next) next = await createProfile(wanted);
-            rememberLastProfileId(next.id);
-            profileRef.current = next;
-            setProfile(next);
-            // Hand the tutor this student's notes from now on.
-            const learner = { name: next.name, grade: next.grade, notes: next.notes.slice(-5).reverse() };
-            await sendToAgent(JSON.stringify({ type: 'profile-switched', learner }), TOPIC_SESSION_EVENT)
-              .catch(() => undefined);
-            return;
-          }
-          if (typeof msg.grade === 'number' && Number.isInteger(msg.grade) && msg.grade >= 1 && msg.grade <= 12) {
-            const prof = profileRef.current;
-            if (!prof || prof.grade === msg.grade) return;
-            const updated = await updateProfile(prof.id, { grade: msg.grade });
-            if (updated) {
-              profileRef.current = updated;
-              setProfile(updated);
-            }
-          }
-        } catch {
-          /* ignore malformed profile messages */
         }
       });
 
@@ -956,6 +972,7 @@ export function useSession(mobile = false, band: BandId = 'primary') {
     },
     [cleanupRoom, prepareStart, readParticipantStates, showToast, trackSessionEnd, waitForMounted],
   );
+  startRef.current = start;
 
   const sendChat = useCallback(
     async (text: string) => {
@@ -1118,16 +1135,38 @@ export function useSession(mobile = false, band: BandId = 'primary') {
     }
     await disconnected;
     cleanupRoom();
-    setPhase('ended');
-  }, [cleanupRoom, phase]);
+    if (goProfilesAfterEndRef.current) {
+      // Menu leave: the lesson ended properly (note saved); open the name
+      // entry directly instead of the end card.
+      goProfilesAfterEndRef.current = false;
+      setProfilesOpen(true);
+      setProfile(null);
+      setPhase('profiles');
+    } else {
+      setPhase('ended');
+    }
+  }, [cleanupRoom, phase, trackSessionEnd]);
 
   const backToProfiles = useCallback(() => {
     intentionalEndRef.current = true;
     cleanupRoom();
+    setProfilesOpen(false);
     setPhase('profiles');
     setProfile(null);
     setConnBanner(null);
   }, [cleanupRoom]);
+
+  /** Menu "leave": send `end` so the worker saves the note, then open the
+   *  name entry directly (no second click). Never disconnects abruptly. */
+  const leaveToProfiles = useCallback(async () => {
+    if (phase !== 'live') {
+      backToProfiles();
+      return;
+    }
+    goProfilesAfterEndRef.current = true;
+    setProfilesOpen(true);
+    await endSession();
+  }, [phase, endSession, backToProfiles]);
 
   // ---- Homework intake ----
 
@@ -1377,6 +1416,8 @@ export function useSession(mobile = false, band: BandId = 'primary') {
     resourceClosed,
     endSession,
     backToProfiles,
+    leaveToProfiles,
+    profilesOpen,
     addFiles,
     addText,
     onItemMounted: resolveMounted,
