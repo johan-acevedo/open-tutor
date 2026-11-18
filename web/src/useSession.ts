@@ -20,12 +20,12 @@ import {
   TOPIC_NOTE,
   TOPIC_SESSION_EVENT,
   TOPIC_TRANSCRIPTION,
-  LEARNER_RPC_CANCEL_SWITCH,
   LEARNER_RPC_SET_GRADE,
   LEARNER_RPC_SWITCH,
 } from './protocol';
-import { appendNote, enqueueProfileGrade, enqueueProfileSwitch, rememberLastProfileId } from './db';
-import { handleCancelSwitch, handleSetGrade, handleSwitch } from './learnerRpc';
+import { enqueueNote, enqueueProfileGrade, enqueueProfileSwitch } from './db';
+import { handleNote, handleSetGrade, handleSwitch } from './learnerRpc';
+import { createEndGate, routeAfterEnd } from './lessonEnd';
 import type { Profile } from './db';
 import {
   getDeviceId,
@@ -40,7 +40,7 @@ import {
   turnSent,
 } from './analytics';
 import { AgentGate } from './agentGate';
-import { isNoteLike, validateBoardFocus, validateBoardItem, validateBoardLoading, validateBoardPageOp } from './validate';
+import { validateBoardFocus, validateBoardItem, validateBoardLoading, validateBoardPageOp } from './validate';
 import { dataUrlToBytes, downscaleImage } from './image';
 import { useWakeLock } from './useWakeLock';
 import { audioElementBusy } from './audioTracks';
@@ -225,12 +225,20 @@ export function useSession(mobile = false, band: BandId = 'primary') {
   // session request always sends the current band without re-wiring start.
   const bandRef = useRef<BandId>(band);
   bandRef.current = band;
-  // In-call student switch (learner.switch RPC): the next lesson's profile.
-  // Armed by the RPC handler; consumed when the worker ends this lesson,
-  // which restarts fresh as the new student. A failed tool call disarms it
-  // (learner.cancelSwitch) so a later disconnect cannot restart wrongly.
-  const pendingSwitchRef = useRef<Profile | null>(null);
-  const startRef = useRef<((p: Profile) => Promise<void>) | null>(null);
+  // In-call switch (learner.switch RPC): the student the start page is
+  // prefilled for after this lesson ends. Consumed once, when the lesson
+  // ends; a failed tool call never arms it, and B is remembered as active
+  // only when B's session actually starts.
+  const pendingPrefillRef = useRef<Profile | null>(null);
+  const [prefillId, setPrefillId] = useState<string | null>(null);
+  // Session generation: handlers capture the generation they were registered
+  // in and never touch UI or profile state from an old one (delayed note or
+  // grade callbacks from A must not land on B).
+  const sessionGenRef = useRef(0);
+  // One end transition per lesson: double leave, Avsluta during goodbye, or
+  // tutor switch plus menu at once all share it — exactly one end, the note
+  // saved once, cleanup touching only its own room. See lessonEnd.ts.
+  const endGateRef = useRef(createEndGate());
   // Menu "leave" flow: end this lesson properly, then open the name entry.
   const goProfilesAfterEndRef = useRef(false);
   const [profilesOpen, setProfilesOpen] = useState(false);
@@ -417,8 +425,7 @@ export function useSession(mobile = false, band: BandId = 'primary') {
       BOARD_RPC_LOADING,
       LEARNER_RPC_SET_GRADE,
       LEARNER_RPC_SWITCH,
-      LEARNER_RPC_CANCEL_SWITCH,
-    ])
+        ])
       unregisterRpc(room, m);
     try {
       room.unregisterTextStreamHandler(TOPIC_TRANSCRIPTION);
@@ -468,8 +475,12 @@ export function useSession(mobile = false, band: BandId = 'primary') {
       if (!room) return;
       preparedRoomRef.current = null;
       intentionalEndRef.current = false;
-      pendingSwitchRef.current = null;
+      pendingPrefillRef.current = null;
+      setPrefillId(null);
       setProfilesOpen(false);
+      // A new generation: callbacks from the previous session (delayed
+      // notes, grades) never touch this one's UI or profile.
+      sessionGenRef.current += 1;
       profileRef.current = p;
       setProfile(p);
       setItems([]);
@@ -595,15 +606,18 @@ export function useSession(mobile = false, band: BandId = 'primary') {
       });
       room.on(RoomEvent.Disconnected, (reason) => {
         // In-call switch: the worker ended A's lesson after the learner.switch
-        // ack. Start a fresh lesson as B: nothing of A (history, board,
-        // homework, notes, end card) survives the restart.
-        const next = pendingSwitchRef.current;
-        if (next) {
-          pendingSwitchRef.current = null;
+        // ack. Show the start page prefilled for B — no automatic reconnect,
+        // no continuation session. B is remembered only when B's session starts.
+        const prefill = pendingPrefillRef.current;
+        if (prefill) {
+          pendingPrefillRef.current = null;
           trackSessionEnd('switched');
           diag.note('connection', { kind: 'disconnected-switch', reason: String(reason ?? '') });
           cleanupRoom();
-          void startRef.current?.(next);
+          setPrefillId(prefill.id);
+          setProfilesOpen(false);
+          setProfile(null);
+          setPhase('profiles');
           return;
         }
         if (intentionalEndRef.current) return;
@@ -773,28 +787,33 @@ export function useSession(mobile = false, band: BandId = 'primary') {
       // failed call leaves the call exactly as it was. Handlers are pure
       // (learnerRpc.ts); this only wires real browser state. Profile writes
       // run through one serialized queue (db.ts); stale targets are rejected.
-      // Read the active id at execution time: a switch that lands first makes
-      // a grade write stale.
+      // The generation is captured here: a callback from an old session
+      // (delayed grade after a restart) never touches the current UI, and a
+      // grade update never changes which profile is active.
+      const myGen = sessionGenRef.current;
+      const isCurrent = () => myGen === sessionGenRef.current;
       const learnerDeps = {
         applyGrade: async (profileId: string, grade: number) => {
           const updated = await enqueueProfileGrade(
             profileId, grade, () => profileRef.current?.id ?? null,
           );
-          if (updated) {
+          // Re-check before applying: the restart may have landed while the
+          // queue was working. The grade keeps the right profile by id; the
+          // UI follows only when this session is still current and the same
+          // profile is still active.
+          if (updated && isCurrent() && profileRef.current?.id === updated.id) {
             profileRef.current = updated;
             setProfile(updated);
           }
-          return updated;
+          return isCurrent() ? updated : undefined;
         },
         resolveStudent: (name: string) => enqueueProfileSwitch(name),
-        rememberLast: rememberLastProfileId,
-        armSwitch: (next: Profile | null) => {
-          pendingSwitchRef.current = next;
+        armPrefill: (next: Profile) => {
+          pendingPrefillRef.current = next;
         },
       };
       registerRpc(room, LEARNER_RPC_SET_GRADE, (data) => handleSetGrade(data, learnerDeps));
       registerRpc(room, LEARNER_RPC_SWITCH, (data) => handleSwitch(data, learnerDeps));
-      registerRpc(room, LEARNER_RPC_CANCEL_SWITCH, () => handleCancelSwitch(learnerDeps));
 
       registerRpc(room, BOARD_RPC_LOADING, async (data) => {
         let parsed: unknown;
@@ -844,27 +863,26 @@ export function useSession(mobile = false, band: BandId = 'primary') {
         }
       });
 
+      // Notes are bound to the profile id (and generation) this session
+      // started with: a delayed note from lesson A is stored under A but
+      // never touches B's UI or live profile.
+      const noteGen = sessionGenRef.current;
+      const myProfileId = p.id;
       room.registerTextStreamHandler(TOPIC_NOTE, async (reader) => {
         try {
-          const text = await reader.readAll();
-          const data: unknown = JSON.parse(text);
-          if (!isNoteLike(data)) return;
-          const note: Note = {
-            at: typeof data.at === 'string' ? data.at : new Date().toISOString(),
-            topic: String(data.topic ?? ''),
-            ...(typeof data.clicked === 'string' ? { clicked: data.clicked } : {}),
-            ...(typeof data.tricky === 'string' ? { tricky: data.tricky } : {}),
-            ...(typeof data.next === 'string' ? { next: data.next } : {}),
-          };
-          setSessionNotes((prev) => [...prev, note]);
-          const prof = profileRef.current;
-          if (prof) {
-            const updated = await appendNote(prof.id, note);
-            if (updated) {
-              profileRef.current = updated;
-              setProfile(updated);
-            }
-          }
+          await handleNote(await reader.readAll(), {
+            sessionProfileId: myProfileId,
+            isCurrentSession: () => noteGen === sessionGenRef.current,
+            getActiveId: () => profileRef.current?.id ?? null,
+            onNote: (note, updated) => {
+              setSessionNotes((prev) => [...prev, note]);
+              if (updated) {
+                profileRef.current = updated;
+                setProfile(updated);
+              }
+            },
+            saveNote: (profileId, note) => enqueueNote(profileId, note),
+          });
         } catch {
           /* ignore */
         }
@@ -972,7 +990,6 @@ export function useSession(mobile = false, band: BandId = 'primary') {
     },
     [cleanupRoom, prepareStart, readParticipantStates, showToast, trackSessionEnd, waitForMounted],
   );
-  startRef.current = start;
 
   const sendChat = useCallback(
     async (text: string) => {
@@ -1112,38 +1129,62 @@ export function useSession(mobile = false, band: BandId = 'primary') {
     [showToast],
   );
 
+  // The single end transition for a room: claiming it twice (double menu
+  // leave, Avsluta during goodbye, menu leave plus in-call switch) runs the
+  // end exactly once. Cleanup touches only the room it started with.
   const endSession = useCallback(async () => {
     const room = roomRef.current;
     if (!room || phase !== 'live') return;
-    intentionalEndRef.current = true;
-    trackSessionEnd('ended_by_child');
-    setPhase('ending');
-    setConnBanner(null);
-    void diagRef.current?.flush();
-    const disconnected = new Promise<void>((resolve) => {
-      const onDisc = () => {
-        room.off(RoomEvent.Disconnected, onDisc);
-        resolve();
-      };
-      room.on(RoomEvent.Disconnected, onDisc);
-      window.setTimeout(resolve, END_WAIT_MS);
-    });
+    if (!endGateRef.current.claim()) return;
     try {
-      await sendToAgent(JSON.stringify({ type: 'end' }), TOPIC_SESSION_EVENT);
-    } catch {
-      /* agent may already be gone; still show the end card */
-    }
-    await disconnected;
-    cleanupRoom();
-    if (goProfilesAfterEndRef.current) {
-      // Menu leave: the lesson ended properly (note saved); open the name
-      // entry directly instead of the end card.
+      intentionalEndRef.current = true;
+      trackSessionEnd('ended_by_child');
+      setPhase('ending');
+      setConnBanner(null);
+      void diagRef.current?.flush();
+      const disconnected = new Promise<void>((resolve) => {
+        const onDisc = () => {
+          room.off(RoomEvent.Disconnected, onDisc);
+          resolve();
+        };
+        room.on(RoomEvent.Disconnected, onDisc);
+        window.setTimeout(resolve, END_WAIT_MS);
+      });
+      try {
+        await sendToAgent(JSON.stringify({ type: 'end' }), TOPIC_SESSION_EVENT);
+      } catch {
+        /* agent may already be gone; still show the end card */
+      }
+      await disconnected;
+      // Only this room's disconnect ends the lesson: a newer session (or a
+      // switch prefill) already replaced it, so leave that one alone.
+      if (roomRef.current !== room) return;
+      cleanupRoom();
+      // A switch prefill always wins over a simultaneous menu leave.
+      const route = routeAfterEnd({
+        prefillId: pendingPrefillRef.current?.id ?? null,
+        goProfiles: goProfilesAfterEndRef.current,
+      });
+      pendingPrefillRef.current = null;
       goProfilesAfterEndRef.current = false;
-      setProfilesOpen(true);
-      setProfile(null);
-      setPhase('profiles');
-    } else {
-      setPhase('ended');
+      if (route.kind === 'prefill') {
+        // In-call switch: the start page for B, prefilled. B is remembered
+        // only when B's session actually starts.
+        setPrefillId(route.id);
+        setProfilesOpen(false);
+        setProfile(null);
+        setPhase('profiles');
+      } else if (route.kind === 'open') {
+        // Menu leave: the lesson ended properly (note saved); open the name
+        // entry directly instead of the end card.
+        setProfilesOpen(true);
+        setProfile(null);
+        setPhase('profiles');
+      } else {
+        setPhase('ended');
+      }
+    } finally {
+      endGateRef.current.release();
     }
   }, [cleanupRoom, phase, trackSessionEnd]);
 
@@ -1157,16 +1198,20 @@ export function useSession(mobile = false, band: BandId = 'primary') {
   }, [cleanupRoom]);
 
   /** Menu "leave": send `end` so the worker saves the note, then open the
-   *  name entry directly (no second click). Never disconnects abruptly. */
+   *  name entry directly (no second click). The end transition itself owns
+   *  idempotency (see endSession): a second call while one is in flight
+   *  stands down, and an end already running is only steered to the name
+   *  entry — never cut short. */
   const leaveToProfiles = useCallback(async () => {
     if (phase !== 'live') {
-      backToProfiles();
+      goProfilesAfterEndRef.current = true;
+      setProfilesOpen(true);
       return;
     }
     goProfilesAfterEndRef.current = true;
     setProfilesOpen(true);
     await endSession();
-  }, [phase, endSession, backToProfiles]);
+  }, [phase, endSession]);
 
   // ---- Homework intake ----
 
@@ -1418,6 +1463,7 @@ export function useSession(mobile = false, band: BandId = 'primary') {
     backToProfiles,
     leaveToProfiles,
     profilesOpen,
+    prefillId,
     addFiles,
     addText,
     onItemMounted: resolveMounted,

@@ -225,6 +225,17 @@ export function enqueueProfileSwitch(name: string): Promise<Profile> {
   });
 }
 
+/** Append a tutor note to one profile by id (never "the current one": the
+ *  caller binds the session's own profile id, so a delayed note from lesson A
+ *  can never land on B). Returns the updated profile, or undefined when the
+ *  profile is gone. */
+export function enqueueNote(profileId: string, note: Note): Promise<Profile | undefined> {
+  return enqueue(async () => {
+    if (!profileId) return undefined;
+    return appendNote(profileId, note);
+  });
+}
+
 /** Apply a tutor-learned grade, but only when the target is still the active
  *  profile at execution time. `getActiveId` is read inside the queue so a write
  *  that lost its race with a switch (or arrives after a restart) is dropped as

@@ -59,7 +59,6 @@ BOARD_RPC_TIMEOUT = 6.0
 LEARNER_RPC_TIMEOUT = 6.0
 LEARNER_RPC_SET_GRADE = "learner.setGrade"
 LEARNER_RPC_SWITCH = "learner.switch"
-LEARNER_RPC_CANCEL_SWITCH = "learner.cancelSwitch"
 HOMEWORK_SETTLE = 1.2  # seconds to wait for more PDF pages before responding
 # Per LLM attempt. The default (10 s, three retries) is what made a slow provider keep a
 # child waiting about 50 s for a greeting on 2026-11-14. One retry, then the failover in
@@ -419,14 +418,14 @@ class Tutor(Agent):
 
     @function_tool()
     async def switch_student(self, context: RunContext, name: str) -> str:
-        """End this lesson and start a fresh one as a different student.
+        """End this lesson; the next one starts with a different student.
 
         Only after confirming with them (and asking the name when it is new).
         The browser resolves or creates their profile and acknowledges with its
         id; this lesson then ends exactly like Avsluta (the note is saved, you
-        say goodbye) and the next session starts fresh — nothing of this lesson
-        survives into it. A failed call leaves you with this student: say so
-        briefly and carry on.
+        say goodbye) and the start page opens prefilled for the new student —
+        no automatic reconnect, no continuation session. A failed call leaves
+        you with this student: say so briefly and carry on.
 
         Args:
             name: The new student's first name.
@@ -436,9 +435,7 @@ class Tutor(Agent):
             return "No name given. Ask who is there now, then call again."
         data = await self._learner_rpc(LEARNER_RPC_SWITCH, {"name": clean})
         if data is None:
-            # The ack never arrived: disarm the browser side best-effort, so a
-            # later disconnect cannot restart as the wrong student.
-            await self._learner_rpc(LEARNER_RPC_CANCEL_SWITCH, {})
+            # The ack never arrived, so nothing was armed: carry on as A.
             current = str(self.learner.get("name") or "").strip() or "this student"
             record_active("switch_student", {"name": clean, "ok": False})
             return (f"Stay with {current}: the switch to {clean} did not go through. "
@@ -970,6 +967,9 @@ async def entrypoint(ctx: JobContext) -> None:
     # while the greeting still runs. The job path keeps its own fallback.
     asyncio.create_task(screen.warmup())
     tutor.child_identity = child.identity
+    # Created here, not next to on_session_event below: switch_student ends
+    # this lesson through it, and the tutor exists before that definition.
+    ending = asyncio.Event()
     tutor.end_event = ending
     set_active(debug)
 
@@ -1158,8 +1158,6 @@ async def entrypoint(ctx: JobContext) -> None:
                                            "chars": len(text), "text": text})
         pending.append(([text], description))
         schedule_reply()
-
-    ending = asyncio.Event()
 
     async def on_session_event(reader: rtc.TextStreamReader, identity: str) -> None:
         try:

@@ -153,6 +153,7 @@ export default function App() {
           onStartGesture={session.prepareStart}
           starting={false}
           startOpen={session.profilesOpen}
+          assumeId={session.prefillId}
         />
       )}
 

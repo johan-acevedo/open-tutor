@@ -19,10 +19,11 @@ design thread lands `design/bands/<band>/` — wiring points in `design/bands/RE
 Next visit assumes the same student ("Hej <name>, starta"); "Byt elev" is in the menu.
 - **The tutor learns the grade** (`learner.setGrade` RPC → serialized browser queue →
 stored profile; stale targets rejected, failed calls change nothing) and **switches
-student in-call as end-and-restart** (`learner.switch` RPC resolves/creates the profile
+student in-call as end-and-prefill** (`learner.switch` RPC resolves/creates the profile
 and acks with its id; the worker then ends this lesson exactly like Avsluta and the
-browser reconnects fresh — nothing of lesson A survives; failed calls keep A and say so,
-with a `learner.cancelSwitch` disarm). On band 3 the tutor
+browser shows the start page prefilled for B — no automatic reconnect, no continuation
+session; failed calls never arm anything and keep A. B counts as a new session under
+the hourly cap. B is remembered as active only when B's session starts). On band 3 the tutor
 finds out naturally whether the learner is a gymnasiet student (which year) or an adult;
 only adults skip the grade. Unknown grades default to the band in the tutor and screen prompts.
 - **No access code.** The gate is gone from page and server (incl. `?kod=` links and

@@ -16,7 +16,6 @@ from livekit.agents import StopResponse
 
 from open_tutor import prompt
 from open_tutor.agent import (
-    LEARNER_RPC_CANCEL_SWITCH,
     LEARNER_RPC_SET_GRADE,
     LEARNER_RPC_SWITCH,
     Tutor,
@@ -107,8 +106,8 @@ async def test_switch_student_failure_stays_as_a():
     assert not t.end_event.is_set()
     assert t.learner["name"] == "Elsa"
     methods = [method for method, _ in t.room.local_participant.calls]
-    # The switch was tried; the half-armed browser is disarmed best-effort.
-    assert methods == [LEARNER_RPC_SWITCH, LEARNER_RPC_CANCEL_SWITCH]
+    # Nothing was armed: exactly one RPC went out, the lesson ends as A.
+    assert methods == [LEARNER_RPC_SWITCH]
 
 
 async def test_switch_student_needs_a_name():

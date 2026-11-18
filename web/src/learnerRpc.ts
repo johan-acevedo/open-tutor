@@ -1,5 +1,6 @@
 import { RpcError } from 'livekit-client';
 import type { RpcInvocationData } from 'livekit-client';
+import type { Note } from './protocol';
 import type { Profile } from './db';
 
 /** Worker → browser learner RPCs (see docs/protocol.md). Pure handlers with
@@ -7,17 +8,18 @@ import type { Profile } from './db';
  *
  *  - set_learner_grade applies only when the target is still the active
  *    profile; anything else is rejected as stale, and the tool on the worker
- *    leaves the call exactly as it was.
+ *    leaves the call exactly as it was. Grade updates never change which
+ *    profile is active.
  *  - switch_student resolves or creates the student's profile (serialized,
- *    one profile per name) and arms the end-and-restart; the worker then ends
- *    this lesson exactly like Avsluta and the browser reconnects fresh.
- *  - cancel_switch disarms a switch whose ack never reached the worker.
+ *    one profile per name) and arms the post-lesson prefill: after this
+ *    lesson ends exactly like Avsluta, the browser shows the start page for
+ *    the new student. The profile is remembered as active only when the new
+ *    student's session actually starts.
  */
 export type LearnerRpcDeps = {
   applyGrade: (profileId: string, grade: number) => Promise<Profile | undefined>;
   resolveStudent: (name: string) => Promise<Profile>;
-  rememberLast: (id: string) => void;
-  armSwitch: (profile: Profile | null) => void;
+  armPrefill: (profile: Profile) => void;
 };
 
 function parsePayload(data: RpcInvocationData, method: string): Record<string, unknown> {
@@ -42,20 +44,49 @@ export async function handleSetGrade(data: RpcInvocationData, deps: LearnerRpcDe
   return JSON.stringify({ ok: true, grade: updated.grade });
 }
 
+export type NoteDeps = {
+  /** The profile id this session started with: notes are bound to it. */
+  sessionProfileId: string;
+  /** False once a newer session started: old callbacks touch nothing. */
+  isCurrentSession: () => boolean;
+  /** The live profile is updated only when it is still the note's target. */
+  getActiveId: () => string | null;
+  onNote: (note: Note, updated: Profile | undefined) => void;
+  saveNote: (profileId: string, note: Note) => Promise<Profile | undefined>;
+};
+
+export async function handleNote(text: string, deps: NoteDeps): Promise<void> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return;
+  }
+  if (typeof parsed !== 'object' || parsed === null) return;
+  const data = parsed as Record<string, unknown>;
+  const note: Note = {
+    at: typeof data.at === 'string' ? data.at : new Date().toISOString(),
+    topic: String(data.topic ?? ''),
+    ...(typeof data.clicked === 'string' ? { clicked: data.clicked } : {}),
+    ...(typeof data.tricky === 'string' ? { tricky: data.tricky } : {}),
+    ...(typeof data.next === 'string' ? { next: data.next } : {}),
+  };
+  if (!note.topic) return;
+  const updated = await deps.saveNote(deps.sessionProfileId, note);
+  // A delayed note from lesson A is stored under A but never touches B's UI.
+  if (!deps.isCurrentSession()) return;
+  if (updated && deps.getActiveId() !== updated.id) return;
+  deps.onNote(note, updated);
+}
+
 export async function handleSwitch(data: RpcInvocationData, deps: LearnerRpcDeps): Promise<string> {
   const msg = parsePayload(data, 'learner.switch');
   const name = String(msg.name ?? '').trim().slice(0, 40);
   if (!name) throw new RpcError(1500, 'learner.switch needs a name');
   const next = await deps.resolveStudent(name);
-  deps.rememberLast(next.id);
-  deps.armSwitch(next);
+  deps.armPrefill(next);
   return JSON.stringify({
     ok: true,
     profile: { id: next.id, name: next.name, grade: next.grade },
   });
-}
-
-export async function handleCancelSwitch(deps: LearnerRpcDeps): Promise<string> {
-  deps.armSwitch(null);
-  return '{"ok":true}';
 }

@@ -109,17 +109,14 @@ export const TOPIC_NOTE = 'note';
  *    only when profileId is still the active profile, else rejects as stale.
  *    Replies { ok, grade }.
  *  - learner.switch { name }: the browser resolves or creates that student's
- *    profile (serialized; one profile per name), arms an end-and-restart with
- *    it, and replies { ok, profile: { id, name, grade } }. The worker then
- *    ends this lesson exactly like Avsluta; on disconnect the browser starts
- *    a fresh session as the new student — nothing of the old lesson survives.
- *  - learner.cancelSwitch {}: disarms a switch whose acknowledgement never
- *    reached the worker (failed tool call), so a later disconnect cannot
- *    restart as the wrong student. Replies { ok }.
+ *    profile (serialized; one profile per name), arms a post-lesson prefill
+ *    with it, and replies { ok, profile: { id, name, grade } }. The worker then
+ *    ends this lesson exactly like Avsluta; afterwards the browser shows the
+ *    start page prefilled for the new student \u2014 no automatic reconnect, no
+ *    continuation session. A failed call never arms anything.
  */
 export const LEARNER_RPC_SET_GRADE = 'learner.setGrade';
 export const LEARNER_RPC_SWITCH = 'learner.switch';
-export const LEARNER_RPC_CANCEL_SWITCH = 'learner.cancelSwitch';
 
 export const ATTR_AGENT_STATE = 'lk.agent.state';
 export const ATTR_TUTOR_MODE = 'tutor.mode';

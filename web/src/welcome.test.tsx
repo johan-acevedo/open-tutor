@@ -85,3 +85,16 @@ it('the upper band switches the copy and keeps name-only start', () => {
   expect(screen.getByLabelText('Förnamn')).toBeDefined();
   expect(screen.queryByLabelText('Årskurs')).toBeNull();
 });
+
+it('prefills the assumed student after an in-call switch', () => {
+  const profiles = [profile(), profile({ id: 'p2', name: 'Noa', grade: null })];
+  const pick = vi.fn();
+  // Last visit was Elsa, but the switch armed Noa: Noa is assumed.
+  localStorage.setItem('open-tutor-last-profile', 'p1');
+  render(
+    <Welcome profiles={profiles} band={bandConfig('primary')} onPick={pick} starting={false} assumeId="p2" />,
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Starta' }));
+  expect(pick).toHaveBeenCalledWith(profiles[1]);
+  localStorage.clear();
+});
