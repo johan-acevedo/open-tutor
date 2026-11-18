@@ -1,0 +1,53 @@
+{
+  "ask": "colosseum",
+  "label": "after",
+  "run": 2,
+  "wall_s": 7.28,
+  "failures": [],
+  "total_s": 7.28,
+  "issues": [],
+  "strategy": "commons+parallel",
+  "image_s": 2.41,
+  "review_concurrency": 3,
+  "reviews": 3,
+  "accepted": {
+    "image_source": "commons",
+    "title": "File:Photo of The Colosseum in Rome, Italy.jpg",
+    "rank": 0,
+    "served": "https://commons.wikimedia.org/wiki/File:Photo_of_The_Colosseum_in_Rome,_Italy.jpg",
+    "reason": "Clear, age-appropriate exterior photo of the Colosseum in Rome that matches the lesson context."
+  },
+  "candidates": [
+    {
+      "rank": 0,
+      "title": "File:Photo of The Colosseum in Rome, Italy.jpg",
+      "decision": "accepted",
+      "source": "commons",
+      "download_s": 0.21,
+      "review_s": 2.57,
+      "finished_s": 2.78,
+      "reason": "Clear, age-appropriate exterior photo of the Colosseum in Rome that matches the lesson context."
+    },
+    {
+      "rank": 1,
+      "title": "File:Colosseum in Rome (3).jpg",
+      "decision": "rejected",
+      "source": "commons",
+      "download_s": 0.17,
+      "review_s": 0.0,
+      "finished_s": 2.78,
+      "reason": "image review cancelled: a better-ranked candidate was accepted"
+    },
+    {
+      "rank": 2,
+      "title": "File:Colosseum in Rome (7).jpg",
+      "decision": "rejected",
+      "source": "commons",
+      "download_s": 0.16,
+      "review_s": 0.0,
+      "finished_s": 2.78,
+      "reason": "image review cancelled: a better-ranked candidate was accepted"
+    }
+  ],
+  "ships_image": true
+}

@@ -1,0 +1,67 @@
+{
+  "ask": "flower",
+  "label": "after",
+  "run": 2,
+  "wall_s": 14.09,
+  "failures": [],
+  "total_s": 14.08,
+  "issues": [],
+  "strategy": "commons+parallel",
+  "image_s": 11.59,
+  "review_concurrency": 3,
+  "reviews": 5,
+  "accepted": null,
+  "candidates": [
+    {
+      "rank": 0,
+      "title": "File:058 Aglais urticae on Dandelion Parc naturel régional J",
+      "decision": "rejected",
+      "source": "commons",
+      "download_s": 0.3,
+      "review_s": 5.83,
+      "finished_s": 6.14,
+      "reason": "The main subject is a butterfly obscuring the flower, and the branching stem does not clearly show a dandelion."
+    },
+    {
+      "rank": 1,
+      "title": "File:Close-up of water droplets on the common dandelion.jpg",
+      "decision": "rejected",
+      "source": "commons",
+      "download_s": 0.28,
+      "review_s": 3.55,
+      "finished_s": 3.85,
+      "reason": "Bilden visar en svartvit närbild av vattendroppar på en överblommad maskros (fröställning), inte en maskros i blom."
+    },
+    {
+      "rank": 2,
+      "title": "File:Dandelion Close Up (243074873).jpeg",
+      "decision": "rejected",
+      "source": "commons",
+      "download_s": 0.29,
+      "review_s": 6.31,
+      "finished_s": 6.63,
+      "reason": "Bilden visar en överblommad maskros med frön, inte en maskros i blom (gul blomma) som efterfrågades."
+    },
+    {
+      "rank": 0,
+      "title": "File:Dandelion Flower close up.jpg - Wikimedia Commons",
+      "decision": "rejected",
+      "source": "parallel",
+      "download_s": 0.09,
+      "review_s": 4.17,
+      "finished_s": 4.26,
+      "reason": "The image is corrupted and mostly covered by a solid grey block."
+    },
+    {
+      "rank": 1,
+      "title": "Close-Up of a Dandelion Flower in Seed Stage - Free Stock Im",
+      "decision": "rejected",
+      "source": "parallel",
+      "download_s": 0.06,
+      "review_s": 5.27,
+      "finished_s": 5.33,
+      "reason": "Bilden visar en överblommad maskros med frön, inte en maskros i blom."
+    }
+  ],
+  "ships_image": false
+}

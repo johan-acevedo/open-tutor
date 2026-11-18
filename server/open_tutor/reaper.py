@@ -17,8 +17,12 @@ class Reaper:
         self._groups: dict[asyncio.TimerHandle, tuple[str, set[asyncio.Future[Any]]]] = {}
 
     def stop(self, route: str, tasks: Iterable[asyncio.Future[Any]] = (),
-             close: Coroutine[Any, Any, Any] | None = None) -> None:
-        """Cancel work now and start closing, without waiting for either."""
+             close: Coroutine[Any, Any, Any] | None = None) -> set[asyncio.Future[Any]]:
+        """Cancel work now and start closing, without waiting for either.
+
+        Returns what the reaper now owns -- the cancelled work and the close --
+        so a caller that must not overlap the next request with this one can
+        wait for it for a bounded moment (see ``Screen._settle_reaped``)."""
         owned = set(tasks) - self.tasks
         for task in owned:
             if not task.done():
@@ -26,12 +30,13 @@ class Reaper:
         if close is not None:
             owned.add(asyncio.create_task(close, name=f"provider-close-{route}"))
         if not owned:
-            return
+            return owned
         self.tasks.update(owned)
         timer = asyncio.get_running_loop().call_later(self.bound, self._expire, owned)
         self._groups[timer] = (route, owned)
         for task in owned:
             task.add_done_callback(self._finished)
+        return owned
 
     def _finished(self, task: asyncio.Future[Any]) -> None:
         self.tasks.discard(task)

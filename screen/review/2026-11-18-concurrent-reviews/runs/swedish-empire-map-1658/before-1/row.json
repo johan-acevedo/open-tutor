@@ -1,0 +1,33 @@
+{
+  "ask": "swedish-empire-map-1658",
+  "label": "before",
+  "run": 1,
+  "wall_s": 9.0,
+  "failures": [],
+  "total_s": 9.0,
+  "issues": [],
+  "strategy": "commons+parallel",
+  "image_s": 4.03,
+  "review_concurrency": null,
+  "reviews": 1,
+  "accepted": {
+    "image_source": "commons",
+    "title": "File:LocationSwedishEmpire.png",
+    "rank": null,
+    "served": "https://commons.wikimedia.org/wiki/File:LocationSwedishEmpire.png",
+    "reason": "Kartan visar tydligt det svenska rikets utbredning år 1658 (stormaktstiden) i grönt på en ren Europakarta, vilket passar utmärkt för årskurs 6."
+  },
+  "candidates": [
+    {
+      "rank": null,
+      "title": "File:LocationSwedishEmpire.png",
+      "decision": "accepted",
+      "source": "commons",
+      "download_s": null,
+      "review_s": null,
+      "finished_s": null,
+      "reason": "Kartan visar tydligt det svenska rikets utbredning år 1658 (stormaktstiden) i grönt på en ren Europakarta, vilket passar"
+    }
+  ],
+  "ships_image": true
+}

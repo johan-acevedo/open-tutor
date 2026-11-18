@@ -1,0 +1,53 @@
+{
+  "ask": "swedish-empire-map-1658",
+  "label": "after",
+  "run": 2,
+  "wall_s": 7.32,
+  "failures": [],
+  "total_s": 7.31,
+  "issues": [],
+  "strategy": "commons+parallel",
+  "image_s": 4.62,
+  "review_concurrency": 3,
+  "reviews": 3,
+  "accepted": {
+    "image_source": "commons",
+    "title": "File:LocationSwedishEmpire.png",
+    "rank": 0,
+    "served": "https://commons.wikimedia.org/wiki/File:LocationSwedishEmpire.png",
+    "reason": "Tydlig och historiskt korrekt karta över det svenska riket vid sin största utbredning år 1658, lätt att läsa för en elev i årskurs 6."
+  },
+  "candidates": [
+    {
+      "rank": 0,
+      "title": "File:LocationSwedishEmpire.png",
+      "decision": "accepted",
+      "source": "commons",
+      "download_s": 0.16,
+      "review_s": 4.83,
+      "finished_s": 5.0,
+      "reason": "Tydlig och historiskt korrekt karta över det svenska riket vid sin största utbredning år 1658, lätt att läsa för en elev"
+    },
+    {
+      "rank": 1,
+      "title": "File:Sweden in 1658.PNG",
+      "decision": "rejected",
+      "source": "commons",
+      "download_s": 0.16,
+      "review_s": 3.11,
+      "finished_s": 3.29,
+      "reason": "a better-ranked candidate was also accepted"
+    },
+    {
+      "rank": 2,
+      "title": "File:Sweden 1658.jpg",
+      "decision": "rejected",
+      "source": "commons",
+      "download_s": 0.2,
+      "review_s": 3.84,
+      "finished_s": 4.06,
+      "reason": "a better-ranked candidate was also accepted"
+    }
+  ],
+  "ships_image": true
+}

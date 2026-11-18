@@ -1,0 +1,53 @@
+{
+  "ask": "a-flower",
+  "label": "after",
+  "run": 2,
+  "wall_s": 9.32,
+  "failures": [],
+  "total_s": 9.32,
+  "issues": [],
+  "strategy": "commons+parallel",
+  "image_s": 6.66,
+  "review_concurrency": 3,
+  "reviews": 3,
+  "accepted": {
+    "image_source": "commons",
+    "title": "File:Tulip Tulipa clusiana 'Lady Jane' Rock Ledge Flower Edit 2000px.jpg",
+    "rank": 0,
+    "served": "https://commons.wikimedia.org/wiki/File:Tulip_Tulipa_clusiana_%27Lady_Jane%27_Rock_Ledge_Flower_Edit_2000px.jpg",
+    "reason": "Clear, high-quality photograph of a flower showing petals, stamens, and pistil, matching the request."
+  },
+  "candidates": [
+    {
+      "rank": 0,
+      "title": "File:Tulip Tulipa clusiana 'Lady Jane' Rock Ledge Flower Edi",
+      "decision": "accepted",
+      "source": "commons",
+      "download_s": 0.2,
+      "review_s": 7.34,
+      "finished_s": 7.54,
+      "reason": "Clear, high-quality photograph of a flower showing petals, stamens, and pistil, matching the request."
+    },
+    {
+      "rank": 1,
+      "title": "File:Hoverfly on flower edit.jpg",
+      "decision": "rejected",
+      "source": "commons",
+      "download_s": 0.19,
+      "review_s": 5.67,
+      "finished_s": 5.88,
+      "reason": "a better-ranked candidate was also accepted"
+    },
+    {
+      "rank": 2,
+      "title": "File:Halictus bee on flower-2.jpg",
+      "decision": "rejected",
+      "source": "commons",
+      "download_s": 0.16,
+      "review_s": 0.0,
+      "finished_s": 7.54,
+      "reason": "image review cancelled: a better-ranked candidate was accepted"
+    }
+  ],
+  "ships_image": true
+}

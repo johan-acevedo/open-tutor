@@ -1,0 +1,53 @@
+{
+  "ask": "colosseum",
+  "label": "after",
+  "run": 1,
+  "wall_s": 9.0,
+  "failures": [],
+  "total_s": 9.0,
+  "issues": [],
+  "strategy": "commons+parallel",
+  "image_s": 4.17,
+  "review_concurrency": 3,
+  "reviews": 3,
+  "accepted": {
+    "image_source": "commons",
+    "title": "File:Photo of The Colosseum in Rome, Italy.jpg",
+    "rank": 0,
+    "served": "https://commons.wikimedia.org/wiki/File:Photo_of_The_Colosseum_in_Rome,_Italy.jpg",
+    "reason": "Tydlig och passande bild av Colosseums utsida i Rom som stämmer med elevens fråga."
+  },
+  "candidates": [
+    {
+      "rank": 0,
+      "title": "File:Photo of The Colosseum in Rome, Italy.jpg",
+      "decision": "accepted",
+      "source": "commons",
+      "download_s": 0.99,
+      "review_s": 3.0,
+      "finished_s": 4.0,
+      "reason": "Tydlig och passande bild av Colosseums utsida i Rom som stämmer med elevens fråga."
+    },
+    {
+      "rank": 1,
+      "title": "File:Colosseum in Rome (3).jpg",
+      "decision": "rejected",
+      "source": "commons",
+      "download_s": 0.15,
+      "review_s": 0.0,
+      "finished_s": 4.0,
+      "reason": "image review cancelled: a better-ranked candidate was accepted"
+    },
+    {
+      "rank": 2,
+      "title": "File:Colosseum in Rome (7).jpg",
+      "decision": "rejected",
+      "source": "commons",
+      "download_s": 0.15,
+      "review_s": 0.0,
+      "finished_s": 4.0,
+      "reason": "image review cancelled: a better-ranked candidate was accepted"
+    }
+  ],
+  "ships_image": true
+}

@@ -1,0 +1,33 @@
+{
+  "ask": "king-gustav-vasa",
+  "label": "before",
+  "run": 2,
+  "wall_s": 7.68,
+  "failures": [],
+  "total_s": 7.68,
+  "issues": [],
+  "strategy": "commons+parallel",
+  "image_s": 2.02,
+  "review_concurrency": null,
+  "reviews": 1,
+  "accepted": {
+    "image_source": "commons",
+    "title": "File:Gustav Vasa.jpg",
+    "rank": null,
+    "served": "https://commons.wikimedia.org/wiki/File:Gustav_Vasa.jpg",
+    "reason": "Historiskt porträtt av Gustav Vasa som passar utmärkt för årskurs 6 och lektionens innehåll."
+  },
+  "candidates": [
+    {
+      "rank": null,
+      "title": "File:Gustav Vasa.jpg",
+      "decision": "accepted",
+      "source": "commons",
+      "download_s": null,
+      "review_s": null,
+      "finished_s": null,
+      "reason": "Historiskt porträtt av Gustav Vasa som passar utmärkt för årskurs 6 och lektionens innehåll."
+    }
+  ],
+  "ships_image": true
+}

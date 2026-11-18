@@ -839,3 +839,56 @@ async def test_race_both_providers_time_out_is_recorded_once(tmp_path, monkeypat
     summary = screen.screen_stats_summary()
     assert summary["screen_calls_total"] == 1 and summary["screen_race_calls"] == 1
     await screen.aclose()
+
+
+async def test_a_review_can_ask_for_one_attempt_even_with_a_backup(tmp_path, monkeypatch):
+    """Concurrent image reviews: N candidates cost N calls, not one hedge each."""
+    monkeypatch.setenv("SCREEN_HEDGE_AFTER_S", "0.01")
+    screen = hedging_screen(
+        tmp_path, monkeypatch,
+        model_call=AsyncMock(return_value='{"accept":true,"reason":"ok"}'),
+        fallback_call=AsyncMock(return_value='{"accept":true,"reason":"ok"}'))
+    text, _ = await screen._call_model("System", "Lesson", kind="image", hedge=False)
+    assert text == '{"accept":true,"reason":"ok"}'
+    screen._fallback_call.assert_not_awaited()  # the backup was never started
+    summary = screen.screen_stats_summary()
+    assert summary["screen_calls_total"] == 1 and summary["screen_hedged_calls"] == 0
+    assert summary["screen_provider_wins"] == {"go": 1}
+    await screen.aclose()
+
+
+async def test_a_review_with_a_backup_still_hedges_when_asked(tmp_path, monkeypatch):
+    """The slot's best-ranked review keeps today's hedge; only the rest are single."""
+    called = []
+
+    async def slow_primary(system, user, images, look_png):
+        called.append("primary")
+        await asyncio.sleep(30)
+        return '{"accept":true,"reason":"ok"}'
+
+    async def fast_fallback(system, user, images, look_png):
+        called.append("secondary")
+        return '{"accept":true,"reason":"ok"}'
+
+    monkeypatch.setenv("SCREEN_HEDGE_AFTER_S", "0.01")
+    screen = hedging_screen(tmp_path, monkeypatch, model_call=slow_primary,
+                            fallback_call=fast_fallback)
+    text, _ = await screen._call_model("System", "Lesson", kind="image")
+    assert text == '{"accept":true,"reason":"ok"}' and called == ["primary", "secondary"]
+    assert screen.screen_stats_summary()["screen_hedged_calls"] == 1
+    await screen.aclose()
+
+
+def test_image_review_concurrency_is_small_and_configurable(monkeypatch):
+    from open_tutor.screen import image_review_concurrency
+
+    monkeypatch.delenv("SCREEN_IMAGE_REVIEWS", raising=False)
+    assert image_review_concurrency() == 3  # a search list's length
+    monkeypatch.setenv("SCREEN_IMAGE_REVIEWS", "1")
+    assert image_review_concurrency() == 1
+    monkeypatch.setenv("SCREEN_IMAGE_REVIEWS", "2")
+    assert image_review_concurrency() == 2
+    for bad in ("0", "7", "many"):
+        monkeypatch.setenv("SCREEN_IMAGE_REVIEWS", bad)
+        with pytest.raises(ValueError, match="SCREEN_IMAGE_REVIEWS"):
+            image_review_concurrency()

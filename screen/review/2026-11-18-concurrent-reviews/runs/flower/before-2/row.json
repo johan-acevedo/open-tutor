@@ -1,0 +1,57 @@
+{
+  "ask": "flower",
+  "label": "before",
+  "run": 2,
+  "wall_s": 17.83,
+  "failures": [],
+  "total_s": 17.83,
+  "issues": [],
+  "strategy": "commons+parallel",
+  "image_s": 15.3,
+  "review_concurrency": null,
+  "reviews": 4,
+  "accepted": null,
+  "candidates": [
+    {
+      "rank": null,
+      "title": "File:058 Aglais urticae on Dandelion Parc naturel régional J",
+      "decision": "rejected",
+      "source": "commons",
+      "download_s": null,
+      "review_s": null,
+      "finished_s": null,
+      "reason": "Bilden fokuserar på en fjäril som täcker större delen av blomman, och stjälken är grenad vilket inte visar en tydlig mas"
+    },
+    {
+      "rank": null,
+      "title": "File:Close-up of water droplets on the common dandelion.jpg",
+      "decision": "rejected",
+      "source": "commons",
+      "download_s": null,
+      "review_s": null,
+      "finished_s": null,
+      "reason": "The image is a black-and-white macro photo of a dandelion seed head with water droplets, not a blooming yellow dandelion"
+    },
+    {
+      "rank": null,
+      "title": "",
+      "decision": "rejected",
+      "source": null,
+      "download_s": null,
+      "review_s": null,
+      "finished_s": null,
+      "reason": "prefetched image unavailable: TimeoutError"
+    },
+    {
+      "rank": null,
+      "title": "File:Dandelion Close Up (243074873).jpeg",
+      "decision": "rejected",
+      "source": null,
+      "download_s": null,
+      "review_s": null,
+      "finished_s": null,
+      "reason": "image review cancelled or budget exhausted"
+    }
+  ],
+  "ships_image": false
+}

@@ -1,0 +1,143 @@
+{
+ "job": "s1",
+ "kind": "page",
+ "page": "p1",
+ "title": "Romarriket",
+ "model": "gemini-4-hydrogen",
+ "api": "chat",
+ "reasoning": "low",
+ "pane": [
+  370,
+  610
+ ],
+ "provider": "google",
+ "failover": false,
+ "hedged": false,
+ "ttft_s": 0.0,
+ "model_s": 1.5,
+ "render_s": 1.17,
+ "look_s": 1.75,
+ "retry_s": 0.0,
+ "total_s": 7.87,
+ "issues": [],
+ "residual_lint": [],
+ "repair": {
+  "look": true,
+  "look_fix": false,
+  "retry": false,
+  "retry_applied": false,
+  "notes": []
+ },
+ "reveal": "show",
+ "image_s": 3.44,
+ "image_reviews": [
+  {
+   "title": "File:Roman empire at its greatest extent.JPG",
+   "source": "https://commons.wikimedia.org/wiki/File:Roman_empire_at_its_greatest_extent.JPG",
+   "decision": "accepted",
+   "reason": "Tydlig historisk karta som visar Romarrikets största utbredning runt Medelhavet, lämplig för årskurs 6.",
+   "image_source": "commons",
+   "query": "Roman Empire greatest extent historical map",
+   "latency_s": 0.08,
+   "rank": 0,
+   "start_s": 0.0,
+   "download_s": 0.17,
+   "review_s": 3.64,
+   "finished_s": 3.82,
+   "sha256": "10729c4b7cfb167e4f4cd0d3f682b68b42d98c84e1688064d84a2bba74595df2",
+   "bytes": 207967
+  },
+  {
+   "title": "File:Map of the Roman Empire in its greatest extent. (with) Ancient Greece. (By S. Augustus Mitchell. 1880) (IA dr map-of-the-roman-empire-in-its-greatest-extent-with-ancient-greece-by-0586072).jpg",
+   "source": "https://commons.wikimedia.org/wiki/File:Map_of_the_Roman_Empire_in_its_greatest_extent._(with)_Ancient_Greece._(By_S._Augustus_Mitchell._1880)_(IA_dr_map-of-the-roman-empire-in-its-greatest-extent-with-ancient-greece-by-0586072).jpg",
+   "decision": "rejected",
+   "reason": "image review cancelled: a better-ranked candidate was accepted",
+   "image_source": "commons",
+   "query": "Roman Empire greatest extent historical map",
+   "latency_s": 0.08,
+   "rank": 1,
+   "start_s": 0.0,
+   "download_s": 0.2,
+   "review_s": 0.0,
+   "finished_s": 3.82,
+   "sha256": "df7c6c4c1cc601a2d784cd8de5025ca2a125bd6bdbde5eb149b8af1123960d2c",
+   "bytes": 302444
+  },
+  {
+   "title": "File:Map of the Roman Empire in its greatest extent. (with) Ancient Greece. Copyright by S. Augustus Mitchell 1884. (IA dr map-of-the-roman-empire-in-its-greatest-extent-with-ancient-greece-copy-0592072).jpg",
+   "source": "https://commons.wikimedia.org/wiki/File:Map_of_the_Roman_Empire_in_its_greatest_extent._(with)_Ancient_Greece._Copyright_by_S._Augustus_Mitchell_1884._(IA_dr_map-of-the-roman-empire-in-its-greatest-extent-with-ancient-greece-copy-0592072).jpg",
+   "decision": "rejected",
+   "reason": "image review cancelled: a better-ranked candidate was accepted",
+   "image_source": "commons",
+   "query": "Roman Empire greatest extent historical map",
+   "latency_s": 0.08,
+   "rank": 2,
+   "start_s": 0.0,
+   "download_s": 0.16,
+   "review_s": 0.0,
+   "finished_s": 3.82,
+   "sha256": "136c848765dd87e63a5fb0bad0d912fc7459d36c1d493506c1b27a993659cb36",
+   "bytes": 256408
+  }
+ ],
+ "images": {
+  "strategy": "commons+parallel",
+  "seconds": 3.44,
+  "review_concurrency": 3,
+  "parallel": {
+   "available": true,
+   "reason": "",
+   "retry_in_s": 0.0
+  },
+  "reviews": [
+   {
+    "title": "File:Roman empire at its greatest extent.JPG",
+    "source": "https://commons.wikimedia.org/wiki/File:Roman_empire_at_its_greatest_extent.JPG",
+    "decision": "accepted",
+    "reason": "Tydlig historisk karta som visar Romarrikets största utbredning runt Medelhavet, lämplig för årskurs 6.",
+    "image_source": "commons",
+    "query": "Roman Empire greatest extent historical map",
+    "latency_s": 0.08,
+    "rank": 0,
+    "start_s": 0.0,
+    "download_s": 0.17,
+    "review_s": 3.64,
+    "finished_s": 3.82,
+    "sha256": "10729c4b7cfb167e4f4cd0d3f682b68b42d98c84e1688064d84a2bba74595df2",
+    "bytes": 207967
+   },
+   {
+    "title": "File:Map of the Roman Empire in its greatest extent. (with) Ancient Greece. (By S. Augustus Mitchell. 1880) (IA dr map-of-the-roman-empire-in-its-greatest-extent-with-ancient-greece-by-0586072).jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:Map_of_the_Roman_Empire_in_its_greatest_extent._(with)_Ancient_Greece._(By_S._Augustus_Mitchell._1880)_(IA_dr_map-of-the-roman-empire-in-its-greatest-extent-with-ancient-greece-by-0586072).jpg",
+    "decision": "rejected",
+    "reason": "image review cancelled: a better-ranked candidate was accepted",
+    "image_source": "commons",
+    "query": "Roman Empire greatest extent historical map",
+    "latency_s": 0.08,
+    "rank": 1,
+    "start_s": 0.0,
+    "download_s": 0.2,
+    "review_s": 0.0,
+    "finished_s": 3.82,
+    "sha256": "df7c6c4c1cc601a2d784cd8de5025ca2a125bd6bdbde5eb149b8af1123960d2c",
+    "bytes": 302444
+   },
+   {
+    "title": "File:Map of the Roman Empire in its greatest extent. (with) Ancient Greece. Copyright by S. Augustus Mitchell 1884. (IA dr map-of-the-roman-empire-in-its-greatest-extent-with-ancient-greece-copy-0592072).jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:Map_of_the_Roman_Empire_in_its_greatest_extent._(with)_Ancient_Greece._Copyright_by_S._Augustus_Mitchell_1884._(IA_dr_map-of-the-roman-empire-in-its-greatest-extent-with-ancient-greece-copy-0592072).jpg",
+    "decision": "rejected",
+    "reason": "image review cancelled: a better-ranked candidate was accepted",
+    "image_source": "commons",
+    "query": "Roman Empire greatest extent historical map",
+    "latency_s": 0.08,
+    "rank": 2,
+    "start_s": 0.0,
+    "download_s": 0.16,
+    "review_s": 0.0,
+    "finished_s": 3.82,
+    "sha256": "136c848765dd87e63a5fb0bad0d912fc7459d36c1d493506c1b27a993659cb36",
+    "bytes": 256408
+   }
+  ]
+ }
+}

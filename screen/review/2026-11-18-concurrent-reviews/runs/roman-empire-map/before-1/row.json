@@ -1,0 +1,33 @@
+{
+  "ask": "roman-empire-map",
+  "label": "before",
+  "run": 1,
+  "wall_s": 8.04,
+  "failures": [],
+  "total_s": 8.03,
+  "issues": [],
+  "strategy": "commons+parallel",
+  "image_s": 3.19,
+  "review_concurrency": null,
+  "reviews": 1,
+  "accepted": {
+    "image_source": "commons",
+    "title": "File:Roman empire at its greatest extent.JPG",
+    "rank": null,
+    "served": "https://commons.wikimedia.org/wiki/File:Roman_empire_at_its_greatest_extent.JPG",
+    "reason": "En tydlig och historisk karta som visar Romarrikets största utbredning runt Medelhavet, vilket passar utmärkt för frågan och årskurs 6."
+  },
+  "candidates": [
+    {
+      "rank": null,
+      "title": "File:Roman empire at its greatest extent.JPG",
+      "decision": "accepted",
+      "source": "commons",
+      "download_s": null,
+      "review_s": null,
+      "finished_s": null,
+      "reason": "En tydlig och historisk karta som visar Romarrikets största utbredning runt Medelhavet, vilket passar utmärkt för frågan"
+    }
+  ],
+  "ships_image": true
+}
