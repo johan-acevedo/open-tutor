@@ -1,5 +1,7 @@
 # Teaching iteration: judgement, not more rules
 
+> Note (2026-11-18): `teaching_probe.py` was removed with the old board path; it tested the pre-Smart-Screen tutor.
+
 > **Historical (2026-11-18).** This record predates the Smart Screen becoming the only
 > mode and the removal of the legacy card board. Its prompt wording and board
 > references describe the retired path; the current state is in
