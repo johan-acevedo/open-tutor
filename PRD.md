@@ -1,6 +1,6 @@
 # Open Tutor: product requirements (first draft)
 
-Status: draft, 2026-11-03. Intent comes from the founding brief in [README.md](README.md). This document describes what a child should experience; technical design is separate work.
+Status: draft, 2026-11-03; age bands added 2026-11-18. Intent comes from the founding brief in [README.md](README.md). This document describes what a learner should experience; technical design is separate work. "Child" below covers every band; gymnasiet students and adults (band 3) are in scope since 2026-11-18.
 
 **Agreed** marks what the brief or Johan has stated. **Default** marks a proposal we build unless someone objects, and change after real sessions. Open decisions are in section 5.
 
@@ -10,10 +10,17 @@ Johan's children (9–15, Sweden) can open a browser page on a school Chromebook
 
 Success: they find it helpful, understand something new, and come back on their own.
 
+Since 2026-11-18 the same codebase also serves högstadiet (`tutor2.*`, åk 7–9)
+and gymnasiet plus adults (`tutor3.*`): one band per host, picked by the
+request host, deciding the look (companion, theme, copy). The band never
+switches mid-session or on later visits; unknown hosts default to band 1
+(åk 1–6). Companion art and themes for bands 2 and 3 are still placeholders
+(the fox, with distinct theme tokens); see `design/bands/README.md`.
+
 ## 2. First learner journey
 
-1. The child opens the URL. No install, no login.
-2. They pick their name from the people saved in this browser, or tap "Ny här?" and enter a first name and school year (årskurs).
+1. The child opens the URL. No install, no login, no access code.
+2. First visit: the page asks only for a first name ("Vad heter du?"). No profile grid, no grade picker. The next visit assumes the same student: "Hej <name>!" with one Starta button. "Byt elev" (switch/add student) lives behind the hamburger menu. Profiles stay in browser storage.
 3. One tap starts the session and grants microphone access. This is the only setup step.
 4. A large tutor character fills the page and **speaks first**: a greeting, a mention of last time if there was one, and an invitation to share what they're working on.
 5. The child talks, types, drops a file or photo, or pastes a screenshot or text. The homework appears on the board where both can see it.
@@ -27,8 +34,10 @@ Success: they find it helpful, understand something new, and come back on their 
 
 - Agreed: no accounts, no registration. Profiles live in browser-local storage. Siblings on one browser each have their own profile. Clearing browser data loses them.
 - Agreed: a new child can start immediately.
-- Default: a profile holds a first name, a school year, and the tutor's notes on past sessions. No PIN between siblings.
-- Default: the school year sets the tutor's register. A 15-year-old is spoken to like a young adult; a 9-year-old gets simpler language and smaller steps.
+- Default: a profile holds a first name, a school year (null until known), and the tutor's notes on past sessions. No PIN between siblings.
+- Default: the school year sets the tutor's register. A 15-year-old is spoken to like a young adult; a 9-year-old gets simpler language and smaller steps. An unknown school year defaults to the band until the tutor learns it (åk 1–6 / högstadiet / gymnasiet-or-adult).
+- Agreed (2026-11-18): if the grade is unknown, the tutor finds it out naturally early in the first call — never as a form; inferring it from shared homework counts — and stores it with the `set_learner_grade` tool, so the browser profile and later calls start with it. On band 3 the tutor finds out naturally whether the learner is a gymnasiet student (and which year) or an adult; only adults skip the grade, and the tutor asks what they are working on.
+- Agreed (2026-11-18): if someone else takes over ("this is Leo now"), the tutor confirms, asks the name when it is new, then switches via the `switch_student` tool: the current lesson ends like Avsluta (its note saved for the current student), and the start page then shows the other student's name with one Starta button. Their own notes load when their lesson starts.
 
 ### 3.2 Live call and presence
 
@@ -85,7 +94,7 @@ Success: they find it helpful, understand something new, and come back on their 
 
 ### 3.10 Character
 
-- Agreed: one original character, large and welcoming on arrival. Inspired by the children's interests (Minecraft, Fortnite, Roblox, Naruto, One Piece, Among Us, Geometry Dash) without copying any of them. It must work for both a 9-year-old and a 15-year-old.
+- Agreed: one original character per band (several companions are in scope since 2026-11-18), large and welcoming on arrival. Band 1's is inspired by the children's interests (Minecraft, Fortnite, Roblox, Naruto, One Piece, Among Us, Geometry Dash) without copying any of them. It must work for both a 9-year-old and a 15-year-old.
 - Agreed for the second mockup pass: retain the blue game-inspired companion, remove its wings, and have it face the learner or look inward toward the board. It must never look out of the screen. Keep its appeal across ages open to feedback from the children.
 
 ### 3.11 Hosting and providers
@@ -94,7 +103,9 @@ Success: they find it helpful, understand something new, and come back on their 
 
 ## 4. Out of scope for the first release
 
-Accounts, cross-device sync, parent dashboards or parent instructions, billing, resource ratings or approval, child editing of the board, curriculum integrations, multiple tutor personalities, screen or camera watching, English and Spanish teaching, and polished onboarding or marketing pages.
+Accounts, cross-device sync, parent dashboards or parent instructions, billing, resource ratings or approval, child editing of the board, curriculum integrations, screen or camera watching, English and Spanish teaching, and polished onboarding or marketing pages.
+
+In scope since 2026-11-18 (contrary to earlier drafts): adults as learners, and one companion per age band.
 
 ## 5. Open decisions
 
@@ -107,7 +118,7 @@ Settled 2026-11-03: the child writes long work (book review, essay) where school
 
 Before a child uses it unsupervised on homework, Johan should be able to check each item on a school Chromebook and on the Windows PC:
 
-- From opening the URL to hearing the tutor greet takes no more than about 15 seconds and one tap after choosing a profile.
+- From opening the URL to hearing the tutor greet takes no more than about 15 seconds and one tap after the name (returning: one tap on "Hej <name>, starta").
 - Saying "vänta" mid-sentence stops the tutor promptly.
 - A 30-second silence while the child calculates does not make the tutor speak, unless it says one short, useful thing.
 - A pasted screenshot, a dropped PDF and a phone photo of a handwritten maths test each appear on the board, and the tutor describes them correctly.
@@ -128,7 +139,7 @@ Raster mockups to generate after clarification, one image per state.
 
 | # | View / state | What it must show | Suggested Swedish copy |
 |---|---|---|---|
-| 1 | Profile picker | Sibling cards, "new" card, start button that grants the mic | "Vem pluggar idag?" · "Elsa, åk 4" · "Leo, åk 8" · "Ny här?" · "Starta" |
+| 1 | Name-only start | First-name field, start button that grants the mic; returning visit: "Hej <name>, starta"; switch/add behind the menu | "Vad heter du?" · "Hej Leo, starta" · "Byt elev" · "Starta" |
 | 2 | Greeting | Large character speaking, empty board hint, caption, bottom bar | "Hej Leo! Förra gången körde vi ekvationer. Vad har du med dig idag?" · "Släpp en fil eller klistra in (Ctrl+V)" |
 | 3 | Homework arrives | Photo of a handwritten maths test pinned on the board, character confirming | "Jag ser uppgift 3 och 4. Ska vi börja med 3?" |
 | 4 | Visual teaching: maths | Board main, character in side panel speaking, equation steps with one step highlighted, "Ritar…" placeholder | "3x + 5 = 20 → 3x = 15 → x = 5" · "Vi tar bort 5 på båda sidor." |

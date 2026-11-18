@@ -53,6 +53,12 @@ from .speech import speakable_stream, unspoken_stream
 log = logging.getLogger("open-tutor")
 
 BOARD_RPC_TIMEOUT = 6.0
+# Worker → browser RPCs for the learner tools (set_learner_grade, switch_student).
+# Acknowledged request/response: the tool returns only after the browser answers,
+# so a failed call leaves the call exactly as it was. See docs/protocol.md.
+LEARNER_RPC_TIMEOUT = 6.0
+LEARNER_RPC_SET_GRADE = "learner.setGrade"
+LEARNER_RPC_SWITCH = "learner.switch"
 HOMEWORK_SETTLE = 1.2  # seconds to wait for more PDF pages before responding
 # Per LLM attempt. The default (10 s, three retries) is what made a slow provider keep a
 # child waiting about 50 s for a greeting on 2026-11-14. One retry, then the failover in
@@ -171,6 +177,9 @@ class Tutor(Agent):
         self.mode = "talking"
         self.notes_saved = 0
         self._http: aiohttp.ClientSession | None = None
+        # Set by the entrypoint: switch_student ends this lesson through it,
+        # exactly like the browser's Avsluta event does.
+        self.end_event: asyncio.Event | None = None
 
     # ---- board -----------------------------------------------------------------
 
@@ -350,6 +359,94 @@ class Tutor(Agent):
             next_step: What to try next time.
         """
         return await self.send_note(topic, clicked, tricky, next_step)
+
+    async def _learner_rpc(self, method: str, payload: dict[str, Any]) -> dict[str, Any] | None:
+        """One acknowledged learner RPC to the browser; None when unanswered.
+
+        The browser owns the profiles: it resolves the target in its serialized
+        queue and answers, or rejects (stale target, unknown name). A failure
+        leaves this call exactly as it was."""
+        if not self.child_identity:
+            return None
+        try:
+            reply = await self.room.local_participant.perform_rpc(
+                destination_identity=self.child_identity,
+                method=method,
+                payload=json.dumps(payload, ensure_ascii=False),
+                response_timeout=LEARNER_RPC_TIMEOUT,
+            )
+            data = json.loads(reply or "{}")
+        except Exception as error:  # timeout, child left, or RPC rejection
+            log.warning("learner rpc %s failed: %s", method, error)
+            record_active("learner_rpc", {"method": method, "ok": False,
+                                              "error": f"{type(error).__name__}"})
+            return None
+        if not isinstance(data, dict) or data.get("ok") is not True:
+            record_active("learner_rpc", {"method": method, "ok": False})
+            return None
+        record_active("learner_rpc", {"method": method, "ok": True})
+        return data
+
+    @function_tool()
+    async def set_learner_grade(self, context: RunContext, grade: int) -> str:
+        """Save the school year you just learned, so later calls start with it.
+
+        Call it once, when the grade first becomes clear early in the call
+        (asked naturally, or inferred from shared homework) — never at the
+        greeting and never for adults (band 3). The browser applies it only
+        when the profile is still this call's; the grade here updates only on
+        acknowledgement.
+
+        Args:
+            grade: School year 1-9 (grundskolan) or 10-12 (gymnasiet year 1-3).
+        """
+        try:
+            g = int(grade)
+        except (TypeError, ValueError):
+            return f"'{grade}' is not a school year. Use 1-12, or leave it unknown."
+        if not 1 <= g <= 12:
+            return f"'{grade}' is not a school year. Use 1-12, or leave it unknown."
+        data = await self._learner_rpc(LEARNER_RPC_SET_GRADE,
+                                       {"profileId": self.learner.get("id"), "grade": g})
+        if data is None:
+            return ("The browser could not store the school year, so nothing is saved. "
+                    "Carry on with the lesson as before and mention nothing.")
+        self.learner["grade"] = g
+        record_active("grade", {"grade": g})
+        return (f"Saved: the learner is in årskurs {g}. "
+                "Keep this call's register as it is; later calls start with it.")
+
+    @function_tool()
+    async def switch_student(self, context: RunContext, name: str) -> str:
+        """End this lesson; the next one starts with a different student.
+
+        Only after confirming with them (and asking the name when it is new).
+        The browser resolves or creates their profile and acknowledges with its
+        id; this lesson then ends exactly like Avsluta (the note is saved, you
+        say goodbye) and the start page opens prefilled for the new student —
+        no automatic reconnect, no continuation session. A failed call leaves
+        you with this student: say so briefly and carry on.
+
+        Args:
+            name: The new student's first name.
+        """
+        clean = (name or "").strip()[:40]
+        if not clean:
+            return "No name given. Ask who is there now, then call again."
+        data = await self._learner_rpc(LEARNER_RPC_SWITCH, {"name": clean})
+        if data is None:
+            # The ack never arrived, so nothing was armed: carry on as A.
+            current = str(self.learner.get("name") or "").strip() or "this student"
+            record_active("switch_student", {"name": clean, "ok": False})
+            return (f"Stay with {current}: the switch to {clean} did not go through. "
+                    "Say so in one short sentence and carry on with the lesson.")
+        profile = data.get("profile") if isinstance(data.get("profile"), dict) else {}
+        record_active("switch_student", {"name": clean, "profile_id": profile.get("id")})
+        # End A's lesson exactly like Avsluta; the goodbye comes through the
+        # normal end path, and the browser then shows B's start page. Say nothing more.
+        if self.end_event is not None:
+            self.end_event.set()
+        raise StopResponse()
 
     async def send_note(self, topic: str, clicked: str = "", tricky: str = "", next_step: str = "") -> str:
         note = Note(
@@ -870,6 +967,10 @@ async def entrypoint(ctx: JobContext) -> None:
     # while the greeting still runs. The job path keeps its own fallback.
     asyncio.create_task(screen.warmup())
     tutor.child_identity = child.identity
+    # Created here, not next to on_session_event below: switch_student ends
+    # this lesson through it, and the tutor exists before that definition.
+    ending = asyncio.Event()
+    tutor.end_event = ending
     set_active(debug)
 
     # Product analytics (PostHog): one process-wide client, fully off without
@@ -1057,8 +1158,6 @@ async def entrypoint(ctx: JobContext) -> None:
                                            "chars": len(text), "text": text})
         pending.append(([text], description))
         schedule_reply()
-
-    ending = asyncio.Event()
 
     async def on_session_event(reader: rtc.TextStreamReader, identity: str) -> None:
         try:

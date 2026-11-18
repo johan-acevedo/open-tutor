@@ -4,7 +4,7 @@ The browser and the tutor worker share one LiveKit room per session. Audio goes 
 
 ## Session start
 
-1. The browser calls `POST /api/session` with `{ "learner": { "name": "Leo", "grade": 8, "notes": [Note, …] } }`. It sends at most the five newest notes.
+1. The browser calls `POST /api/session` with `{ "learner": { "name": "Leo", "grade": 8, "notes": [Note, …], "band": "middle" } }`. It sends at most the five newest notes. `grade` is `null` when the tutor has not learned it yet; `band` (`primary` | `middle` | `upper`) is the age band for the page load, picked by the request host.
 2. The web service creates a room `tutor-<random>`, dispatches the `open-tutor` agent into it, and returns `{ "url", "token", "room" }`. The learner JSON becomes the participant's metadata, so it travels with the token.
 3. The browser connects, publishes the microphone, and waits. The tutor speaks first.
 
@@ -15,7 +15,7 @@ The browser and the tutor worker share one LiveKit room per session. Audio goes 
 | Text stream | `lk.chat` | What the child typed. The agent treats it like speech. |
 | Byte stream | `homework` | One image (PNG/JPEG/WebP) per stream. Attributes: `kind` = `photo` \| `screenshot` \| `pdf-page`, `source` = original file name, `page` = page number (PDF only), `pages` = total pages, `itemId` = the board id the browser already gave it. |
 | Text stream | `homework-text` | Pasted text. Attributes: `itemId`. |
-| Text stream | `session-event` | JSON `{ "type": "end" }` when Avsluta is pressed, `{ "type": "resource-closed", "id" }`, `{ "type": "board-size", "w", "h", "device" }` (visible `.ot-board-scroll` content-box size, ResizeObserver; debounced, on change), `{ "type": "quiet", "on": true }` (reserved). |
+| Text stream | `session-event` | JSON `{ "type": "end" }` when Avsluta is pressed (or the menu leave flow starts), `{ "type": "resource-closed", "id" }`, `{ "type": "board-size", "w", "h", "device" }` (visible `.ot-board-scroll` content-box size, ResizeObserver; debounced, on change), `{ "type": "quiet", "on": true }` (reserved). |
 
 The browser shows homework on the board itself as soon as the child adds it (kind `homework`), then sends it. The tutor never re-sends homework images.
 
@@ -31,6 +31,8 @@ The browser shows homework on the board itself as soon as the child adds it (kin
 | RPC to browser | `board.point` | `{ "id", "part" }` highlights one part of that page. Responds `{ "ok": true }`. |
 | RPC to browser | `board.loading` | `{ "id", "topic" }` dims that page and shows "Laddar <topic>…" at once while the next page is prepared; an empty topic clears it. A successful patch clears it too. Responds `{ "ok": true }`. |
 | Text stream | `note` | JSON `Note`. The browser saves it to the current profile in IndexedDB. |
+| RPC to browser | `learner.setGrade` | `{ "profileId", "grade" }`, from the tutor's `set_learner_grade` tool. Acknowledged request/response: the browser applies the grade only when `profileId` is still the active profile (all writes run through one serialized queue; stale targets are rejected with an error), replies `{ "ok": true, "grade" }`, and the tool updates the call only on acknowledgement. A failed call leaves the lesson exactly as it was. |
+| RPC to browser | `learner.switch` | `{ "name" }`, from the tutor's `switch_student` tool. The browser resolves or creates that student's profile (serialized; one profile per name), arms a post-lesson prefill, and replies `{ "ok": true, "profile": { "id", "name", "grade" } }`. The tool then ends this lesson exactly like Avsluta (the note is saved, the tutor says goodbye); afterwards the browser shows the start page prefilled for the new student — no automatic reconnect, no continuation session, and the hourly session cap simply counts B's session as a new one. A failed call (or rejection) never arms anything: the tool says so briefly and carries on. |
 | Text stream | `lk.transcription` | Built-in agent captions, streamed in step with the audio. The browser shows the sentence being spoken. |
 | Participant attribute | `lk.agent.state` | Built-in: `initializing`, `listening`, `thinking`, `speaking`. |
 | Participant attribute | `tutor.mode` | `talking` \| `quiet` \| `resource` \| `ending`. Quiet means the child is working; the avatar waits. |

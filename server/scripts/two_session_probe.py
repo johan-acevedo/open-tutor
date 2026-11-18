@@ -42,7 +42,6 @@ async def run_session(index: int, notes: list[dict], log) -> dict:
     client = TestClient(create_app())
     response = client.post(
         "/api/session",
-        headers={"x-tutor-code": os.environ.get("TUTOR_ACCESS_CODE", "")},
         json={"learner": {"name": "Leo", "grade": 7, "notes": notes}},
     )
     response.raise_for_status()

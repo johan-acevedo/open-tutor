@@ -91,7 +91,7 @@ The worker logs the route at the start of each session (`tutor TTS route elevenl
 | `TUTOR_LLM_MODEL`, `TUTOR_LLM_BASE_URL`, `TUTOR_LLM_REASONING` | Override the route's model, endpoint or reasoning effort (Go default `minimal`) |
 | `TUTOR_AGENT_NAME` | Dispatch name, default `open-tutor`. Give a test worker and its web service another name so it never takes a family session |
 | `EXA_API_KEY` | Resource search |
-| `TUTOR_ACCESS_CODE` | Optional family code. When set, the page asks for it once per browser |
+| `TUTOR_BAND` | Testing override for the age band (`primary` | `middle` | `upper`). Advertised via `/api/config`; applies only when the page names no band (no `?band=`, nothing remembered). Empty (default): the request host picks the band |
 | `TUTOR_ALLOWED_COUNTRIES` | Optional comma-separated Cloudflare country codes, e.g. `SE`. Missing/disallowed country headers get 403; `/api/health` remains accessible |
 | `TUTOR_MAX_SESSIONS_PER_HOUR` | Owner spending cap across the instance (default 12) |
 | `TUTOR_CLOUD_RECORDING` | `1` uploads session audio and transcripts to LiveKit Cloud observability. Off by default |
@@ -111,12 +111,19 @@ The worker logs the route at the start of each session (`tutor TTS route elevenl
 | `SCREEN_IMAGE_REVIEWS` | Default `3`, at most `6`. How many of a slot's image candidates are downloaded and vision-reviewed at once, and the ceiling on reviews in flight for the whole page (several slots resolve concurrently). `1` reviews them one after another, as before 2026-11-18. Each slot's best-ranked review keeps the hedge; the rest are single attempts, so N candidates cost at most N+1 provider calls per source list. See [concurrent candidate reviews](../docs/smart-screen.md) |
 | `SCREEN_IMAGES` | Smart Screen image source: `commons` (default, today's behaviour: Wikimedia Commons only), `commons+parallel` (search both at once via the Parallel Images API in fast mode; review Commons first, take the first candidate the vision review accepts), or `parallel` (Parallel only). Needs `PARALLEL_API_KEY` (Infisical); without it, or while Parallel cools down after credit/auth errors (10 min) or transient failures (1 min), the job falls back to Commons-only silently. Per-image records (source, query, latency, verdict) land in meta.json `images`/`image_reviews`; Parallel ships with a `Källa: <site>` credit, and the existing vision review of the actual picture stays the gate. An accepted Parallel picture is stored under the session (`<session>/images/`, content-addressed `<sha256>.<ext>`) and served by the web app at `/api/images/<sha256>.<ext>` (immutable cache, nosniff); unknown hashes answer 404 |
 
-### Password-free Sweden testing
+### Open Sweden testing (no access code)
 
-For the hosted demo, `TUTOR_ALLOWED_COUNTRIES=SE` and an empty `TUTOR_ACCESS_CODE`
-allow Swedish visitors without a password. Country checks cover the page, assets
+The public instance asks for no code: `TUTOR_ALLOWED_COUNTRIES=SE` admits
+Swedish visitors directly (2026-11-18 the family-code gate was removed from
+both the page and the web service; other hosts needing a gate should put it
+in a reverse proxy). Country checks cover the page, assets
 and session creation. The session-start cap still applies. IP geolocation is
 approximate and VPNs affect it.
+
+The `CF-IPCountry` header is forgeable by anyone who can reach the origin
+directly, so this check is only as strong as the ingress: keep the web service
+reachable solely through the Cloudflare tunnel (production binds a tailnet
+address) and never expose the origin itself.
 
 This restriction trusts Cloudflare's `CF-IPCountry` header. Enable Cloudflare IP
 Geolocation and keep the origin private behind its tunnel; a publicly reachable

@@ -7,10 +7,9 @@
 // Privacy: events carry small fixed scalar properties only (rooms, grades,
 // counts, outcomes). Conversation text, typed text, homework content and
 // images NEVER reach this module — the helpers take no free-text arguments.
-// The family access code NEVER reaches PostHog either: the ?kod= parameter is
-// stripped from the URL at startup (see consumeFamilyCodeFromUrl, called from
-// main.tsx before init) and the before_send hook below scrubs it from every
-// URL-like property as a second layer.
+// There is no access code any more (the public instance is open); the
+// before_send hook below still scrubs ?kod= from URL-like properties so an
+// old coded link never leaks into analytics.
 
 export type HomeworkKind = 'image' | 'pdf' | 'text';
 
@@ -242,10 +241,6 @@ export function pageOpened(): void {
   if (pageOpenedSent) return;
   pageOpenedSent = true;
   track('page_opened');
-}
-
-export function accessCodeResult(ok: boolean): void {
-  track('access_code_result', { ok });
 }
 
 export function micPermission(granted: boolean): void {

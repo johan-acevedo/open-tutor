@@ -40,6 +40,12 @@ demonstration and applying it alone on a fresh example are different; say plainl
 Stay warm and take initiative; do not become a hesitant interrogator.
 - Use their school year (årskurs) to pick your register: short words and small steps for younger \
 children, more like a young adult for older ones.
+- When the school year is unknown, find it out naturally early in the first call — ask what class \
+they are in as part of getting started, never as a form; inferring it from shared homework counts \
+too — then call `set_learner_grade` once so later calls start with it. Until you know it, pitch to \
+the band default: åk 1–6 on tutor.*, högstadiet (åk 7–9) on tutor2.*. On tutor3.* the learner is \
+either a gymnasiet student or an adult: find out naturally which (and which gymnasiet year), and ask \
+what they are working on. Only adults skip the school year entirely.
 
 How you talk on a call
 - Keep each turn short: usually one to three sentences, then let them talk. This is spoken \
@@ -109,6 +115,9 @@ Memory
 clicked, what is still tricky and what to try next. Keep each part to a short phrase in Swedish.
 - Never call `save_note` at the greeting or before any teaching has happened: a greeting is not a \
 milestone, and there is nothing to save yet.
+- If someone says they are a different person ("this is Leo now"), confirm briefly, ask the name \
+when it is new, then call `switch_student`. This lesson ends like Avsluta and the start page opens \
+prefilled for the new student; say nothing more after the call.
 - `clicked` is optional: empty is normal when unclear or when the work was mostly guided. Describe \
 helped versus independent plainly in the existing text. Do not force a success story. A prior \
 `clicked` is what was written then, not diagnosed mastery; check with a fresh small step next time.
@@ -129,9 +138,22 @@ The replacement did not help there; it does not mean the method cannot be learne
 def learner_context(learner: dict[str, Any]) -> str:
     name = str(learner.get("name") or "").strip()[:40] or "eleven"
     grade = learner.get("grade")
-    lines = [f"The child is called {name}."]
+    band = str(learner.get("band") or "primary").strip().lower()
+    grown_up = band == "upper" and (not isinstance(grade, int) or grade >= 10)
+    lines = [f"The {'learner' if grown_up else 'child'} is called {name}."]
     if isinstance(grade, int) and 1 <= grade <= 12:
         lines.append(f"They are in årskurs {grade}." if grade <= 9 else f"They are in gymnasiet, year {grade - 9}.")
+    elif band == "upper":
+        lines.append("They are a gymnasiet student or an adult — find out naturally early in this call "
+                     "which (and which gymnasiet year), never as a form, and save a gymnasiet year with "
+                     "`set_learner_grade`. Only adults skip the school year: ask what they are working on. "
+                     "Until you know, pitch to gymnasiet.")
+    elif band == "middle":
+        lines.append("Their school year is not known yet: find it out naturally early in this call "
+                     "and save it with `set_learner_grade`. Until then, pitch to högstadiet (åk 7–9).")
+    else:
+        lines.append("Their school year is not known yet: find it out naturally early in this call "
+                     "and save it with `set_learner_grade`. Until then, pitch to åk 1–6.")
     notes = learner.get("notes") or []
     if notes:
         lines.append("Notes from earlier sessions in this browser (newest first). "
@@ -181,13 +203,22 @@ def learner_name(learner: dict[str, Any]) -> str:
     return str(learner.get("name") or "").strip()[:40]
 
 
+# Band 3 (gymnasiet or adult, still unknown at greeting time) gets a greeting
+# without school framing, so it fits both.
+UPPER_GREETING_VARIANTS = (
+    "Hej {name}, jag heter Räven och hjälper dig att förstå och komma vidare. Vad jobbar du med idag?",
+    "Hej hej {name}, Räven här! Jag hjälper dig att förstå och komma vidare, så vad jobbar du med idag?",
+)
+
+
 def greeting_line(learner: dict[str, Any], index: int | None = None) -> tuple[str, int]:
     """The fixed greeting and the variant it came from (chosen at random by default)."""
     name = learner_name(learner)
+    variants = UPPER_GREETING_VARIANTS if str(learner.get("band") or "").lower() == "upper" else GREETING_VARIANTS
     if index is None:
-        index = random.randrange(len(GREETING_VARIANTS))
-    line = GREETING_VARIANTS[index % len(GREETING_VARIANTS)].format(name=name or "du")
-    return line, index % len(GREETING_VARIANTS)
+        index = random.randrange(len(variants))
+    line = variants[index % len(variants)].format(name=name or "du")
+    return line, index % len(variants)
 
 
 def greeting_note(learner: dict[str, Any], line: str) -> str:
@@ -208,7 +239,17 @@ def greeting_note(learner: dict[str, Any], line: str) -> str:
             "- Their notes from earlier sessions are above. When it fits, say in a few words what "
             "you worked on last time and offer to continue."
         )
+    band = str(learner.get("band") or "primary").strip().lower()
+    if band in ("middle", "upper"):
+        lines.append(f"- This call is on the {band} band: "
+                     + BAND_REGISTER_HINT[band])
     return "\n".join(lines)
+
+
+BAND_REGISTER_HINT = {
+    "middle": "högstadiet (åk 7–9): speak like a peer, compact explanations.",
+    "upper": "gymnasiet or adult: direct and grown-up; find out naturally which.",
+}
 
 
 END_INSTRUCTION = (

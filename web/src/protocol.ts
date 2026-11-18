@@ -36,9 +36,14 @@ export type BoardFocusPayload = {
 };
 
 export type SessionLearner = {
+  /** Browser profile id, so the worker's learner RPCs can name their target. */
+  id?: string;
   name: string;
-  grade: number;
+  /** School year 1-12, or null when the tutor has not learned it yet. */
+  grade: number | null;
   notes: Note[];
+  /** Age band for this page load (primary | middle | upper). */
+  band?: string;
 };
 
 export type SessionRequest = {
@@ -97,6 +102,21 @@ export const TOPIC_HOMEWORK = 'homework';
 export const TOPIC_HOMEWORK_TEXT = 'homework-text';
 export const TOPIC_SESSION_EVENT = 'session-event';
 export const TOPIC_NOTE = 'note';
+/** Worker → browser RPCs for the tutor's learner tools. Acknowledged
+ *  request/response (the tool returns only after the browser answers):
+ *
+ *  - learner.setGrade { profileId, grade }: the browser applies the grade
+ *    only when profileId is still the active profile, else rejects as stale.
+ *    Replies { ok, grade }.
+ *  - learner.switch { name }: the browser resolves or creates that student's
+ *    profile (serialized; one profile per name), arms a post-lesson prefill
+ *    with it, and replies { ok, profile: { id, name, grade } }. The worker then
+ *    ends this lesson exactly like Avsluta; afterwards the browser shows the
+ *    start page prefilled for the new student \u2014 no automatic reconnect, no
+ *    continuation session. A failed call never arms anything.
+ */
+export const LEARNER_RPC_SET_GRADE = 'learner.setGrade';
+export const LEARNER_RPC_SWITCH = 'learner.switch';
 
 export const ATTR_AGENT_STATE = 'lk.agent.state';
 export const ATTR_TUTOR_MODE = 'tutor.mode';

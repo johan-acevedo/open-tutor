@@ -6,7 +6,10 @@ import type { Note } from './protocol';
 export type Profile = {
   id: string;
   name: string;
-  grade: number;
+  /** School year (1-12), or null when not known yet. The tutor learns it
+   *  naturally in the first call via the set_learner_grade tool; adults
+   *  (band 3 adults) are never asked for one. */
+  grade: number | null;
   notes: Note[];
   createdAt: number;
 };
@@ -128,7 +131,7 @@ export async function saveProfile(profile: Profile): Promise<void> {
   }
 }
 
-export async function createProfile(name: string, grade: number): Promise<Profile> {
+export async function createProfile(name: string, grade: number | null = null): Promise<Profile> {
   const profile: Profile = {
     id: newProfileId(),
     name: name.trim(),
@@ -138,6 +141,117 @@ export async function createProfile(name: string, grade: number): Promise<Profil
   };
   await saveProfile(profile);
   return profile;
+}
+
+/** Patch a profile (grade learned mid-call, name fix). Returns the updated profile. */
+export async function updateProfile(profileId: string, patch: { grade?: number | null; name?: string }): Promise<Profile | undefined> {
+  let profile: Profile | undefined;
+  if (idbBroken) {
+    profile = memoryFallback.get(profileId);
+  } else {
+    try {
+      profile = await tx<Profile | undefined>('readonly', (store) => store.get(profileId));
+    } catch {
+      idbBroken = true;
+      profile = memoryFallback.get(profileId);
+    }
+  }
+  if (!profile) return undefined;
+  const updated: Profile = {
+    ...profile,
+    ...(patch.grade !== undefined ? { grade: patch.grade } : {}),
+    ...(patch.name !== undefined ? { name: patch.name.trim() || profile.name } : {}),
+  };
+  await saveProfile(updated);
+  return updated;
+}
+
+/** Find a stored profile by first name (case-insensitive), for in-call switching. */
+export function resolveProfileSwitch(profiles: Profile[], name: string): Profile | undefined {
+  const wanted = name.trim().toLowerCase();
+  if (!wanted) return undefined;
+  return profiles.find((p) => p.name.trim().toLowerCase() === wanted);
+}
+
+const LAST_KEY = 'open-tutor-last-profile';
+
+/** The student the last visit assumed; the next visit starts with them. */
+export function getLastProfileId(): string | null {
+  try {
+    return localStorage.getItem(LAST_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function rememberLastProfileId(id: string): void {
+  try {
+    localStorage.setItem(LAST_KEY, id);
+  } catch {
+    /* storage blocked: next visit just asks the name again */
+  }
+}
+
+export function forgetLastProfileId(): void {
+  try {
+    localStorage.removeItem(LAST_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+// ---- Serialized profile writes -------------------------------------------------
+//
+// Learner RPCs from the worker (learner.setGrade, learner.switch) and the UI share
+// this browser. Every write runs through one queue so concurrent calls cannot
+// interleave: each message carries the profile it targets, and a write whose target
+// is no longer the active profile is dropped as stale. Switching twice to the same
+// new name resolves the same stored profile, so one profile is created.
+
+let profileQueue: Promise<unknown> = Promise.resolve();
+
+function enqueue<T>(job: () => Promise<T>): Promise<T> {
+  const next = profileQueue.then(job, job);
+  profileQueue = next.catch(() => undefined);
+  return next;
+}
+
+/** Find the named profile or create it, atomically within the queue. */
+export function enqueueProfileSwitch(name: string): Promise<Profile> {
+  const wanted = name.trim().slice(0, 40);
+  return enqueue(async () => {
+    const stored = await listProfiles();
+    return resolveProfileSwitch(stored, wanted) ?? createProfile(wanted);
+  });
+}
+
+/** Append a tutor note to one profile by id (never "the current one": the
+ *  caller binds the session's own profile id, so a delayed note from lesson A
+ *  can never land on B). Returns the updated profile, or undefined when the
+ *  profile is gone. */
+export function enqueueNote(profileId: string, note: Note): Promise<Profile | undefined> {
+  return enqueue(async () => {
+    if (!profileId) return undefined;
+    return appendNote(profileId, note);
+  });
+}
+
+/** Apply a tutor-learned grade, but only when the target is still the active
+ *  profile at execution time. `getActiveId` is read inside the queue so a write
+ *  that lost its race with a switch (or arrives after a restart) is dropped as
+ *  stale. Returns the updated profile, or undefined when stale/invalid. */
+export function enqueueProfileGrade(
+  profileId: string, grade: number, getActiveId: () => string | null,
+): Promise<Profile | undefined> {
+  return enqueue(async () => {
+    const activeId = getActiveId();
+    if (!profileId || !activeId || profileId !== activeId) return undefined;
+    if (!Number.isInteger(grade) || grade < 1 || grade > 12) return undefined;
+    const current = await getProfile(activeId);
+    if (!current) return undefined;
+    if (current.grade === grade) return current;
+    return updateProfile(activeId, { grade });
+  });
 }
 
 /** Append a note to a profile, keeping the newest MAX_NOTES. */

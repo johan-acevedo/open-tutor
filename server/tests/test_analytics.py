@@ -78,17 +78,17 @@ def test_posthog_settings_key_and_default_host():
 
 
 def test_config_null_when_unset():
-    assert TestClient(create_app(ENV)).get("/api/config").json() == {"posthog": None}
+    assert TestClient(create_app(ENV)).get("/api/config").json() == {"posthog": None, "band": None}
 
 
 def test_config_returns_key_and_host_when_set():
     client = TestClient(create_app({**ENV, "TUTOR_POSTHOG_KEY": "phc_test"}))
     assert client.get("/api/config").json() == {
-        "posthog": {"key": "phc_test", "host": "https://eu.i.posthog.com"}}
+        "posthog": {"key": "phc_test", "host": "https://eu.i.posthog.com"}, "band": None}
     custom = TestClient(create_app({**ENV, "TUTOR_POSTHOG_KEY": "phc_x",
                                     "TUTOR_POSTHOG_HOST": "https://eu.example"}))
     assert custom.get("/api/config").json() == {
-        "posthog": {"key": "phc_x", "host": "https://eu.example"}}
+        "posthog": {"key": "phc_x", "host": "https://eu.example"}, "band": None}
 
 
 def test_config_passes_through_country_middleware():
