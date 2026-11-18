@@ -50,8 +50,10 @@ served corpora and cached indexes).
 
 - Trunk: `main`. The Smart Screen branch was merged on 2026-11-13 (PR #51); branch from `main`.
 - Production: ThinkCentre (https://tutor.labtopia.dev), `main`, Smart Screen on since
-  2026-11-13. Last deploy 2026-11-16: `429b511` (PRs #69 and #70, tried on dev first),
-  `TUTOR_INTERRUPT_MIN_S=1.6`. It is a public test: deploy only with Johan's go, and never
+  2026-11-13 (the only mode since PR #73). Last deploy 2026-11-18: `7390659` (PRs #58, #72,
+  #73; Parallel image search tried on dev first), `SCREEN_IMAGES=commons+parallel` and
+  `PARALLEL_API_KEY` added to the env file, `TUTOR_INTERRUPT_MIN_S=1.6`. Rollback commit
+  `0705f22`, env backup `env.bak-20261118-before-parallel`. It is a public test: deploy only with Johan's go, and never
   restart during a call. `deploy/install.sh` over ssh reports a failed health check because
   it probes 127.0.0.1 while the service binds the tailnet address; check that address instead.
 - Development: dell5500, services `open-tutor-smart-dev-agent` and `-web`, run from a checkout
@@ -1104,3 +1106,9 @@ Sources, inspected phone/wide renders, timings and limits:
 - Which model and reasoning level the screen runs on (measure with the examples in place).
 - Image generation: whether, and with what.
 - How the tutor is told a page is ready without interrupting its own sentence.
+
+### Materials preview removed from elitebook (2026-11-18)
+
+After PR #73, the materials preview services (`open-tutor-materials-web`/`-agent`), their env
+file, the preview and ML virtualenvs, the Siyavula EPUBs and indexes (2.2 GB), the package cache,
+and the Tailscale Serve entries (port 9443 and `/open-tutor-materials/`) were removed from elitebook.
