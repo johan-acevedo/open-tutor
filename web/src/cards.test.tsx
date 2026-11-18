@@ -8,69 +8,35 @@ afterEach(() => cleanup());
 
 const noop = vi.fn();
 
-function htmlItem(height?: number, width?: number): BoardItem {
-  return {
-    id: 'b1',
-    kind: 'html',
-    title: 'Linjen y=kx+m',
-    html: '<!doctype html><html><head></head><body><h1>Linjär ekvation</h1></body></html>',
-    ...(height === undefined ? {} : { height }),
-    ...(width === undefined ? {} : { width }),
-  };
-}
-
-describe('HtmlCard generated-board surface', () => {
-  it('renders no outer headline, padding frame or card chrome', () => {
-    const { container } = render(<BoardCard item={htmlItem(800)} onMounted={noop} />);
-    const article = container.querySelector('article[data-board-id="b1"]');
-    expect(article).toBeTruthy();
-    expect(article?.classList.contains('ot-bcard-html')).toBe(true);
-    expect(article?.querySelector('h2')).toBeNull();
+describe('BoardCard surfaces', () => {
+  it('renders homework as a paper card with its title and text', () => {
+    const item: BoardItem = { id: 'h1', kind: 'homework', title: 'matte.jpg', text: 'Uppgift 3' };
+    const { container } = render(<BoardCard item={item} onMounted={noop} />);
+    expect(container.querySelector('h3')?.textContent).toBe('matte.jpg');
+    expect(container.querySelector('.ot-paper p')?.textContent).toBe('Uppgift 3');
   });
 
-  it('keeps the title accessible on the article and the frame', () => {
-    const { container } = render(<BoardCard item={htmlItem(800)} onMounted={noop} />);
-    const article = container.querySelector('article[data-board-id="b1"]');
-    expect(article?.getAttribute('aria-label')).toBe('Linjen y=kx+m');
-    const frame = container.querySelector('iframe.ot-html-frame') as HTMLIFrameElement | null;
-    expect(frame?.title).toBe('Linjen y=kx+m');
+  it('renders an image card with its alt text', () => {
+    const item: BoardItem = { id: 'i1', kind: 'image', url: 'https://x/y.png', alt: 'En bild' };
+    const { container } = render(<BoardCard item={item} onMounted={noop} />);
+    expect(container.querySelector('img')?.getAttribute('alt')).toBe('En bild');
   });
 
-  it('sizes the frame to the commissioned pane height', () => {
-    const { container } = render(<BoardCard item={htmlItem(800)} onMounted={noop} />);
-    const frame = container.querySelector('iframe.ot-html-frame') as HTMLIFrameElement | null;
-    expect(frame?.style.height).toBe('800px');
-  });
-
-  it('keeps the commissioned design box for the fit wrapper', () => {
-    const { container } = render(<BoardCard item={htmlItem(800, 1280)} onMounted={noop} />);
-    const fit = container.querySelector('.ot-html-fit') as HTMLElement | null;
-    expect(fit?.dataset.designW).toBe('1280');
-    expect(fit?.dataset.designH).toBe('800');
-    const frame = container.querySelector('iframe.ot-html-frame') as HTMLIFrameElement | null;
-    expect(frame?.style.width).toBe('1280px');
-    expect(frame?.style.height).toBe('800px');
-  });
-
-  it('scales the frame with transform so clicks still land after shrinking', () => {
-    const { container } = render(<BoardCard item={htmlItem(800, 1280)} onMounted={noop} />);
-    const frame = container.querySelector('iframe.ot-html-frame') as HTMLIFrameElement | null;
-    expect(frame?.style.transformOrigin).toBe('top left');
-    expect(frame?.style.transform).toMatch(/^scale\(/);
-    // Legacy items without width keep fluid-width behaviour (height fit only).
-    const { container: legacy } = render(<BoardCard item={htmlItem(800)} onMounted={noop} />);
-    expect(legacy.querySelector('.ot-html-fit')).toBeNull();
-    expect(legacy.querySelector('iframe.ot-html-frame')).toBeTruthy();
-  });
-
-  it('serves the board with the library CSP (CDN styles, fonts, images)', () => {
-    const { container } = render(<BoardCard item={htmlItem(800)} onMounted={noop} />);
-    const frame = container.querySelector('iframe.ot-html-frame') as HTMLIFrameElement | null;
-    const srcDoc = frame?.srcdoc ?? '';
-    expect(srcDoc).toContain("style-src 'unsafe-inline' https://cdn.jsdelivr.net");
-    expect(srcDoc).toContain('font-src https://cdn.jsdelivr.net');
-    expect(srcDoc).toContain('img-src data: https:');
-    expect(frame?.getAttribute('sandbox')).toBe('allow-scripts');
+  it('renders a resource card with its player and the Klar button', () => {
+    const item: BoardItem = {
+      id: 'r1',
+      kind: 'resource',
+      title: 'Film',
+      url: 'https://example.org/v',
+      embedUrl: 'https://example.org/embed',
+    };
+    const closed = vi.fn();
+    const { container } = render(
+      <BoardCard item={item} onMounted={noop} onResourceClosed={closed} />,
+    );
+    expect(container.querySelector('iframe.ot-resource-frame')).toBeTruthy();
+    container.querySelector<HTMLButtonElement>('.ot-klar-btn')?.click();
+    expect(closed).toHaveBeenCalledWith('r1');
   });
 
   it('shows a drawing status without an outer headline while pending', () => {
@@ -82,10 +48,9 @@ describe('HtmlCard generated-board surface', () => {
     expect(container.querySelector('[role="status"]')?.textContent).toContain('Ritar');
   });
 
-  it('keeps the document doctype before the security policy', () => {
-    const { container } = render(<BoardCard item={htmlItem(800, 1280)} onMounted={noop} />);
-    const frame = container.querySelector<HTMLIFrameElement>('iframe');
-    expect(frame?.srcdoc.startsWith('<!doctype html>')).toBe(true);
-    expect(frame?.srcdoc).toContain('<head><meta http-equiv="Content-Security-Policy"');
+  it('leaves pages to PageCard', () => {
+    const item: BoardItem = { id: 'p1', kind: 'page', title: 'Klockan', body: '<h1>x</h1>' };
+    const { container } = render(<BoardCard item={item} onMounted={noop} />);
+    expect(container.innerHTML).toBe('');
   });
 });

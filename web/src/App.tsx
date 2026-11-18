@@ -153,7 +153,6 @@ export default function App() {
               onItemMounted={session.onItemMounted}
               onItemFailed={session.onItemFailed}
               onResourceClosed={(id) => void session.resourceClosed(id)}
-              mobile={mobile}
               activeItemId={session.activeItemId}
               registerPageFrame={session.registerPageFrame}
               onPageAnswer={session.sendPageAnswer}

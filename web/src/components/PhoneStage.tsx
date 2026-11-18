@@ -63,7 +63,6 @@ export default function PhoneStage({
           learnerName={learnerName}
           items={items}
           focused={focused}
-          mobile
           showEmptyState={false}
           onItemMounted={onItemMounted}
           onResourceClosed={onResourceClosed}

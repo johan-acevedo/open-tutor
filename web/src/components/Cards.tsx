@@ -1,18 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import katex from 'katex';
+import { useEffect, useRef, useState } from 'react';
 import type { BoardItem } from '../protocol';
-import { renderMarkdown } from '../markdown';
-import { sanitiseSvg } from '../svgSanitize';
-import MaterialSection from './MaterialSection';
 
 export const IMAGE_MOUNT_TIMEOUT_MS = 4000;
 
 type CardProps = {
   item: BoardItem;
-  focusedStep?: number;
   onMounted: (id: string) => void;
   onResourceClosed?: (id: string) => void;
-  revealThrough?: number;
   /** Immediate failure signal so a board RPC is rejected, not timed out. */
   onFailed?: (id: string, message: string) => void;
 };
@@ -44,105 +38,6 @@ function useReportMounted(item: BoardItem, onMounted: (id: string) => void, wait
   return { ref, finish };
 }
 
-function TextCard({ item, onMounted }: CardProps) {
-  if (item.kind !== 'text') return null;
-  const { ref } = useReportMounted(item, onMounted);
-  const html = useMemo(() => renderMarkdown(item.markdown), [item.markdown]);
-  return (
-    <article className="ot-bcard ot-katex" ref={ref} data-board-id={item.id} aria-label={item.title ?? 'Text'}>
-      {item.title && <h2>{item.title}</h2>}
-      <div className="ot-md" dangerouslySetInnerHTML={{ __html: html }} />
-    </article>
-  );
-}
-
-function StepsCard({ item, focusedStep, onMounted, revealThrough }: CardProps) {
-  if (item.kind !== 'steps') return null;
-  const { ref } = useReportMounted(item, onMounted);
-  const stepRefs = useRef(new Map<number, HTMLDivElement>());
-  useEffect(() => {
-    if (focusedStep !== undefined && revealThrough === undefined) {
-      const el = stepRefs.current.get(focusedStep);
-      if (el && typeof el.scrollIntoView === 'function') {
-        el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-      }
-    }
-  }, [focusedStep, revealThrough]);
-  return (
-    <article className="ot-bcard ot-katex" ref={ref} data-board-id={item.id} aria-label={item.title ?? 'Steg för steg'}>
-      {item.title && <h2>{item.title}</h2>}
-      <div className="ot-steps">
-        {item.steps.map((s, i) => (
-          <div className="ot-step-row" key={i} hidden={revealThrough !== undefined && i > revealThrough}>
-            {i > 0 && (s.op || s.note) && (
-              <div className="ot-step-transition">
-                {s.op && (
-                  <span
-                    className="ot-op"
-                    aria-label={`Operation: ${s.op}`}
-                    dangerouslySetInnerHTML={{
-                      __html: katex.renderToString(s.op, { displayMode: false, throwOnError: false }),
-                    }}
-                  />
-                )}
-                {s.note && <span className="ot-step-note">{s.note}</span>}
-              </div>
-            )}
-            <div
-              ref={(el) => {
-                if (el) stepRefs.current.set(i, el);
-                else stepRefs.current.delete(i);
-              }}
-              className={`ot-step-eq${focusedStep === i ? ' focused' : ''}`}
-              data-step={i}
-              dangerouslySetInnerHTML={{
-                __html: katex.renderToString(s.tex, { displayMode: true, throwOnError: false }),
-              }}
-            />
-            {i === 0 && s.note && <div className="ot-step-note">{s.note}</div>}
-          </div>
-        ))}
-      </div>
-    </article>
-  );
-}
-
-function MindmapCard({ item, onMounted }: CardProps) {
-  if (item.kind !== 'mindmap') return null;
-  const { ref } = useReportMounted(item, onMounted);
-  return (
-    <article className="ot-bcard" ref={ref} data-board-id={item.id} aria-label={item.title ?? 'Tankekarta'}>
-      {item.title && <h2>{item.title}</h2>}
-      <div className="ot-mindmap">
-        <div className="ot-mind-center">{item.center}</div>
-        <div className="ot-mind-ideas">
-          {item.ideas.map((idea, i) => (
-            <div className="ot-mind-idea" key={i}>
-              {idea}
-            </div>
-          ))}
-        </div>
-      </div>
-    </article>
-  );
-}
-
-function SvgCard({ item, onMounted }: CardProps) {
-  if (item.kind !== 'svg') return null;
-  const { ref } = useReportMounted(item, onMounted);
-  const html = useMemo(() => sanitiseSvg(item.svg), [item.svg]);
-  return (
-    <article className="ot-bcard" ref={ref} data-board-id={item.id} aria-label={item.title ?? 'Bild'}>
-      {item.title && <h2>{item.title}</h2>}
-      <div className="ot-svg-wrap" dangerouslySetInnerHTML={{ __html: html }} />
-    </article>
-  );
-}
-
-// Shared with the tutor's screenshot renderer; test_board_render.py checks parity.
-const HTML_CSP =
-  "default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; style-src 'unsafe-inline' https://cdn.jsdelivr.net; font-src https://cdn.jsdelivr.net; img-src data: https:";
-
 /** Visible content-box size of the board scroll surface around a card. */
 function scrollAvail(wrap: HTMLElement | null): { w: number; h: number } | null {
   const scroller = wrap?.closest<HTMLElement>('.ot-board-scroll');
@@ -151,105 +46,6 @@ function scrollAvail(wrap: HTMLElement | null): { w: number; h: number } | null 
   const padX = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
   const padY = (parseFloat(style.paddingTop) || 0) + (parseFloat(style.paddingBottom) || 0);
   return { w: scroller.clientWidth - padX, h: scroller.clientHeight - padY };
-}
-
-function HtmlCard({ item, onMounted }: CardProps) {
-  if (item.kind !== 'html') return null;
-  const { ref } = useReportMounted(item, onMounted);
-  const srcDoc = useMemo(
-    () => {
-      const meta = `<meta http-equiv="Content-Security-Policy" content="${HTML_CSP}">`;
-      // Keep the doctype first so the frame uses the screenshot's standards mode.
-      for (const tag of [/<head\b[^>]*>/i, /<html\b[^>]*>/i]) {
-        if (tag.test(item.html)) return item.html.replace(tag, (opening) => opening + meta);
-      }
-      return meta + item.html;
-    },
-    [item.html],
-  );
-  // Preserve the model's viewport and shrink the whole drawing on smaller screens.
-  const designH = item.height ?? 360;
-  const designW = item.width ?? null;
-  const [scale, setScale] = useState(1);
-  useEffect(() => {
-    const wrap = ref.current;
-    if (!wrap) return;
-    const compute = () => {
-      const avail = scrollAvail(wrap);
-      if (!avail || !(avail.w >= 1 && avail.h >= 1)) {
-        setScale(1);
-        return;
-      }
-      const dW = designW ?? avail.w;
-      const next = Math.min(avail.w / dW, avail.h / designH, 1);
-      setScale(Number.isFinite(next) && next > 0 ? next : 1);
-    };
-    compute();
-    let ro: ResizeObserver | null = null;
-    if (typeof ResizeObserver !== 'undefined') {
-      const scroller = wrap.closest('.ot-board-scroll');
-      if (scroller) {
-        ro = new ResizeObserver(compute);
-        ro.observe(scroller);
-      }
-    }
-    window.addEventListener('resize', compute);
-    window.addEventListener('orientationchange', compute);
-    return () => {
-      ro?.disconnect();
-      window.removeEventListener('resize', compute);
-      window.removeEventListener('orientationchange', compute);
-    };
-  }, [designW, designH]);
-  if (designW == null) {
-    return (
-      <article
-        className="ot-bcard ot-bcard-html"
-        ref={ref}
-        data-board-id={item.id}
-        aria-label={item.title ?? 'Interaktivt innehåll'}
-      >
-        <iframe
-          className="ot-html-frame"
-          title={item.title ?? 'Interaktivt innehåll'}
-          sandbox="allow-scripts"
-          srcDoc={srcDoc}
-          style={{ height: Math.max(1, Math.floor(designH * scale)) }}
-        />
-      </article>
-    );
-  }
-  const showW = Math.max(1, Math.floor(designW * scale));
-  const showH = Math.max(1, Math.floor(designH * scale));
-  return (
-    <article
-      className="ot-bcard ot-bcard-html"
-      ref={ref}
-      data-board-id={item.id}
-      aria-label={item.title ?? 'Interaktivt innehåll'}
-    >
-      <div
-        className="ot-html-fit"
-        data-scale={scale.toFixed(4)}
-        data-design-w={designW}
-        data-design-h={designH}
-        style={{ width: showW, height: showH }}
-      >
-        <iframe
-          className="ot-html-frame"
-          title={item.title ?? 'Interaktivt innehåll'}
-          sandbox="allow-scripts"
-          srcDoc={srcDoc}
-          style={{
-            width: designW,
-            height: designH,
-            transform: `scale(${scale})`,
-            transformOrigin: 'top left',
-          }}
-        />
-      </div>
-    </article>
-  );
 }
 
 function ImageCard({ item, onMounted }: CardProps) {
@@ -335,11 +131,6 @@ function ResourceCard({ item, onMounted, onResourceClosed }: CardProps) {
   );
 }
 
-function MaterialCard({ item, onMounted, onFailed }: CardProps) {
-  if (item.kind !== 'material') return null;
-  return <MaterialSection item={item} onMounted={onMounted} onFailed={onFailed ?? (() => {})} />;
-}
-
 function HomeworkCard({ item, onMounted }: CardProps) {
   if (item.kind !== 'homework') return null;
   const { ref } = useReportMounted(item, onMounted);
@@ -358,24 +149,12 @@ function HomeworkCard({ item, onMounted }: CardProps) {
 
 export default function BoardCard(props: CardProps) {
   switch (props.item.kind) {
-    case 'text':
-      return <TextCard {...props} />;
-    case 'steps':
-      return <StepsCard {...props} />;
-    case 'mindmap':
-      return <MindmapCard {...props} />;
-    case 'svg':
-      return <SvgCard {...props} />;
-    case 'html':
-      return <HtmlCard {...props} />;
     case 'image':
       return <ImageCard {...props} />;
     case 'pending':
       return <PendingCard {...props} />;
     case 'resource':
       return <ResourceCard {...props} />;
-    case 'material':
-      return <MaterialCard {...props} />;
     case 'homework':
       return <HomeworkCard {...props} />;
     case 'page':

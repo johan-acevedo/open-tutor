@@ -1,5 +1,10 @@
 # Teaching iteration: judgement, not more rules
 
+> **Historical (2026-11-18).** This record predates the Smart Screen becoming the only
+> mode and the removal of the legacy card board. Its prompt wording and board
+> references describe the retired path; the current state is in
+> [smart-screen.md](smart-screen.md).
+
 Status: implementation reviewed on branch `teaching-judgement-iteration`; awaiting merge and deployment.
 No merge, no deployment. Production stays on `main` (`b24ea26`) on ThinkCentre.
 

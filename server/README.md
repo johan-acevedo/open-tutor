@@ -3,15 +3,10 @@
 Two processes, both in this package:
 
 - **Web service** (`open_tutor.web`, FastAPI): serves the built page from `web/dist`, and `POST /api/session` returns a short-lived LiveKit room token. The learner's name, school year and newest notes travel in the token's participant metadata. Nothing is stored on the server.
-- **Tutor worker** (`open_tutor.agent`, LiveKit Agents): joins each room as `open-tutor`, runs Soniox speech recognition, the tutor model and the voice, and drives the board through the protocol in [docs/protocol.md](../docs/protocol.md).
-
-The web service also serves original material sections read-only, rendered from the pinned Siyavula EPUBs (steps 3a/3b in [the material-library state](../docs/material-library/STATE.md)):
-
-- `GET /api/materials/sections/{id}` — visible text, image list, completeness, book/source/license metadata for the tutor.
-- `GET /materials/sections/{id}/index.html` — the original section page, embeddable as `<iframe sandbox="">`.
-- `GET /materials/sections/{id}/{asset}` — only the section's own packaged images and CSS.
-
-Packages are built lazily per section under `$XDG_CACHE_HOME/open-tutor/material-packages` and published atomically. A host without the EPUBs answers 503 on these routes and is otherwise unchanged.
+- **Tutor worker** (`open_tutor.agent`, LiveKit Agents): joins each room as `open-tutor`, runs Soniox speech recognition, the tutor model and the voice, and drives the Smart Screen through the protocol in [docs/protocol.md](../docs/protocol.md).
+  The Smart Screen is the only screen mode (2026-11-18): the legacy card board and its
+  `TUTOR_SCREEN` switch are gone. A leftover `TUTOR_SCREEN=smart` is accepted silently; any
+  other value is ignored with one warning at session start.
 
 ## Run locally
 
@@ -99,9 +94,6 @@ The worker logs the route at the start of each session (`tutor TTS route elevenl
 | `TUTOR_ACCESS_CODE` | Optional family code. When set, the page asks for it once per browser |
 | `TUTOR_ALLOWED_COUNTRIES` | Optional comma-separated Cloudflare country codes, e.g. `SE`. Missing/disallowed country headers get 403; `/api/health` remains accessible |
 | `TUTOR_MAX_SESSIONS_PER_HOUR` | Owner spending cap across the instance (default 12) |
-| `TUTOR_MATERIAL_CACHE` | Directory for rendered original-section packages (default `$XDG_CACHE_HOME/open-tutor/material-packages`, never in the repo) |
-| `TUTOR_MATERIAL_INDEX` | Directory of a saved EmbeddingGemma 2 index that the tutor's `search_materials` tool searches (needs the optional `ml` group). Unset: the tool answers "unavailable" and nothing else changes. There is no default or fallback index |
-| `TUTOR_MATERIALS_DIR`, `TUTOR_MATERIALS_BOOKS` | Override the downloaded Siyavula EPUB directory and its `books.json`. Without the EPUBs the material routes answer 503; nothing else changes |
 | `TUTOR_CLOUD_RECORDING` | `1` uploads session audio and transcripts to LiveKit Cloud observability. Off by default |
 | `TUTOR_DEBUG_LOG` | `1` writes a per-session debug trail to a private local directory (see below). Off by default |
 | `TUTOR_DEBUG_LOG_DIR` | Override the debug trail directory (default `~/.local/state/open-tutor/sessions`) |
@@ -293,34 +285,17 @@ The trail's config snapshot also records analytics state as `posthog_enabled`
 (`"1"`/`"0"`): the project token itself is never written anywhere server-side.
 See [hosting](../deploy/README.md) for turning PostHog on.
 
-## Teaching boards
+## Board transport
 
-- `commission_board` makes a new board for a new topic: placeholder first, then the
-  finished drawing at the same new id. A LiveKit progress update releases the
-  voice turn immediately, so the tutor can keep helping while drawing runs.
-  The finished result arrives automatically with the board id and screenshot.
-- `edit_board` sends the saved HTML and the requested change back to the renderer.
-  It updates the same board id, using an explicit id or the most recent board when
-  omitted. The renderer is instructed to preserve unrelated content and controls.
-  Failed edits restore the saved source. The tutor receives confirmation only when
-  the browser acknowledges that restoration. Only one drawing or edit runs per
-  session; overlapping calls are refused immediately. A later edit uses the latest
-  successful source. Boards live only in the session.
-  Input values changed inside the sandbox are not currently saved with that source.
-- Board engine defaults: `BOARD_MODEL=opencode-go/muse-spark-1.3-contributor`,
-  `BOARD_THINKING=minimal`. Environment overrides still apply. `BOARD_MAX_TOKENS=16384`
-  caps the provider's output-token limit for board requests only: `board_model.py`
-  loads `open_tutor/board_budget.js` explicitly (`--extension` still applies with
-  `--no-extensions`), and the extension clamps an existing `max_tokens` /
-  `max_completion_tokens` down to the cap while keeping a lower configured limit.
-  Replies cut off before `</html>` are rejected. A complete HTML document is kept
-  if only its trailing tutor note hits the token cap. Timed-out or cancelled
-  processes are killed and reaped. The renderer prompt is adapted from the
-  `gym/prompts/r13/system.md` on the `gym/board-renderer` branch, used by the r21
-  configuration. Production requests a short tutor note and has no automatic review pass.
+The tutor never draws. A background Screen agent writes pages and patches (see
+[docs/smart-screen.md](../docs/smart-screen.md)); this section covers the transport only.
+
 - Dimension handshake: `board.show`/`board.update` acks return
-  `{ok:true, board:{w,h,device}}` once the pane has settled; the worker uses those
-  dims for the frozen design box. Plain `{ok:true}` peers still work.
+  `{ok:true, board:{w,h,device}}` once the pane has settled. The worker uses those dims
+  as the page's render size. Every board RPC goes through one serialized delivery path
+  per session, so no two changes interleave on the way to the browser.
+- A `pending` placeholder is still a valid board item, but nothing produces one now:
+  a page appears when the Screen has finished it.
 
 ## The greeting and the session's voice
 
@@ -394,25 +369,6 @@ paid a fresh TLS handshake. The tutor and screen clients share one httpx transpo
 host with a ~120 s keep-alive (`open_tutor/http_clients.py`), so turns reuse warm
 connections across a lesson; worker prewarm opens one cheap request (the provider's model
 list) to each configured provider, bounded to ~5 s and never failing the worker.
-## Material search proof
-
-`open_tutor/materials/search.py` builds an exact cosine index from passage records and
-`scripts/search_materials.py` drives it. This is the bounded EmbeddingGemma 2 proof, not a
-production feature: evidence, sample definition, per-query IDs and limitations are in
-[docs/material-library/step2b-embedding-proof.md](../docs/material-library/step2b-embedding-proof.md).
-
-The model and index are an optional dependency group and never part of the server runtime:
-
-```bash
-uv sync --group ml --python 3.13                 # sentence-transformers, torch, torchvision (CPU)
-bin/with-env uv run --no-sync python scripts/search_materials.py prove
-bin/with-env uv run --no-sync python scripts/search_materials.py query --query "how do plants make food?"
-```
-
-Weights stay in the Hugging Face cache and the index in
-`~/.local/share/open-tutor/materials/embeddinggemma-2-index`. Only owned passage text plus heading
-and breadcrumb context is embedded; passage HTML spans are never model input, empty passages are
-skipped, and hits carry `text_complete: false` when the original content is partly images.
 
 ## Tests
 
@@ -424,4 +380,4 @@ uv run pytest -q
 
 `scripts/live_probe.py` runs a real session against a running worker with a scripted fictional learner: recorded Swedish clips, a generated worksheet, an interruption, 30 s of quiet work, mumbling, and the end of the session. It writes a JSON timeline and the tutor's audio. It uses live providers and costs a little; it is not part of CI.
 
-Run this prototype material server with `uvicorn open_tutor.web:app --workers 1`. Material packages are built lazily; concurrent publishers adopt a valid existing package rather than replacing it.
+Run the web service with `uvicorn open_tutor.web:app --workers 1`.

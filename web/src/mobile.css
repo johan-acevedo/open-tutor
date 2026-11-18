@@ -280,25 +280,9 @@
   margin-bottom: 8px;
   overflow-wrap: anywhere;
 }
-.ot-phone .ot-bcard .ot-md,
 .ot-phone .ot-paper p {
   font-size: 17px;
 }
-.ot-phone .ot-step-eq {
-  font-size: 25px;
-  padding: 6px;
-}
-.ot-phone .ot-step-note {
-  font-size: 14px;
-}
-.ot-phone .ot-step-transition {
-  flex-wrap: wrap;
-  gap: 4px;
-}
-.ot-phone .ot-op {
-  font-size: 14px;
-}
-.ot-phone .ot-bcard.ot-bcard-html,
 .ot-phone .ot-bcard.ot-bcard-pending {
   padding: 0;
 }

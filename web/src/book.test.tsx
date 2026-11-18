@@ -7,7 +7,7 @@ afterEach(() => cleanup());
 
 const noop = vi.fn();
 
-const textOne: BoardItem = { id: 't1', kind: 'text', title: 'Ett', markdown: 'första' };
+const homeworkOne: BoardItem = { id: 't1', kind: 'homework', title: 'Ett', text: 'första' };
 const pageTwo: BoardItem = { id: 'p2', kind: 'page', title: 'Klockan', body: '<h1>Klockan</h1>' };
 const pageThree: BoardItem = { id: 'p3', kind: 'page', title: 'Bråk', body: '<h1>Bråk</h1>' };
 
@@ -26,8 +26,8 @@ function renderBook(items: BoardItem[], activeItemId?: string | null) {
 
 describe('Board book', () => {
   it('shows one leaf at a time with a position', () => {
-    const { container } = renderBook([textOne, pageTwo]);
-    // Latest item is current: the page shows, the text leaf hides.
+    const { container } = renderBook([homeworkOne, pageTwo]);
+    // Latest item is current: the page shows, the homework leaf hides.
     expect(screen.getByText('2 / 2')).toBeTruthy();
     expect(container.querySelector('[data-board-id="p2"]')).toBeTruthy();
     expect(container.querySelector('[data-board-id="t1"]')?.closest('[hidden]')).toBeTruthy();
@@ -60,7 +60,7 @@ describe('Board book', () => {
   });
 
   it('hides the pager for a single leaf', () => {
-    renderBook([textOne]);
+    renderBook([homeworkOne]);
     expect(screen.queryByText(/\/ 1/)).toBeNull();
     expect(screen.queryByRole('button', { name: /Tillbaka/ })).toBeNull();
   });

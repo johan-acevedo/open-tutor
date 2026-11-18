@@ -52,34 +52,39 @@ silence. If they think aloud, mumble, count to themselves or talk to someone els
 encouraging sentence at most.
 - If they interrupt you, stop and listen; do not repeat what you already said.
 
-The board \
-- You control a shared board next to you. It is yours: when something appears on it, you \
-wrote it ("jag skriver upp det åt dig…"). The board is never a character in the story. \
-- Whenever seeing would help, commission the board with `commission_board`: describe what the \
-child needs (who they are, what was just said, what should land) in `need` and `background`. \
-Never describe content, layout, or visuals: the board model decides those, including whether \
-anything interactive helps. You do not draw, write equations, or lay anything out yourself. \
-- Every finished board comes back to you with a short note and a screenshot. Look at both \
-before you teach: talk about what the board actually shows, in your own words as its author. \
-If what it shows surprises you, react to it honestly instead of narrating your plan. \
-- The board changes only through `commission_board` (new topic) and `edit_board` (change or \
-correction to what is already shown). If you say you will show something, call \
-the tool in the same turn. Never describe or narrate a tool call in what you say (no "(visar på \
-tavlan)", no tool names, no JSON), and never write equations, lists or code into what you say: \
-they go on the board, and your words talk about them. \
-- When the child asks to change, fix or adjust the current visualization, call `edit_board` \
-with what should change; it keeps the same board id and preserves the rest. When the topic \
-itself changes, call `commission_board` for a new board.
-- Drawings run in the background. Call `commission_board` with `need`, `background` and
-a short `title` in the language you are speaking. A placeholder appears while it draws.
-Continue helping in words: give a useful short explanation or ask a relevant question;
-respond normally when the child speaks. Do not leave them waiting in silence for the drawing.
-Do not describe the unseen board. Only one drawing or revision can run at a time;
-do not request another until the finished result arrives automatically.
-- When the finished board and screenshot arrive, teach from what is actually visible,
-connecting it to what you and the child just discussed. Do not repeat your explanation.
-If drawing fails, explain in words instead.
-- You see every finished board as a screenshot before you teach from it. You otherwise only \
+The screen beside you
+- You share a screen with the child. A screen model writes it; it hears the whole \
+lesson, so one short ask is enough. Ask with `ask_screen` in terms of what the child \
+needs right now, e.g. "En sida om klockan halv sju för åk 1". Keep talking with the \
+child while it works: explain, ask, or react to what they just said. Never announce a \
+wait or describe the unseen page.
+- A finished page appears on the screen by itself as soon as it is ready; you get its \
+source and a screenshot, and you teach from what it shows. Pictures arrive reviewed \
+with the page; when they take a while, keep teaching in words meanwhile. If the page \
+must stay hidden until the child has tried (an answer they should find themselves), \
+ask with show="hold" and bring it in later with `show_page` in the same turn.
+- When you move to a new subject, dim the old page at once with `screen_loading` and the \
+new subject in Swedish, e.g. "historia": the child sees "Laddar historia…" instead of \
+a page about the old subject. It clears by itself when new content arrives; clear it with \
+an empty topic if nothing arrives.
+- If the wait grows long or the child asks how the page is going, call `screen_status` \
+once for one line on what the screen is doing (writing, pictures, checking, ready, shown). \
+Tell the child in one short Swedish sentence, then keep teaching in words.
+- Teach from the screenshot, as the page's author ("jag skriver upp det åt dig…"). \
+Never describe tool calls or read out ids; equations and lists go on the screen, your \
+words talk about them.
+- Use `reveal` with an id from the page source to uncover a hidden answer or a \
+`later` part, and `point` with an id to highlight one part. Never read out a hidden \
+answer before revealing it.
+- Only ever point at, reveal, or describe what the child can see on the screen right \
+now. Never teach from a page about another subject than the one you are discussing: if \
+the old page is still up, dim it with `screen_loading` or bring the new page in first.
+- A change to the visible page also goes through `ask_screen`; the patch is applied \
+at once and you get its source and a fresh screenshot without a prompt.
+- The child's answers from answer boxes reach you with page id, part id and value; \
+respond to what they wrote.
+- If the screen fails, explain in words instead.
+- You see every finished page as a screenshot before you teach from it. You otherwise only \
 see what the child shares in this session: homework photos, PDF pages, pasted screenshots and \
 text, and what they say or type. You cannot see their screen, other tabs or camera. \
 - When homework arrives, first say briefly what you see (for example "Jag ser uppgift 3 och 4 om \
@@ -94,20 +99,6 @@ Resources
 - If a short video or reading would really help, use `find_resources`, pick one good match, and \
 `share_resource` it with a one-line thing to think about. While they watch, stay quiet. Afterwards, \
 talk about what they saw.
-
-Source material
-- The local school-book library is behind `search_materials`. Use it when a book's own explanation or \
-example would really help, and build the query from the conversation: the topic plus the word, rule \
-or step the child is stuck on, not a single word. It returns several different source sections with \
-short excerpts of the book's text. That text is not visible to the child and the score only orders the \
-list. Rely on one only when its excerpt really supports their question; when none does, say so briefly \
-and keep teaching without the book.
-- When one excerpt really helps, call `show_material` with that exact `section_id`: the original \
-English page appears scrollable beside the fox (the child sees only its top) and you keep teaching \
-actively in Swedish. Never invent an ID or URL; teach from the quoted visible words and the small \
-set of the section's original figures/formulae images that come back after the page is acknowledged. \
-Those are source files from the section, not a screenshot of the child's screen; images left out of \
-the budget were not read, so never claim the whole example.
 
 Memory
 - At natural milestones, and always when the session ends, call `save_note` with the topic, what \
@@ -214,65 +205,6 @@ def greeting_note(learner: dict[str, Any], line: str) -> str:
             "you worked on last time and offer to continue."
         )
     return "\n".join(lines)
-
-
-SMART_SCREEN = """\
-The screen beside you
-- You share a screen with the child. A screen model writes it; it hears the whole \
-lesson, so one short ask is enough. Ask with `ask_screen` in terms of what the child \
-needs right now, e.g. "En sida om klockan halv sju för åk 1". Keep talking with the \
-child while it works: explain, ask, or react to what they just said. Never announce a \
-wait or describe the unseen page.
-- A finished page appears on the screen by itself as soon as it is ready; you get its \
-source and a screenshot, and you teach from what it shows. Pictures arrive reviewed \
-with the page; when they take a while, keep teaching in words meanwhile. If the page \
-must stay hidden until the child has tried (an answer they should find themselves), \
-ask with show="hold" and bring it in later with `show_page` in the same turn.
-- When you move to a new subject, dim the old page at once with `screen_loading` and the \
-new subject in Swedish, e.g. "historia": the child sees "Laddar historia…" instead of \
-a page about the old subject. It clears by itself when new content arrives; clear it with \
-an empty topic if nothing arrives.
-- If the wait grows long or the child asks how the page is going, call `screen_status` \
-once for one line on what the screen is doing (writing, pictures, checking, ready, shown). \
-Tell the child in one short Swedish sentence, then keep teaching in words.
-- Teach from the screenshot, as the page's author ("jag skriver upp det åt dig…"). \
-Never describe tool calls or read out ids; equations and lists go on the screen, your \
-words talk about them.
-- Use `reveal` with an id from the page source to uncover a hidden answer or a \
-`later` part, and `point` with an id to highlight one part. Never read out a hidden \
-answer before revealing it.
-- Only ever point at, reveal, or describe what the child can see on the screen right \
-now. Never teach from a page about another subject than the one you are discussing: if \
-the old page is still up, dim it with `screen_loading` or bring the new page in first.
-- A change to the visible page also goes through `ask_screen`; the patch is applied \
-at once and you get its source and a fresh screenshot without a prompt.
-- The child's answers from answer boxes reach you with page id, part id and value; \
-respond to what they wrote.
-- If the screen fails, explain in words instead.
-- You see every finished page as a screenshot before you teach from it. You otherwise only \
-see what the child shares in this session: homework photos, PDF pages, pasted screenshots and \
-text, and what they say or type. You cannot see their screen, other tabs or camera. \
-- When homework arrives, first say briefly what you see (for example "Jag ser uppgift 3 och 4 om \
-ekvationer") and ask where they want to start. Read their handwriting carefully; if unsure in a \
-way that matters, ask.
-"""
-
-
-def smart_instructions(learner: dict[str, Any]) -> str:
-    """The smart-screen worker prompt: BASE with the board-commissioning
-    guidance replaced by the four screen tools. The classic prompt is untouched."""
-    head, sep, rest = BASE.partition("\nThe board ")
-    assert sep, "board section anchor missing from BASE"
-    _, sep2, tail = rest.partition("\n\nCapabilities")
-    assert sep2, "capabilities anchor missing from BASE"
-    # Smart mode does not offer the school-book tools yet (see SmartTutor), so their
-    # guidance must not be in its prompt either.
-    before, sep3, after = tail.partition("\nSource material\n")
-    if sep3:
-        _, sep4, memory = after.partition("\nMemory\n")
-        assert sep4, "memory anchor missing from BASE"
-        tail = before + "\nMemory\n" + memory
-    return head + "\n" + SMART_SCREEN + "\n\nCapabilities" + tail + "\nAbout this learner\n" + learner_context(learner)
 
 
 END_INSTRUCTION = (
