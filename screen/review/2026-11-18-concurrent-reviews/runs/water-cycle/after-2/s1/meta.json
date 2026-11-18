@@ -1,0 +1,145 @@
+{
+ "job": "s1",
+ "kind": "page",
+ "page": "p1",
+ "title": "Vattnets kretslopp",
+ "model": "gemini-4-hydrogen",
+ "api": "chat",
+ "reasoning": "low",
+ "pane": [
+  370,
+  610
+ ],
+ "provider": "google",
+ "failover": false,
+ "hedged": false,
+ "ttft_s": 0.0,
+ "model_s": 1.5,
+ "render_s": 1.03,
+ "look_s": 0.0,
+ "retry_s": 0.0,
+ "total_s": 17.59,
+ "issues": [],
+ "residual_lint": [],
+ "repair": {
+  "look": false,
+  "look_fix": false,
+  "retry": false,
+  "retry_applied": false,
+  "notes": [
+   "look pass skipped: page target budget"
+  ]
+ },
+ "reveal": "show",
+ "image_s": 15.05,
+ "image_reviews": [
+  {
+   "title": "Vattnets Kretslopp för Skolo, The Water Cycle for Schools, Swedish",
+   "source": "https://www.usgs.gov/media/images/vattnets-kretslopp-skolo-water-cycle-schools-swedish",
+   "decision": "rejected",
+   "reason": "Bilden är skadad eller ofullständig (nästan helt grå).",
+   "image_source": "parallel",
+   "query": "water cycle diagram illustration for children",
+   "latency_s": 0.99,
+   "rank": 0,
+   "start_s": 0.0,
+   "download_s": 0.59,
+   "review_s": 6.15,
+   "finished_s": 6.74,
+   "sha256": "00a525385637c302cd21e076fe632709a27472a34e7f01d78065da2ffcc02b9c",
+   "bytes": 17010
+  },
+  {
+   "title": "Vattnets Kretslopp för Skolo, The Water Cycle for Schools, Swedish",
+   "source": "https://www.usgs.gov/media/images/vattnets-kretslopp-skolo-water-cycle-schools-swedish",
+   "decision": "rejected",
+   "reason": "image review cancelled or budget exhausted",
+   "image_source": "parallel",
+   "query": "water cycle diagram illustration for children",
+   "latency_s": 0.99,
+   "rank": 1,
+   "start_s": 0.0,
+   "download_s": 0.64,
+   "review_s": 0.0,
+   "finished_s": 14.56,
+   "sha256": "274b34d7d006c685f528c04a00fd338659a913975ea25cc6d95992938c4742bd",
+   "bytes": 21133
+  },
+  {
+   "title": "Vattnets Kretslopp för Skolo, The Water Cycle for Schools, Swedish",
+   "source": "https://www.usgs.gov/media/images/vattnets-kretslopp-skolo-water-cycle-schools-swedish",
+   "decision": "rejected",
+   "reason": "Bilden är trasig och visar bara en liten del längst upp medan resten är grå.",
+   "image_source": "parallel",
+   "query": "water cycle diagram illustration for children",
+   "latency_s": 0.99,
+   "rank": 2,
+   "start_s": 0.0,
+   "download_s": 0.62,
+   "review_s": 6.16,
+   "finished_s": 6.78,
+   "sha256": "0c3915ec37eec1bff1f7ef71da8707dbfdf449b8f4d6d1077a9ae3a211d00c33",
+   "bytes": 17048
+  }
+ ],
+ "images": {
+  "strategy": "commons+parallel",
+  "seconds": 15.05,
+  "review_concurrency": 3,
+  "parallel": {
+   "available": true,
+   "reason": "",
+   "retry_in_s": 0.0
+  },
+  "reviews": [
+   {
+    "title": "Vattnets Kretslopp för Skolo, The Water Cycle for Schools, Swedish",
+    "source": "https://www.usgs.gov/media/images/vattnets-kretslopp-skolo-water-cycle-schools-swedish",
+    "decision": "rejected",
+    "reason": "Bilden är skadad eller ofullständig (nästan helt grå).",
+    "image_source": "parallel",
+    "query": "water cycle diagram illustration for children",
+    "latency_s": 0.99,
+    "rank": 0,
+    "start_s": 0.0,
+    "download_s": 0.59,
+    "review_s": 6.15,
+    "finished_s": 6.74,
+    "sha256": "00a525385637c302cd21e076fe632709a27472a34e7f01d78065da2ffcc02b9c",
+    "bytes": 17010
+   },
+   {
+    "title": "Vattnets Kretslopp för Skolo, The Water Cycle for Schools, Swedish",
+    "source": "https://www.usgs.gov/media/images/vattnets-kretslopp-skolo-water-cycle-schools-swedish",
+    "decision": "rejected",
+    "reason": "image review cancelled or budget exhausted",
+    "image_source": "parallel",
+    "query": "water cycle diagram illustration for children",
+    "latency_s": 0.99,
+    "rank": 1,
+    "start_s": 0.0,
+    "download_s": 0.64,
+    "review_s": 0.0,
+    "finished_s": 14.56,
+    "sha256": "274b34d7d006c685f528c04a00fd338659a913975ea25cc6d95992938c4742bd",
+    "bytes": 21133
+   },
+   {
+    "title": "Vattnets Kretslopp för Skolo, The Water Cycle for Schools, Swedish",
+    "source": "https://www.usgs.gov/media/images/vattnets-kretslopp-skolo-water-cycle-schools-swedish",
+    "decision": "rejected",
+    "reason": "Bilden är trasig och visar bara en liten del längst upp medan resten är grå.",
+    "image_source": "parallel",
+    "query": "water cycle diagram illustration for children",
+    "latency_s": 0.99,
+    "rank": 2,
+    "start_s": 0.0,
+    "download_s": 0.62,
+    "review_s": 6.16,
+    "finished_s": 6.78,
+    "sha256": "0c3915ec37eec1bff1f7ef71da8707dbfdf449b8f4d6d1077a9ae3a211d00c33",
+    "bytes": 17048
+   }
+  ]
+ }
+}

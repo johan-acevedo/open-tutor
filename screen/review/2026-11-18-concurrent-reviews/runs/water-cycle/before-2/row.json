@@ -1,0 +1,57 @@
+{
+  "ask": "water-cycle",
+  "label": "before",
+  "run": 2,
+  "wall_s": 17.84,
+  "failures": [],
+  "total_s": 17.84,
+  "issues": [],
+  "strategy": "commons+parallel",
+  "image_s": 15.3,
+  "review_concurrency": null,
+  "reviews": 4,
+  "accepted": null,
+  "candidates": [
+    {
+      "rank": null,
+      "title": "Vattnets Kretslopp för Skolo, The Water Cycle for Schools, S",
+      "decision": "rejected",
+      "source": "parallel",
+      "download_s": null,
+      "review_s": null,
+      "finished_s": null,
+      "reason": "Bilden är trasig och nästan helt grå, så den visar inte vattnets kretslopp."
+    },
+    {
+      "rank": null,
+      "title": "Vattnets Kretslopp för Skolo, The Water Cycle for Schools, S",
+      "decision": "rejected",
+      "source": "parallel",
+      "download_s": null,
+      "review_s": null,
+      "finished_s": null,
+      "reason": "Bilden är avklippt, har ett stort grått fält längst ner och texten är för liten och suddig för att kunna läsas tydligt."
+    },
+    {
+      "rank": null,
+      "title": "",
+      "decision": "rejected",
+      "source": null,
+      "download_s": null,
+      "review_s": null,
+      "finished_s": null,
+      "reason": "prefetched image unavailable: TimeoutError"
+    },
+    {
+      "rank": null,
+      "title": "Vattnets Kretslopp för Skolo, The Water Cycle for Schools, S",
+      "decision": "rejected",
+      "source": null,
+      "download_s": null,
+      "review_s": null,
+      "finished_s": null,
+      "reason": "image review cancelled or budget exhausted"
+    }
+  ],
+  "ships_image": false
+}

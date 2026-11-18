@@ -1,0 +1,70 @@
+{
+ "job": "s1",
+ "kind": "page",
+ "page": "p1",
+ "title": "Sverige 1658",
+ "model": "gemini-4-hydrogen",
+ "api": "chat",
+ "reasoning": "low",
+ "pane": [
+  370,
+  610
+ ],
+ "provider": "google",
+ "failover": false,
+ "hedged": false,
+ "ttft_s": 0.0,
+ "model_s": 1.5,
+ "render_s": 1.11,
+ "look_s": 2.35,
+ "retry_s": 0.0,
+ "total_s": 9.0,
+ "issues": [],
+ "residual_lint": [],
+ "repair": {
+  "look": true,
+  "look_fix": false,
+  "retry": false,
+  "retry_applied": false,
+  "notes": [
+   "look pass timed out"
+  ]
+ },
+ "reveal": "show",
+ "image_s": 4.03,
+ "image_reviews": [
+  {
+   "title": "File:LocationSwedishEmpire.png",
+   "source": "https://commons.wikimedia.org/wiki/File:LocationSwedishEmpire.png",
+   "decision": "accepted",
+   "reason": "Kartan visar tydligt det svenska rikets utbredning år 1658 (stormaktstiden) i grönt på en ren Europakarta, vilket passar utmärkt för årskurs 6.",
+   "sha256": "e6a056621cee1353ca6829fd3f5a89246d478cb46949725afc7c3d36d49276d9",
+   "bytes": 115954,
+   "image_source": "commons",
+   "query": "Swedish Empire map 1658 historical",
+   "latency_s": 0.09
+  }
+ ],
+ "images": {
+  "strategy": "commons+parallel",
+  "seconds": 4.03,
+  "parallel": {
+   "available": true,
+   "reason": "",
+   "retry_in_s": 0.0
+  },
+  "reviews": [
+   {
+    "title": "File:LocationSwedishEmpire.png",
+    "source": "https://commons.wikimedia.org/wiki/File:LocationSwedishEmpire.png",
+    "decision": "accepted",
+    "reason": "Kartan visar tydligt det svenska rikets utbredning år 1658 (stormaktstiden) i grönt på en ren Europakarta, vilket passar utmärkt för årskurs 6.",
+    "sha256": "e6a056621cee1353ca6829fd3f5a89246d478cb46949725afc7c3d36d49276d9",
+    "bytes": 115954,
+    "image_source": "commons",
+    "query": "Swedish Empire map 1658 historical",
+    "latency_s": 0.09
+   }
+  ]
+ }
+}

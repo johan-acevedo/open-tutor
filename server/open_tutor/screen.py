@@ -38,6 +38,8 @@ if str(_REPO_ROOT) not in sys.path:
 from screen.tools import prompt as screen_prompt  # noqa: E402
 from screen.tools import screenkit as screenkit  # noqa: E402
 from screen.tools.page_images import (  # noqa: E402
+    DEFAULT_REVIEW_CONCURRENCY,
+    MAX_REVIEW_CONCURRENCY,
     PageImages,
     SlotDecision,
     SlotKey,
@@ -307,6 +309,22 @@ def image_mode() -> str:
     if mode not in IMAGE_MODES:
         raise ValueError(f"SCREEN_IMAGES must be one of {', '.join(IMAGE_MODES)}, not {mode!r}")
     return mode
+
+
+def image_review_concurrency() -> int:
+    """How many candidates one slot downloads and reviews at once.
+
+    ``SCREEN_IMAGE_REVIEWS`` (default 3, the size of a search list). It is
+    also the ceiling on reviews in flight for the whole page, so several
+    slots cannot multiply what the screen model route is asked to serve."""
+    raw = _screen_env("SCREEN_IMAGE_REVIEWS", str(DEFAULT_REVIEW_CONCURRENCY)).strip()
+    try:
+        value = int(raw)
+    except ValueError:
+        raise ValueError(f"SCREEN_IMAGE_REVIEWS must be a whole number, not {raw!r}") from None
+    if not 1 <= value <= MAX_REVIEW_CONCURRENCY:
+        raise ValueError(f"SCREEN_IMAGE_REVIEWS must be between 1 and {MAX_REVIEW_CONCURRENCY}, not {value}")
+    return value
 
 
 def _accepts_first_text(fn: Callable[..., Any]) -> bool:
@@ -824,7 +842,8 @@ class Screen:
                           look_png: bytes | None = None,
                           kind: str = "write",
                           budget_s: float | None = None,
-                          prefetch: PrefetchPool | None = None) -> tuple[str, float]:
+                          prefetch: PrefetchPool | None = None,
+                          hedge: bool = True) -> tuple[str, float]:
         """One model call (``kind``: write|look|retry|image), hedged when armed.
 
         Without ``SCREEN_FALLBACK`` this is today's single-provider call. With it,
@@ -843,27 +862,19 @@ class Screen:
         so image search+download+review starts while the page is still being
         written; attempts share prefetch tasks by slot key, so a second
         attempt never pays for a vision review twice.
+
+        ``hedge`` False asks for exactly one provider call even when a backup
+        is armed. The image review uses it for all but the slot's best-ranked
+        candidate: those reviews run concurrently, so the concurrency is the
+        redundancy, and hedging each of them would multiply the calls a page
+        spends on the same picture list (and the provider's rate limit).
         """
         t0 = time.monotonic()
         fallback = self._fallback_ready()
-        if fallback is None:
-            first: asyncio.Event = asyncio.Event()
-            holder: dict[str, float] = {}
-            try:
-                result = await self._request_with_timeout(
-                    self._run_route(self._model_call, system, user,
-                                    self._homework_images(), look_png, first, holder,
-                                    on_text=prefetch.sink("primary") if prefetch else None),
-                    route=_spec_provider(self.model_spec()), timeout=budget_s)
-            except Exception as error:
-                self._note_call(kind, _spec_provider(self.model_spec()), hedged=False,
-                                ttft_s=None, loser="none", error=type(error).__name__)
-                raise
-            text, _elapsed = result
-            self._note_provider(kind, _spec_provider(self.model_spec()), failed=False)
-            self._note_call(kind, _spec_provider(self.model_spec()), hedged=False,
-                            ttft_s=holder.get("t"), loser="none")
-            return text, time.monotonic() - t0
+        if fallback is None or not hedge:
+            return await self._call_model_single(system, user, look_png, kind, t0,
+                                                 budget_s, prefetch,
+                                                 backup_armed=fallback is not None)
         hedge_after = _screen_hedge_after_s()
         if hedge_after is None:
             return await self._call_model_legacy(system, user, look_png, kind, t0,
@@ -874,6 +885,34 @@ class Screen:
         return await self._call_model_hedged(system, user, look_png, kind, t0,
                                              fallback, hedge_after, budget_s,
                                              prefetch)
+
+    async def _call_model_single(self, system: str, user: str, look_png: bytes | None,
+                                 kind: str, t0: float, budget_s: float | None,
+                                 prefetch: PrefetchPool | None = None,
+                                 *, backup_armed: bool = False) -> tuple[str, float]:
+        """One provider call on the primary route: no hedge, no failover.
+
+        ``backup_armed`` only marks the record, so analytics can tell a call
+        that deliberately ran alone (a concurrent image review) from one that
+        had no backup configured."""
+        first: asyncio.Event = asyncio.Event()
+        holder: dict[str, float] = {}
+        try:
+            result = await self._request_with_timeout(
+                self._run_route(self._model_call, system, user,
+                                self._homework_images(), look_png, first, holder,
+                                on_text=prefetch.sink("primary") if prefetch else None),
+                route=_spec_provider(self.model_spec()), timeout=budget_s)
+        except Exception as error:
+            self._note_call(kind, _spec_provider(self.model_spec()), hedged=False,
+                            ttft_s=None, loser="none", error=type(error).__name__,
+                            backup_armed=backup_armed)
+            raise
+        text, _elapsed = result
+        self._note_provider(kind, _spec_provider(self.model_spec()), failed=False)
+        self._note_call(kind, _spec_provider(self.model_spec()), hedged=False,
+                        ttft_s=holder.get("t"), loser="none", backup_armed=backup_armed)
+        return text, time.monotonic() - t0
 
     async def _call_model_legacy(self, system: str, user: str,
                                  look_png: bytes | None, kind: str, t0: float,
@@ -1452,7 +1491,8 @@ class Screen:
                    winner_total_s: float | None = None,
                    loser_total_s: float | None = None,
                    loser_ttft_s: float | None = None,
-                   loser_error: str | None = None) -> None:
+                   loser_error: str | None = None,
+                   backup_armed: bool = False) -> None:
         """Remember one model call for analytics (never prompts or answers).
 
         Race-only timings (``winner_total_s``, the loser's times, ``race``)
@@ -1474,6 +1514,9 @@ class Screen:
             entry["loser_ttft_s"] = round(loser_ttft_s, 3)
         if loser_error is not None:
             entry["loser_error"] = loser_error
+        if backup_armed:
+            # A backup was configured but this call ran alone on purpose.
+            entry["single_attempt"] = True
         self._call_stats.append(entry)
         if kind == "write":
             self._job_hedged = hedged
@@ -1814,6 +1857,7 @@ class Screen:
     def _images_meta(images: PageImages) -> dict[str, Any]:
         """The meta.json ``images`` section: strategy, per-image records, Parallel state."""
         return {"strategy": images.image_mode, "seconds": round(images.seconds, 2),
+                "review_concurrency": images.review_concurrency,
                 "parallel": images.parallel_state, "reviews": images.events}
 
     def _image_job(self, ask: str, t0: float) -> PageImages:
@@ -1823,22 +1867,24 @@ class Screen:
         # slot that arrives while the page is still being written still gets
         # its search + download + review. With the default 20 s limit that is
         # about 17 s into the job.
-        async def review(user: str, image: bytes | None, _deadline: float = 0.0) -> str:
+        async def review(user: str, image: bytes | None, _deadline: float = 0.0,
+                         hedge: bool = True) -> str:
             text, _ = await self._call_model(
                 "Choose an educational image for a Swedish school child. Inspect the actual picture with the lesson context. "
                 "Return only the requested JSON decision, reason and a text/HTML alternative if rejected.", user, image,
-                kind="image", budget_s=max(0.0, _deadline - time.monotonic()))
+                kind="image", budget_s=max(0.0, _deadline - time.monotonic()), hedge=hedge)
             return text
 
         deadline = t0 + self.timeout - FINAL_RENDER_RESERVE_S - DELIVERY_RESERVE_S
 
-        async def review_with_deadline(user: str, image: bytes | None) -> str:
-            return await review(user, image, deadline)
+        async def review_with_deadline(user: str, image: bytes | None, hedge: bool = True) -> str:
+            return await review(user, image, deadline, hedge)
 
         from .reviewed_images import ReviewedImageStore, reviewed_images_dir
 
         return PageImages(self._build_user_text(ask), review_with_deadline, deadline,
                           image_mode=image_mode(),
+                          review_concurrency=image_review_concurrency(),
                           image_store=ReviewedImageStore(reviewed_images_dir(self.pages_dir)))
 
     def _time_left(self, t0: float) -> float:

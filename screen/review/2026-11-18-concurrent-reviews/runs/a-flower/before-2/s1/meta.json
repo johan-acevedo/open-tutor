@@ -1,0 +1,70 @@
+{
+ "job": "s1",
+ "kind": "page",
+ "page": "p1",
+ "title": "En blomma",
+ "model": "gemini-4-hydrogen",
+ "api": "chat",
+ "reasoning": "low",
+ "pane": [
+  370,
+  610
+ ],
+ "provider": "google",
+ "failover": false,
+ "hedged": false,
+ "ttft_s": 0.0,
+ "model_s": 1.5,
+ "render_s": 1.22,
+ "look_s": 0.0,
+ "retry_s": 0.0,
+ "total_s": 7.5,
+ "issues": [],
+ "residual_lint": [],
+ "repair": {
+  "look": false,
+  "look_fix": false,
+  "retry": false,
+  "retry_applied": false,
+  "notes": [
+   "look pass skipped: page target budget"
+  ]
+ },
+ "reveal": "show",
+ "image_s": 4.78,
+ "image_reviews": [
+  {
+   "title": "File:Tulip Tulipa clusiana 'Lady Jane' Rock Ledge Flower Edit 2000px.jpg",
+   "source": "https://commons.wikimedia.org/wiki/File:Tulip_Tulipa_clusiana_%27Lady_Jane%27_Rock_Ledge_Flower_Edit_2000px.jpg",
+   "decision": "accepted",
+   "reason": "Tydlig och fin närbild av en blomma (tulpan) som passar bra för att visa vad en blomma är.",
+   "sha256": "23a4827f33b29c580118d04ea45a2be181da8069e04c52dec1c2fd1e278a8b9b",
+   "bytes": 154020,
+   "image_source": "commons",
+   "query": "flower",
+   "latency_s": 0.09
+  }
+ ],
+ "images": {
+  "strategy": "commons+parallel",
+  "seconds": 4.78,
+  "parallel": {
+   "available": true,
+   "reason": "",
+   "retry_in_s": 0.0
+  },
+  "reviews": [
+   {
+    "title": "File:Tulip Tulipa clusiana 'Lady Jane' Rock Ledge Flower Edit 2000px.jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:Tulip_Tulipa_clusiana_%27Lady_Jane%27_Rock_Ledge_Flower_Edit_2000px.jpg",
+    "decision": "accepted",
+    "reason": "Tydlig och fin närbild av en blomma (tulpan) som passar bra för att visa vad en blomma är.",
+    "sha256": "23a4827f33b29c580118d04ea45a2be181da8069e04c52dec1c2fd1e278a8b9b",
+    "bytes": 154020,
+    "image_source": "commons",
+    "query": "flower",
+    "latency_s": 0.09
+   }
+  ]
+ }
+}

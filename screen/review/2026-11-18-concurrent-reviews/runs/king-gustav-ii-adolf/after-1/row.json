@@ -1,0 +1,53 @@
+{
+  "ask": "king-gustav-ii-adolf",
+  "label": "after",
+  "run": 1,
+  "wall_s": 8.16,
+  "failures": [],
+  "total_s": 8.16,
+  "issues": [],
+  "strategy": "commons+parallel",
+  "image_s": 5.42,
+  "review_concurrency": 3,
+  "reviews": 3,
+  "accepted": {
+    "image_source": "commons",
+    "title": "File:Gustav II Adolf of Sweden.jpg",
+    "rank": 0,
+    "served": "https://commons.wikimedia.org/wiki/File:Gustav_II_Adolf_of_Sweden.jpg",
+    "reason": "Tydligt och passande porträtt av Gustav II Adolf som stämmer med lektionens syfte."
+  },
+  "candidates": [
+    {
+      "rank": 0,
+      "title": "File:Gustav II Adolf of Sweden.jpg",
+      "decision": "accepted",
+      "source": "commons",
+      "download_s": 0.19,
+      "review_s": 5.07,
+      "finished_s": 5.26,
+      "reason": "Tydligt och passande porträtt av Gustav II Adolf som stämmer med lektionens syfte."
+    },
+    {
+      "rank": 1,
+      "title": "File:Gustav II of Sweden.jpg",
+      "decision": "rejected",
+      "source": "commons",
+      "download_s": 0.96,
+      "review_s": 0.0,
+      "finished_s": 5.26,
+      "reason": "image review cancelled: a better-ranked candidate was accepted"
+    },
+    {
+      "rank": 2,
+      "title": "File:Portrait of Gustav II Adolf (1594–1632), King of Sweden",
+      "decision": "rejected",
+      "source": "commons",
+      "download_s": 0.95,
+      "review_s": 3.22,
+      "finished_s": 4.21,
+      "reason": "a better-ranked candidate was also accepted"
+    }
+  ],
+  "ships_image": true
+}

@@ -1,0 +1,53 @@
+{
+  "ask": "roman-empire-map",
+  "label": "after",
+  "run": 1,
+  "wall_s": 9.01,
+  "failures": [],
+  "total_s": 9.0,
+  "issues": [],
+  "strategy": "commons+parallel",
+  "image_s": 3.35,
+  "review_concurrency": 3,
+  "reviews": 3,
+  "accepted": {
+    "image_source": "commons",
+    "title": "File:Roman empire at its greatest extent.JPG",
+    "rank": 0,
+    "served": "https://commons.wikimedia.org/wiki/File:Roman_empire_at_its_greatest_extent.JPG",
+    "reason": "Tydlig historisk karta som visar Romarriket när det var som störst, lagom för årskurs 6."
+  },
+  "candidates": [
+    {
+      "rank": 0,
+      "title": "File:Roman empire at its greatest extent.JPG",
+      "decision": "accepted",
+      "source": "commons",
+      "download_s": 0.17,
+      "review_s": 3.56,
+      "finished_s": 3.73,
+      "reason": "Tydlig historisk karta som visar Romarriket när det var som störst, lagom för årskurs 6."
+    },
+    {
+      "rank": 1,
+      "title": "File:Map of the Roman Empire in its greatest extent. (with) ",
+      "decision": "rejected",
+      "source": "commons",
+      "download_s": 0.18,
+      "review_s": 0.0,
+      "finished_s": 3.73,
+      "reason": "image review cancelled: a better-ranked candidate was accepted"
+    },
+    {
+      "rank": 2,
+      "title": "File:Map of the Roman Empire in its greatest extent. (with) ",
+      "decision": "rejected",
+      "source": "commons",
+      "download_s": 0.18,
+      "review_s": 0.0,
+      "finished_s": 3.73,
+      "reason": "image review cancelled: a better-ranked candidate was accepted"
+    }
+  ],
+  "ships_image": true
+}

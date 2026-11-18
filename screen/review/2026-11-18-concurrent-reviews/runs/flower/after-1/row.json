@@ -1,0 +1,67 @@
+{
+  "ask": "flower",
+  "label": "after",
+  "run": 1,
+  "wall_s": 15.19,
+  "failures": [],
+  "total_s": 15.19,
+  "issues": [],
+  "strategy": "commons+parallel",
+  "image_s": 12.67,
+  "review_concurrency": 3,
+  "reviews": 5,
+  "accepted": null,
+  "candidates": [
+    {
+      "rank": 0,
+      "title": "File:058 Aglais urticae on Dandelion Parc naturel régional J",
+      "decision": "rejected",
+      "source": "commons",
+      "download_s": 0.21,
+      "review_s": 5.48,
+      "finished_s": 5.68,
+      "reason": "A butterfly covers most of the flower, and the plant has branching stems rather than a clear single dandelion flower."
+    },
+    {
+      "rank": 1,
+      "title": "File:Close-up of water droplets on the common dandelion.jpg",
+      "decision": "rejected",
+      "source": "commons",
+      "download_s": 0.2,
+      "review_s": 3.5,
+      "finished_s": 3.73,
+      "reason": "Bilden visar en svartvit närbild av vattendroppar på en överblommad maskros (fröställning), inte en maskros i blom."
+    },
+    {
+      "rank": 2,
+      "title": "File:Dandelion Close Up (243074873).jpeg",
+      "decision": "rejected",
+      "source": "commons",
+      "download_s": 0.16,
+      "review_s": 7.34,
+      "finished_s": 7.54,
+      "reason": "Bilden visar en överblommad maskros med frön, inte en maskros i blom (den gula blomman) som efterfrågades."
+    },
+    {
+      "rank": 0,
+      "title": "File:Dandelion Flower close up.jpg - Wikimedia Commons",
+      "decision": "rejected",
+      "source": "parallel",
+      "download_s": 0.09,
+      "review_s": 4.98,
+      "finished_s": 5.06,
+      "reason": "The image is corrupted and mostly covered by a solid grey block, showing only the very tips of the yellow petals."
+    },
+    {
+      "rank": 1,
+      "title": "Close-Up of a Dandelion Flower in Seed Stage - Free Stock Im",
+      "decision": "rejected",
+      "source": "parallel",
+      "download_s": 0.06,
+      "review_s": 4.24,
+      "finished_s": 4.3,
+      "reason": "Bilden visar en maskros i fröstadiet (vit boll) och inte en blommande gul maskros som efterfrågades."
+    }
+  ],
+  "ships_image": false
+}

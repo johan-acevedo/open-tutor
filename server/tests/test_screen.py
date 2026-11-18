@@ -1053,6 +1053,7 @@ async def test_images_are_reviewed_before_page_or_patch_reaches_renderer_or_chil
     for result in (pages[0], patches[0]):
         meta = json.loads((result.directory / "meta.json").read_text())
         assert meta["image_reviews"][0]["decision"] == "accepted" and "image_s" in meta
+        assert meta["images"]["review_concurrency"] == 3  # the default, recorded
         assert (result.directory / "images.json").exists()
 
 

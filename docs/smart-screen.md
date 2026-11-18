@@ -802,7 +802,8 @@ it takes effect when the code deploys there.
   pictures on both modes and falls back to text. Caveat: a slot gets ~17 s of
   search + review, so six sequential vision reviews do not fit when both
   sources return full lists and the provider is slow -- review concurrency is
-  the follow-up if real lessons hit this. No cool-down triggered; error paths
+  the follow-up if real lessons hit this (done the same day, below). No
+  cool-down triggered; error paths
   are unit-tested with recorded responses, including private-IP and
   redirect-to-private refusals.
 - **Security review (GPT-6.1 Sol, 2026-11-18, all five reproduced and fixed
@@ -815,6 +816,71 @@ it takes effect when the code deploys there.
   briefly, per-source isolation, cancel and drain); malformed 2xx JSON never
   cooling down (now a transient failure; a legitimate empty `results: []`
   stays a normal empty result).
+
+### Concurrent candidate reviews (2026-11-18)
+
+Branch `t3/concurrent-image-reviews`. The follow-up the parallel-image caveat above
+asked for: candidates for one `<ot-image>` slot were downloaded and vision-reviewed
+one after another, so ~17 s of image budget fitted about four reviews, and when the
+first candidates were bad (a flag-silhouette map, the wrong flowers) the good one was
+never judged and the page fell back to text. Now the top of the list is judged at
+once; nothing else about the image step changes (search, gates, store, delivery).
+
+- **How many at once.** `SCREEN_IMAGE_REVIEWS` (default 3, max 6): the candidates
+  admitted in rank order, further ones admitted as reviews settle. Three is a search
+  list, so a whole Commons list is judged while the first answer is still on its way;
+  `1` restores the sequential behaviour exactly. The prefetch pool resolves several
+  slots concurrently, so the same number is a per-page gate on reviews in flight: two
+  slots do not double what the screen model route is asked to serve. `commons+parallel`
+  keeps its phase order, so Commons candidates are all judged before any Parallel one.
+- **The ordering rule** (also in `page_images.py`): walk the candidates in preference
+  order (Commons by search rank, then Parallel by search rank). A finished rejection or
+  failure is stepped over; a review still in flight blocks, because a better-ranked
+  candidate may yet be accepted. So the winner is *the best-ranked acceptance whose
+  better-ranked reviews have all finished* -- a faster lower-ranked acceptance never
+  pre-empts a better-ranked review that is still being judged -- and once the deadline
+  hits, the best-ranked acceptance among the reviews that did finish. The reviews stop
+  0.25 s before the absolute image deadline so that decision, and the drain below, run
+  on our own clock instead of the caller's outer timeout.
+- **Nothing is left running, nothing unreviewed ships.** Once a winner is chosen or the
+  deadline hits, every other download and review is cancelled and drained; a
+  still-running candidate is recorded as rejected (`cancelled: a better-ranked
+  candidate was accepted`, or `image review cancelled or budget exhausted`), and a
+  review that was accepted but outranked says so. Only the winner reaches
+  `_keep_approved_bytes`, so Parallel bytes are stored (and served as
+  `/api/images/<sha256>.<ext>`) only for the picture that actually ships: a lost
+  acceptance leaves neither an event that claims a served image nor a file behind.
+  The text fallback for the slot comes from the best-ranked rejection that offered one,
+  instead of from whichever review happened to finish last.
+- **Provider calls do not multiply.** A hedged review can start the same review on the
+  backup provider, so hedging all N would spend up to 2N calls per list. Only the slot's
+  best-ranked review keeps the hedge/failover; the rest are single attempts
+  (`_call_model(hedge=False)`, recorded as `single_attempt` in the call stats when a
+  backup was armed). A slot therefore costs at most N+1 calls per source list, and the
+  concurrency is itself the redundancy a hedge would have bought.
+- **Records.** Each candidate's `image_reviews`/`images.reviews` entry keeps today's
+  keys and gains `rank`, `start_s`, `download_s`, `review_s`, `finished_s`; entries stay
+  in rank order regardless of completion order, and `images` gains
+  `review_concurrency`. Charge for the change: a slot now judges up to N candidates
+  even when the first is accepted (≈0.5 extra vision call per slot in the run below).
+- **Tests.** The ranking rule (a slower better-ranked acceptance still wins; quick
+  lower-ranked acceptances wait for their betters), the deadline (a hung better-ranked
+  review costs nothing: the best finished acceptance is taken), cancellation and drain
+  (losers cancelled, no `page-image-review-*` task left), isolation (one failing review
+  rejects only its candidate), concurrency (three at once, `1` sequential), the per-page
+  gate, only the best-ranked review hedging, and only the winning Parallel bytes
+  reaching the review store. Server side: `_call_model(hedge=False)` makes exactly one
+  call with a backup armed, and `SCREEN_IMAGE_REVIEWS` parsing.
+- **Live comparison** (`screen/review/2026-11-18-concurrent-reviews/`, `origin/main` vs
+  this branch, eight fictional asks, two runs each, real providers): acceptance 11/16 →
+  12/16, median image slot 4.74 s → 4.86 s, runs the budget cut 5 → 1, completed vision
+  reviews 22 → 34. The acceptance gained is the Swedish Empire map that timed out on
+  `main`; the dandelion ask now judges all five candidates in ~12 s instead of two to
+  four in 15.3 s, and correctly rejects all of them. Preference order held everywhere
+  (identical accepted file as `main` whenever Commons ranked a good picture first). The
+  Parallel water-cycle diagrams are rejected as cropped/grey in both checkouts, so that
+  is the source's content, not this change. Not tested live: a real lesson, and a
+  multi-slot page (the gate is unit-tested only).
 
 ### What Johan's test calls settled (2026-11-13)
 

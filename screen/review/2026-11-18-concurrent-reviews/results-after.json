@@ -1,0 +1,866 @@
+[
+  {
+    "ask": "king-gustav-ii-adolf",
+    "label": "after",
+    "run": 1,
+    "wall_s": 8.16,
+    "failures": [],
+    "total_s": 8.16,
+    "issues": [],
+    "strategy": "commons+parallel",
+    "image_s": 5.42,
+    "review_concurrency": 3,
+    "reviews": 3,
+    "accepted": {
+      "image_source": "commons",
+      "title": "File:Gustav II Adolf of Sweden.jpg",
+      "rank": 0,
+      "served": "https://commons.wikimedia.org/wiki/File:Gustav_II_Adolf_of_Sweden.jpg",
+      "reason": "Tydligt och passande porträtt av Gustav II Adolf som stämmer med lektionens syfte."
+    },
+    "candidates": [
+      {
+        "rank": 0,
+        "title": "File:Gustav II Adolf of Sweden.jpg",
+        "decision": "accepted",
+        "source": "commons",
+        "download_s": 0.19,
+        "review_s": 5.07,
+        "finished_s": 5.26,
+        "reason": "Tydligt och passande porträtt av Gustav II Adolf som stämmer med lektionens syfte."
+      },
+      {
+        "rank": 1,
+        "title": "File:Gustav II of Sweden.jpg",
+        "decision": "rejected",
+        "source": "commons",
+        "download_s": 0.96,
+        "review_s": 0.0,
+        "finished_s": 5.26,
+        "reason": "image review cancelled: a better-ranked candidate was accepted"
+      },
+      {
+        "rank": 2,
+        "title": "File:Portrait of Gustav II Adolf (1594–1632), King of Sweden",
+        "decision": "rejected",
+        "source": "commons",
+        "download_s": 0.95,
+        "review_s": 3.22,
+        "finished_s": 4.21,
+        "reason": "a better-ranked candidate was also accepted"
+      }
+    ],
+    "ships_image": true
+  },
+  {
+    "ask": "king-gustav-ii-adolf",
+    "label": "after",
+    "run": 2,
+    "wall_s": 9.01,
+    "failures": [],
+    "total_s": 9.0,
+    "issues": [],
+    "strategy": "commons+parallel",
+    "image_s": 4.31,
+    "review_concurrency": 3,
+    "reviews": 3,
+    "accepted": {
+      "image_source": "commons",
+      "title": "File:Gustav II Adolf of Sweden.jpg",
+      "rank": 0,
+      "served": "https://commons.wikimedia.org/wiki/File:Gustav_II_Adolf_of_Sweden.jpg",
+      "reason": "Tydligt och åldersanpassat porträtt av Gustav II Adolf som passar lektionen om stormaktstiden."
+    },
+    "candidates": [
+      {
+        "rank": 0,
+        "title": "File:Gustav II Adolf of Sweden.jpg",
+        "decision": "accepted",
+        "source": "commons",
+        "download_s": 0.17,
+        "review_s": 4.52,
+        "finished_s": 4.69,
+        "reason": "Tydligt och åldersanpassat porträtt av Gustav II Adolf som passar lektionen om stormaktstiden."
+      },
+      {
+        "rank": 1,
+        "title": "File:Gustav II of Sweden.jpg",
+        "decision": "rejected",
+        "source": "commons",
+        "download_s": 0.19,
+        "review_s": 0.0,
+        "finished_s": 4.7,
+        "reason": "image review cancelled: a better-ranked candidate was accepted"
+      },
+      {
+        "rank": 2,
+        "title": "File:Portrait of Gustav II Adolf (1594–1632), King of Sweden",
+        "decision": "rejected",
+        "source": "commons",
+        "download_s": 0.2,
+        "review_s": 4.05,
+        "finished_s": 4.28,
+        "reason": "a better-ranked candidate was also accepted"
+      }
+    ],
+    "ships_image": true
+  },
+  {
+    "ask": "king-gustav-vasa",
+    "label": "after",
+    "run": 1,
+    "wall_s": 8.76,
+    "failures": [],
+    "total_s": 8.76,
+    "issues": [],
+    "strategy": "commons+parallel",
+    "image_s": 2.76,
+    "review_concurrency": 3,
+    "reviews": 3,
+    "accepted": {
+      "image_source": "commons",
+      "title": "File:Gustav Vasa.jpg",
+      "rank": 0,
+      "served": "https://commons.wikimedia.org/wiki/File:Gustav_Vasa.jpg",
+      "reason": "Klassiskt och tydligt porträtt av Gustav Vasa som passar perfekt för åk 6 och frågan."
+    },
+    "candidates": [
+      {
+        "rank": 0,
+        "title": "File:Gustav Vasa.jpg",
+        "decision": "accepted",
+        "source": "commons",
+        "download_s": 0.17,
+        "review_s": 2.55,
+        "finished_s": 2.71,
+        "reason": "Klassiskt och tydligt porträtt av Gustav Vasa som passar perfekt för åk 6 och frågan."
+      },
+      {
+        "rank": 1,
+        "title": "File:Gustav Vasa small profile.jpeg",
+        "decision": "rejected",
+        "source": "commons",
+        "download_s": 0.15,
+        "review_s": 0.0,
+        "finished_s": 2.71,
+        "reason": "image review cancelled: a better-ranked candidate was accepted"
+      },
+      {
+        "rank": 2,
+        "title": "File:Vasa Museum - Gustav Adolf.jpg",
+        "decision": "rejected",
+        "source": "commons",
+        "download_s": 0.19,
+        "review_s": 0.0,
+        "finished_s": 2.71,
+        "reason": "image review cancelled: a better-ranked candidate was accepted"
+      }
+    ],
+    "ships_image": true
+  },
+  {
+    "ask": "king-gustav-vasa",
+    "label": "after",
+    "run": 2,
+    "wall_s": 7.88,
+    "failures": [],
+    "total_s": 7.88,
+    "issues": [],
+    "strategy": "commons+parallel",
+    "image_s": 2.61,
+    "review_concurrency": 3,
+    "reviews": 3,
+    "accepted": {
+      "image_source": "commons",
+      "title": "File:Gustav Vasa.jpg",
+      "rank": 0,
+      "served": "https://commons.wikimedia.org/wiki/File:Gustav_Vasa.jpg",
+      "reason": "A clear, age-appropriate historical portrait painting of Gustav Vasa that directly matches the lesson context and requested label."
+    },
+    "candidates": [
+      {
+        "rank": 0,
+        "title": "File:Gustav Vasa.jpg",
+        "decision": "accepted",
+        "source": "commons",
+        "download_s": 0.16,
+        "review_s": 2.83,
+        "finished_s": 2.99,
+        "reason": "A clear, age-appropriate historical portrait painting of Gustav Vasa that directly matches the lesson context and reques"
+      },
+      {
+        "rank": 1,
+        "title": "File:Gustav Vasa small profile.jpeg",
+        "decision": "rejected",
+        "source": "commons",
+        "download_s": 0.11,
+        "review_s": 0.0,
+        "finished_s": 2.99,
+        "reason": "image review cancelled: a better-ranked candidate was accepted"
+      },
+      {
+        "rank": 2,
+        "title": "File:Vasa Museum - Gustav Adolf.jpg",
+        "decision": "rejected",
+        "source": "commons",
+        "download_s": 0.19,
+        "review_s": 0.0,
+        "finished_s": 2.99,
+        "reason": "image review cancelled: a better-ranked candidate was accepted"
+      }
+    ],
+    "ships_image": true
+  },
+  {
+    "ask": "colosseum",
+    "label": "after",
+    "run": 1,
+    "wall_s": 9.0,
+    "failures": [],
+    "total_s": 9.0,
+    "issues": [],
+    "strategy": "commons+parallel",
+    "image_s": 4.17,
+    "review_concurrency": 3,
+    "reviews": 3,
+    "accepted": {
+      "image_source": "commons",
+      "title": "File:Photo of The Colosseum in Rome, Italy.jpg",
+      "rank": 0,
+      "served": "https://commons.wikimedia.org/wiki/File:Photo_of_The_Colosseum_in_Rome,_Italy.jpg",
+      "reason": "Tydlig och passande bild av Colosseums utsida i Rom som stämmer med elevens fråga."
+    },
+    "candidates": [
+      {
+        "rank": 0,
+        "title": "File:Photo of The Colosseum in Rome, Italy.jpg",
+        "decision": "accepted",
+        "source": "commons",
+        "download_s": 0.99,
+        "review_s": 3.0,
+        "finished_s": 4.0,
+        "reason": "Tydlig och passande bild av Colosseums utsida i Rom som stämmer med elevens fråga."
+      },
+      {
+        "rank": 1,
+        "title": "File:Colosseum in Rome (3).jpg",
+        "decision": "rejected",
+        "source": "commons",
+        "download_s": 0.15,
+        "review_s": 0.0,
+        "finished_s": 4.0,
+        "reason": "image review cancelled: a better-ranked candidate was accepted"
+      },
+      {
+        "rank": 2,
+        "title": "File:Colosseum in Rome (7).jpg",
+        "decision": "rejected",
+        "source": "commons",
+        "download_s": 0.15,
+        "review_s": 0.0,
+        "finished_s": 4.0,
+        "reason": "image review cancelled: a better-ranked candidate was accepted"
+      }
+    ],
+    "ships_image": true
+  },
+  {
+    "ask": "colosseum",
+    "label": "after",
+    "run": 2,
+    "wall_s": 7.28,
+    "failures": [],
+    "total_s": 7.28,
+    "issues": [],
+    "strategy": "commons+parallel",
+    "image_s": 2.41,
+    "review_concurrency": 3,
+    "reviews": 3,
+    "accepted": {
+      "image_source": "commons",
+      "title": "File:Photo of The Colosseum in Rome, Italy.jpg",
+      "rank": 0,
+      "served": "https://commons.wikimedia.org/wiki/File:Photo_of_The_Colosseum_in_Rome,_Italy.jpg",
+      "reason": "Clear, age-appropriate exterior photo of the Colosseum in Rome that matches the lesson context."
+    },
+    "candidates": [
+      {
+        "rank": 0,
+        "title": "File:Photo of The Colosseum in Rome, Italy.jpg",
+        "decision": "accepted",
+        "source": "commons",
+        "download_s": 0.21,
+        "review_s": 2.57,
+        "finished_s": 2.78,
+        "reason": "Clear, age-appropriate exterior photo of the Colosseum in Rome that matches the lesson context."
+      },
+      {
+        "rank": 1,
+        "title": "File:Colosseum in Rome (3).jpg",
+        "decision": "rejected",
+        "source": "commons",
+        "download_s": 0.17,
+        "review_s": 0.0,
+        "finished_s": 2.78,
+        "reason": "image review cancelled: a better-ranked candidate was accepted"
+      },
+      {
+        "rank": 2,
+        "title": "File:Colosseum in Rome (7).jpg",
+        "decision": "rejected",
+        "source": "commons",
+        "download_s": 0.16,
+        "review_s": 0.0,
+        "finished_s": 2.78,
+        "reason": "image review cancelled: a better-ranked candidate was accepted"
+      }
+    ],
+    "ships_image": true
+  },
+  {
+    "ask": "flower",
+    "label": "after",
+    "run": 1,
+    "wall_s": 15.19,
+    "failures": [],
+    "total_s": 15.19,
+    "issues": [],
+    "strategy": "commons+parallel",
+    "image_s": 12.67,
+    "review_concurrency": 3,
+    "reviews": 5,
+    "accepted": null,
+    "candidates": [
+      {
+        "rank": 0,
+        "title": "File:058 Aglais urticae on Dandelion Parc naturel régional J",
+        "decision": "rejected",
+        "source": "commons",
+        "download_s": 0.21,
+        "review_s": 5.48,
+        "finished_s": 5.68,
+        "reason": "A butterfly covers most of the flower, and the plant has branching stems rather than a clear single dandelion flower."
+      },
+      {
+        "rank": 1,
+        "title": "File:Close-up of water droplets on the common dandelion.jpg",
+        "decision": "rejected",
+        "source": "commons",
+        "download_s": 0.2,
+        "review_s": 3.5,
+        "finished_s": 3.73,
+        "reason": "Bilden visar en svartvit närbild av vattendroppar på en överblommad maskros (fröställning), inte en maskros i blom."
+      },
+      {
+        "rank": 2,
+        "title": "File:Dandelion Close Up (243074873).jpeg",
+        "decision": "rejected",
+        "source": "commons",
+        "download_s": 0.16,
+        "review_s": 7.34,
+        "finished_s": 7.54,
+        "reason": "Bilden visar en överblommad maskros med frön, inte en maskros i blom (den gula blomman) som efterfrågades."
+      },
+      {
+        "rank": 0,
+        "title": "File:Dandelion Flower close up.jpg - Wikimedia Commons",
+        "decision": "rejected",
+        "source": "parallel",
+        "download_s": 0.09,
+        "review_s": 4.98,
+        "finished_s": 5.06,
+        "reason": "The image is corrupted and mostly covered by a solid grey block, showing only the very tips of the yellow petals."
+      },
+      {
+        "rank": 1,
+        "title": "Close-Up of a Dandelion Flower in Seed Stage - Free Stock Im",
+        "decision": "rejected",
+        "source": "parallel",
+        "download_s": 0.06,
+        "review_s": 4.24,
+        "finished_s": 4.3,
+        "reason": "Bilden visar en maskros i fröstadiet (vit boll) och inte en blommande gul maskros som efterfrågades."
+      }
+    ],
+    "ships_image": false
+  },
+  {
+    "ask": "flower",
+    "label": "after",
+    "run": 2,
+    "wall_s": 14.09,
+    "failures": [],
+    "total_s": 14.08,
+    "issues": [],
+    "strategy": "commons+parallel",
+    "image_s": 11.59,
+    "review_concurrency": 3,
+    "reviews": 5,
+    "accepted": null,
+    "candidates": [
+      {
+        "rank": 0,
+        "title": "File:058 Aglais urticae on Dandelion Parc naturel régional J",
+        "decision": "rejected",
+        "source": "commons",
+        "download_s": 0.3,
+        "review_s": 5.83,
+        "finished_s": 6.14,
+        "reason": "The main subject is a butterfly obscuring the flower, and the branching stem does not clearly show a dandelion."
+      },
+      {
+        "rank": 1,
+        "title": "File:Close-up of water droplets on the common dandelion.jpg",
+        "decision": "rejected",
+        "source": "commons",
+        "download_s": 0.28,
+        "review_s": 3.55,
+        "finished_s": 3.85,
+        "reason": "Bilden visar en svartvit närbild av vattendroppar på en överblommad maskros (fröställning), inte en maskros i blom."
+      },
+      {
+        "rank": 2,
+        "title": "File:Dandelion Close Up (243074873).jpeg",
+        "decision": "rejected",
+        "source": "commons",
+        "download_s": 0.29,
+        "review_s": 6.31,
+        "finished_s": 6.63,
+        "reason": "Bilden visar en överblommad maskros med frön, inte en maskros i blom (gul blomma) som efterfrågades."
+      },
+      {
+        "rank": 0,
+        "title": "File:Dandelion Flower close up.jpg - Wikimedia Commons",
+        "decision": "rejected",
+        "source": "parallel",
+        "download_s": 0.09,
+        "review_s": 4.17,
+        "finished_s": 4.26,
+        "reason": "The image is corrupted and mostly covered by a solid grey block."
+      },
+      {
+        "rank": 1,
+        "title": "Close-Up of a Dandelion Flower in Seed Stage - Free Stock Im",
+        "decision": "rejected",
+        "source": "parallel",
+        "download_s": 0.06,
+        "review_s": 5.27,
+        "finished_s": 5.33,
+        "reason": "Bilden visar en överblommad maskros med frön, inte en maskros i blom."
+      }
+    ],
+    "ships_image": false
+  },
+  {
+    "ask": "water-cycle",
+    "label": "after",
+    "run": 1,
+    "wall_s": 9.14,
+    "failures": [],
+    "total_s": 9.14,
+    "issues": [],
+    "strategy": "commons+parallel",
+    "image_s": 6.63,
+    "review_concurrency": 3,
+    "reviews": 3,
+    "accepted": null,
+    "candidates": [
+      {
+        "rank": 0,
+        "title": "Vattnets Kretslopp för Skolo, The Water Cycle for Schools, S",
+        "decision": "rejected",
+        "source": "parallel",
+        "download_s": 0.67,
+        "review_s": 4.93,
+        "finished_s": 5.6,
+        "reason": "The image is corrupted and mostly solid grey, with only the very top strip visible."
+      },
+      {
+        "rank": 1,
+        "title": "Vattnets Kretslopp för Skolo, The Water Cycle for Schools, S",
+        "decision": "rejected",
+        "source": "parallel",
+        "download_s": 0.61,
+        "review_s": 5.2,
+        "finished_s": 5.81,
+        "reason": "Bilden är beskuren till höger så att text klipps av, och den är för lågupplöst och rörig för att texten ska gå att läsa "
+      },
+      {
+        "rank": 2,
+        "title": "Vattnets Kretslopp för Skolo, The Water Cycle for Schools, S",
+        "decision": "rejected",
+        "source": "parallel",
+        "download_s": 0.63,
+        "review_s": 4.97,
+        "finished_s": 5.6,
+        "reason": "Bilden är skadad och nästan helt grå, så innehållet syns inte."
+      }
+    ],
+    "ships_image": false
+  },
+  {
+    "ask": "water-cycle",
+    "label": "after",
+    "run": 2,
+    "wall_s": 17.59,
+    "failures": [],
+    "total_s": 17.59,
+    "issues": [],
+    "strategy": "commons+parallel",
+    "image_s": 15.05,
+    "review_concurrency": 3,
+    "reviews": 3,
+    "accepted": null,
+    "candidates": [
+      {
+        "rank": 0,
+        "title": "Vattnets Kretslopp för Skolo, The Water Cycle for Schools, S",
+        "decision": "rejected",
+        "source": "parallel",
+        "download_s": 0.59,
+        "review_s": 6.15,
+        "finished_s": 6.74,
+        "reason": "Bilden är skadad eller ofullständig (nästan helt grå)."
+      },
+      {
+        "rank": 1,
+        "title": "Vattnets Kretslopp för Skolo, The Water Cycle for Schools, S",
+        "decision": "rejected",
+        "source": "parallel",
+        "download_s": 0.64,
+        "review_s": 0.0,
+        "finished_s": 14.56,
+        "reason": "image review cancelled or budget exhausted"
+      },
+      {
+        "rank": 2,
+        "title": "Vattnets Kretslopp för Skolo, The Water Cycle for Schools, S",
+        "decision": "rejected",
+        "source": "parallel",
+        "download_s": 0.62,
+        "review_s": 6.16,
+        "finished_s": 6.78,
+        "reason": "Bilden är trasig och visar bara en liten del längst upp medan resten är grå."
+      }
+    ],
+    "ships_image": false
+  },
+  {
+    "ask": "roman-empire-map",
+    "label": "after",
+    "run": 1,
+    "wall_s": 9.01,
+    "failures": [],
+    "total_s": 9.0,
+    "issues": [],
+    "strategy": "commons+parallel",
+    "image_s": 3.35,
+    "review_concurrency": 3,
+    "reviews": 3,
+    "accepted": {
+      "image_source": "commons",
+      "title": "File:Roman empire at its greatest extent.JPG",
+      "rank": 0,
+      "served": "https://commons.wikimedia.org/wiki/File:Roman_empire_at_its_greatest_extent.JPG",
+      "reason": "Tydlig historisk karta som visar Romarriket när det var som störst, lagom för årskurs 6."
+    },
+    "candidates": [
+      {
+        "rank": 0,
+        "title": "File:Roman empire at its greatest extent.JPG",
+        "decision": "accepted",
+        "source": "commons",
+        "download_s": 0.17,
+        "review_s": 3.56,
+        "finished_s": 3.73,
+        "reason": "Tydlig historisk karta som visar Romarriket när det var som störst, lagom för årskurs 6."
+      },
+      {
+        "rank": 1,
+        "title": "File:Map of the Roman Empire in its greatest extent. (with) ",
+        "decision": "rejected",
+        "source": "commons",
+        "download_s": 0.18,
+        "review_s": 0.0,
+        "finished_s": 3.73,
+        "reason": "image review cancelled: a better-ranked candidate was accepted"
+      },
+      {
+        "rank": 2,
+        "title": "File:Map of the Roman Empire in its greatest extent. (with) ",
+        "decision": "rejected",
+        "source": "commons",
+        "download_s": 0.18,
+        "review_s": 0.0,
+        "finished_s": 3.73,
+        "reason": "image review cancelled: a better-ranked candidate was accepted"
+      }
+    ],
+    "ships_image": true
+  },
+  {
+    "ask": "roman-empire-map",
+    "label": "after",
+    "run": 2,
+    "wall_s": 7.87,
+    "failures": [],
+    "total_s": 7.87,
+    "issues": [],
+    "strategy": "commons+parallel",
+    "image_s": 3.44,
+    "review_concurrency": 3,
+    "reviews": 3,
+    "accepted": {
+      "image_source": "commons",
+      "title": "File:Roman empire at its greatest extent.JPG",
+      "rank": 0,
+      "served": "https://commons.wikimedia.org/wiki/File:Roman_empire_at_its_greatest_extent.JPG",
+      "reason": "Tydlig historisk karta som visar Romarrikets största utbredning runt Medelhavet, lämplig för årskurs 6."
+    },
+    "candidates": [
+      {
+        "rank": 0,
+        "title": "File:Roman empire at its greatest extent.JPG",
+        "decision": "accepted",
+        "source": "commons",
+        "download_s": 0.17,
+        "review_s": 3.64,
+        "finished_s": 3.82,
+        "reason": "Tydlig historisk karta som visar Romarrikets största utbredning runt Medelhavet, lämplig för årskurs 6."
+      },
+      {
+        "rank": 1,
+        "title": "File:Map of the Roman Empire in its greatest extent. (with) ",
+        "decision": "rejected",
+        "source": "commons",
+        "download_s": 0.2,
+        "review_s": 0.0,
+        "finished_s": 3.82,
+        "reason": "image review cancelled: a better-ranked candidate was accepted"
+      },
+      {
+        "rank": 2,
+        "title": "File:Map of the Roman Empire in its greatest extent. (with) ",
+        "decision": "rejected",
+        "source": "commons",
+        "download_s": 0.16,
+        "review_s": 0.0,
+        "finished_s": 3.82,
+        "reason": "image review cancelled: a better-ranked candidate was accepted"
+      }
+    ],
+    "ships_image": true
+  },
+  {
+    "ask": "swedish-empire-map-1658",
+    "label": "after",
+    "run": 1,
+    "wall_s": 8.75,
+    "failures": [],
+    "total_s": 8.75,
+    "issues": [],
+    "strategy": "commons+parallel",
+    "image_s": 6.11,
+    "review_concurrency": 3,
+    "reviews": 3,
+    "accepted": {
+      "image_source": "commons",
+      "title": "File:LocationSwedishEmpire.png",
+      "rank": 0,
+      "served": "https://commons.wikimedia.org/wiki/File:LocationSwedishEmpire.png",
+      "reason": "Tydlig och lättläst karta som visar det svenska rikets utbredning år 1658 i Europa, vilket passar bra för årskurs 6."
+    },
+    "candidates": [
+      {
+        "rank": 0,
+        "title": "File:LocationSwedishEmpire.png",
+        "decision": "accepted",
+        "source": "commons",
+        "download_s": 0.18,
+        "review_s": 5.7,
+        "finished_s": 5.88,
+        "reason": "Tydlig och lättläst karta som visar det svenska rikets utbredning år 1658 i Europa, vilket passar bra för årskurs 6."
+      },
+      {
+        "rank": 1,
+        "title": "File:Sweden in 1658.PNG",
+        "decision": "rejected",
+        "source": "commons",
+        "download_s": 0.36,
+        "review_s": 3.6,
+        "finished_s": 3.99,
+        "reason": "a better-ranked candidate was also accepted"
+      },
+      {
+        "rank": 2,
+        "title": "File:Sweden 1658.jpg",
+        "decision": "rejected",
+        "source": "commons",
+        "download_s": 0.2,
+        "review_s": 4.52,
+        "finished_s": 4.75,
+        "reason": "a better-ranked candidate was also accepted"
+      }
+    ],
+    "ships_image": true
+  },
+  {
+    "ask": "swedish-empire-map-1658",
+    "label": "after",
+    "run": 2,
+    "wall_s": 7.32,
+    "failures": [],
+    "total_s": 7.31,
+    "issues": [],
+    "strategy": "commons+parallel",
+    "image_s": 4.62,
+    "review_concurrency": 3,
+    "reviews": 3,
+    "accepted": {
+      "image_source": "commons",
+      "title": "File:LocationSwedishEmpire.png",
+      "rank": 0,
+      "served": "https://commons.wikimedia.org/wiki/File:LocationSwedishEmpire.png",
+      "reason": "Tydlig och historiskt korrekt karta över det svenska riket vid sin största utbredning år 1658, lätt att läsa för en elev i årskurs 6."
+    },
+    "candidates": [
+      {
+        "rank": 0,
+        "title": "File:LocationSwedishEmpire.png",
+        "decision": "accepted",
+        "source": "commons",
+        "download_s": 0.16,
+        "review_s": 4.83,
+        "finished_s": 5.0,
+        "reason": "Tydlig och historiskt korrekt karta över det svenska riket vid sin största utbredning år 1658, lätt att läsa för en elev"
+      },
+      {
+        "rank": 1,
+        "title": "File:Sweden in 1658.PNG",
+        "decision": "rejected",
+        "source": "commons",
+        "download_s": 0.16,
+        "review_s": 3.11,
+        "finished_s": 3.29,
+        "reason": "a better-ranked candidate was also accepted"
+      },
+      {
+        "rank": 2,
+        "title": "File:Sweden 1658.jpg",
+        "decision": "rejected",
+        "source": "commons",
+        "download_s": 0.2,
+        "review_s": 3.84,
+        "finished_s": 4.06,
+        "reason": "a better-ranked candidate was also accepted"
+      }
+    ],
+    "ships_image": true
+  },
+  {
+    "ask": "a-flower",
+    "label": "after",
+    "run": 1,
+    "wall_s": 7.81,
+    "failures": [],
+    "total_s": 7.81,
+    "issues": [],
+    "strategy": "commons+parallel",
+    "image_s": 5.09,
+    "review_concurrency": 3,
+    "reviews": 3,
+    "accepted": {
+      "image_source": "commons",
+      "title": "File:Tulip Tulipa clusiana 'Lady Jane' Rock Ledge Flower Edit 2000px.jpg",
+      "rank": 0,
+      "served": "https://commons.wikimedia.org/wiki/File:Tulip_Tulipa_clusiana_%27Lady_Jane%27_Rock_Ledge_Flower_Edit_2000px.jpg",
+      "reason": "Tydlig och fin bild av en blomma (tulpan) med synliga kronblad, ståndare och pistill."
+    },
+    "candidates": [
+      {
+        "rank": 0,
+        "title": "File:Tulip Tulipa clusiana 'Lady Jane' Rock Ledge Flower Edi",
+        "decision": "accepted",
+        "source": "commons",
+        "download_s": 0.19,
+        "review_s": 5.04,
+        "finished_s": 5.23,
+        "reason": "Tydlig och fin bild av en blomma (tulpan) med synliga kronblad, ståndare och pistill."
+      },
+      {
+        "rank": 1,
+        "title": "File:Hoverfly on flower edit.jpg",
+        "decision": "rejected",
+        "source": "commons",
+        "download_s": 0.29,
+        "review_s": 0.0,
+        "finished_s": 5.23,
+        "reason": "image review cancelled: a better-ranked candidate was accepted"
+      },
+      {
+        "rank": 2,
+        "title": "File:Halictus bee on flower-2.jpg",
+        "decision": "rejected",
+        "source": "commons",
+        "download_s": 0.29,
+        "review_s": 0.0,
+        "finished_s": 5.23,
+        "reason": "image review cancelled: a better-ranked candidate was accepted"
+      }
+    ],
+    "ships_image": true
+  },
+  {
+    "ask": "a-flower",
+    "label": "after",
+    "run": 2,
+    "wall_s": 9.32,
+    "failures": [],
+    "total_s": 9.32,
+    "issues": [],
+    "strategy": "commons+parallel",
+    "image_s": 6.66,
+    "review_concurrency": 3,
+    "reviews": 3,
+    "accepted": {
+      "image_source": "commons",
+      "title": "File:Tulip Tulipa clusiana 'Lady Jane' Rock Ledge Flower Edit 2000px.jpg",
+      "rank": 0,
+      "served": "https://commons.wikimedia.org/wiki/File:Tulip_Tulipa_clusiana_%27Lady_Jane%27_Rock_Ledge_Flower_Edit_2000px.jpg",
+      "reason": "Clear, high-quality photograph of a flower showing petals, stamens, and pistil, matching the request."
+    },
+    "candidates": [
+      {
+        "rank": 0,
+        "title": "File:Tulip Tulipa clusiana 'Lady Jane' Rock Ledge Flower Edi",
+        "decision": "accepted",
+        "source": "commons",
+        "download_s": 0.2,
+        "review_s": 7.34,
+        "finished_s": 7.54,
+        "reason": "Clear, high-quality photograph of a flower showing petals, stamens, and pistil, matching the request."
+      },
+      {
+        "rank": 1,
+        "title": "File:Hoverfly on flower edit.jpg",
+        "decision": "rejected",
+        "source": "commons",
+        "download_s": 0.19,
+        "review_s": 5.67,
+        "finished_s": 5.88,
+        "reason": "a better-ranked candidate was also accepted"
+      },
+      {
+        "rank": 2,
+        "title": "File:Halictus bee on flower-2.jpg",
+        "decision": "rejected",
+        "source": "commons",
+        "download_s": 0.16,
+        "review_s": 0.0,
+        "finished_s": 7.54,
+        "reason": "image review cancelled: a better-ranked candidate was accepted"
+      }
+    ],
+    "ships_image": true
+  }
+]

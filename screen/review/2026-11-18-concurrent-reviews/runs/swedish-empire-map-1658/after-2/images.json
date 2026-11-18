@@ -1,0 +1,50 @@
+[
+ {
+  "title": "File:LocationSwedishEmpire.png",
+  "source": "https://commons.wikimedia.org/wiki/File:LocationSwedishEmpire.png",
+  "decision": "accepted",
+  "reason": "Tydlig och historiskt korrekt karta över det svenska riket vid sin största utbredning år 1658, lätt att läsa för en elev i årskurs 6.",
+  "image_source": "commons",
+  "query": "Swedish Empire map 1658 historical",
+  "latency_s": 0.09,
+  "rank": 0,
+  "start_s": 0.0,
+  "download_s": 0.16,
+  "review_s": 4.83,
+  "finished_s": 5.0,
+  "sha256": "e6a056621cee1353ca6829fd3f5a89246d478cb46949725afc7c3d36d49276d9",
+  "bytes": 115954
+ },
+ {
+  "title": "File:Sweden in 1658.PNG",
+  "source": "https://commons.wikimedia.org/wiki/File:Sweden_in_1658.PNG",
+  "decision": "rejected",
+  "reason": "a better-ranked candidate was also accepted",
+  "image_source": "commons",
+  "query": "Swedish Empire map 1658 historical",
+  "latency_s": 0.09,
+  "rank": 1,
+  "start_s": 0.0,
+  "download_s": 0.16,
+  "review_s": 3.11,
+  "finished_s": 3.29,
+  "sha256": "2cc54be53e5378087de4b4c8ff8c85369107951b2b8541a90bb8ac5996f3ad83",
+  "bytes": 64782
+ },
+ {
+  "title": "File:Sweden 1658.jpg",
+  "source": "https://commons.wikimedia.org/wiki/File:Sweden_1658.jpg",
+  "decision": "rejected",
+  "reason": "a better-ranked candidate was also accepted",
+  "image_source": "commons",
+  "query": "Swedish Empire map 1658 historical",
+  "latency_s": 0.09,
+  "rank": 2,
+  "start_s": 0.0,
+  "download_s": 0.2,
+  "review_s": 3.84,
+  "finished_s": 4.06,
+  "sha256": "1ca6a60b25453f119044169a4ba7600e4ce2310fe2607a5610e5a1c379315312",
+  "bytes": 346757
+ }
+]

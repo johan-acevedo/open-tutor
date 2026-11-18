@@ -1,0 +1,13 @@
+[
+ {
+  "title": "File:Gustav Vasa.jpg",
+  "source": "https://commons.wikimedia.org/wiki/File:Gustav_Vasa.jpg",
+  "decision": "accepted",
+  "reason": "Historiskt porträtt av Gustav Vasa som passar utmärkt för årskurs 6 och lektionens innehåll.",
+  "sha256": "10988e38dd806f8de1cadcb5c7ec8a32c78399fe511a0fdfda53568de9709281",
+  "bytes": 38585,
+  "image_source": "commons",
+  "query": "Gustav Vasa portrait painting",
+  "latency_s": 0.11
+ }
+]

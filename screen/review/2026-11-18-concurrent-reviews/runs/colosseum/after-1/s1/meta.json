@@ -1,0 +1,145 @@
+{
+ "job": "s1",
+ "kind": "page",
+ "page": "p1",
+ "title": "Colosseum",
+ "model": "gemini-4-hydrogen",
+ "api": "chat",
+ "reasoning": "low",
+ "pane": [
+  370,
+  610
+ ],
+ "provider": "google",
+ "failover": false,
+ "hedged": false,
+ "ttft_s": 0.0,
+ "model_s": 1.5,
+ "render_s": 1.19,
+ "look_s": 2.14,
+ "retry_s": 0.0,
+ "total_s": 9.0,
+ "issues": [],
+ "residual_lint": [],
+ "repair": {
+  "look": true,
+  "look_fix": false,
+  "retry": false,
+  "retry_applied": false,
+  "notes": [
+   "look pass timed out"
+  ]
+ },
+ "reveal": "show",
+ "image_s": 4.17,
+ "image_reviews": [
+  {
+   "title": "File:Photo of The Colosseum in Rome, Italy.jpg",
+   "source": "https://commons.wikimedia.org/wiki/File:Photo_of_The_Colosseum_in_Rome,_Italy.jpg",
+   "decision": "accepted",
+   "reason": "Tydlig och passande bild av Colosseums utsida i Rom som stämmer med elevens fråga.",
+   "image_source": "commons",
+   "query": "Colosseum Rome exterior photo",
+   "latency_s": 0.66,
+   "rank": 0,
+   "start_s": 0.0,
+   "download_s": 0.99,
+   "review_s": 3.0,
+   "finished_s": 4.0,
+   "sha256": "5b7cf5a471c61fc37f3565579df43c4c0fc7f0d853eccc2b654443d6e517a3cb",
+   "bytes": 222671
+  },
+  {
+   "title": "File:Colosseum in Rome (3).jpg",
+   "source": "https://commons.wikimedia.org/wiki/File:Colosseum_in_Rome_(3).jpg",
+   "decision": "rejected",
+   "reason": "image review cancelled: a better-ranked candidate was accepted",
+   "image_source": "commons",
+   "query": "Colosseum Rome exterior photo",
+   "latency_s": 0.66,
+   "rank": 1,
+   "start_s": 0.0,
+   "download_s": 0.15,
+   "review_s": 0.0,
+   "finished_s": 4.0,
+   "sha256": "07479da80c70316798415d344d8606254ceab16c0e8008e8c097548b5c8ba00d",
+   "bytes": 166636
+  },
+  {
+   "title": "File:Colosseum in Rome (7).jpg",
+   "source": "https://commons.wikimedia.org/wiki/File:Colosseum_in_Rome_(7).jpg",
+   "decision": "rejected",
+   "reason": "image review cancelled: a better-ranked candidate was accepted",
+   "image_source": "commons",
+   "query": "Colosseum Rome exterior photo",
+   "latency_s": 0.66,
+   "rank": 2,
+   "start_s": 0.0,
+   "download_s": 0.15,
+   "review_s": 0.0,
+   "finished_s": 4.0,
+   "sha256": "81b8edfc1630373066deee620625fec43d14fe12ce56d8a78c45c114d4989b41",
+   "bytes": 139492
+  }
+ ],
+ "images": {
+  "strategy": "commons+parallel",
+  "seconds": 4.17,
+  "review_concurrency": 3,
+  "parallel": {
+   "available": true,
+   "reason": "",
+   "retry_in_s": 0.0
+  },
+  "reviews": [
+   {
+    "title": "File:Photo of The Colosseum in Rome, Italy.jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:Photo_of_The_Colosseum_in_Rome,_Italy.jpg",
+    "decision": "accepted",
+    "reason": "Tydlig och passande bild av Colosseums utsida i Rom som stämmer med elevens fråga.",
+    "image_source": "commons",
+    "query": "Colosseum Rome exterior photo",
+    "latency_s": 0.66,
+    "rank": 0,
+    "start_s": 0.0,
+    "download_s": 0.99,
+    "review_s": 3.0,
+    "finished_s": 4.0,
+    "sha256": "5b7cf5a471c61fc37f3565579df43c4c0fc7f0d853eccc2b654443d6e517a3cb",
+    "bytes": 222671
+   },
+   {
+    "title": "File:Colosseum in Rome (3).jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:Colosseum_in_Rome_(3).jpg",
+    "decision": "rejected",
+    "reason": "image review cancelled: a better-ranked candidate was accepted",
+    "image_source": "commons",
+    "query": "Colosseum Rome exterior photo",
+    "latency_s": 0.66,
+    "rank": 1,
+    "start_s": 0.0,
+    "download_s": 0.15,
+    "review_s": 0.0,
+    "finished_s": 4.0,
+    "sha256": "07479da80c70316798415d344d8606254ceab16c0e8008e8c097548b5c8ba00d",
+    "bytes": 166636
+   },
+   {
+    "title": "File:Colosseum in Rome (7).jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:Colosseum_in_Rome_(7).jpg",
+    "decision": "rejected",
+    "reason": "image review cancelled: a better-ranked candidate was accepted",
+    "image_source": "commons",
+    "query": "Colosseum Rome exterior photo",
+    "latency_s": 0.66,
+    "rank": 2,
+    "start_s": 0.0,
+    "download_s": 0.15,
+    "review_s": 0.0,
+    "finished_s": 4.0,
+    "sha256": "81b8edfc1630373066deee620625fec43d14fe12ce56d8a78c45c114d4989b41",
+    "bytes": 139492
+   }
+  ]
+ }
+}
