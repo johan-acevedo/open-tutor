@@ -1,0 +1,55 @@
+{
+ "independent": {
+  "rektangel": {
+   "known": [
+    {
+     "side": 1,
+     "text": "5 cm",
+     "scale": 0.08
+    },
+    {
+     "side": 2,
+     "text": "3 cm",
+     "scale": 0.1
+    },
+    {
+     "side": 3,
+     "text": "4 cm",
+     "scale": 0.1
+    },
+    {
+     "side": 4,
+     "text": "3 cm",
+     "scale": 0.1
+    }
+   ],
+   "flags": [
+    {
+     "sides": [
+      1
+     ],
+     "text": "5 cm",
+     "direction": "shorter",
+     "pct": 20
+    }
+   ],
+   "skipped": null
+  }
+ },
+ "shell": {
+  "370x610": [
+   {
+    "kind": "length",
+    "msg": "<ot-polygon id=\"rektangel\"> in <ot-graph id=\"figurer\"> side 1 (\"5 cm\") is drawn about 20% shorter than the other labelled sides imply; check the label or redraw the side to match",
+    "where": "<ot-polygon id=\"rektangel\">"
+   }
+  ],
+  "1000x700": [
+   {
+    "kind": "length",
+    "msg": "<ot-polygon id=\"rektangel\"> in <ot-graph id=\"figurer\"> side 1 (\"5 cm\") is drawn about 20% shorter than the other labelled sides imply; check the label or redraw the side to match",
+    "where": "<ot-polygon id=\"rektangel\">"
+   }
+  ]
+ }
+}

@@ -1,0 +1,29 @@
+{
+ "independent": {
+  "triangel": {
+   "known": [
+    {
+     "side": 1,
+     "text": "4 cm",
+     "scale": 0.1
+    },
+    {
+     "side": 2,
+     "text": "4 cm",
+     "scale": 0.09991121058219643
+    },
+    {
+     "side": 3,
+     "text": "4 cm",
+     "scale": 0.09991121058219643
+    }
+   ],
+   "flags": [],
+   "skipped": null
+  }
+ },
+ "shell": {
+  "370x610": [],
+  "1000x700": []
+ }
+}

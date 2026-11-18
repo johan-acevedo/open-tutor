@@ -1,0 +1,32 @@
+{
+ "independent": {
+  "triangel": {
+   "known": [
+    {
+     "side": 1,
+     "text": "5 cm",
+     "scale": 0.08
+    },
+    {
+     "side": 2,
+     "text": "3 cm",
+     "scale": 0.16666666666666666
+    }
+   ],
+   "flags": [
+    {
+     "sides": [
+      1,
+      2
+     ],
+     "direction": "disagree"
+    }
+   ],
+   "skipped": null
+  }
+ },
+ "shell": {
+  "370x610": [],
+  "1000x700": []
+ }
+}

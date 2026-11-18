@@ -1,0 +1,34 @@
+{
+ "independent": {
+  "rektangel": {
+   "known": [
+    {
+     "side": 1,
+     "text": "4 cm",
+     "scale": 1.0
+    },
+    {
+     "side": 2,
+     "text": "30 mm",
+     "scale": 1.0
+    },
+    {
+     "side": 3,
+     "text": "0,04 m",
+     "scale": 1.0
+    },
+    {
+     "side": 4,
+     "text": "30 mm",
+     "scale": 1.0
+    }
+   ],
+   "flags": [],
+   "skipped": null
+  }
+ },
+ "shell": {
+  "370x610": [],
+  "1000x700": []
+ }
+}
