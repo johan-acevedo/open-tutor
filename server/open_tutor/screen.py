@@ -758,7 +758,13 @@ class Screen:
         if isinstance(grade, int) and 1 <= grade <= 12:
             level = f"åk {grade}" if grade <= 9 else f"gymnasiet år {grade - 9}"
             return f"Child: {name}, {level}."
-        return f"Child: {name}."
+        # Unknown grade: the screen pitches to the band default, like the tutor.
+        band = str(self.learner.get("band") or "primary").strip().lower()
+        if band == "upper":
+            return f"Learner: {name}, gymnasiet or adult (unknown)."
+        if band == "middle":
+            return f"Child: {name}, högstadiet (year unknown)."
+        return f"Child: {name}, åk 1–6 (year unknown)."
 
     def _build_user_text(self, ask: str) -> str:
         width, height = self._pane_size()
