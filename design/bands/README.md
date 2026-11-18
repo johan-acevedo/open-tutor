@@ -6,7 +6,7 @@ Owner decision, 2026-11-18: the address selects a band's companion, visual theme
 | --- | --- | --- |
 | `tutor.labtopia.dev` | Åk 1–6 | Keep the current blue fox and screen style |
 | `tutor2.labtopia.dev` | Åk 7–9, högstadiet, ages 13–15 | G1 Lodjuret selected by Johan |
-| `tutor3.labtopia.dev` | Åk 10+, gymnasiet and adults together | Selection open. New directions must have expressive hands |
+| `tutor3.labtopia.dev` | Åk 10+, gymnasiet and adults together | V3 Björnen selected by Johan |
 
 These ranges are Johan's corrected decision of 2026-11-18. They supersede the audience labels in the first-pass prompts and historical directory names. `gymnasiet/concepts/` holds the original tutor2 exploration; `adults/concepts/` holds tutor3. Keep those image paths stable for links already shared in the design thread. Use the corrected address-to-range mapping when producing final assets and configuration.
 
@@ -14,9 +14,9 @@ These ranges are Johan's corrected decision of 2026-11-18. They supersede the au
 
 G1 Lodjuret is locked as the tutor2 companion for åk 7–9. Preserve its identity and its two articulated hands for explanatory gestures. Keep elbows, palms, and fingers visible within the exported frame. The graphite and amber screen remains the paired proposal. Judge its scale, gestures, and screen style for 13–15-year-olds.
 
-The tutor3 companion remains undecided. Hägern and Vecket did not settle that choice. The next pass explores companions with two articulated arms and expressive hands. It was queued immediately before the range correction with adult-focused prompts. Assess the results for gymnasiet students and adults together. The general teaching material and colleague-like companions do not need an age-specific role. See [the second-pass prompts](exploration-2026-11-18/adults-round-2-prompts.json).
+Johan selected V3 Björnen as the tutor3 companion. Hägern and Vecket did not settle that choice. The next pass explores companions with two articulated arms and expressive hands. It was queued immediately before the range correction with adult-focused prompts. Assess the results for gymnasiet students and adults together. The general teaching material and colleague-like companions do not need an age-specific role. See [the second-pass prompts](exploration-2026-11-18/adults-round-2-prompts.json).
 
-## New tutor3 directions
+## Tutor3 exploration history
 
 These concepts explore teaching gestures for the shared gymnasiet and adult band. All three show two articulated arms and hands, an open-palm explanation, pencil work, and relaxed folded hands. The four states remain listening, speaking, preparing the board, and waiting.
 
@@ -83,48 +83,24 @@ Gesture verification must check the displayed body crop as well as the source im
 
 The screen shell uses Lexend and its own CSS variables in `screen/shell/shell.css`. The outer app has a separate `--ot-*` variable set in `web/src/styles.css`. A selected theme must cover both, including teaching colours, muted text, answer controls, and focus states.
 
-## Next delivery gates
+## Delivery and landing-page choice
 
-1. Johan chooses or revises one companion and screen direction per new band.
-2. Produce final assets and per-band tokens. Fetch main and inspect open PRs again before agreeing asset paths with the host-selection worker. Open a PR when this step is ready. Do not merge, deploy, or restart services.
-3. After the asset and theme choice, show name-only arrival mockups for all three bands. Use "Vad heter du?" and a start action. Put "Byt elev" in the menu.
+The companion choices are settled: Lodjuret for middle and Björnen for upper. Final art sources, PNG exports, and shared theme tokens live in `middle/` and `upper/`. The app consumes all seven WebP poses under `web/public/character/<band>/`. Rebuild with `python3 scripts/export_band_companions.py`; the export manifest records source strips and pose order. PNG and WebP outputs preserve alpha, use at most 900 px height, and WebP quality 88. The fox files remain unchanged.
+
+The exact final-art prompts are in [production-pair-prompts.json](production-pair-prompts.json). The initial seven-pose atlas was superseded because its rendering crowded the ear tips. The exporter finds the actual transparent gutter between the two figures rather than assuming an exact 50/50 layout.
+
+The app's `BandProvider` supplies a stable per-band config to the arrival image, every call pose, the phone companion, and each teaching frame. The new bands' fixed spoken greeting and tutor self-introduction use their selected companion name; the primary greeting and instructions remain byte-identical to the host-selection base. TTS voice configuration is unchanged. `theme.css` is the single token source for both web and shell names. Vite bundles it as text; the server's preview renderer reads that same file from the learner's band. Primary uses its original style declarations.
+
+Johan requested [landing alternatives A/B/C](landing-exploration/README.md) while the companion exports were underway. Those remain generated mock images awaiting his choice. No A/B/C flow is selected or implemented. No merge, deploy, or live-service restart is authorised.
 
 These concept images do not verify readability in the running app, state transitions, motion, or voice synchronisation. No live lesson or service is changed by this pass.
 
 ## Host-selection integration contract
 
-The design integration builds on PR #78 (`t3/age-bands`). Its original handoff follows. The selections above supersede its placeholder descriptions.
+This integration builds on PR #78 (`t3/age-bands`, initially `40617e9`). It retains that branch's host resolver, name-only onboarding, learner tools and copy. The design PR targets main and depends on #78. Review design-specific code against that branch until #78 merges.
 
-Unknown hosts (localhost, tailnet dev URLs) default to primary (band 1, åk 1–6).
-Testing override: `?band=primary|middle|upper` (also `?band=1|2|3`), remembered
-for the next visit, or the server env `TUTOR_BAND` (advertised via
-`/api/config`, applies only when the page names no band).
-
-## Where things go
-
-Put finished art under `design/bands/<band>/` (e.g. `design/bands/high/`,
-`design/bands/adult/`), then wire it in:
-
-- **Companion art** (web app): `web/src/bands.ts`, per-band
-  `companion.greetingImage` (today: `/character/greeting.webp` for all three;
-  `companion.asset` is `'fox-placeholder'` for bands 2–3). Band 1 keeps the fox.
-  The landing page renders `bandConfig(band).companion.greetingImage`.
-- **Web theme tokens**: `web/src/bands.ts` `theme` (accentFrom/accentTo/surface)
-  plus the matching `[data-band='middle']` / `[data-band='upper']` overrides in
-  `web/src/styles.css`. Keep token names identical across bands.
-- **Screen shell theme**: same token names, applied in `screen/shell/` (see
-  `screen/README.md`). The screen already knows the band: it travels in the
-  session metadata (`learner.band`) and the screen's learner line carries the
-  band default (see `server/open_tutor/screen.py` `_learner_line`).
-- **Copy**: `web/src/bands.ts` `copy` (Swedish; the upper band says "Byt person" /
-  "Ny person" since it covers gymnasiet students and adults, the school bands
-  say "Byt elev" / "Ny elev").
-- **Tutor register**: `server/open_tutor/prompt.py` `BAND_REGISTER_HINT` +
-  `learner_context` (unknown grade defaults per band; adults are never asked
-  for a school year). Same voice on all bands for now.
-
-## Screenshots
-
-`design/bands/screens-2026-11-18/` holds the first pass: all three bands at
-phone and desktop sizes (first visit → name → call screen; second visit;
-Byt elev). Placeholders, not the final look.
+- `web/src/bands.ts` owns `companion.asset`, `companion.name`, the complete `companion.poses` map, and `theme.stylesheet`.
+- `web/src/BandContext.tsx` exposes that config without resolving the host again in child components.
+- `design/bands/middle/theme.css` and `upper/theme.css` supply the existing `--ot-*` and shell variable names. New-band layout styling lives in `web/src/bandStyles.css`.
+- `screen/tools/screenkit.py` composes the matching preview theme. `server/open_tutor/screen.py` passes the learner band.
+- `web/band-review.html?band=middle|upper|primary` is a development-only review entry using the actual avatar, controls and teaching-frame components, with fictional content and no voice-provider call.

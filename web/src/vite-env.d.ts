@@ -1,5 +1,10 @@
 /// <reference types="vite/client" />
 
+declare module 'virtual:band-themes' {
+  export const middleTheme: string;
+  export const upperTheme: string;
+}
+
 declare module 'virtual:screen-shell' {
   export const frameHtml: string;
   export const shellCss: string;

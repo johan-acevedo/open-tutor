@@ -1,0 +1,64 @@
+[
+  {
+    "band": "middle",
+    "file": "greeting-listening.png",
+    "poses": [
+      "greeting",
+      "listening"
+    ]
+  },
+  {
+    "band": "middle",
+    "file": "speaking-thinking.png",
+    "poses": [
+      "speaking",
+      "thinking"
+    ]
+  },
+  {
+    "band": "middle",
+    "file": "working-waiting.png",
+    "poses": [
+      "working",
+      "waiting"
+    ]
+  },
+  {
+    "band": "middle",
+    "file": "pointing.png",
+    "poses": [
+      "pointing"
+    ]
+  },
+  {
+    "band": "upper",
+    "file": "greeting-listening.png",
+    "poses": [
+      "greeting",
+      "listening"
+    ]
+  },
+  {
+    "band": "upper",
+    "file": "speaking-thinking.png",
+    "poses": [
+      "speaking",
+      "thinking"
+    ]
+  },
+  {
+    "band": "upper",
+    "file": "working-waiting.png",
+    "poses": [
+      "working",
+      "waiting"
+    ]
+  },
+  {
+    "band": "upper",
+    "file": "pointing.png",
+    "poses": [
+      "pointing"
+    ]
+  }
+]

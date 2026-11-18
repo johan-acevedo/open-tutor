@@ -1,0 +1,128 @@
+[
+  {
+    "band": "middle",
+    "pose": "greeting",
+    "size": [
+      844,
+      900
+    ],
+    "bytes": 99592
+  },
+  {
+    "band": "middle",
+    "pose": "listening",
+    "size": [
+      756,
+      900
+    ],
+    "bytes": 90632
+  },
+  {
+    "band": "middle",
+    "pose": "speaking",
+    "size": [
+      925,
+      900
+    ],
+    "bytes": 99422
+  },
+  {
+    "band": "middle",
+    "pose": "thinking",
+    "size": [
+      674,
+      900
+    ],
+    "bytes": 84180
+  },
+  {
+    "band": "middle",
+    "pose": "working",
+    "size": [
+      809,
+      900
+    ],
+    "bytes": 94372
+  },
+  {
+    "band": "middle",
+    "pose": "waiting",
+    "size": [
+      790,
+      900
+    ],
+    "bytes": 92946
+  },
+  {
+    "band": "middle",
+    "pose": "pointing",
+    "size": [
+      785,
+      900
+    ],
+    "bytes": 106784
+  },
+  {
+    "band": "upper",
+    "pose": "greeting",
+    "size": [
+      817,
+      900
+    ],
+    "bytes": 111256
+  },
+  {
+    "band": "upper",
+    "pose": "listening",
+    "size": [
+      782,
+      900
+    ],
+    "bytes": 104478
+  },
+  {
+    "band": "upper",
+    "pose": "speaking",
+    "size": [
+      891,
+      900
+    ],
+    "bytes": 100392
+  },
+  {
+    "band": "upper",
+    "pose": "thinking",
+    "size": [
+      708,
+      900
+    ],
+    "bytes": 91114
+  },
+  {
+    "band": "upper",
+    "pose": "working",
+    "size": [
+      801,
+      900
+    ],
+    "bytes": 96086
+  },
+  {
+    "band": "upper",
+    "pose": "waiting",
+    "size": [
+      798,
+      900
+    ],
+    "bytes": 96164
+  },
+  {
+    "band": "upper",
+    "pose": "pointing",
+    "size": [
+      865,
+      900
+    ],
+    "bytes": 114582
+  }
+]

@@ -1,0 +1,92 @@
+[
+  {
+    "view": "primary-1366x768",
+    "poses": 7,
+    "colours": {
+      "background": "rgb(24, 27, 34)",
+      "text": "rgb(243, 245, 248)",
+      "font": "\"Segoe UI\", Roboto, \"Plus Jakarta Sans\", system-ui, -apple-system, sans-serif"
+    },
+    "frame": {
+      "background": "rgb(24, 27, 34)",
+      "text": "rgb(243, 245, 248)"
+    },
+    "answer": "received",
+    "errors": []
+  },
+  {
+    "view": "primary-390x844",
+    "poses": 7,
+    "colours": {
+      "background": "rgb(24, 27, 34)",
+      "text": "rgb(243, 245, 248)",
+      "font": "\"Segoe UI\", Roboto, \"Plus Jakarta Sans\", system-ui, -apple-system, sans-serif"
+    },
+    "frame": {
+      "background": "rgb(24, 27, 34)",
+      "text": "rgb(243, 245, 248)"
+    },
+    "answer": "received",
+    "errors": []
+  },
+  {
+    "view": "middle-1366x768",
+    "poses": 7,
+    "colours": {
+      "background": "rgb(21, 25, 31)",
+      "text": "rgb(240, 238, 232)",
+      "font": "\"Lexend Variable\", Lexend, \"Segoe UI\", system-ui, sans-serif"
+    },
+    "frame": {
+      "background": "rgb(21, 25, 31)",
+      "text": "rgb(240, 238, 232)"
+    },
+    "answer": "received",
+    "errors": []
+  },
+  {
+    "view": "middle-390x844",
+    "poses": 7,
+    "colours": {
+      "background": "rgb(21, 25, 31)",
+      "text": "rgb(240, 238, 232)",
+      "font": "\"Lexend Variable\", Lexend, \"Segoe UI\", system-ui, sans-serif"
+    },
+    "frame": {
+      "background": "rgb(21, 25, 31)",
+      "text": "rgb(240, 238, 232)"
+    },
+    "answer": "received",
+    "errors": []
+  },
+  {
+    "view": "upper-1366x768",
+    "poses": 7,
+    "colours": {
+      "background": "rgb(28, 37, 34)",
+      "text": "rgb(242, 238, 229)",
+      "font": "\"Lexend Variable\", Lexend, \"Segoe UI\", system-ui, sans-serif"
+    },
+    "frame": {
+      "background": "rgb(28, 37, 34)",
+      "text": "rgb(242, 238, 229)"
+    },
+    "answer": "received",
+    "errors": []
+  },
+  {
+    "view": "upper-390x844",
+    "poses": 7,
+    "colours": {
+      "background": "rgb(28, 37, 34)",
+      "text": "rgb(242, 238, 229)",
+      "font": "\"Lexend Variable\", Lexend, \"Segoe UI\", system-ui, sans-serif"
+    },
+    "frame": {
+      "background": "rgb(28, 37, 34)",
+      "text": "rgb(242, 238, 229)"
+    },
+    "answer": "received",
+    "errors": []
+  }
+]

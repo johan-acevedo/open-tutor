@@ -24,8 +24,10 @@
       "host": "tutor3.labtopia.dev",
       "schoolYears": "10+",
       "audience": "gymnasiet and adults together",
-      "status": "companion and screen style awaiting selection",
-      "gestures": "two articulated arms and expressive hands"
+      "status": "companion locked",
+      "gestures": "two articulated arms and expressive hands",
+      "companion": "V3 Björnen",
+      "theme": "forest-grey, linen and brass"
     }
   ]
 }

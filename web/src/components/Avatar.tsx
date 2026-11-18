@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Pill, Pose } from '../avatarState';
+import { useBand } from '../BandContext';
 
 type Props = {
   pose: Pose;
@@ -27,15 +28,17 @@ export function AvatarFallback() {
  * shipped yet falls back everywhere.
  */
 export function PoseImage({ pose, decorative }: { pose: Pose; decorative?: boolean }) {
+  const { companion } = useBand();
+  const src = companion.poses[pose];
   const [missing, setMissing] = useState(false);
   // A pose image may be absent (e.g. working.webp before it ships); when the
   // pose changes, retry the new image instead of sticking on the fallback.
-  useEffect(() => setMissing(false), [pose]);
+  useEffect(() => setMissing(false), [src]);
   if (missing) return <AvatarFallback />;
   return (
     <img
       className="ot-avatar-img"
-      src={`/character/${pose}.webp`}
+      src={src}
       alt={decorative ? '' : 'Tutorn'}
       onError={() => setMissing(true)}
     />
@@ -55,28 +58,28 @@ export function PillIcon({ pill }: { pill: Pill }) {
   if (pill.icon === 'ear') {
     return (
       <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-        <circle cx="8" cy="8" r="6.5" fill="none" stroke="#22D3EE" strokeWidth="2" />
-        <circle cx="8" cy="8" r="2.5" fill="#22D3EE" />
+        <circle cx="8" cy="8" r="6.5" fill="none" stroke="var(--ot-cyan)" strokeWidth="2" />
+        <circle cx="8" cy="8" r="2.5" fill="var(--ot-cyan)" />
       </svg>
     );
   }
   if (pill.icon === 'sparkle') {
     return (
       <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-        <path d="M8 0l1.8 5.2L15 7l-5.2 1.8L8 14l-1.8-5.2L1 7l5.2-1.8z" fill="#A78BFA" />
+        <path d="M8 0l1.8 5.2L15 7l-5.2 1.8L8 14l-1.8-5.2L1 7l5.2-1.8z" fill="var(--ot-violet)" />
       </svg>
     );
   }
   if (pill.icon === 'pencil') {
     return (
       <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-        <path d="M11 1l4 4-8.5 8.5L2 15l1.5-4.5z" fill="none" stroke="#A78BFA" strokeWidth="1.8" />
+        <path d="M11 1l4 4-8.5 8.5L2 15l1.5-4.5z" fill="none" stroke="var(--ot-violet)" strokeWidth="1.8" />
       </svg>
     );
   }
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-      <circle cx="8" cy="8" r="6" fill="none" stroke="#9BA3B4" strokeWidth="2" />
+      <circle cx="8" cy="8" r="6" fill="none" stroke="var(--ot-text-dim)" strokeWidth="2" />
     </svg>
   );
 }

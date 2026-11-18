@@ -9,31 +9,34 @@
 //   whether the learner is a gymnasiet student (and which year) or an adult;
 //   only adults skip the grade.
 //
-// Companion art and full themes for bands 2 and 3 are being designed in a
-// separate thread (see design/bands/README.md): every band reuses the fox for
-// now, with clearly distinct theme tokens so the switch is visible.
+import type { Pose } from './avatarState';
+import { middleTheme, upperTheme } from 'virtual:band-themes';
 
 export type BandId = 'primary' | 'middle' | 'upper';
+
+function poseImages(directory: string): Record<Pose, string> {
+  return {
+    greeting: `${directory}/greeting.webp`,
+    listening: `${directory}/listening.webp`,
+    speaking: `${directory}/speaking.webp`,
+    thinking: `${directory}/thinking.webp`,
+    working: `${directory}/working.webp`,
+    waiting: `${directory}/waiting.webp`,
+    pointing: `${directory}/pointing.webp`,
+  };
+}
 
 export type BandConfig = {
   id: BandId;
   /** Host prefixes that select this band (matched against the request host). */
   hosts: string[];
-  /** Companion asset set. Placeholders reuse the fox; the design thread puts
-   *  real art under design/bands/<band>/ and wires it here (see
-   *  design/bands/README.md). */
   companion: {
-    /** Label shown in docs/tests; the art itself is still the fox. */
-    asset: 'fox-placeholder' | 'fox';
-    greetingImage: string;
+    asset: 'fox' | 'lynx' | 'bear';
+    name: string;
+    poses: Record<Pose, string>;
   };
-  /** Theme tokens for the web app (applied as CSS variables under
-   *  [data-band]; see styles.css) and the screen shell (same token names;
-   *  see design/bands/README.md). Distinct per band on purpose. */
   theme: {
-    accentFrom: string;
-    accentTo: string;
-    surface: string;
+    stylesheet: string;
   };
   /** Band copy for the web app (Swedish). */
   copy: {
@@ -52,8 +55,8 @@ export const BANDS: Record<BandId, BandConfig> = {
   primary: {
     id: 'primary',
     hosts: ['tutor.'],
-    companion: { asset: 'fox', greetingImage: '/character/greeting.webp' },
-    theme: { accentFrom: '#22d3ee', accentTo: '#a78bfa', surface: '#121826' },
+    companion: { asset: 'fox', name: 'Räven', poses: poseImages('/character') },
+    theme: { stylesheet: '' },
     copy: {
       landingTitle: 'Vad heter du?',
       namePrompt: 'Förnamn',
@@ -67,8 +70,8 @@ export const BANDS: Record<BandId, BandConfig> = {
   middle: {
     id: 'middle',
     hosts: ['tutor2.'],
-    companion: { asset: 'fox-placeholder', greetingImage: '/character/greeting.webp' },
-    theme: { accentFrom: '#34d399', accentTo: '#38bdf8', surface: '#0e1a17' },
+    companion: { asset: 'lynx', name: 'Lodjuret', poses: poseImages('/character/middle') },
+    theme: { stylesheet: middleTheme },
     copy: {
       landingTitle: 'Vad heter du?',
       namePrompt: 'Förnamn',
@@ -82,8 +85,8 @@ export const BANDS: Record<BandId, BandConfig> = {
   upper: {
     id: 'upper',
     hosts: ['tutor3.'],
-    companion: { asset: 'fox-placeholder', greetingImage: '/character/greeting.webp' },
-    theme: { accentFrom: '#fbbf24', accentTo: '#f472b6', surface: '#1a1410' },
+    companion: { asset: 'bear', name: 'Björnen', poses: poseImages('/character/upper') },
+    theme: { stylesheet: upperTheme },
     copy: {
       landingTitle: 'Vad heter du?',
       namePrompt: 'Förnamn',

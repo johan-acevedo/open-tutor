@@ -1,0 +1,51 @@
+/* Selected upper theme. Shared by the web app and screen/shell/. */
+[data-band="upper"] {
+  --ot-canvas: #1c2522;
+  --ot-grid: transparent;
+  --ot-elevated: #28332e;
+  --ot-bottombar: #17201c;
+  --ot-border: #53645b;
+  --ot-paper: #f2eee5;
+  --ot-paper-ink: #25322b;
+  --ot-text: #f2eee5;
+  --ot-text-dim: #b6c1b8;
+  --ot-cyan: #cab28a;
+  --ot-cyan-fill: #cab28a1f;
+  --ot-violet: #a8c2b6;
+  --ot-green: #a9cda7;
+  --ot-green-border: #a9cda770;
+  --ot-amber: #dfbd7d;
+  --ot-red: #efa09a;
+  --ot-end-fill: #963f38;
+  --ot-font: "Lexend Variable", "Lexend", "Segoe UI", system-ui, sans-serif;
+  --ot-radius: 6px;
+  --bg: var(--ot-canvas);
+  --surface: var(--ot-elevated);
+  --surface-2: #344139;
+  --border: var(--ot-border);
+  --border-2: #708578;
+  --text: var(--ot-text);
+  --muted: var(--ot-text-dim);
+  --cyan: var(--ot-cyan);
+  --violet: var(--ot-violet);
+  --green: var(--ot-green);
+  --amber: var(--ot-amber);
+  --pink: #d0a9b4;
+  --red: var(--ot-red);
+  --paper: var(--ot-paper);
+  --ink: var(--ot-paper-ink);
+  --cyan-soft: #cab28a24;
+  --violet-soft: #a8c2b629;
+  --green-soft: #a9cda726;
+  --amber-soft: #dfbd7d29;
+  --pink-soft: #d0a9b429;
+  --radius: 0.3em;
+  --font: var(--ot-font);
+  color-scheme: dark;
+}
+
+:root[data-band="upper"] .card.cyan { border-color: var(--cyan); }
+:root[data-band="upper"] .card.violet { border-color: var(--violet); }
+:root[data-band="upper"] .card.green { border-color: var(--green); }
+:root[data-band="upper"] .card.amber { border-color: var(--amber); }
+

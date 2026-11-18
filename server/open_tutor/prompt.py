@@ -171,8 +171,13 @@ def learner_context(learner: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def companion_name(learner: dict[str, Any]) -> str:
+    return {"middle": "Lodjuret", "upper": "Björnen"}.get(str(learner.get("band") or "").lower(), "Räven")
+
+
 def instructions(learner: dict[str, Any]) -> str:
-    return BASE + "\nAbout this learner\n" + learner_context(learner)
+    base = BASE.replace("Your name is Räven.", f"Your name is {companion_name(learner)}.", 1)
+    return base + "\nAbout this learner\n" + learner_context(learner)
 
 
 def greeting_instruction(learner: dict[str, Any]) -> str:
@@ -182,7 +187,7 @@ def greeting_instruction(learner: dict[str, Any]) -> str:
             "worked on last time, then ask what they have with them today. Two short sentences."
         )
     return (
-        "Greet the child by name, warmly and briefly in Swedish. Introduce yourself as Räven, say "
+        f"Greet the child by name, warmly and briefly in Swedish. Introduce yourself as {companion_name(learner)}, say "
         "briefly that you help with homework, and ask what they are working on today. Two short sentences."
     )
 
@@ -192,10 +197,10 @@ def greeting_instruction(learner: dict[str, Any]) -> str:
 # greeting. Each variant is two short spoken sentences: who it is, that it helps with
 # homework and schoolwork, and what the child is working on today. No emoji, no lists.
 GREETING_VARIANTS = (
-    "Hej {name}, jag heter Räven och hjälper dig med läxor och skolarbete. Vad jobbar du med idag?",
-    "Hej hej {name}, Räven här! Jag hjälper dig med läxor och skoluppgifter, så vad jobbar du med idag?",
-    "Hej {name}, kul att du är här! Jag är Räven och hjälper dig med läxor och skolan, vad jobbar du med idag?",
-    "Hej {name}, det är Räven! Jag hjälper dig med läxor och skolarbete, så vad jobbar du med idag?",
+    "Hej {name}, jag heter {companion} och hjälper dig med läxor och skolarbete. Vad jobbar du med idag?",
+    "Hej hej {name}, {companion} här! Jag hjälper dig med läxor och skoluppgifter, så vad jobbar du med idag?",
+    "Hej {name}, kul att du är här! Jag är {companion} och hjälper dig med läxor och skolan, vad jobbar du med idag?",
+    "Hej {name}, det är {companion}! Jag hjälper dig med läxor och skolarbete, så vad jobbar du med idag?",
 )
 
 
@@ -206,8 +211,8 @@ def learner_name(learner: dict[str, Any]) -> str:
 # Band 3 (gymnasiet or adult, still unknown at greeting time) gets a greeting
 # without school framing, so it fits both.
 UPPER_GREETING_VARIANTS = (
-    "Hej {name}, jag heter Räven och hjälper dig att förstå och komma vidare. Vad jobbar du med idag?",
-    "Hej hej {name}, Räven här! Jag hjälper dig att förstå och komma vidare, så vad jobbar du med idag?",
+    "Hej {name}, jag heter {companion} och hjälper dig att förstå och komma vidare. Vad jobbar du med idag?",
+    "Hej hej {name}, {companion} här! Jag hjälper dig att förstå och komma vidare, så vad jobbar du med idag?",
 )
 
 
@@ -217,7 +222,7 @@ def greeting_line(learner: dict[str, Any], index: int | None = None) -> tuple[st
     variants = UPPER_GREETING_VARIANTS if str(learner.get("band") or "").lower() == "upper" else GREETING_VARIANTS
     if index is None:
         index = random.randrange(len(variants))
-    line = variants[index % len(variants)].format(name=name or "du")
+    line = variants[index % len(variants)].format(name=name or "du", companion=companion_name(learner))
     return line, index % len(variants)
 
 

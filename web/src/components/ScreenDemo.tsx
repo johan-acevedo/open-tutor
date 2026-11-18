@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import Board from './Board';
+import { useBand } from '../BandContext';
 import BottomBar from './BottomBar';
 import PhoneStage from './PhoneStage';
 import type { BoardItem } from '../protocol';
@@ -24,7 +25,6 @@ const OPS: Record<string, { patch: string; reveal: string; point: string }> = {
   'demo-division': { patch: divisionPatch, reveal: 'stolen', point: 'stolen' },
 };
 
-const GREETING = 'Hej! Jag heter Räven. Vad jobbar du med idag?';
 // Long enough that both bubbles have to trim it (4 lines big, 3 lines in the strip).
 const LONG_LINE =
   'Titta på klockan på sidan. Den stora visaren pekar på tolv, och den lilla står på tre. ' +
@@ -32,10 +32,11 @@ const LONG_LINE =
 const SPEAKING: Pill = { label: 'Pratar', icon: 'bars', tone: 'cyan', animateBars: true };
 
 export default function ScreenDemo() {
+  const band = useBand();
   const { mobile, portrait } = useViewport();
   const phone = mobile && portrait;
   const [activeId, setActiveId] = useState('demo-klockan');
-  const [said, setSaid] = useState(GREETING);
+  const [said, setSaid] = useState(`Hej! Jag heter ${band.companion.name}. Vad jobbar du med idag?`);
   const [answers, setAnswers] = useState<PageAnswer[]>([]);
   const sends = useRef(new Map<string, (msg: PageShellMessage) => void>());
   const stage = usePhoneStage({ hasItem: ITEMS.length > 0, itemSignal: 0, initial: 'fox' });
@@ -93,7 +94,7 @@ export default function ScreenDemo() {
 
   if (phone) {
     return (
-      <div className="ot-root ot-phone ot-phone-portrait">
+      <div data-band={band.id} className="ot-root ot-phone ot-phone-portrait">
         <header className="ot-demo-bar ot-demo-bar-phone">
           <strong>Skärm-demo</strong>
           {controls}
@@ -132,7 +133,7 @@ export default function ScreenDemo() {
   }
 
   return (
-    <div className="ot-demo">
+    <div data-band={band.id} className="ot-root ot-demo">
       <header className="ot-demo-bar">
         <strong>Skärm-demo</strong>
         {controls}

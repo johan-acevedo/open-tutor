@@ -11,13 +11,17 @@ Johan's corrected ranges: `tutor.labtopia.dev` serves åk 1–6 with the current
 adults together, åk 10+. The address fixes the band for the visit. The voice stays the same.
 
 G1 Lodjuret is locked as the tutor2 companion. Expressive hands are a requirement for
-teaching gestures. The tutor3 companion remains open, with new concepts evaluated for both
-older teenagers and adults. The design record and exact generation prompts are in
+teaching gestures. Johan selected V3 Björnen for tutor3, gymnasiet and adults together. The design record and exact generation prompts are in
 [`design/bands/`](../design/bands/README.md); the corrected mapping and selections are in
 [`decisions.json`](../design/bands/decisions.json).
 
-This records design choices only. Final companion assets, theme tokens, and host selection
-are not implemented by this concept pass. No service or live call is changed.
+The design integration builds on PR #78. All seven poses use transparent WebP under
+`web/public/character/middle/` and `upper/`. The per-band `theme.css` under `design/bands/`
+is shared by the app and teaching frame, including server previews. The fox assets and
+primary theme stay unchanged. Fixed greetings and tutor self-introductions use the selected
+companion name on the new bands, with the same TTS voice. Johan's landing alternatives A/B/C remain mock images awaiting
+a choice. Verification and exact export commands live in the design record. No public
+deploy or live-service restart is part of this work.
 ## 2026-11-18: age bands, name-only start, no access code
 
 Johan's evolution of the PRD (this PR, `t3/age-bands`; voice/LLM call not re-tested):

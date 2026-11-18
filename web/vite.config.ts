@@ -10,14 +10,19 @@ import react from '@vitejs/plugin-react';
 function screenTextPlugin() {
   const shellDir = fileURLToPath(new URL('../screen/shell/', import.meta.url));
   const examplesDir = fileURLToPath(new URL('../screen/examples/', import.meta.url));
+  const bandsDir = fileURLToPath(new URL('../design/bands/', import.meta.url));
   const read = (dir: string, name: string) => readFileSync(dir + name, 'utf8');
   return {
     name: 'screen-text',
     resolveId(id: string) {
-      if (id === 'virtual:screen-shell' || id === 'virtual:screen-demo') return `\0${id}`;
+      if (id === 'virtual:screen-shell' || id === 'virtual:screen-demo' || id === 'virtual:band-themes') return `\0${id}`;
       return null;
     },
     load(id: string) {
+      if (id === '\0virtual:band-themes') {
+        return `export const middleTheme = ${JSON.stringify(read(bandsDir, 'middle/theme.css'))};\n` +
+          `export const upperTheme = ${JSON.stringify(read(bandsDir, 'upper/theme.css'))};\n`;
+      }
       if (id === '\0virtual:screen-shell') {
         return (
           `export const frameHtml = ${JSON.stringify(read(shellDir, 'frame.html'))};\n` +

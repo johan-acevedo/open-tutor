@@ -393,30 +393,6 @@ a:focus-visible {
   border-radius: 24px;
 }
 
-/* ---------- Age bands: one codebase, the host picks the band ---------- */
-/* Companion art for bands 2 and 3 arrives from the design thread (see
- * design/bands/README.md); every band reuses the fox for now. The theme
- * tokens below are deliberately distinct so the switch is visible. */
-.ot-root[data-band='middle'] {
-  --ot-cyan: #34d399;
-  --ot-cyan-fill: #34d3991f;
-  --ot-violet: #38bdf8;
-  --ot-canvas: #0e1a17;
-  --ot-elevated: #16241f;
-  --ot-bottombar: #0d1714;
-  --ot-border: #27463a;
-}
-
-.ot-root[data-band='upper'] {
-  --ot-cyan: #fbbf24;
-  --ot-cyan-fill: #fbbf241f;
-  --ot-violet: #f472b6;
-  --ot-canvas: #1a1410;
-  --ot-elevated: #262019;
-  --ot-bottombar: #16110c;
-  --ot-border: #4a3d2c;
-}
-
 .ot-link-btn {
   background: none;
   border: none;

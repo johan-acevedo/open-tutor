@@ -2088,7 +2088,7 @@ class Screen:
             self._browser = await self._pw.chromium.launch()
         page = await self._browser.new_page(viewport={"width": width, "height": height}, reduced_motion="reduce")
         try:
-            await page.set_content(screenkit.host_page(screenkit.compose(body)))
+            await page.set_content(screenkit.host_page(screenkit.compose(body, band=str(self.learner.get("band") or "primary"))))
             # The inner srcdoc frame may not exist on the very first tick;
             # wait for it instead of falling back to the outer document,
             # which never reports otReady and would cost a 30 s timeout.

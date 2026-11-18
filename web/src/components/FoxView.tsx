@@ -1,6 +1,7 @@
 import type { Pill, Pose } from '../avatarState';
 import { captionTail } from '../useSession';
 import { PillIcon, PoseImage } from './Avatar';
+import { useBand } from '../BandContext';
 
 // The strip has room for about three lines, the big bubble for about four.
 // Trimming to the tail keeps the latest words (the caption itself is already
@@ -68,6 +69,7 @@ export function FoxHero({
  * Tapping the head goes back to the big fox.
  */
 export function FoxStrip({ pose, pill, caption, captionFading, onShowFox }: Caption & { onShowFox: () => void }) {
+  const { companion } = useBand();
   const line = captionTail(caption, STRIP_CHARS);
   return (
     <div className={`ot-fox-strip ot-pose-${pose}`} data-phone-view="item">
@@ -75,8 +77,8 @@ export function FoxStrip({ pose, pill, caption, captionFading, onShowFox }: Capt
         type="button"
         className={`ot-fox-head ot-fox-head-${pill.tone}${pill.animateBars ? ' ot-fox-head-speaking' : ''}`}
         onClick={onShowFox}
-        aria-label="Visa Räven"
-        title="Visa Räven"
+        aria-label={`Visa ${companion.name}`}
+        title={`Visa ${companion.name}`}
       >
         <PoseImage pose={pose} decorative />
       </button>

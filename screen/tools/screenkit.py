@@ -31,12 +31,16 @@ CSP = ("default-src 'none'; "
        "connect-src https://cdn.jsdelivr.net https://commons.wikimedia.org")
 
 
-def compose(body: str, shell: pathlib.Path | None = None) -> str:
+def compose(body: str, shell: pathlib.Path | None = None, *, band: str = "primary") -> str:
     """Wrap a page body in the shell. `shell` points at another shell directory (a git ref
     exported to disk), which is how the map checks are also run on an older shell."""
     shell = pathlib.Path(shell) if shell else SHELL
     frame = (shell / "frame.html").read_text()
     css = (shell / "shell.css").read_text()
+    selected_band = band if band in ("middle", "upper") else "primary"
+    if selected_band != "primary":
+        css += "\n" + (ROOT.parent / "design" / "bands" / selected_band / "theme.css").read_text()
+    frame = frame.replace('<html lang="sv"', f'<html lang="sv" data-band="{selected_band}"')
     js = (shell / "shell.js").read_text()
     # Sweden's 21 län travel with the shell, not with the page body (RPC keeps to ~15 kB).
     lan = json.loads((shell / "data" / "lan-sverige.json").read_text())
