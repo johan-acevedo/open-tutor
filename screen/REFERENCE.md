@@ -120,6 +120,8 @@ can be pointed at by id `lan-<bokstav>`: `lan-M` is Skåne, `lan-BD` is Norrbott
 
 **Image**: `query` asks the server to find and inspect a Commons image; unsuitable images become text. The child never searches.
 Use only `ot-image`, never raw `img` or SVG images. Prefer `query`; supplied `src` and credits are verified too.
+When the ask wants a real picture, photo, painting or map, put it on the page as an `ot-image` with a
+descriptive English `query` (for a historical map, for example `query="Swedish Empire 1658 map"`); never link an image yourself.
 `ot-label` marks a part: `at` is x and y in percent of the image.
 ```html
 <ot-image query="Colosseum Rome" alt="Colosseum i Rom"></ot-image>

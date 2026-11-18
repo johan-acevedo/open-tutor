@@ -1112,3 +1112,19 @@ Sources, inspected phone/wide renders, timings and limits:
 After PR #73, the materials preview services (`open-tutor-materials-web`/`-agent`), their env
 file, the preview and ML virtualenvs, the Siyavula EPUBs and indexes (2.2 GB), the package cache,
 and the Tailscale Serve entries (port 9443 and `/open-tutor-materials/`) were removed from elitebook.
+
+### Picture requests go to the screen (2026-11-18)
+
+A production test call showed the tutor answering "find a picture instead of the drawn map"
+with `find_resources`/`share_resource` (Exa web search). The prompt (`server/open_tutor/prompt.py`)
+and the resource tool descriptions (`agent.py`) now say: picture/photo/painting/real map/
+illustration requests go to `ask_screen` with an explicit image ask, which the screen resolves
+through Commons + Parallel search with vision review; `find_resources`/`share_resource` stay for
+videos and readings. `screen/REFERENCE.md` tells the writer to put a requested real picture on
+the page as `<ot-image query="...">` (e.g. `query="Swedish Empire 1658 map"`). Live check on
+dell5500 dev (Go, Muse Spark minimal, fictional lesson): 3 picture asks over two runs each all
+called `ask_screen`, the video ask called `find_resources` (8/8). One screen job on the same
+ask emitted the `Swedish Empire 1658 map` slot and shipped an accepted Commons map
+(`Swedish Empire 1658.jpg`, search latency 0.2 s) in 19.5 s. Caveat: three earlier same-budget
+runs rejected two Commons flag-silhouette maps and starved the good candidate (Parallel prefetch
+timeout, ~12 s image spend) -- more evidence for the review-concurrency follow-up.

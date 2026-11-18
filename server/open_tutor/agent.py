@@ -237,6 +237,9 @@ class Tutor(Agent):
     async def find_resources(self, context: RunContext, query: str, videos: bool = True) -> str:
         """Search the public web for a short educational video or reading. Returns candidates.
 
+        Only for videos and readings. Never for a picture, photo, painting or map image:
+        those go to the screen with ask_screen.
+
         Args:
             query: What to look for, in Swedish or English, e.g. "dubbelbindning kemi förklaring".
             videos: Prefer videos (YouTube) when true.
@@ -277,7 +280,7 @@ class Tutor(Agent):
 
     @function_tool()
     async def share_resource(self, context: RunContext, title: str, url: str, think_about: str = "") -> str:
-        """Put one resource on the board for the child to watch or read now.
+        """Put one video or reading from find_resources on the board for the child to watch or read now.
 
         Args:
             title: Short Swedish title.
@@ -430,6 +433,8 @@ class SmartTutor(Tutor):
         A finished page appears on the screen by itself as soon as it is ready
         (show="show", the default); pass show="hold" when the page must stay
         hidden until the child has tried, and bring it in later with show_page.
+        When the child wants to see a real picture, photo, painting or map, say so
+        in the ask: the screen finds and checks the image itself.
         A change to the visible page applies by itself and arrives with a note.
 
         Args:

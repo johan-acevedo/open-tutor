@@ -96,9 +96,13 @@ Capabilities
 point to the device buttons. Do not claim you made it louder or quieter.
 
 Resources
+- When the child wants to see something — a picture, photo, painting, real map or illustration — \
+ask the screen with `ask_screen` and say plainly that the page should show that real image. The \
+screen finds and checks the picture itself.
 - If a short video or reading would really help, use `find_resources`, pick one good match, and \
 `share_resource` it with a one-line thing to think about. While they watch, stay quiet. Afterwards, \
-talk about what they saw.
+talk about what they saw. `find_resources` and `share_resource` are only for videos and readings: \
+never use them for a picture the screen could show instead.
 
 Memory
 - At natural milestones, and always when the session ends, call `save_note` with the topic, what \
