@@ -1,0 +1,68 @@
+{
+ "job": "s1",
+ "kind": "page",
+ "page": "p1",
+ "title": "Gustav Vasa",
+ "model": "gemini-4-hydrogen",
+ "api": "chat",
+ "reasoning": "low",
+ "pane": [
+  370,
+  610
+ ],
+ "provider": "google",
+ "failover": false,
+ "hedged": false,
+ "ttft_s": 0.0,
+ "model_s": 1.5,
+ "render_s": 1.16,
+ "look_s": 2.3,
+ "retry_s": 0.0,
+ "total_s": 8.73,
+ "issues": [],
+ "residual_lint": [],
+ "repair": {
+  "look": true,
+  "look_fix": false,
+  "retry": false,
+  "retry_applied": false,
+  "notes": []
+ },
+ "reveal": "show",
+ "image_s": 3.76,
+ "image_reviews": [
+  {
+   "title": "File:Gustav Vasa.jpg",
+   "source": "https://commons.wikimedia.org/wiki/File:Gustav_Vasa.jpg",
+   "decision": "accepted",
+   "reason": "A clear, authentic historical portrait of Gustav Vasa that matches the requested description and is suitable for grade 6.",
+   "sha256": "10988e38dd806f8de1cadcb5c7ec8a32c78399fe511a0fdfda53568de9709281",
+   "bytes": 38585,
+   "image_source": "commons",
+   "query": "Gustav Vasa portrait painting",
+   "latency_s": 0.1
+  }
+ ],
+ "images": {
+  "strategy": "commons+parallel",
+  "seconds": 3.76,
+  "parallel": {
+   "available": true,
+   "reason": "",
+   "retry_in_s": 0.0
+  },
+  "reviews": [
+   {
+    "title": "File:Gustav Vasa.jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:Gustav_Vasa.jpg",
+    "decision": "accepted",
+    "reason": "A clear, authentic historical portrait of Gustav Vasa that matches the requested description and is suitable for grade 6.",
+    "sha256": "10988e38dd806f8de1cadcb5c7ec8a32c78399fe511a0fdfda53568de9709281",
+    "bytes": 38585,
+    "image_source": "commons",
+    "query": "Gustav Vasa portrait painting",
+    "latency_s": 0.1
+   }
+  ]
+ }
+}

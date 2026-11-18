@@ -1,0 +1,1 @@
+[{"query": "Colosseum Rome exterior photo", "source": "", "decision": "rejected", "reason": "prefetched image unavailable: TimeoutError"}, {"title": "File:Photo of The Colosseum in Rome, Italy.jpg", "source": "https://commons.wikimedia.org/wiki/File:Photo_of_The_Colosseum_in_Rome,_Italy.jpg", "decision": "rejected", "reason": "image review cancelled or budget exhausted"}]

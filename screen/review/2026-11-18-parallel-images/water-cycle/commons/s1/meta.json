@@ -1,0 +1,56 @@
+{
+ "job": "s1",
+ "kind": "page",
+ "page": "p1",
+ "title": "Vattnets kretslopp",
+ "model": "gemini-4-hydrogen",
+ "api": "chat",
+ "reasoning": "low",
+ "pane": [
+  370,
+  610
+ ],
+ "provider": "google",
+ "failover": false,
+ "hedged": false,
+ "ttft_s": 0.0,
+ "model_s": 1.5,
+ "render_s": 1.26,
+ "look_s": 3.41,
+ "retry_s": 0.0,
+ "total_s": 6.18,
+ "issues": [],
+ "residual_lint": [],
+ "repair": {
+  "look": true,
+  "look_fix": true,
+  "retry": false,
+  "retry_applied": false,
+  "notes": []
+ },
+ "reveal": "show",
+ "image_s": 0.0,
+ "image_reviews": [
+  {
+   "query": "water cycle diagram illustration for children",
+   "decision": "rejected",
+   "reason": "no image candidates"
+  }
+ ],
+ "images": {
+  "strategy": "commons",
+  "seconds": 0.0,
+  "parallel": {
+   "available": true,
+   "reason": "",
+   "retry_in_s": 0.0
+  },
+  "reviews": [
+   {
+    "query": "water cycle diagram illustration for children",
+    "decision": "rejected",
+    "reason": "no image candidates"
+   }
+  ]
+ }
+}

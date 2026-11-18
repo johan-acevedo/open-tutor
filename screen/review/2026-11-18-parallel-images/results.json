@@ -1,0 +1,278 @@
+[
+  {
+    "ask": "colosseum",
+    "mode": "commons+parallel",
+    "wall_s": 17.83,
+    "failures": [],
+    "total_s": 17.83,
+    "issues": [],
+    "strategy": "commons+parallel",
+    "image_s": 15.31,
+    "parallel": {
+      "available": true,
+      "reason": "",
+      "retry_in_s": 0.0
+    },
+    "ships_query": false,
+    "ships_src": []
+  },
+  {
+    "ask": "colosseum",
+    "mode": "commons",
+    "wall_s": 9.01,
+    "failures": [],
+    "total_s": 9.0,
+    "issues": [],
+    "strategy": "commons",
+    "image_s": 3.28,
+    "parallel": {
+      "available": true,
+      "reason": "",
+      "retry_in_s": 0.0
+    },
+    "accepted": {
+      "image_source": "commons",
+      "title": "File:Photo of The Colosseum in Rome, Italy.jpg",
+      "credit": "",
+      "latency_s": 0.16,
+      "reason": "Tydligt och lämpligt foto av Colosseums utsida i Rom som passar årskurs 6."
+    },
+    "ships_query": false,
+    "ships_src": [
+      "<ot-image alt=\"Colosseum i Rom\" src=\"https://thumb.wikimedia.org/wikipedia/commons/thumb/1/15/Photo_of_The_Colosseum_in_Rome%2C_Italy.jpg/960px-Photo_of_The_Colosseum_in_Rome%2C_Italy.jpg?utm_source=commons.wikimedia.org&amp;utm_campaign=imageinfo&amp;utm_content=thumbnail\" credit=\"Bild: Minimum-herb, CC BY-SA 4.0, Wikimedia Commons\">"
+    ]
+  },
+  {
+    "ask": "flower",
+    "mode": "commons+parallel",
+    "wall_s": 17.79,
+    "failures": [],
+    "total_s": 17.79,
+    "issues": [],
+    "strategy": "commons+parallel",
+    "image_s": 15.3,
+    "parallel": {
+      "available": true,
+      "reason": "",
+      "retry_in_s": 0.0
+    },
+    "ships_query": false,
+    "ships_src": []
+  },
+  {
+    "ask": "flower",
+    "mode": "commons",
+    "wall_s": 17.82,
+    "failures": [],
+    "total_s": 17.82,
+    "issues": [],
+    "strategy": "commons",
+    "image_s": 15.3,
+    "parallel": {
+      "available": true,
+      "reason": "",
+      "retry_in_s": 0.0
+    },
+    "ships_query": false,
+    "ships_src": []
+  },
+  {
+    "ask": "king-gustav-ii-adolf",
+    "mode": "commons+parallel",
+    "wall_s": 8.54,
+    "failures": [],
+    "total_s": 8.54,
+    "issues": [],
+    "strategy": "commons+parallel",
+    "image_s": 5.85,
+    "parallel": {
+      "available": true,
+      "reason": "",
+      "retry_in_s": 0.0
+    },
+    "accepted": {
+      "image_source": "commons",
+      "title": "File:Gustav II Adolf of Sweden.jpg",
+      "credit": "",
+      "latency_s": 0.11,
+      "reason": "Clear, age-appropriate historical portrait of Gustav II Adolf matching the lesson context."
+    },
+    "ships_query": false,
+    "ships_src": [
+      "<ot-image alt=\"Porträtt av Gustav II Adolf\" src=\"https://upload.wikimedia.org/wikipedia/commons/5/5a/Gustav_II_Adolf_of_Sweden.jpg?utm_source=commons.wikimedia.org&amp;utm_campaign=imageinfo&amp;utm_content=thumbnail_unscaled\" credit=\"Bild: Attributed to Jacob Hoefnagel, Public domain, Wikimedia Commons\">"
+    ]
+  },
+  {
+    "ask": "king-gustav-ii-adolf",
+    "mode": "commons",
+    "wall_s": 8.35,
+    "failures": [],
+    "total_s": 8.35,
+    "issues": [],
+    "strategy": "commons",
+    "image_s": 4.75,
+    "parallel": {
+      "available": true,
+      "reason": "",
+      "retry_in_s": 0.0
+    },
+    "accepted": {
+      "image_source": "commons",
+      "title": "File:Gustav II Adolf of Sweden.jpg",
+      "credit": "",
+      "latency_s": 0.21,
+      "reason": "A clear, authentic, and age-appropriate portrait painting of Gustav II Adolf that directly matches the request."
+    },
+    "ships_query": false,
+    "ships_src": [
+      "<ot-image alt=\"Porträtt av Gustav II Adolf\" src=\"https://upload.wikimedia.org/wikipedia/commons/5/5a/Gustav_II_Adolf_of_Sweden.jpg?utm_source=commons.wikimedia.org&amp;utm_campaign=imageinfo&amp;utm_content=thumbnail_unscaled\" credit=\"Bild: Attributed to Jacob Hoefnagel, Public domain, Wikimedia Commons\">"
+    ]
+  },
+  {
+    "ask": "king-gustav-vasa",
+    "mode": "commons+parallel",
+    "wall_s": 8.73,
+    "failures": [],
+    "total_s": 8.73,
+    "issues": [],
+    "strategy": "commons+parallel",
+    "image_s": 3.76,
+    "parallel": {
+      "available": true,
+      "reason": "",
+      "retry_in_s": 0.0
+    },
+    "accepted": {
+      "image_source": "commons",
+      "title": "File:Gustav Vasa.jpg",
+      "credit": "",
+      "latency_s": 0.1,
+      "reason": "A clear, authentic historical portrait of Gustav Vasa that matches the requested description and is suitable for grade 6."
+    },
+    "ships_query": false,
+    "ships_src": [
+      "<ot-image alt=\"Porträtt av Gustav Vasa\" src=\"https://upload.wikimedia.org/wikipedia/commons/5/58/Gustav_Vasa.jpg?utm_source=commons.wikimedia.org&amp;utm_campaign=imageinfo&amp;utm_content=thumbnail_unscaled\" credit=\"Bild: Jacob Binck, Public domain, Wikimedia Commons\">"
+    ]
+  },
+  {
+    "ask": "king-gustav-vasa",
+    "mode": "commons",
+    "wall_s": 8.12,
+    "failures": [],
+    "total_s": 8.12,
+    "issues": [],
+    "strategy": "commons",
+    "image_s": 2.45,
+    "parallel": {
+      "available": true,
+      "reason": "",
+      "retry_in_s": 0.0
+    },
+    "accepted": {
+      "image_source": "commons",
+      "title": "File:Gustav Vasa.jpg",
+      "credit": "",
+      "latency_s": 0.08,
+      "reason": "Historiskt porträtt av Gustav Vasa som passar utmärkt för årskurs 6 och lektionens syfte."
+    },
+    "ships_query": false,
+    "ships_src": [
+      "<ot-image alt=\"Porträtt av Gustav Vasa\" src=\"https://upload.wikimedia.org/wikipedia/commons/5/58/Gustav_Vasa.jpg?utm_source=commons.wikimedia.org&amp;utm_campaign=imageinfo&amp;utm_content=thumbnail_unscaled\" credit=\"Bild: Jacob Binck, Public domain, Wikimedia Commons\">"
+    ]
+  },
+  {
+    "ask": "roman-empire-map",
+    "mode": "commons+parallel",
+    "wall_s": 7.42,
+    "failures": [],
+    "total_s": 7.42,
+    "issues": [],
+    "strategy": "commons+parallel",
+    "image_s": 4.44,
+    "parallel": {
+      "available": true,
+      "reason": "",
+      "retry_in_s": 0.0
+    },
+    "accepted": {
+      "image_source": "commons",
+      "title": "File:Roman empire at its greatest extent.JPG",
+      "credit": "",
+      "latency_s": 0.11,
+      "reason": "Tydlig historisk karta som visar Romarriket när det var som störst, lagom för årskurs 6."
+    },
+    "ships_query": false,
+    "ships_src": [
+      "<ot-image alt=\"Karta över Romarriket\" src=\"https://thumb.wikimedia.org/wikipedia/commons/thumb/8/81/Roman_empire_at_its_greatest_extent.JPG/960px-Roman_empire_at_its_greatest_extent.JPG?utm_source=commons.wikimedia.org&amp;utm_campaign=imageinfo&amp;utm_content=thumbnail\" credit=\"Bild: Wilson Marcius, Public domain, Wikimedia Commons\">"
+    ]
+  },
+  {
+    "ask": "roman-empire-map",
+    "mode": "commons",
+    "wall_s": 8.25,
+    "failures": [],
+    "total_s": 8.25,
+    "issues": [],
+    "strategy": "commons",
+    "image_s": 2.76,
+    "parallel": {
+      "available": true,
+      "reason": "",
+      "retry_in_s": 0.0
+    },
+    "accepted": {
+      "image_source": "commons",
+      "title": "File:Roman empire at its greatest extent.JPG",
+      "credit": "",
+      "latency_s": 0.11,
+      "reason": "Tydlig historisk karta som visar Romarrikets utbredning runt Medelhavet när det var som störst."
+    },
+    "ships_query": false,
+    "ships_src": [
+      "<ot-image alt=\"Karta över Romarriket\" src=\"https://thumb.wikimedia.org/wikipedia/commons/thumb/8/81/Roman_empire_at_its_greatest_extent.JPG/960px-Roman_empire_at_its_greatest_extent.JPG?utm_source=commons.wikimedia.org&amp;utm_campaign=imageinfo&amp;utm_content=thumbnail\" credit=\"Bild: Wilson Marcius, Public domain, Wikimedia Commons\">"
+    ]
+  },
+  {
+    "ask": "water-cycle",
+    "mode": "commons+parallel",
+    "wall_s": 12.21,
+    "failures": [],
+    "total_s": 12.21,
+    "issues": [],
+    "strategy": "commons+parallel",
+    "image_s": 8.43,
+    "parallel": {
+      "available": true,
+      "reason": "",
+      "retry_in_s": 0.0
+    },
+    "accepted": {
+      "image_source": "parallel",
+      "title": "Vattnets Kretslopp för Skolo, The Water Cycle for Schools, Swedish",
+      "credit": "",
+      "latency_s": 0.92,
+      "reason": "Tydlig och åldersanpassad svensk illustration av vattnets kretslopp från USGS som visar huvudstegen som avdunstning, kondens, nederbörd och ytavrinning."
+    },
+    "ships_query": false,
+    "ships_src": [
+      "<ot-image alt=\"Illustration av vattnets kretslopp\" src=\"https://d9-wret.s3.us-west-2.amazonaws.com/assets/palladium/production/s3fs-public/styles/full_width/public/thumbnails/image/water-cycle-schools-swedish.jpg?itok=hnpH7rFE\" credit=\"Källa: www.usgs.gov\">"
+    ]
+  },
+  {
+    "ask": "water-cycle",
+    "mode": "commons",
+    "wall_s": 6.18,
+    "failures": [],
+    "total_s": 6.18,
+    "issues": [],
+    "strategy": "commons",
+    "image_s": 0.0,
+    "parallel": {
+      "available": true,
+      "reason": "",
+      "retry_in_s": 0.0
+    },
+    "ships_query": false,
+    "ships_src": []
+  }
+]

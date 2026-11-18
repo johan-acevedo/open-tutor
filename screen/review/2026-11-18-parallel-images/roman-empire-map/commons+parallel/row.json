@@ -1,0 +1,26 @@
+{
+  "ask": "roman-empire-map",
+  "mode": "commons+parallel",
+  "wall_s": 7.42,
+  "failures": [],
+  "total_s": 7.42,
+  "issues": [],
+  "strategy": "commons+parallel",
+  "image_s": 4.44,
+  "parallel": {
+    "available": true,
+    "reason": "",
+    "retry_in_s": 0.0
+  },
+  "accepted": {
+    "image_source": "commons",
+    "title": "File:Roman empire at its greatest extent.JPG",
+    "credit": "",
+    "latency_s": 0.11,
+    "reason": "Tydlig historisk karta som visar Romarriket när det var som störst, lagom för årskurs 6."
+  },
+  "ships_query": false,
+  "ships_src": [
+    "<ot-image alt=\"Karta över Romarriket\" src=\"https://thumb.wikimedia.org/wikipedia/commons/thumb/8/81/Roman_empire_at_its_greatest_extent.JPG/960px-Roman_empire_at_its_greatest_extent.JPG?utm_source=commons.wikimedia.org&amp;utm_campaign=imageinfo&amp;utm_content=thumbnail\" credit=\"Bild: Wilson Marcius, Public domain, Wikimedia Commons\">"
+  ]
+}

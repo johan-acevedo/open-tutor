@@ -1,0 +1,70 @@
+{
+ "job": "s1",
+ "kind": "page",
+ "page": "p1",
+ "title": "Colosseum",
+ "model": "gemini-4-hydrogen",
+ "api": "chat",
+ "reasoning": "low",
+ "pane": [
+  370,
+  610
+ ],
+ "provider": "google",
+ "failover": false,
+ "hedged": false,
+ "ttft_s": 0.0,
+ "model_s": 1.5,
+ "render_s": 1.84,
+ "look_s": 0.0,
+ "retry_s": 0.0,
+ "total_s": 9.98,
+ "issues": [],
+ "residual_lint": [],
+ "repair": {
+  "look": false,
+  "look_fix": false,
+  "retry": false,
+  "retry_applied": false,
+  "notes": [
+   "look pass skipped: page target budget"
+  ]
+ },
+ "reveal": "show",
+ "image_s": 6.64,
+ "image_reviews": [
+  {
+   "title": "File:Photo of The Colosseum in Rome, Italy.jpg",
+   "source": "https://commons.wikimedia.org/wiki/File:Photo_of_The_Colosseum_in_Rome,_Italy.jpg",
+   "decision": "accepted",
+   "reason": "Tydligt foto av Colosseum i Rom som passar bra för årskurs 6 och visar byggnaden tydligt.",
+   "sha256": "5b7cf5a471c61fc37f3565579df43c4c0fc7f0d853eccc2b654443d6e517a3cb",
+   "bytes": 222671,
+   "image_source": "commons",
+   "query": "Colosseum Rome exterior photo",
+   "latency_s": 0.29
+  }
+ ],
+ "images": {
+  "strategy": "commons+parallel",
+  "seconds": 6.64,
+  "parallel": {
+   "available": true,
+   "reason": "",
+   "retry_in_s": 0.0
+  },
+  "reviews": [
+   {
+    "title": "File:Photo of The Colosseum in Rome, Italy.jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:Photo_of_The_Colosseum_in_Rome,_Italy.jpg",
+    "decision": "accepted",
+    "reason": "Tydligt foto av Colosseum i Rom som passar bra för årskurs 6 och visar byggnaden tydligt.",
+    "sha256": "5b7cf5a471c61fc37f3565579df43c4c0fc7f0d853eccc2b654443d6e517a3cb",
+    "bytes": 222671,
+    "image_source": "commons",
+    "query": "Colosseum Rome exterior photo",
+    "latency_s": 0.29
+   }
+  ]
+ }
+}

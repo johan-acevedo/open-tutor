@@ -294,6 +294,21 @@ def _screen_env(name: str, default: str) -> str:
     return os.environ.get(name, default)
 
 
+IMAGE_MODES = ("commons", "commons+parallel", "parallel")
+
+
+def image_mode() -> str:
+    """Which image source a page job searches (``SCREEN_IMAGES``).
+
+    ``commons`` (default) is today's behaviour: Wikimedia Commons only.
+    ``commons+parallel`` searches both at once and reviews Commons first;
+    ``parallel`` searches only Parallel. Anything else fails loudly."""
+    mode = _screen_env("SCREEN_IMAGES", "commons").strip().lower()
+    if mode not in IMAGE_MODES:
+        raise ValueError(f"SCREEN_IMAGES must be one of {', '.join(IMAGE_MODES)}, not {mode!r}")
+    return mode
+
+
 def _accepts_first_text(fn: Callable[..., Any]) -> bool:
     """Whether a model-call seam function takes an ``on_first_text`` keyword.
 
@@ -1618,7 +1633,8 @@ class Screen:
                               "model_s": round(model_s, 2), "render_s": round(render_s, 2),
                               "total_s": round(total_s, 2), "issues": issues,
                               "delivered": not errors,
-                              "image_s": round(images.seconds, 2), "image_reviews": images.events})
+                              "image_s": round(images.seconds, 2), "image_reviews": images.events,
+                              "images": self._images_meta(images)})
         record_active("screen_patch", {"job": job_id, "page": visible.page_id,
                                        "total_s": round(total_s, 2), "issues": issues,
                                        "delivered": not errors,
@@ -1743,7 +1759,8 @@ class Screen:
                               "total_s": round(total_s, 2), "issues": issues,
                               "residual_lint": residual, "repair": repair,
                               "reveal": reveal,
-                              "image_s": round(images.seconds, 2), "image_reviews": images.events})
+                              "image_s": round(images.seconds, 2), "image_reviews": images.events,
+                              "images": self._images_meta(images)})
         if images.events:
             record_active("screen_images", {"job": job_id, "seconds": round(images.seconds, 2),
                                             "reviews": images.events})
@@ -1793,6 +1810,12 @@ class Screen:
             meta["fallback_disabled"] = True
         return meta
 
+    @staticmethod
+    def _images_meta(images: PageImages) -> dict[str, Any]:
+        """The meta.json ``images`` section: strategy, per-image records, Parallel state."""
+        return {"strategy": images.image_mode, "seconds": round(images.seconds, 2),
+                "parallel": images.parallel_state, "reviews": images.events}
+
     def _image_job(self, ask: str, t0: float) -> PageImages:
         # Images run to the job limit minus render reserves, not to a soft
         # page target: the voice turn is never blocked (the job runs in the
@@ -1812,7 +1835,8 @@ class Screen:
         async def review_with_deadline(user: str, image: bytes | None) -> str:
             return await review(user, image, deadline)
 
-        return PageImages(self._build_user_text(ask), review_with_deadline, deadline)
+        return PageImages(self._build_user_text(ask), review_with_deadline, deadline,
+                          image_mode=image_mode())
 
     def _time_left(self, t0: float) -> float:
         """Seconds until the job limit; optional work is spent from this."""

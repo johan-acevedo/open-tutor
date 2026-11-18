@@ -1,0 +1,17 @@
+{
+  "ask": "flower",
+  "mode": "commons+parallel",
+  "wall_s": 17.79,
+  "failures": [],
+  "total_s": 17.79,
+  "issues": [],
+  "strategy": "commons+parallel",
+  "image_s": 15.3,
+  "parallel": {
+    "available": true,
+    "reason": "",
+    "retry_in_s": 0.0
+  },
+  "ships_query": false,
+  "ships_src": []
+}

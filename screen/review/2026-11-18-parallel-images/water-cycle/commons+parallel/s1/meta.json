@@ -1,0 +1,70 @@
+{
+ "job": "s1",
+ "kind": "page",
+ "page": "p1",
+ "title": "Vattnets kretslopp",
+ "model": "gemini-4-hydrogen",
+ "api": "chat",
+ "reasoning": "low",
+ "pane": [
+  370,
+  610
+ ],
+ "provider": "google",
+ "failover": false,
+ "hedged": false,
+ "ttft_s": 0.0,
+ "model_s": 1.5,
+ "render_s": 2.28,
+ "look_s": 0.0,
+ "retry_s": 0.0,
+ "total_s": 12.21,
+ "issues": [],
+ "residual_lint": [],
+ "repair": {
+  "look": false,
+  "look_fix": false,
+  "retry": false,
+  "retry_applied": false,
+  "notes": [
+   "look pass skipped: page target budget"
+  ]
+ },
+ "reveal": "show",
+ "image_s": 8.43,
+ "image_reviews": [
+  {
+   "title": "Vattnets Kretslopp för Skolo, The Water Cycle for Schools, Swedish",
+   "source": "https://www.usgs.gov/media/images/vattnets-kretslopp-skolo-water-cycle-schools-swedish",
+   "decision": "accepted",
+   "reason": "Tydlig och åldersanpassad svensk illustration av vattnets kretslopp från USGS som visar huvudstegen som avdunstning, kondens, nederbörd och ytavrinning.",
+   "sha256": "7728e709f1bb31d2c3c3977be37a32f8ca5e26ccb5c2698314edc48f9de69d6f",
+   "bytes": 332673,
+   "image_source": "parallel",
+   "query": "water cycle diagram illustration for children",
+   "latency_s": 0.92
+  }
+ ],
+ "images": {
+  "strategy": "commons+parallel",
+  "seconds": 8.43,
+  "parallel": {
+   "available": true,
+   "reason": "",
+   "retry_in_s": 0.0
+  },
+  "reviews": [
+   {
+    "title": "Vattnets Kretslopp för Skolo, The Water Cycle for Schools, Swedish",
+    "source": "https://www.usgs.gov/media/images/vattnets-kretslopp-skolo-water-cycle-schools-swedish",
+    "decision": "accepted",
+    "reason": "Tydlig och åldersanpassad svensk illustration av vattnets kretslopp från USGS som visar huvudstegen som avdunstning, kondens, nederbörd och ytavrinning.",
+    "sha256": "7728e709f1bb31d2c3c3977be37a32f8ca5e26ccb5c2698314edc48f9de69d6f",
+    "bytes": 332673,
+    "image_source": "parallel",
+    "query": "water cycle diagram illustration for children",
+    "latency_s": 0.92
+   }
+  ]
+ }
+}

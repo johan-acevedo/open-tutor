@@ -7,13 +7,14 @@ import hashlib
 import html
 import json
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from html.parser import HTMLParser
 from typing import Awaitable, Callable
 
 import httpx
 
 from screen.tools import commons_images as commons
+from screen.tools import parallel_images as parallel
 
 
 @dataclass
@@ -175,9 +176,15 @@ class PageImages:
     """One job's image budget, approvals and rejection record. No cross-lesson cache."""
 
     def __init__(self, context: str, review: Callable[[str, bytes | None], Awaitable[str]], deadline: float,
-                 *, client: httpx.AsyncClient | None = None):
+                 *, client: httpx.AsyncClient | None = None, image_mode: str = "commons"):
+        if image_mode not in ("commons", "commons+parallel", "parallel"):
+            raise ValueError(f"Unknown image mode {image_mode!r}: commons, commons+parallel or parallel")
         self.context, self.review, self.deadline = context, review, deadline
         self.client = client
+        self.image_mode = image_mode
+        # Parallel cool-down state for diagnostics (never a key); refreshed
+        # whenever a slot consults Parallel.
+        self.parallel_state: dict[str, object] = parallel.state()
         self.approved: dict[SlotKey, commons.Candidate] = {}
         # Rendered output we produced ourselves: full slot identity (as served,
         # src + canonical credit, no `query`) -> candidate. Re-preparing our own
@@ -212,18 +219,99 @@ class PageImages:
                 "Do not disclose the answer to a question the child should solve. No image tags or scripts in the fallback.")
         return _verdict(await self.review(user, data))
 
+    def _parallel_queries(self, slot: ImageSlot) -> tuple[str, list[str]]:
+        """Goal-style objective plus 1-3 short keyword queries for a slot."""
+        query = " ".join(str(slot.attrs.get("query", "") or "").split())
+        alt = " ".join(str(slot.attrs.get("alt", "") or "").split())
+        labels = " ".join(without_images(slot.children).split())
+        queries = [text[:200] for text in (query, alt, labels) if text][:3]
+        context = " ".join(str(self.context or "").split())
+        objective = (f"Educational image for a Swedish school lesson about {query or alt or labels}. "
+                     f"Page details: {alt} {labels}".strip() + f" Lesson context: {context[:800]}")
+        return objective[:5000], queries
+
+    async def _search_all(self, slot: ImageSlot) -> tuple[list[commons.Candidate], dict[str, float]]:
+        """Run this slot's searches; Commons candidates first, then Parallel.
+
+        In ``commons+parallel`` both searches start at once and the loser's
+        extra candidates still get reviewed when the winner's are all refused,
+        so a second source widens the choice instead of replacing it. Each
+        source's search seconds are returned for the per-image records."""
+        query, src = slot.attrs.get("query", ""), slot.attrs.get("src", "")
+        use_commons = self.image_mode in ("commons", "commons+parallel")
+        use_parallel = self.image_mode in ("commons+parallel", "parallel")
+        latencies: dict[str, float] = {}
+        commons_result: commons.SearchResult | None = None
+        parallel_result: commons.SearchResult | None = None
+
+        async def run_commons() -> None:
+            nonlocal commons_result
+            started = time.monotonic()
+            try:
+                commons_result = await commons.lookup_image(src, client=self.client) if src \
+                    else await commons.search_images(query, client=self.client)
+            finally:
+                latencies["commons"] = round(time.monotonic() - started, 2)
+
+        async def run_parallel() -> None:
+            nonlocal parallel_result
+            started = time.monotonic()
+            try:
+                objective, queries = self._parallel_queries(slot)
+                if not queries:
+                    parallel_result = commons.SearchResult(
+                        rejected=[{"title": "", "reason": "no query to search Parallel for"}])
+                    return
+                parallel_result = await parallel.search_images(objective, queries, client=self.client)
+            except parallel.ParallelUnavailable as error:
+                parallel_result = commons.SearchResult(
+                    rejected=[{"title": "", "reason": f"Parallel skipped: {error}"}])
+            except parallel.ParallelError as error:
+                parallel_result = commons.SearchResult(
+                    rejected=[{"title": "", "reason": f"Parallel failed: {error}"}])
+            finally:
+                latencies["parallel"] = round(time.monotonic() - started, 2)
+                self.parallel_state = parallel.state()
+
+        jobs = []
+        if use_commons:
+            jobs.append(run_commons())
+        if use_parallel:
+            # No Parallel lookup: a model-supplied URL is untrusted, so an
+            # src-only slot has no query to search for.
+            jobs.append(run_parallel())
+        if jobs:
+            await asyncio.gather(*jobs)
+        candidates: list[commons.Candidate] = []
+        noted = 0
+        for result in (commons_result, parallel_result):
+            if result is None:
+                continue
+            self.events.extend({**entry, "image_source": "parallel" if result is parallel_result else "commons",
+                                "query": query, "decision": "rejected"} for entry in result.rejected)
+            noted += len(result.rejected)
+            candidates.extend(result.candidates)
+        if not candidates and not noted:
+            self.events.append({"query": query, "decision": "rejected", "reason": "no image candidates"})
+        return candidates, latencies
+
+    async def _download(self, candidate: commons.Candidate) -> tuple[bytes, commons.Candidate]:
+        """Fetch a candidate's bitmap; Parallel URLs are SSRF-checked per hop."""
+        if candidate.source == "parallel":
+            data, sniffed = await parallel.download_image(candidate, client=self.client)
+            return data, replace(candidate, mime_type=sniffed or candidate.mime_type)
+        return await commons.download_image(candidate, client=self.client), candidate
+
     async def _decide(self, slot: ImageSlot) -> SlotDecision:
         """Search, download and review one slot; return only the verdict."""
-        query, src = slot.attrs.get("query", ""), slot.attrs.get("src", "")
+        query = slot.attrs.get("query", "")
         key = slot_key(slot)
-        result = await commons.lookup_image(src, client=self.client) if src else await commons.search_images(query, client=self.client)
-        self.events.extend({**entry, "decision": "rejected"} for entry in result.rejected)
-        if not result.candidates and not result.rejected:
-            self.events.append({"query": query, "decision": "rejected", "reason": "no Commons candidates"})
+        candidates, latencies = await self._search_all(slot)
         fallback = ""
-        for candidate in result.candidates:
+        for candidate in candidates:
+            source = candidate.source or "commons"
             try:
-                data = await commons.download_image(candidate, client=self.client)
+                data, candidate = await self._download(candidate)
                 accepted, reason, alternate = await self._inspect(slot, candidate, data)
             except asyncio.CancelledError:
                 self.events.append({"title": candidate.title, "source": candidate.source_url,
@@ -231,14 +319,18 @@ class PageImages:
                 raise
             except Exception as error:  # download/review boundary; cancellation still reaches the job budget
                 self.events.append({"title": candidate.title, "source": candidate.source_url,
-                                    "decision": "rejected", "reason": f"download/review failed: {type(error).__name__}"})
+                                    "decision": "rejected", "reason": f"download/review failed: {type(error).__name__}",
+                                    "image_source": source, "query": query,
+                                    "latency_s": latencies.get(source, 0.0)})
                 continue
             fallback = alternate or fallback
             if fallback:
                 self.alternates[key] = fallback
             self.events.append({"title": candidate.title, "source": candidate.source_url,
                                 "decision": "accepted" if accepted else "rejected", "reason": reason,
-                                "sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data)})
+                                "sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data),
+                                "image_source": source, "query": query,
+                                "latency_s": latencies.get(source, 0.0)})
             if accepted:
                 self.approved[key] = candidate
                 self.rendered[self._rendered_key(slot, candidate)] = candidate

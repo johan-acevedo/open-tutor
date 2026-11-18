@@ -1,0 +1,138 @@
+{
+ "job": "s1",
+ "kind": "page",
+ "page": "p1",
+ "title": "Maskrosen",
+ "model": "gemini-4-hydrogen",
+ "api": "chat",
+ "reasoning": "low",
+ "pane": [
+  370,
+  610
+ ],
+ "provider": "google",
+ "failover": false,
+ "hedged": false,
+ "ttft_s": 0.0,
+ "model_s": 1.5,
+ "render_s": 0.99,
+ "look_s": 0.0,
+ "retry_s": 0.0,
+ "total_s": 17.79,
+ "issues": [],
+ "residual_lint": [],
+ "repair": {
+  "look": false,
+  "look_fix": false,
+  "retry": false,
+  "retry_applied": false,
+  "notes": [
+   "look pass skipped: page target budget"
+  ]
+ },
+ "reveal": "show",
+ "image_s": 15.3,
+ "image_reviews": [
+  {
+   "title": "File:058 Aglais urticae on Dandelion Parc naturel régional Jura vaudois Photo by Giles Laurent.jpg",
+   "source": "https://commons.wikimedia.org/wiki/File:058_Aglais_urticae_on_Dandelion_Parc_naturel_r%C3%A9gional_Jura_vaudois_Photo_by_Giles_Laurent.jpg",
+   "decision": "rejected",
+   "reason": "A large butterfly covers most of the flower, and the plant has branching stems rather than a clear dandelion.",
+   "sha256": "84ee84d63827970368dc658609ce6725b8faaab5a82fdd1b07c7bcdfeb2a7857",
+   "bytes": 96689,
+   "image_source": "commons",
+   "query": "dandelion flower close-up photo",
+   "latency_s": 0.12
+  },
+  {
+   "title": "File:Close-up of water droplets on the common dandelion.jpg",
+   "source": "https://commons.wikimedia.org/wiki/File:Close-up_of_water_droplets_on_the_common_dandelion.jpg",
+   "decision": "rejected",
+   "reason": "The image is a black-and-white macro of water droplets on a dandelion seed head, not a yellow dandelion flower in bloom.",
+   "sha256": "6dcbcff4350181dfdb20e41d3879d09f5bfb8860e8857f512e1a685829020c11",
+   "bytes": 215676,
+   "image_source": "commons",
+   "query": "dandelion flower close-up photo",
+   "latency_s": 0.12
+  },
+  {
+   "title": "File:Dandelion Close Up (243074873).jpeg",
+   "source": "https://commons.wikimedia.org/wiki/File:Dandelion_Close_Up_(243074873).jpeg",
+   "decision": "rejected",
+   "reason": "The image shows a dandelion seed head rather than a dandelion in bloom as requested.",
+   "sha256": "9670846c6abef6866eb600807141914f56612aff83e24ae61fee397f58743978",
+   "bytes": 174572,
+   "image_source": "commons",
+   "query": "dandelion flower close-up photo",
+   "latency_s": 0.12
+  },
+  {
+   "query": "dandelion flower close-up photo",
+   "source": "",
+   "decision": "rejected",
+   "reason": "prefetched image unavailable: TimeoutError"
+  },
+  {
+   "title": "File:Dandelion Flower close up.jpg - Wikimedia Commons",
+   "source": "https://commons.wikimedia.org/wiki/File:Dandelion_Flower_close_up.jpg",
+   "decision": "rejected",
+   "reason": "image review cancelled or budget exhausted"
+  }
+ ],
+ "images": {
+  "strategy": "commons+parallel",
+  "seconds": 15.3,
+  "parallel": {
+   "available": true,
+   "reason": "",
+   "retry_in_s": 0.0
+  },
+  "reviews": [
+   {
+    "title": "File:058 Aglais urticae on Dandelion Parc naturel régional Jura vaudois Photo by Giles Laurent.jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:058_Aglais_urticae_on_Dandelion_Parc_naturel_r%C3%A9gional_Jura_vaudois_Photo_by_Giles_Laurent.jpg",
+    "decision": "rejected",
+    "reason": "A large butterfly covers most of the flower, and the plant has branching stems rather than a clear dandelion.",
+    "sha256": "84ee84d63827970368dc658609ce6725b8faaab5a82fdd1b07c7bcdfeb2a7857",
+    "bytes": 96689,
+    "image_source": "commons",
+    "query": "dandelion flower close-up photo",
+    "latency_s": 0.12
+   },
+   {
+    "title": "File:Close-up of water droplets on the common dandelion.jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:Close-up_of_water_droplets_on_the_common_dandelion.jpg",
+    "decision": "rejected",
+    "reason": "The image is a black-and-white macro of water droplets on a dandelion seed head, not a yellow dandelion flower in bloom.",
+    "sha256": "6dcbcff4350181dfdb20e41d3879d09f5bfb8860e8857f512e1a685829020c11",
+    "bytes": 215676,
+    "image_source": "commons",
+    "query": "dandelion flower close-up photo",
+    "latency_s": 0.12
+   },
+   {
+    "title": "File:Dandelion Close Up (243074873).jpeg",
+    "source": "https://commons.wikimedia.org/wiki/File:Dandelion_Close_Up_(243074873).jpeg",
+    "decision": "rejected",
+    "reason": "The image shows a dandelion seed head rather than a dandelion in bloom as requested.",
+    "sha256": "9670846c6abef6866eb600807141914f56612aff83e24ae61fee397f58743978",
+    "bytes": 174572,
+    "image_source": "commons",
+    "query": "dandelion flower close-up photo",
+    "latency_s": 0.12
+   },
+   {
+    "query": "dandelion flower close-up photo",
+    "source": "",
+    "decision": "rejected",
+    "reason": "prefetched image unavailable: TimeoutError"
+   },
+   {
+    "title": "File:Dandelion Flower close up.jpg - Wikimedia Commons",
+    "source": "https://commons.wikimedia.org/wiki/File:Dandelion_Flower_close_up.jpg",
+    "decision": "rejected",
+    "reason": "image review cancelled or budget exhausted"
+   }
+  ]
+ }
+}
