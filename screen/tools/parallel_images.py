@@ -29,6 +29,7 @@ import socket
 import time
 import urllib.parse
 
+import aiohttp
 import httpx
 
 from screen.tools import commons_images as commons
@@ -98,11 +99,16 @@ def _classify(status: int, body: str) -> tuple[float, str]:
 
 @contextlib.asynccontextmanager
 async def _http(client: httpx.AsyncClient | None):
-    """Use the caller's client, or a short-lived one that follows nothing."""
+    """Use the caller's client, or a short-lived one that follows nothing.
+
+    The owned client ignores proxy environment variables: image search and
+    download must never be steered through a proxy the deployment did not
+    configure explicitly."""
     if client is not None:
         yield client
         return
     async with httpx.AsyncClient(timeout=SEARCH_TIMEOUT, follow_redirects=False,
+                                 trust_env=False,
                                  headers={"User-Agent": USER_AGENT}) as own:
         yield own
 
@@ -137,10 +143,9 @@ def _candidate(entry: object) -> commons.Candidate | dict[str, str]:
 
 def _result(payload: object) -> commons.SearchResult:
     entries = payload.get("results") if isinstance(payload, dict) else None
-    result = commons.SearchResult()
     if not isinstance(entries, list):
-        result.rejected.append({"title": "", "reason": "Parallel returned no results list"})
-        return result
+        raise ParallelError("Parallel returned no results list")
+    result = commons.SearchResult()
     for entry in entries[:MAX_RESULTS]:
         outcome = _candidate(entry)
         if isinstance(outcome, commons.Candidate):
@@ -180,7 +185,9 @@ async def search_images(objective: str, queries: list[str], *,
             response = await http.post(API, json=body,
                                        headers={"x-api-key": key, "Content-Type": "application/json"},
                                        timeout=SEARCH_TIMEOUT, follow_redirects=False)
-    except (httpx.TimeoutException, httpx.NetworkError) as error:
+    except httpx.HTTPError as error:
+        # Any transport failure (timeouts, resets, proxy errors, broken TLS)
+        # cools down briefly: hammering a struggling endpoint helps nothing.
         _cool_down(COOLDOWN_TRANSIENT_S, f"Parallel unreachable ({type(error).__name__})")
         log.warning("parallel image search unreachable: %s", type(error).__name__)
         raise ParallelError(f"Parallel unreachable: {type(error).__name__}") from error
@@ -197,7 +204,14 @@ async def search_images(objective: str, queries: list[str], *,
     except ValueError:
         _cool_down(COOLDOWN_TRANSIENT_S, "Parallel returned no JSON")
         raise ParallelError("Parallel returned no JSON") from None
-    return _result(payload)
+    try:
+        return _result(payload)
+    except ParallelError as error:
+        # A 200 OK with a structurally wrong body is a broken endpoint, not
+        # an empty result: cool down briefly. A legitimate ``results: []``
+        # stays a normal empty result (no cool-down, see ``_result``).
+        _cool_down(COOLDOWN_TRANSIENT_S, str(error))
+        raise
 
 
 def reset_cooldown() -> None:
@@ -244,8 +258,12 @@ def _address_problem(address: str) -> str:
     return ""
 
 
-async def _check_host(host: str, resolve) -> str:
-    """Refuse the host unless every resolved address is public (empty when ok)."""
+async def _validated_addresses(host: str, resolve) -> list[str]:
+    """This hop's addresses, validated public before any connection is made.
+
+    One resolution per hop: the returned addresses are exactly the set the
+    fetch layer must connect to, so a DNS change after validation cannot
+    steer the connection anywhere unvalidated (DNS rebinding)."""
     try:
         addresses = await _resolve(host, resolve)
     except ParallelError:
@@ -253,12 +271,12 @@ async def _check_host(host: str, resolve) -> str:
     except Exception as error:
         raise ParallelError(f"cannot resolve {host}: {type(error).__name__}") from error
     if not addresses:
-        return f"host {host or 'missing'} resolves to nothing"
+        raise ValueError(f"Refusing to download: host {host or 'missing'} resolves to nothing")
     for address in addresses:
         problem = _address_problem(address)
         if problem:
-            return problem
-    return ""
+            raise ValueError(f"Refusing to download: {problem}")
+    return list(addresses)
 
 
 def _url_problem(url: str) -> str:
@@ -289,57 +307,108 @@ def _sniff(data: bytes) -> str:
     return ""
 
 
-async def download_image(candidate: commons.Candidate, *,
-                         client: httpx.AsyncClient | None = None,
-                         resolve=None) -> tuple[bytes, str]:
+class _PinnedResolver(aiohttp.abc.AbstractResolver):
+    """Resolve only from a fixed pin table: no system DNS at fetch time.
+
+    Each redirect hop is resolved and validated up front
+    (:func:`_validated_addresses`); the fetch layer then connects only to
+    those addresses. The URL hostname is still used for SNI, certificate
+    verification and the Host header, so TLS authenticates the name while
+    TCP goes to the validated IP. A lookup for any unpinned host raises
+    instead of touching system DNS, and proxies stay off
+    (``trust_env=False``)."""
+
+    def __init__(self, pins: dict[str, list[str]]):
+        self._pins = {str(host).lower(): list(addresses) for host, addresses in pins.items()}
+
+    async def resolve(self, host: str, port: int = 0,
+                      family: int = socket.AF_UNSPEC):
+        addresses = self._pins.get(str(host).lower())
+        if not addresses:
+            raise socket.gaierror(f"refusing unpinned host {host!r}")
+        resolved = []
+        for address in addresses:
+            try:
+                is_v6 = ipaddress.ip_address(address).version == 6
+            except ValueError:
+                raise socket.gaierror(f"refusing unpinned address {address!r}") from None
+            shown = f"[{address}]" if is_v6 else address
+            resolved.append({"hostname": host, "host": shown, "port": port,
+                             "family": socket.AF_INET6 if is_v6 else socket.AF_INET,
+                             "proto": 0, "flags": socket.AI_NUMERICHOST})
+        return resolved
+
+    async def close(self) -> None:
+        return None
+
+
+async def _fetch(url: str, pins: dict[str, list[str]], *, ssl=None):
+    """One HTTP hop to a pinned host: no redirects, no proxy, capped body.
+
+    Returns ``(status, headers, body)``. ``pins`` maps the URL hostname to
+    its validated addresses; nothing else is ever resolved. Raises
+    :class:`ParallelError` on any transport failure."""
+    timeout = aiohttp.ClientTimeout(total=DOWNLOAD_TIMEOUT, sock_connect=min(3.0, DOWNLOAD_TIMEOUT))
+    connector = aiohttp.TCPConnector(resolver=_PinnedResolver(pins), use_dns_cache=False,
+                                     limit=1, ssl=True if ssl is None else ssl)
+    try:
+        async with aiohttp.ClientSession(connector=connector, timeout=timeout, trust_env=False,
+                                         headers={"User-Agent": USER_AGENT}) as session:
+            async with session.get(url, allow_redirects=False) as response:
+                body = await response.content.read(MAX_BYTES + 1)
+                headers = {key.lower(): value for key, value in response.headers.items()}
+                return response.status, headers, body
+    except (aiohttp.ClientError, asyncio.TimeoutError) as error:
+        raise ParallelError(f"Image download failed: {type(error).__name__}") from error
+
+
+async def download_image(candidate: commons.Candidate, *, resolve=None, fetch=None) -> tuple[bytes, str]:
     """Fetch the candidate's bitmap: JPEG, PNG or WebP, at most 2 MiB.
 
     Any public https host is allowed, but the hostname is resolved and every
-    address refused unless public -- again for each of at most 3 redirect
-    hops, which are followed manually so no hop skips the check. Returns the
+    address refused unless public -- once for each of at most 3 redirect
+    hops, which are followed manually so no hop skips the check. Each hop
+    connects only to its validated addresses (pinned: no second DNS lookup
+    at connect time), while TLS still verifies the hostname. Returns the
     bytes and the sniffed media type. ``resolve`` is a test seam
-    (``host -> [ip, ...]``); DNS uses the system resolver in a thread.
+    (``host -> [ip, ...]``); ``fetch`` replaces the network hop
+    (``(url, pins) -> (status, headers, body)``) for unit tests.
     """
     problem = _url_problem(candidate.image_url)
     if problem:
         raise ValueError(f"Refusing to download: {problem}")
     url = candidate.image_url
-    async with _http(client) as http:
-        for _ in range(MAX_REDIRECTS + 1):
-            host = (urllib.parse.urlsplit(url).hostname or "").lower()
-            problem = _url_problem(url) or await _check_host(host, resolve)
-            if problem:
-                raise ValueError(f"Refusing to download: {problem}")
-            try:
-                async with http.stream("GET", url, timeout=DOWNLOAD_TIMEOUT,
-                                       follow_redirects=False,
-                                       headers={"User-Agent": USER_AGENT}) as response:
-                    if response.status_code in (301, 302, 303, 307, 308):
-                        target = response.headers.get("location", "")
-                        url = urllib.parse.urljoin(url, target)
-                        if not url or not target:
-                            raise ValueError("Refusing to download: the redirect has no target")
-                        continue
-                    if response.status_code != 200:
-                        raise ValueError(f"Image request failed with HTTP {response.status_code}")
-                    declared = response.headers.get("content-type", "").split(";")[0].strip().lower()
-                    if not declared.startswith("image/"):
-                        raise ValueError(f"Refusing to download: the response is {declared or 'untyped'}, not an image")
-                    length = response.headers.get("content-length", "")
-                    if length.isdigit() and int(length) > MAX_BYTES:
-                        raise ValueError(f"Refusing to download: {length} bytes is over the {MAX_BYTES} byte limit")
-                    chunks: list[bytes] = []
-                    total = 0
-                    async for chunk in response.aiter_bytes():
-                        total += len(chunk)
-                        if total > MAX_BYTES:
-                            raise ValueError(f"Refusing to download: the image grew past {MAX_BYTES} bytes")
-                        chunks.append(chunk)
-                    data = b"".join(chunks)
-                    sniffed = _sniff(data)
-                    if sniffed not in commons.MIME_TYPES:
-                        raise ValueError(f"Refusing to download: the bytes are {sniffed or 'not a bitmap'}")
-                    return data, sniffed
-            except (httpx.TimeoutException, httpx.NetworkError) as error:
-                raise ParallelError(f"Image download failed: {type(error).__name__}") from error
+    get = fetch if fetch is not None else _fetch
+    for _ in range(MAX_REDIRECTS + 1):
+        host = (urllib.parse.urlsplit(url).hostname or "").lower()
+        problem = _url_problem(url)
+        if problem:
+            raise ValueError(f"Refusing to download: {problem}")
+        addresses = await _validated_addresses(host, resolve)
+        try:
+            status, headers, body = await get(url, {host: addresses})
+        except ParallelError:
+            raise
+        except Exception as error:
+            raise ParallelError(f"Image download failed: {type(error).__name__}") from error
+        if status in (301, 302, 303, 307, 308):
+            target = headers.get("location", "")
+            url = urllib.parse.urljoin(url, target)
+            if not url or not target:
+                raise ValueError("Refusing to download: the redirect has no target")
+            continue
+        if status != 200:
+            raise ValueError(f"Image request failed with HTTP {status}")
+        declared = headers.get("content-type", "").split(";")[0].strip().lower()
+        if not declared.startswith("image/"):
+            raise ValueError(f"Refusing to download: the response is {declared or 'untyped'}, not an image")
+        length = headers.get("content-length", "")
+        if length.isdigit() and int(length) > MAX_BYTES:
+            raise ValueError(f"Refusing to download: {length} bytes is over the {MAX_BYTES} byte limit")
+        if len(body) > MAX_BYTES:
+            raise ValueError(f"Refusing to download: the image grew past {MAX_BYTES} bytes")
+        sniffed = _sniff(body)
+        if sniffed not in commons.MIME_TYPES:
+            raise ValueError(f"Refusing to download: the bytes are {sniffed or 'not a bitmap'}")
+        return body, sniffed
     raise ValueError("Refusing to download: too many redirects")

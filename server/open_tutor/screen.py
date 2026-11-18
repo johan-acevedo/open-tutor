@@ -1835,8 +1835,11 @@ class Screen:
         async def review_with_deadline(user: str, image: bytes | None) -> str:
             return await review(user, image, deadline)
 
+        from .reviewed_images import ReviewedImageStore, reviewed_images_dir
+
         return PageImages(self._build_user_text(ask), review_with_deadline, deadline,
-                          image_mode=image_mode())
+                          image_mode=image_mode(),
+                          image_store=ReviewedImageStore(reviewed_images_dir(self.pages_dir)))
 
     def _time_left(self, t0: float) -> float:
         """Seconds until the job limit; optional work is spent from this."""
