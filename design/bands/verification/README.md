@@ -16,7 +16,7 @@ The screenshots are actual served renders. `upper-phone-strip.png` separately ch
 
 The exporter validates the 14 transparent PNG/WebP pairs, limits height to 900 px, and encodes WebP at quality 88. It preserves the generated source strips and their pose manifest. Existing fox WebP files have no diff. Primary fixed greetings and assembled instructions were also compared with the PR #78 base and found byte-identical.
 
-Local checks: web suite 127 passed, TypeScript and production build passed, review document checks passed. Companion identity and existing teaching checks passed after adapting the upper-band greeting expectation to Björnen. The final full server result is recorded in the PR.
+Local checks: server suite 530 passed, web suite 127 passed, TypeScript and production build passed, review document checks passed. Companion identity and existing teaching checks passed after adapting the upper-band greeting expectation to Björnen.
 
 Not tested: a real voice lesson, lip synchronisation, physical phone microphone permissions, and whether learners prefer the characters in sustained use. A/B/C landing designs remain generated images awaiting Johan's choice.
 
