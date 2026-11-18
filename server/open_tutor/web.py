@@ -46,6 +46,9 @@ class Learner(BaseModel):
     name: str = Field(min_length=1, max_length=40)
     grade: int | None = Field(default=None, ge=1, le=12)
     notes: list[NoteIn] = Field(default_factory=list, max_length=5)
+    # Age band for this page load (primary | middle | upper). Chosen by the
+    # request host; validated loosely so older pages keep working.
+    band: str | None = Field(default=None, max_length=12)
 
 
 class SessionRequest(BaseModel):
@@ -81,7 +84,6 @@ def create_app(environ: dict[str, str] | None = None) -> FastAPI:
     env = dict(os.environ if environ is None else environ)
     app = FastAPI(title="Open Tutor", docs_url=None, redoc_url=None, openapi_url=None)
     limiter = SessionLimiter(int(env.get("TUTOR_MAX_SESSIONS_PER_HOUR", "12")))
-    access_code = env.get("TUTOR_ACCESS_CODE", "")
     allowed_countries = {country.strip().upper() for country in env.get("TUTOR_ALLOWED_COUNTRIES", "").split(",") if country.strip()}
 
     @app.middleware("http")
@@ -97,10 +99,14 @@ def create_app(environ: dict[str, str] | None = None) -> FastAPI:
     async def config() -> dict[str, Any]:
         """Public runtime config for the page. No secrets: only the PostHog
         project token (``phc_…``, meant to be public) and host, or null when
-        analytics is off. Passes through the country middleware like other routes.
+        analytics is off, plus the testing band override (``TUTOR_BAND``) or
+        null. Passes through the country middleware like other routes.
         """
         settings = posthog_settings(env)
-        return {"posthog": settings} if settings else {"posthog": None}
+        band = (env.get("TUTOR_BAND") or "").strip().lower() or None
+        if band not in ("primary", "middle", "upper"):
+            band = None
+        return {"posthog": settings if settings else None, "band": band}
 
     @app.get("/api/health")
     async def health() -> dict[str, Any]:
@@ -126,8 +132,8 @@ def create_app(environ: dict[str, str] | None = None) -> FastAPI:
 
     @app.post("/api/session")
     async def create_session(body: SessionRequest, request: Request) -> dict[str, str]:
-        if access_code and not secrets.compare_digest(request.headers.get("x-tutor-code", ""), access_code):
-            raise HTTPException(status_code=401, detail="code")
+        # No access code: the public instance is open. Protection is the
+        # Sweden-only check (middleware above) plus the hourly session cap.
         for name in ("LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET"):
             if not env.get(name):
                 raise HTTPException(status_code=503, detail="not configured")

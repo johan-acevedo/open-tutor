@@ -11,7 +11,6 @@ const posthogMock = vi.hoisted(() => ({
 vi.mock('posthog-js', () => ({ default: posthogMock }));
 
 import {
-  accessCodeResult,
   analyticsEnabled,
   getDeviceId,
   homeworkShared,
@@ -30,13 +29,6 @@ import {
   stripKodFromUrl,
   turnSent,
 } from './analytics';
-import {
-  consumeFamilyCodeFromUrl,
-  familyCode,
-  rememberFamilyCode,
-  resetFamilyCodeForTests,
-} from './useSession';
-
 function configResponse(key: string | null) {
   return {
     ok: true,
@@ -60,7 +52,6 @@ describe('analytics', () => {
     expect(analyticsEnabled()).toBe(false);
     expect(posthogMock.init).not.toHaveBeenCalled();
     pageOpened();
-    accessCodeResult(true);
     micPermission(true);
     sessionStartRequested();
     identifyLearner('Leo', 8);
@@ -106,7 +97,6 @@ describe('analytics', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(configResponse(POSTHOG_KEY)));
     await initAnalytics();
     pageOpened();
-    accessCodeResult(false);
     micPermission(true);
     sessionStartRequested();
     sessionStarted('tutor-abc');
@@ -119,7 +109,6 @@ describe('analytics', () => {
     const calls = posthogMock.capture.mock.calls as Array<[string, Record<string, unknown>]>;
     expect(calls.map(([event]) => event)).toEqual([
       'page_opened',
-      'access_code_result',
       'mic_permission',
       'session_start_requested',
       'session_started',
@@ -130,7 +119,6 @@ describe('analytics', () => {
       'resource_opened',
     ]);
     const byEvent = Object.fromEntries(calls);
-    expect(byEvent['access_code_result']).toEqual({ ok: false });
     expect(byEvent['mic_permission']).toEqual({ granted: true });
     expect(byEvent['session_started']).toEqual({ room: 'tutor-abc' });
     expect(byEvent['session_failed']).toEqual({ status: 503 });
@@ -141,7 +129,6 @@ describe('analytics', () => {
     // Allowlisted property keys per event: nothing else can leave the browser.
     const allowed: Record<string, string[]> = {
       page_opened: [],
-      access_code_result: ['ok'],
       mic_permission: ['granted'],
       session_start_requested: [],
       session_started: ['room'],
@@ -177,18 +164,6 @@ describe('analytics', () => {
     expect(stableLearnerId('dev-1', 'Leo')).toBe('device:dev-1:learner:leo');
     expect(stableLearnerId('dev-1', '  LEO  ')).toBe('device:dev-1:learner:leo');
     expect(stableLearnerId('dev-1', 'Anna  Maria')).toBe('device:dev-1:learner:anna maria');
-  });
-
-  it('strips the kod access code from the URL at startup', () => {
-    window.history.replaceState(null, '', '/?kod=SECRET123');
-    expect(consumeFamilyCodeFromUrl()).toBe('SECRET123');
-    expect(window.location.search).toBe('');
-    expect(window.location.href).not.toContain('SECRET123');
-    // Remembered for the session request.
-    expect(localStorage.getItem('open-tutor-code')).toBe('SECRET123');
-    // Second call finds no kod: the code now comes from storage.
-    expect(consumeFamilyCodeFromUrl()).toBeNull();
-    window.history.replaceState(null, '', '/');
   });
 
   it('scrubs kod from URL-like properties via the before_send hook', async () => {
@@ -401,58 +376,5 @@ describe('pre-init queue ordering', () => {
       'turn_sent',
       'homework_shared',
     ]);
-  });
-});
-
-describe('family code without storage', () => {
-  beforeEach(() => {
-    resetAnalytics();
-    localStorage.clear();
-    vi.unstubAllGlobals();
-    resetFamilyCodeForTests();
-  });
-  function blockStorage() {
-    const getItem = vi
-      .spyOn(Storage.prototype, 'getItem')
-      .mockImplementation(() => {
-        throw new Error('blocked');
-      });
-    const setItem = vi
-      .spyOn(Storage.prototype, 'setItem')
-      .mockImplementation(() => {
-        throw new Error('blocked');
-      });
-    return () => {
-      getItem.mockRestore();
-      setItem.mockRestore();
-    };
-  }
-
-  it('keeps the URL code in memory when storage throws', () => {
-    resetFamilyCodeForTests();
-    const unblock = blockStorage();
-    try {
-      window.history.replaceState(null, '', '/?kod=URLKOD123');
-      expect(familyCode()).toBe('URLKOD123'); // consumed from the URL...
-      expect(window.location.search).toBe(''); // ...and scrubbed from the URL
-      expect(familyCode()).toBe('URLKOD123'); // ...and remembered without storage
-    } finally {
-      unblock();
-      window.history.replaceState(null, '', '/');
-      resetFamilyCodeForTests();
-    }
-  });
-
-  it('keeps a typed prompt code in memory when storage throws', () => {
-    resetFamilyCodeForTests();
-    const unblock = blockStorage();
-    try {
-      rememberFamilyCode('PROMPTKOD');
-      expect(familyCode()).toBe('PROMPTKOD'); // the retry reuses it
-      expect(familyCode()).toBe('PROMPTKOD');
-    } finally {
-      unblock();
-      resetFamilyCodeForTests();
-    }
   });
 });

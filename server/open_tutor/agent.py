@@ -53,6 +53,9 @@ from .speech import speakable_stream, unspoken_stream
 log = logging.getLogger("open-tutor")
 
 BOARD_RPC_TIMEOUT = 6.0
+# Server → browser text-stream topic for the learner tools (set_learner_grade,
+# switch_student). The browser owns the profiles; see docs/protocol.md.
+PROFILE_TOPIC = "profile"
 HOMEWORK_SETTLE = 1.2  # seconds to wait for more PDF pages before responding
 # Per LLM attempt. The default (10 s, three retries) is what made a slow provider keep a
 # child waiting about 50 s for a greeting on 2026-11-14. One retry, then the failover in
@@ -350,6 +353,68 @@ class Tutor(Agent):
             next_step: What to try next time.
         """
         return await self.send_note(topic, clicked, tricky, next_step)
+
+    async def send_profile(self, payload: dict[str, Any]) -> bool:
+        """Ask the browser to apply a profile change. The browser owns storage."""
+        try:
+            await self.room.local_participant.send_text(
+                json.dumps(payload, ensure_ascii=False),
+                topic=PROFILE_TOPIC,
+                destination_identities=[self.child_identity] if self.child_identity else None,
+            )
+            return True
+        except Exception as error:
+            log.warning("profile send failed: %s", error)
+            return False
+
+    @function_tool()
+    async def set_learner_grade(self, context: RunContext, grade: int) -> str:
+        """Save the school year you just learned, so later calls start with it.
+
+        Call it once, when the grade first becomes clear early in the call
+        (asked naturally, or inferred from shared homework) — never at the
+        greeting and never for adults (band 3). Updates this call and the browser profile.
+
+        Args:
+            grade: School year 1-9 (grundskolan) or 10-12 (gymnasiet year 1-3).
+        """
+        try:
+            g = int(grade)
+        except (TypeError, ValueError):
+            return f"'{grade}' is not a school year. Use 1-12, or leave it unknown."
+        if not 1 <= g <= 12:
+            return f"'{grade}' is not a school year. Use 1-12, or leave it unknown."
+        self.learner["grade"] = g
+        record_active("grade", {"grade": g})
+        stored = await self.send_profile({"grade": g})
+        if not stored:
+            return (f"The learner is in årskurs {g} for the rest of this call, but the browser "
+                    "could not store it. Mention nothing; carry on.")
+        return (f"Saved: the learner is in årskurs {g}. "
+                "Keep this call's register as it is; later calls start with it.")
+
+    @function_tool()
+    async def switch_student(self, context: RunContext, name: str) -> str:
+        """Switch to a different student who is now at the screen.
+
+        Only after confirming with them (and asking the name when it is new).
+        The browser switches or creates their profile and their notes arrive
+        as a session event right after; greet them and continue from those notes.
+
+        Args:
+            name: The new student's first name.
+        """
+        clean = (name or "").strip()[:40]
+        if not clean:
+            return "No name given. Ask who is there now, then call again."
+        self.learner["name"] = clean
+        record_active("switch_student", {"name": clean})
+        stored = await self.send_profile({"switchTo": clean})
+        if not stored:
+            return (f"Switching to {clean}, but the browser could not switch profiles. "
+                    "Treat them as a new student with no notes and carry on.")
+        return (f"Switching to {clean}. Their notes arrive as a session event next; "
+                "greet them by name and continue from what those notes say.")
 
     async def send_note(self, topic: str, clicked: str = "", tricky: str = "", next_step: str = "") -> str:
         note = Note(
@@ -1097,6 +1162,25 @@ async def entrypoint(ctx: JobContext) -> None:
             await tutor.set_mode("talking")
             debug.record("prompt", {"kind": "resource_closed"})
             prompt_event(session, "The child finished the resource. Ask briefly what they noticed or thought.")
+        elif event.get("type") == "profile-switched":
+            # The browser applied switch_student: a different student (or a new
+            # profile) is now at the screen. Their notes travel here because only
+            # the browser stores them. In-place: Screen and entrypoint share this dict.
+            switched = event.get("learner") if isinstance(event.get("learner"), dict) else {}
+            new_name = str(switched.get("name") or "").strip()[:40] or tutor.learner.get("name", "")
+            tutor.learner["name"] = new_name
+            new_grade = switched.get("grade")
+            tutor.learner["grade"] = new_grade if isinstance(new_grade, int) and 1 <= new_grade <= 12 else None
+            incoming = switched.get("notes")
+            tutor.learner["notes"] = incoming if isinstance(incoming, list) else []
+            debug.record("prompt", {"kind": "profile_switched", "name": new_name,
+                                      "grade": tutor.learner["grade"],
+                                      "notes": len(tutor.learner["notes"])})
+            ctx_ = tutor.chat_ctx.copy()
+            ctx_.add_message(role="user", content=[prompt.switched_student_context(tutor.learner)])
+            await tutor.update_chat_ctx(ctx_)
+            prompt_event(session, f"{new_name} is at the screen now. Greet them by name in one "
+                                  "short sentence and continue from their notes above.")
 
     def spawn(coro_fn):
         def handler(reader, identity):

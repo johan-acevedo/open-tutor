@@ -6,10 +6,13 @@ type Props = {
   dragOver: boolean;
   onCamera: () => void;
   onFiles: () => void;
+  /** Leave the call and go back to the start screen (switch/add student). */
+  onSwitchStudent?: () => void;
+  switchLabel?: string;
 };
 
 /** Hamburger dropdown in the topbar: live homework inbox + about note. */
-export default function TopMenu({ items, dragOver, onCamera, onFiles }: Props) {
+export default function TopMenu({ items, dragOver, onCamera, onFiles, onSwitchStudent, switchLabel }: Props) {
   const [open, setOpen] = useState(false);
   const [about, setAbout] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -70,6 +73,11 @@ export default function TopMenu({ items, dragOver, onCamera, onFiles }: Props) {
             <button type="button" onClick={onFiles}>
               Välj bild
             </button>
+            {onSwitchStudent && (
+              <button type="button" onClick={onSwitchStudent}>
+                {switchLabel ?? 'Byt elev'}
+              </button>
+            )}
           </div>
           <button
             type="button"

@@ -31,7 +31,7 @@ export default function EndCard({ learnerName, notes, onBack }: Props) {
         </div>
       )}
       <button type="button" className="ot-start-btn" onClick={onBack}>
-        Tillbaka till profiler
+        Tillbaka till start
       </button>
     </div>
   );
