@@ -1,0 +1,23 @@
+{
+ "independent": {
+  "polygon-1": {
+   "known": [],
+   "flags": [],
+   "skipped": "no sides"
+  },
+  "polygon-2": {
+   "known": [],
+   "flags": [],
+   "skipped": "no sides"
+  },
+  "polygon-3": {
+   "known": [],
+   "flags": [],
+   "skipped": "no sides"
+  }
+ },
+ "shell": {
+  "370x610": [],
+  "1000x700": []
+ }
+}

@@ -1,0 +1,25 @@
+{
+ "independent": {
+  "rektangel": {
+   "known": [],
+   "flags": [],
+   "skipped": "degenerate edge"
+  }
+ },
+ "shell": {
+  "370x610": [
+   {
+    "kind": "crowded",
+    "msg": "label '5 cm' crosses its own line by 7 px; keep given measures; shorten labels, use separate graphs or give the graph more room",
+    "where": "<ot-graph id=\"figurer\">"
+   }
+  ],
+  "1000x700": [
+   {
+    "kind": "crowded",
+    "msg": "label '5 cm' crosses its own line by 13 px; keep given measures; shorten labels, use separate graphs or give the graph more room",
+    "where": "<ot-graph id=\"figurer\">"
+   }
+  ]
+ }
+}

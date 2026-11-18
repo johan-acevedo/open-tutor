@@ -1,0 +1,13 @@
+{
+ "independent": {
+  "triangel": {
+   "known": [],
+   "flags": [],
+   "skipped": "mixed dimensions"
+  }
+ },
+ "shell": {
+  "370x610": [],
+  "1000x700": []
+ }
+}

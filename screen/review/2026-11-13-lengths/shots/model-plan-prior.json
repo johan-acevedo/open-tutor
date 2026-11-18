@@ -1,0 +1,107 @@
+{
+ "independent": {
+  "rektangel": {
+   "known": [
+    {
+     "side": 1,
+     "text": "4 cm",
+     "scale": 0.1
+    },
+    {
+     "side": 2,
+     "text": "3 cm",
+     "scale": 0.1
+    },
+    {
+     "side": 3,
+     "text": "4 cm",
+     "scale": 0.1
+    },
+    {
+     "side": 4,
+     "text": "3 cm",
+     "scale": 0.1
+    }
+   ],
+   "flags": [],
+   "skipped": null
+  },
+  "l-form": {
+   "known": [
+    {
+     "side": 1,
+     "text": "3 cm",
+     "scale": 0.1
+    },
+    {
+     "side": 2,
+     "text": "1 cm",
+     "scale": 0.1
+    },
+    {
+     "side": 3,
+     "text": "2 cm",
+     "scale": 0.1
+    },
+    {
+     "side": 4,
+     "text": "1 cm",
+     "scale": 0.1
+    },
+    {
+     "side": 5,
+     "text": "1 cm",
+     "scale": 0.1
+    },
+    {
+     "side": 6,
+     "text": "2 cm",
+     "scale": 0.1
+    }
+   ],
+   "flags": [],
+   "skipped": null
+  }
+ },
+ "shell": {
+  "370x610": [
+   {
+    "kind": "crowded",
+    "msg": "label '3 cm' crosses an outline; keep given measures; shorten labels, use separate graphs or give the graph more room",
+    "where": "<ot-graph id=\"figurer\">"
+   },
+   {
+    "kind": "crowded",
+    "msg": "label '2 cm' crosses an outline; keep given measures; shorten labels, use separate graphs or give the graph more room",
+    "where": "<ot-graph id=\"figurer\">"
+   },
+   {
+    "kind": "crowded",
+    "msg": "label '1 cm' crosses an outline; keep given measures; shorten labels, use separate graphs or give the graph more room",
+    "where": "<ot-graph id=\"figurer\">"
+   },
+   {
+    "kind": "crowded",
+    "msg": "labels '3 cm' and '2 cm' overlap by 10 px; keep given measures; shorten labels, use separate graphs or give the graph more room",
+    "where": "<ot-graph id=\"figurer\">"
+   },
+   {
+    "kind": "crowded",
+    "msg": "labels '2 cm' and '1 cm' overlap by 12 px; keep given measures; shorten labels, use separate graphs or give the graph more room",
+    "where": "<ot-graph id=\"figurer\">"
+   }
+  ],
+  "1000x700": [
+   {
+    "kind": "crowded",
+    "msg": "labels '3 cm' and '2 cm' overlap by 10 px; keep given measures; shorten labels, use separate graphs or give the graph more room",
+    "where": "<ot-graph id=\"figurer\">"
+   },
+   {
+    "kind": "crowded",
+    "msg": "labels '2 cm' and '1 cm' overlap by 27 px; keep given measures; shorten labels, use separate graphs or give the graph more room",
+    "where": "<ot-graph id=\"figurer\">"
+   }
+  ]
+ }
+}

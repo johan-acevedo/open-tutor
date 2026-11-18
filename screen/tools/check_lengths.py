@@ -403,7 +403,7 @@ def check_lifecycle(shell, out: Path) -> list[str]:
         with tempfile.TemporaryDirectory() as directory:
             screen = Screen({}, Path(directory))
             try:
-                _, issues = await screen._default_render_page(bad, fixed, 370, 610)
+                _, issues = await screen._default_render_page(bad, fixed, [], 370, 610)
                 if [i for i in issues if issue_kind(i) == "length"]:
                     failures.append(f"server preview kept repaired length warnings: {issues}")
             finally:

@@ -1,0 +1,13 @@
+{
+ "independent": {
+  "rektangel": {
+   "known": [],
+   "flags": [],
+   "skipped": "missing/degenerate coordinates"
+  }
+ },
+ "shell": {
+  "370x610": [],
+  "1000x700": []
+ }
+}
