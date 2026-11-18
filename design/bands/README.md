@@ -4,9 +4,35 @@ Owner decision, 2026-11-18: the address selects a band's companion, visual theme
 
 | Address | Audience | Design status |
 | --- | --- | --- |
-| `tutor.labtopia.dev` | Middle school | Keep the current blue fox and screen style |
-| `tutor2.labtopia.dev` | Gymnasiet | Two concepts awaiting Johan's choice |
-| `tutor3.labtopia.dev` | Adults | Two concepts awaiting Johan's choice |
+| `tutor.labtopia.dev` | Åk 1–6 | Keep the current blue fox and screen style |
+| `tutor2.labtopia.dev` | Åk 7–9, högstadiet, ages 13–15 | G1 Lodjuret selected by Johan |
+| `tutor3.labtopia.dev` | Åk 10+, gymnasiet and adults together | Selection open. New directions must have expressive hands |
+
+These ranges are Johan's corrected decision of 2026-11-18. They supersede the audience labels in the first-pass prompts and historical directory names. `gymnasiet/concepts/` holds the original tutor2 exploration; `adults/concepts/` holds tutor3. Keep those image paths stable for links already shared in the design thread. Use the corrected address-to-range mapping when producing final assets and configuration.
+
+## Owner feedback, 2026-11-18
+
+G1 Lodjuret is locked as the tutor2 companion for åk 7–9. Preserve its identity and its two articulated hands for explanatory gestures. Keep elbows, palms, and fingers visible within the exported frame. The graphite and amber screen remains the paired proposal. Judge its scale, gestures, and screen style for 13–15-year-olds.
+
+The tutor3 companion remains undecided. Hägern and Vecket did not settle that choice. The next pass explores companions with two articulated arms and expressive hands. It was queued immediately before the range correction with adult-focused prompts. Assess the results for gymnasiet students and adults together. The general teaching material and colleague-like companions do not need an age-specific role. See [the second-pass prompts](exploration-2026-11-18/adults-round-2-prompts.json).
+
+## New tutor3 directions
+
+These concepts explore teaching gestures for the shared gymnasiet and adult band. All three show two articulated arms and hands, an open-palm explanation, pencil work, and relaxed folded hands. The four states remain listening, speaking, preparing the board, and waiting.
+
+| ID | Companion | Screen proposal |
+| --- | --- | --- |
+| V3 | Björnen. Broad shoulders, mature bear face, rolled sleeves | Deep forest-grey, linen, and brass |
+| V4 | Uttern. Slender otter with a long muzzle and rolled sleeves | Light warm grey, charcoal, and petrol |
+| V5 | Form. A fictional limestone figure with articulated hands | Warm graphite, cream board, and terracotta |
+
+All three propose Lexend and flat cards with 6 px corners. These are generated still-image proposals, not final assets or implemented theme tokens.
+
+![V3, Björnen with teaching gestures and a forest-grey call screen](adults/concepts/03-bjornen.png)
+
+![V4, Uttern with teaching gestures and a light call screen](adults/concepts/04-uttern.png)
+
+![V5, Form with teaching gestures and a graphite and cream call screen](adults/concepts/05-form.png)
 
 ## First concept pass
 
@@ -25,13 +51,13 @@ The generated text and typography are illustrative. The documented font and colo
 
 Generated navigation labels and lesson text are not interface or curriculum specifications. Keep the current menu and call controls when implementing the selected look.
 
-### Gymnasiet
+### Tutor2, åk 7–9
 
 ![G1, Lodjuret with a graphite and amber call screen and four states](gymnasiet/concepts/01-lodjuret.png)
 
 ![G2, Korpen with an ink and lilac call screen and four states](gymnasiet/concepts/02-korpen.png)
 
-### Adults
+### Tutor3, gymnasiet and adults
 
 ![V1, Hägern with a mineral and forest green call screen and four states](adults/concepts/01-hagern.png)
 
@@ -39,7 +65,7 @@ Generated navigation labels and lesson text are not interface or curriculum spec
 
 ## Current asset contract
 
-Inspected on `origin/main` at `a2685c1`, 2026-11-18. `web/src/components/Avatar.tsx` renders a transparent static WebP at `/character/<pose>.webp`. There are no video loops or sprite animations. Status icons and speaking motion are separate UI elements.
+Inspected on `origin/main` at `a2685c1`, 2026-11-18, and rechecked unchanged against `9063c47` after the age-range correction. `web/src/components/Avatar.tsx` renders a transparent static WebP at `/character/<pose>.webp`. There are no video loops or sprite animations. Status icons and speaking motion are separate UI elements.
 
 | Pose | Current dimensions |
 | --- | --- |
@@ -52,6 +78,8 @@ Inspected on `origin/main` at `a2685c1`, 2026-11-18. `web/src/components/Avatar.
 | `pointing` | 432 × 539 |
 
 Selected companions need all seven poses, transparent alpha, full ears or head and gestures inside the crop, and consistent face placement for the phone's circular crop. The four-state concepts group `thinking` and `working` as preparation, and `speaking` and `pointing` as speech. Final exports must preserve those separate runtime states.
+
+Gesture verification must check the displayed body crop as well as the source image. The current circular phone head crop cannot show hands. Review the teaching layout before claiming that exported gestures are visible on phones.
 
 The screen shell uses Lexend and its own CSS variables in `screen/shell/shell.css`. The outer app has a separate `--ot-*` variable set in `web/src/styles.css`. A selected theme must cover both, including teaching colours, muted text, answer controls, and focus states.
 

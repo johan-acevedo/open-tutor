@@ -4,6 +4,21 @@ Lead: the thread "state of the project" (Claude, 2026-11-12). The lead keeps thi
 Workers read it before starting and report against it. Decisions here were agreed with Johan
 on 2026-11-12 unless marked open.
 
+## 2026-11-18: age-band design decisions
+
+Johan's corrected ranges: `tutor.labtopia.dev` serves åk 1–6 with the current fox and style;
+`tutor2.labtopia.dev` serves åk 7–9, ages 13–15; `tutor3.labtopia.dev` serves gymnasiet and
+adults together, åk 10+. The address fixes the band for the visit. The voice stays the same.
+
+G1 Lodjuret is locked as the tutor2 companion. Expressive hands are a requirement for
+teaching gestures. The tutor3 companion remains open, with new concepts evaluated for both
+older teenagers and adults. The design record and exact generation prompts are in
+[`design/bands/`](../design/bands/README.md); the corrected mapping and selections are in
+[`decisions.json`](../design/bands/decisions.json).
+
+This records design choices only. Final companion assets, theme tokens, and host selection
+are not implemented by this concept pass. No service or live call is changed.
+
 ## 2026-11-18: the Smart Screen is the only mode, and the legacy board is deleted
 
 Johan's decision. Production and dev already ran with `TUTOR_SCREEN=smart`; the code default
