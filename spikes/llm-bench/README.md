@@ -15,24 +15,26 @@ and backs off on 429 (anonymous quota is 250 tests/hr; 300-run A/B/C needs ~2 wi
 - `run-global.py` — Globalping driver (needs deployed Worker).
 - `direct-baseline.jsonl` — Sweden results, 2026-11-16 ~10:35 UTC.
 
-## Deploy (needs a token with Workers Scripts:Edit on the Sorl account —
-## the `CLOUDFLARE_API_TOKEN` in homelab secrets is Workers-AI-only and CANNOT deploy)
+## Deploy (needs a token with Workers Scripts:Edit on your Cloudflare account —
+## a Workers-AI-only token CANNOT deploy)
 ```bash
 cd spikes/llm-bench
-export CLOUDFLARE_API_TOKEN="$(ssh johan-4070 'source ~/.config/homelab/secrets/cloudflare.env; printf %s "$CLOUDFLARE_API_TOKEN"')"
-export CLOUDFLARE_ACCOUNT_ID=76974d5ee42be1d512456fe96261ea49  # Sorl
+export CLOUDFLARE_API_TOKEN="<token with Workers Scripts:Edit>"
+export CLOUDFLARE_ACCOUNT_ID="<your-account-id>"  # from the Cloudflare dashboard
 export BENCH_PATH="$(openssl rand -hex 16)"   # 32 hex chars, never commit the value
 wrangler deploy
 echo "$BENCH_PATH" | wrangler secret put BENCH_PATH
-grep COMMAND_CODE_API_KEY ~/.config/homelab/secrets/agent-auth.env | cut -d= -f2- | tr -d '\n' | wrangler secret put COMMAND_CODE_API_KEY
+# keys come from an env file you keep outside the repo
+#   AGENT_AUTH_ENV=/path/to/agent-auth.env
+grep COMMAND_CODE_API_KEY "$AGENT_AUTH_ENV" | cut -d= -f2- | tr -d '\n' | wrangler secret put COMMAND_CODE_API_KEY
 # smoke test (expect colo ARN from Sweden, reasoning_chars 0 on A):
-curl "https://open-tutor-llm-bench.<sub>.workers.dev/$BENCH_PATH/bench?backend=a"
-curl "https://open-tutor-llm-bench.<sub>.workers.dev/$BENCH_PATH/bench?backend=b"
+curl "https://open-tutor-llm-bench.<your-subdomain>.workers.dev/$BENCH_PATH/bench?backend=a"
+curl "https://open-tutor-llm-bench.<your-subdomain>.workers.dev/$BENCH_PATH/bench?backend=b"
 ```
 
 ## Run global probes
 ```bash
-WORKER_BASE="https://open-tutor-llm-bench.<sub>.workers.dev/$BENCH_PATH" python3 run-global.py
+WORKER_BASE="https://open-tutor-llm-bench.<your-subdomain>.workers.dev/$BENCH_PATH" python3 run-global.py
 # 10 cities x (A B A B x limit 5) = 200 probe runs; ~1 hr with polling
 ```
 

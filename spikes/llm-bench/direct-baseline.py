@@ -4,9 +4,9 @@ Same prompt as spikes/llm-bench/worker.js. 10 runs each, streaming.
 Usage: CLOUDFLARE_API_TOKEN=... COMMAND_CODE_API_KEY=... python3 direct-baseline.py
 Writes JSON lines to direct-baseline.jsonl (git-ignored results, keep local).
 """
-import json, os, subprocess, sys, time, urllib.request
+import json, os, sys, time, urllib.request
 
-ACCT = "76974d5ee42be1d512456fe96261ea49"
+ACCT = os.environ["CLOUDFLARE_ACCOUNT_ID"]  # set this in your shell, never commit it
 MODEL_A = "@cf/deepseek-ai/deepseek-v4.1-flash-1017"
 MODEL_B = "deepseek/deepseek-v4.1-flash"
 
@@ -27,9 +27,7 @@ def get_cf_token():
     t = os.environ.get("CLOUDFLARE_API_TOKEN")
     if t:
         return t
-    return subprocess.run(
-        ["ssh", "johan-4070", "source ~/.config/homelab/secrets/cloudflare.env; printf %s \"$CLOUDFLARE_API_TOKEN\""],
-        capture_output=True, text=True).stdout
+    sys.exit("set CLOUDFLARE_API_TOKEN (see README) to run backend A")
 
 def read_sse(resp, t0):
     ttft_c = ttft_r = None
@@ -119,7 +117,8 @@ def main():
     token = get_cf_token() if "a" in want else None
     secrets = {}
     if want & {"b", "c"}:
-        with open(os.path.expanduser("~/.config/homelab/secrets/agent-auth.env")) as f:
+        auth_env = os.path.expanduser(os.environ.get("AGENT_AUTH_ENV", "agent-auth.env"))
+        with open(auth_env) as f:
             for l in f:
                 if l.startswith("COMMAND_CODE_API_KEY="):
                     secrets["b"] = l.split("=", 1)[1].strip()

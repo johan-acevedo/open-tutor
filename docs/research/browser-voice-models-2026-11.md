@@ -3,12 +3,14 @@
 Research for the open-tutor voice tutor: speech runs **entirely in the browser**
 (ONNX Runtime Web / Transformers.js / WASM / WebGPU), the LLM stays a cloud API.
 Web Speech API and Gemini Nano are out of scope. Research only — no product code.
+A browser voice spike was built alongside this research and shipped as a throwaway
+demo (closed PR #68); it is not kept in the repo.
 
 - Window for "new": **2026-09-20 → 2026-11-15**. Dates below are `createdAt` from
   `https://huggingface.co/api/models/<id>` unless noted.
 - Sizes below are the **download sizes of the files the browser actually needs**
   (from `…/api/models/<id>?blobs=true`), not marketing numbers.
-- "Measured" = run by me on CPU in `~/scratch/browser-voice-research/`
+- "Measured" = run by me on CPU in a scratch directory outside this repo
   (LibriSpeech test-clean clips for STT, 3 fixed sentences for TTS, whisper
   tiny.en int8 as the TTS intelligibility judge). Repro commands: Appendix.
 - Bottom line up front: **Whistle (STT, 16.9 MB) + Silero int8 (VAD, 0.64 MB) +
@@ -139,13 +141,13 @@ when a Pico-class `sv` model appears.
 
 ## Appendix — reproduce the hands-on results
 
-Environment: `~/scratch/browser-voice-research/` (throwaway uv project; WAVs and
+Environment: a scratch directory outside this repo (throwaway uv project; WAVs and
 `eval/stt/refs.txt` kept there, not in this repo). CPU: generic x86-64 Linux box.
 All "measured" numbers above come from these commands; first-run timings include
 one-time model downloads.
 
 ```bash
-cd ~/scratch/browser-voice-research
+cd browser-voice-research   # scratch dir, not in this repo
 uv pip install onnxruntime soundfile librosa jiwer numpy huggingface_hub \
   faster-whisper datasets sentencepiece transformers cactus-compute
 UV_INDEX_URL=https://download.pytorch.org/whl/cpu uv pip install torch

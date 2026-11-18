@@ -20,19 +20,19 @@ Sydney, Singapore/Tokyo). Which endpoint serves **Muse Spark 1.3 Contributor** a
 - Set reasoning effort to **`minimal`/`low`** for voice turns. Defaults burn 250–400 reasoning
   tokens (≈2–4 s) before the first speakable token on both DeepSeek and Muse Spark.
 
-**Lead re-check (2026-11-16, dell5500, 5 runs):** DeepSeek V4.1 Flash on Command Code chat completions with `"thinking": {"type": "disabled"}` gave content TTFT **median 1.48 s** (1.21–1.58 s), about half the default-mode 3.1 s. Note that Command Code returns 403 to Python's default User-Agent, so send a client User-Agent. On the chat endpoint, `reasoning_effort` (`minimal`/`none`) returned 400 for Muse Spark; the agent's Muse Spark numbers used the Responses endpoint.
+**Lead re-check (2026-11-16, one dev machine, 5 runs):** DeepSeek V4.1 Flash on Command Code chat completions with `"thinking": {"type": "disabled"}` gave content TTFT **median 1.48 s** (1.21–1.58 s), about half the default-mode 3.1 s. Note that Command Code returns 403 to Python's default User-Agent, so send a client User-Agent. On the chat endpoint, `reasoning_effort` (`minimal`/`none`) returned 400 for Muse Spark; the agent's Muse Spark numbers used the Responses endpoint.
 
 All claims are either **measured** (command + output in §5) or **estimated** (formula in §2);
 everything else links its source. Unknowns are stated plainly.
 
 ---
 
-## 1. Measured from Sweden (dell5500, 2026-11-16)
+## 1. Measured from Sweden (one dev machine, 2026-11-16)
 
 Short prompt (~300 tokens in, `/1965909632` out target), streaming, 10 runs per cell.
 "First token" = first SSE token of any kind (incl. opaque/reasoning).
 "Content" = first speakable text token — **this is the number that matters for voice.**
-Keys from `~/.pi/agent/auth.json` (never printed, logged, or sent to probe services).
+Keys came from the agent's own auth file (never printed, logged, or sent to probe services).
 
 | Endpoint | Model (effort) | DNS / TCP / TLS to edge | TTFT first-token med (p90) | **TTFT content med (p90)** | Total med | tok/s med |
 |---|---|---|---|---|---|---|
@@ -82,7 +82,7 @@ More (ping avg, same method):
 - `api.meta.ai` — anycast on Meta's own edge (Sydney 1.4, Phoenix 11.5, Ashburn 0.8, Frankfurt
   0.6, Singapore 1.2, Tokyo 1.3 ms; per-city IPs). Inference region undisclosed in
   [Meta Model API docs](https://dev.meta.ai/docs/overview) — **unknown**.
-- `api.deepseek.com` — same IP worldwide (`3.173.21.63`), ~1 ms ping on 5/6 continents
+- `api.deepseek.com` — same IP worldwide, ~1 ms ping on 5/6 continents
   (Phoenix 54 ms): anycast front door (likely CDN), **origin unknown**, no key available so no
   TTFT measured.
 - `api.fireworks.ai` — anycast edge (Frankfurt 0.9, Tokyo 1.6, Phoenix 11.6 ms).
@@ -203,7 +203,7 @@ curl -sI https://api.commandcode.ai/provider/v1 -H "User-Agent: Mozilla/5.0 ..."
 
 ```python
 # TTFT harness (full: /tmp/ttft.py in the research session; sketch of the core loop)
-# key = json.load(open(os.path.expanduser("~/.pi/agent/auth.json")))["commandcode"]["key"]  # REDACTED
+# key = load_key_from_the_agent_auth_file()            # REDACTED
 req = urllib.request.Request(url, data=json.dumps({
     "model": "deepseek/deepseek-v4.1-flash",
     "messages": [{"role": "user", "content": PROMPT_300TOK}],  # ~300 in, 400-600 out budget
@@ -256,7 +256,7 @@ non-empty `content` delta. Full rig committed under `spikes/llm-bench/`
 (`worker.js`, `wrangler.toml`, `direct-baseline.py` + `direct-baseline.jsonl`,
 `run-global.py`, `README.md`).
 
-### Thinking-off knobs — confirmed (dell5500, 2026-11-16)
+### Thinking-off knobs — confirmed (one dev machine, 2026-11-16)
 
 - **A (Workers AI): `reasoning_effort: "none"` turns thinking fully off.**
   The [model docs](https://developers.cloudflare.com/workers-ai/models/deepseek-v4.1-flash-1017/)
@@ -275,7 +275,7 @@ non-empty `content` delta. Full rig committed under `spikes/llm-bench/`
   re-check — either Command Code changed routing mid-day or the morning runs hit a
   different path. Backend B therefore ran **thinking-ON** in this bake-off.
 
-### Sweden direct baseline (dell5500, 20 runs/backend over two rounds ~10:35 + ~13:05 UTC, same prompt as the Worker)
+### Sweden direct baseline (one dev machine, 20 runs/backend over two rounds ~10:35 + ~13:05 UTC, same prompt as the Worker)
 
 | Backend | TTFT content med | TTFT range | Reasoning | Content chars (med) |
 |---|---|---|---|---|
@@ -296,15 +296,15 @@ observed here; the Worker binding path may stream more granularly (verify post-d
 
 ### Global leg: MEASURED 2026-11-16 (10 cities × A/B/C × 10 runs, n=304)
 
-Deploy unblocked with the fixed Sorl-member token (`cloudflare-worker-test.env`,
-subdomain `sorl`): worker `open-tutor-llm-bench`, secrets `BENCH_PATH` +
+Deploy unblocked with a token that had Workers Scripts:Edit (kept in the local env
+file, never in the repo), subdomain `<your-subdomain>`: worker `open-tutor-llm-bench`, secrets `BENCH_PATH` +
 `COMMAND_CODE_API_KEY` + `OPENCODE_API_KEY`, backend C added (OpenCode Go,
 `thinking disabled`, `x-opencode-session` UUID per call). Two method fixes en
 route: Globalping percent-encodes `?` in `request.path`, so the Worker routes on
 the path segment (`/bench/<a|b|c>`, query as fallback); and the anonymous 250/hr
 quota 429'd mid-run (~1 hr pause; resume-by-tally added to `run-global.py`). The
 first 15 Sydney/Phoenix rows 404'd on the old query format and are excluded.
-Nothing else in Sorl touched; worker deleted after (end of this section).
+Nothing else in that Cloudflare account was touched; worker deleted after (end of this section).
 
 Per-city TTFT in ms, server-measured (tot = full-reply server ms; colo = Worker PoP):
 
@@ -370,12 +370,12 @@ Key commands (values redacted; full text in `spikes/llm-bench/README.md`):
 
 ```bash
 # deploy (needs Workers:Edit — currently missing, see above)
-CLOUDFLARE_ACCOUNT_ID=76974d5ee42be1d512456fe96261ea49  # Sorl
+CLOUDFLARE_ACCOUNT_ID="<your-account-id>"              # from the dashboard or env file
 BENCH_PATH="$(openssl rand -hex 16)"                   # never commit value
 wrangler deploy
 wrangler secret put BENCH_PATH            # paste $BENCH_PATH
 wrangler secret put COMMAND_CODE_API_KEY # paste key (never in repo/logs)
-# global probes: WORKER_BASE=https://open-tutor-llm-bench.<sub>.workers.dev/$BENCH_PATH \
+# global probes: WORKER_BASE=https://open-tutor-llm-bench.<your-subdomain>.workers.dev/$BENCH_PATH \
 #   python3 run-global.py     # 10 cities x A,B,A,B x limit 5 = 200 runs
 wrangler delete open-tutor-llm-bench      # cleanup + verify via API list
 ```

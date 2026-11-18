@@ -2,7 +2,7 @@
 """Global TTFT bake-off via Globalping HTTP measurements (ready to run after deploy).
 
 Prereqs: worker deployed (see README below), WORKER_BASE env =
-  https://open-tutor-llm-bench.<subdomain>.workers.dev/<32hex>
+  https://open-tutor-llm-bench.<your-subdomain>.workers.dev/<32hex>
 Usage: WORKER_BASE=... python3 run-global.py
 Writes global-results.jsonl (one line per probe run). No keys leave this machine:
   probes only GET the secret path; provider keys stay inside the Worker.
