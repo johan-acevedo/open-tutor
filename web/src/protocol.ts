@@ -37,8 +37,11 @@ export type BoardFocusPayload = {
 
 export type SessionLearner = {
   name: string;
-  grade: number;
+  /** School year 1-12, or null when the tutor has not learned it yet. */
+  grade: number | null;
   notes: Note[];
+  /** Age band for this page load (middle | high | adult). */
+  band?: string;
 };
 
 export type SessionRequest = {
@@ -64,6 +67,7 @@ export type DiagWireEvent = {
 
 export type SessionEvent =
   | { type: 'end' }
+  | { type: 'profile-switched'; learner: SessionLearner }
   | { type: 'resource-closed'; id: string }
   | { type: 'board-size'; w: number; h: number; device: string }
   | { type: 'quiet'; on: boolean }
@@ -97,6 +101,11 @@ export const TOPIC_HOMEWORK = 'homework';
 export const TOPIC_HOMEWORK_TEXT = 'homework-text';
 export const TOPIC_SESSION_EVENT = 'session-event';
 export const TOPIC_NOTE = 'note';
+/** Server → browser: the tutor's learner tools (set_learner_grade,
+ *  switch_student). The browser owns the profiles, applies the change and
+ *  answers a switch with a profile-switched session-event carrying notes.
+ *  Payload: { grade: number } or { switchTo: name }. */
+export const TOPIC_PROFILE = 'profile';
 
 export const ATTR_AGENT_STATE = 'lk.agent.state';
 export const ATTR_TUTOR_MODE = 'tutor.mode';

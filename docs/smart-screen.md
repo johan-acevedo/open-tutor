@@ -4,6 +4,29 @@ Lead: the thread "state of the project" (Claude, 2026-11-12). The lead keeps thi
 Workers read it before starting and report against it. Decisions here were agreed with Johan
 on 2026-11-12 unless marked open.
 
+## 2026-11-18: age bands, name-only start, no access code
+
+Johan's evolution of the PRD (this PR, `t3/age-bands`; voice/LLM call not re-tested):
+
+- **Bands by address (ranges corrected 2026-11-18).** `tutor.*` = åk 1–6 (primary, today's
+fox and style), `tutor2.*` = åk 7–9 (middle, högstadiet), `tutor3.*` = gymnasiet + adults
+(upper). One codebase; the host picks the band (per page load, never mid-session), and the
+band decides the look (companion, theme, copy: `web/src/bands.ts`, `[data-band]` CSS).
+Unknown hosts default to primary; `?band=` or server `TUTOR_BAND` override for testing.
+Companion art/themes for bands 2–3 are placeholders (fox + distinct tokens) until the
+design thread lands `design/bands/<band>/` — wiring points in `design/bands/README.md`.
+- **Name-only start.** First visit asks only "Vad heter du?"; no grid, no grade picker.
+Next visit assumes the same student ("Hej <name>, starta"); "Byt elev" is in the menu.
+- **The tutor learns the grade** (`set_learner_grade` → browser topic `profile` → stored
+profile) and **switches student in-call** (`switch_student` → browser switches/creates the
+profile and returns their notes as a `profile-switched` session-event). On band 3 the tutor
+finds out naturally whether the learner is a gymnasiet student (which year) or an adult;
+only adults skip the grade. Unknown grades default to the band in the tutor and screen prompts.
+- **No access code.** The gate is gone from page and server; Sweden-only check
+(`cf-ipcountry`) and `TUTOR_MAX_SESSIONS_PER_HOUR` stay. Same voice on all bands.
+- Docs: PRD (bands, onboarding, grade learning, switching, adults + companions in
+scope), AGENTS.md users line, README, `docs/protocol.md`, `server/README.md` settings.
+
 ## 2026-11-18: the Smart Screen is the only mode, and the legacy board is deleted
 
 Johan's decision. Production and dev already ran with `TUTOR_SCREEN=smart`; the code default
@@ -50,8 +73,8 @@ served corpora and cached indexes).
 
 - Trunk: `main`. The Smart Screen branch was merged on 2026-11-13 (PR #51); branch from `main`.
 - Production: ThinkCentre (https://tutor.labtopia.dev), `main`, Smart Screen on since
-  2026-11-13 (the only mode since PR #73). Last deploy 2026-11-18: `7390659` (PRs #58, #72,
-  #73; Parallel image search tried on dev first), `SCREEN_IMAGES=commons+parallel` and
+  2026-11-13 (the only mode since PR #73). Last deploy 2026-11-18: `9063c47` (PRs #75
+  and #76), `SCREEN_IMAGES=commons+parallel` and
   `PARALLEL_API_KEY` added to the env file, `TUTOR_INTERRUPT_MIN_S=1.6`. Rollback commit
   `0705f22`, env backup `env.bak-20261118-before-parallel`. It is a public test: deploy only with Johan's go, and never
   restart during a call. `deploy/install.sh` over ssh reports a failed health check because

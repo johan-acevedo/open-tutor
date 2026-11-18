@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ConnectionState, Room, RoomEvent, RpcError, Track, TrackEvent } from 'livekit-client';
 import type { RpcInvocationData } from 'livekit-client';
+import type { BandId } from './bands';
 import type { BoardFocusPayload, BoardItem, HomeworkAttributes, Note, SessionResponse } from './protocol';
 import type { PageShellMessage } from './components/PageCard';
 import {
@@ -17,13 +18,13 @@ import {
   TOPIC_HOMEWORK,
   TOPIC_HOMEWORK_TEXT,
   TOPIC_NOTE,
+  TOPIC_PROFILE,
   TOPIC_SESSION_EVENT,
   TOPIC_TRANSCRIPTION,
 } from './protocol';
-import { appendNote } from './db';
+import { appendNote, createProfile, listProfiles, rememberLastProfileId, resolveProfileSwitch, updateProfile } from './db';
 import type { Profile } from './db';
 import {
-  accessCodeResult,
   getDeviceId,
   homeworkShared,
   identifyLearner,
@@ -185,7 +186,7 @@ function unregisterRpc(room: Room, method: string): void {
   }
 }
 
-export function useSession(mobile = false) {
+export function useSession(mobile = false, band: BandId = 'primary') {
   const [phase, setPhase] = useState<Phase>('profiles');
   const [profile, setProfile] = useState<Profile | null>(null);
   const [items, setItems] = useState<BoardItem[]>([]);
@@ -217,6 +218,10 @@ export function useSession(mobile = false) {
   useWakeLock(phase === 'live');
 
   const roomRef = useRef<Room | null>(null);
+  // The age band for sessions started from this page load. Ref so the
+  // session request always sends the current band without re-wiring start.
+  const bandRef = useRef<BandId>(band);
+  bandRef.current = band;
   const pageSendsRef = useRef(new Map<string, (msg: PageShellMessage) => void>());
   const preparedRoomRef = useRef<Room | null>(null);
   const profileRef = useRef<Profile | null>(null);
@@ -410,6 +415,11 @@ export function useSession(mobile = false) {
     } catch {
       /* ignore */
     }
+    try {
+      room.unregisterTextStreamHandler(TOPIC_PROFILE);
+    } catch {
+      /* ignore */
+    }
     room.removeAllListeners();
     void room.disconnect().catch(() => undefined);
   }, []);
@@ -486,7 +496,6 @@ export function useSession(mobile = false) {
 
       const notes = p.notes.slice(-5).reverse(); // newest first
       let session: SessionResponse;
-      let codeAsked = false;
       let failStatus: string | number = 'request-failed';
       try {
         const request = () => {
@@ -494,27 +503,12 @@ export function useSession(mobile = false) {
           boardLastSentRef.current = `${board.w}x${board.h}:${board.device}`;
           return fetch('/api/session', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-tutor-code': familyCode() },
-            body: JSON.stringify({ learner: { name: p.name, grade: p.grade, notes },
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ learner: { name: p.name, grade: p.grade, notes, band: bandRef.current },
               board, device_id: getDeviceId() }),
           });
         };
-        let res = await request();
-        if (res.status === 401) {
-          // The owner can protect the instance with a family code; asked once per browser.
-          codeAsked = true;
-          const code = window.prompt('Skriv familjekoden:') ?? '';
-          rememberFamilyCode(code.trim());
-          res = await request();
-        }
-        if (res.status === 401) {
-          accessCodeResult(false);
-          showToast('Fel familjekod. Försök igen.');
-          cleanupRoom();
-          setPhase('profiles');
-          return;
-        }
-        if (codeAsked) accessCodeResult(true);
+        const res = await request();
         if (res.status === 429) {
           sessionFailed(429);
           showToast('Det är fullt just nu. Försök igen om en stund.');
@@ -795,6 +789,42 @@ export function useSession(mobile = false) {
           }
         } catch {
           /* ignore */
+        }
+      });
+
+      // Profile updates from the tutor's tools (set_learner_grade,
+      // switch_student): the browser owns the profiles, so the tutor sends
+      // a wish and the browser applies it. See docs/protocol.md.
+      room.registerTextStreamHandler(TOPIC_PROFILE, async (reader) => {
+        try {
+          const data: unknown = JSON.parse(await reader.readAll());
+          if (typeof data !== 'object' || data === null) return;
+          const msg = data as { grade?: unknown; switchTo?: unknown };
+          if (typeof msg.switchTo === 'string' && msg.switchTo.trim()) {
+            const wanted = msg.switchTo.trim().slice(0, 40);
+            const stored = await listProfiles();
+            let next = resolveProfileSwitch(stored, wanted);
+            if (!next) next = await createProfile(wanted);
+            rememberLastProfileId(next.id);
+            profileRef.current = next;
+            setProfile(next);
+            // Hand the tutor this student's notes from now on.
+            const learner = { name: next.name, grade: next.grade, notes: next.notes.slice(-5).reverse() };
+            await sendToAgent(JSON.stringify({ type: 'profile-switched', learner }), TOPIC_SESSION_EVENT)
+              .catch(() => undefined);
+            return;
+          }
+          if (typeof msg.grade === 'number' && Number.isInteger(msg.grade) && msg.grade >= 1 && msg.grade <= 12) {
+            const prof = profileRef.current;
+            if (!prof || prof.grade === msg.grade) return;
+            const updated = await updateProfile(prof.id, { grade: msg.grade });
+            if (updated) {
+              profileRef.current = updated;
+              setProfile(updated);
+            }
+          }
+        } catch {
+          /* ignore malformed profile messages */
         }
       });
 
@@ -1372,59 +1402,4 @@ export function captionTail(text: string, max = 140): string {
   }
   out = out.trim();
   return out.length > max ? '…' + out.slice(out.length - max + 1) : out;
-}
-
-const CODE_KEY = 'open-tutor-code';
-
-/** The family code for this page load, set from the URL or the prompt.
- *  localStorage below is only persistence across loads: when storage is
- *  blocked the code still works for this load (and the session request),
- *  instead of being lost with the stripped URL. */
-let memoryCode = '';
-
-export function rememberFamilyCode(code: string): void {
-  if (!code) return;
-  memoryCode = code;
-  try {
-    localStorage.setItem(CODE_KEY, code);
-  } catch {
-    /* storage blocked: memory still serves this page load */
-  }
-}
-
-/** For tests: forget the page-load code so cases start clean. */
-export function resetFamilyCodeForTests(): void {
-  memoryCode = '';
-}
-
-/** Read ?kod= once and scrub it from the URL, remembering the code.
- *  Called from main.tsx at startup — before analytics init — so PostHog
- *  never sees the access code in $current_url. Returns the code, or null
- *  when the URL carries none. */
-export function consumeFamilyCodeFromUrl(): string | null {
-  try {
-    const fromUrl = new URLSearchParams(window.location.search).get('kod');
-    if (fromUrl) {
-      rememberFamilyCode(fromUrl);
-      window.history.replaceState(null, '', window.location.pathname);
-      return fromUrl;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-/** Family code from a shared link (?kod=…), remembered in this browser.
- *  Memory first (URL, then the prompt), storage as fallback — so a blocked
- *  localStorage loses neither the link code nor a typed one on retry. */
-export function familyCode(): string {
-  const fromUrl = consumeFamilyCodeFromUrl();
-  if (fromUrl) return fromUrl;
-  if (memoryCode) return memoryCode;
-  try {
-    return localStorage.getItem(CODE_KEY) ?? '';
-  } catch {
-    return '';
-  }
 }

@@ -16,7 +16,7 @@ An older student sitting beside them could listen, find a starting point, explai
 
 The first users are Johan's own children, with their actual schoolwork. They will use the tool on ordinary weekdays. There is no prepared demonstration or scripted assignment. What happens in those sessions should guide development.
 
-The wider ambition is to help children across the world get better educational support. This is intended as an open-source project that others can improve, adapt, and run. Making money is not the motivation. Adults learning a trade or an advanced subject may benefit from the same approach later, but children are the initial focus.
+The wider ambition is to help children across the world get better educational support. This is intended as an open-source project that others can improve, adapt, and run. Making money is not the motivation. Since 2026-11-18 the same codebase also serves högstadiet (`tutor2.*`, åk 7–9) and gymnasiet plus adults (`tutor3.*`), one band per host; children in åk 1–6 remain the initial focus and the founding experience below is band 1.
 
 ## Arrive and meet the tutor
 
@@ -64,7 +64,7 @@ The initial focus is teaching in Swedish across subjects such as maths, religion
 
 Voice selection starts with the quality of spoken Swedish, with no preference for a masculine or feminine voice. Mixed-language teaching can follow initial use.
 
-The tutor remembers the learner across visits. Initially, learner profiles and continuity live in browser-local storage, with no account. A returning child can choose their saved name, and siblings sharing a browser can keep separate profiles. Someone new can start without registration.
+The tutor remembers the learner across visits. Initially, learner profiles and continuity live in browser-local storage, with no account. The first visit asks only for a first name; the next visit assumes the same learner. Siblings sharing a browser keep separate profiles behind "Byt elev", and someone new can start without registration. The tutor learns an unknown school year naturally in the first call (on band 3 it first finds out whether the learner is a gymnasiet student or an adult; only adults skip the grade).
 
 This initial memory belongs to the browser and device. Clearing browser storage loses that continuity. Browser-local memory does not imply on-device inference: live sessions still send the necessary content to the backend and selected providers.
 
@@ -113,7 +113,7 @@ The balance of humour, encouragement, initiative, and direct explanation should 
 
 ## Keep the first version focused
 
-Accounts, cross-device synchronisation, parent dashboards, parent instructions, billing, resource ratings, and child-editable whiteboards can come later. Formal curriculum integrations and multiple tutor personalities can also wait.
+Accounts, cross-device synchronisation, parent dashboards, parent instructions, billing, resource ratings, and child-editable whiteboards can come later. Formal curriculum integrations can also wait. One companion and theme per age band is in scope (bands 2–3 still reuse the fox as a placeholder); see `design/bands/README.md`.
 
 Inference costs are covered for the initial experiment. Johan may also open his hosted instance to others for a while. Sustainable access needs attention as usage grows, but should not dictate the first experience. Free trials and user-provided provider access remain possibilities, subject to what providers support.
 

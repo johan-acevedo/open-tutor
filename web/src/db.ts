@@ -6,7 +6,10 @@ import type { Note } from './protocol';
 export type Profile = {
   id: string;
   name: string;
-  grade: number;
+  /** School year (1-12), or null when not known yet. The tutor learns it
+   *  naturally in the first call via the set_learner_grade tool; adults
+   *  (band 3 adults) are never asked for one. */
+  grade: number | null;
   notes: Note[];
   createdAt: number;
 };
@@ -128,7 +131,7 @@ export async function saveProfile(profile: Profile): Promise<void> {
   }
 }
 
-export async function createProfile(name: string, grade: number): Promise<Profile> {
+export async function createProfile(name: string, grade: number | null = null): Promise<Profile> {
   const profile: Profile = {
     id: newProfileId(),
     name: name.trim(),
@@ -138,6 +141,63 @@ export async function createProfile(name: string, grade: number): Promise<Profil
   };
   await saveProfile(profile);
   return profile;
+}
+
+/** Patch a profile (grade learned mid-call, name fix). Returns the updated profile. */
+export async function updateProfile(profileId: string, patch: { grade?: number | null; name?: string }): Promise<Profile | undefined> {
+  let profile: Profile | undefined;
+  if (idbBroken) {
+    profile = memoryFallback.get(profileId);
+  } else {
+    try {
+      profile = await tx<Profile | undefined>('readonly', (store) => store.get(profileId));
+    } catch {
+      idbBroken = true;
+      profile = memoryFallback.get(profileId);
+    }
+  }
+  if (!profile) return undefined;
+  const updated: Profile = {
+    ...profile,
+    ...(patch.grade !== undefined ? { grade: patch.grade } : {}),
+    ...(patch.name !== undefined ? { name: patch.name.trim() || profile.name } : {}),
+  };
+  await saveProfile(updated);
+  return updated;
+}
+
+/** Find a stored profile by first name (case-insensitive), for in-call switching. */
+export function resolveProfileSwitch(profiles: Profile[], name: string): Profile | undefined {
+  const wanted = name.trim().toLowerCase();
+  if (!wanted) return undefined;
+  return profiles.find((p) => p.name.trim().toLowerCase() === wanted);
+}
+
+const LAST_KEY = 'open-tutor-last-profile';
+
+/** The student the last visit assumed; the next visit starts with them. */
+export function getLastProfileId(): string | null {
+  try {
+    return localStorage.getItem(LAST_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function rememberLastProfileId(id: string): void {
+  try {
+    localStorage.setItem(LAST_KEY, id);
+  } catch {
+    /* storage blocked: next visit just asks the name again */
+  }
+}
+
+export function forgetLastProfileId(): void {
+  try {
+    localStorage.removeItem(LAST_KEY);
+  } catch {
+    /* ignore */
+  }
 }
 
 /** Append a note to a profile, keeping the newest MAX_NOTES. */

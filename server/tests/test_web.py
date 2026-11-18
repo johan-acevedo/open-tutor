@@ -21,15 +21,37 @@ def test_session_token_carries_learner_and_agent_dispatch():
     assert claims["roomConfig"]["agents"][0]["agentName"] == "open-tutor"
 
 
+def test_session_carries_band_and_config_advertises_testing_band():
+    body = {"learner": {"name": "Leo", "grade": None, "notes": [], "band": "middle"}}
+    client = TestClient(create_app(ENV))
+    response = client.post("/api/session", json=body)
+    assert response.status_code == 200
+    claims = jwt.decode(response.json()["token"], ENV["LIVEKIT_API_SECRET"], algorithms=["HS256"])
+    assert json.loads(claims["metadata"])["learner"]["band"] == "middle"
+    # Older pages send no band: still accepted, nothing stored.
+    legacy = client.post("/api/session", json=LEARNER)
+    assert legacy.status_code == 200
+    assert "band" not in json.loads(
+        jwt.decode(legacy.json()["token"], ENV["LIVEKIT_API_SECRET"], algorithms=["HS256"])["metadata"])["learner"]
+    # Null grade (not known yet) is accepted.
+    assert client.post("/api/session", json=body).status_code == 200
+    # /api/config names no band by default; TUTOR_BAND sets a testing default.
+    assert client.get("/api/config").json()["band"] is None
+    assert TestClient(create_app({**ENV, "TUTOR_BAND": "upper"})).get("/api/config").json()["band"] == "upper"
+    assert TestClient(create_app({**ENV, "TUTOR_BAND": "nope"})).get("/api/config").json()["band"] is None
+
+
 def test_rejects_bad_learner_and_missing_config():
     assert TestClient(create_app(ENV)).post("/api/session", json={"learner": {"name": ""}}).status_code == 422
     assert TestClient(create_app({})).post("/api/session", json=LEARNER).status_code == 503
 
 
-def test_access_code_when_configured():
-    client = TestClient(create_app({**ENV, "TUTOR_ACCESS_CODE": "fika"}))
-    assert client.post("/api/session", json=LEARNER).status_code == 401
-    assert client.post("/api/session", json=LEARNER, headers={"x-tutor-code": "fika"}).status_code == 200
+def test_no_access_code_gate():
+    # The public instance is open: no code is asked, and a leftover
+    # TUTOR_ACCESS_CODE in the environment no longer gates anything.
+    assert TestClient(create_app(ENV)).post("/api/session", json=LEARNER).status_code == 200
+    assert TestClient(create_app({**ENV, "TUTOR_ACCESS_CODE": "fika"})).post(
+        "/api/session", json=LEARNER).status_code == 200
 
 
 def test_hourly_session_cap():

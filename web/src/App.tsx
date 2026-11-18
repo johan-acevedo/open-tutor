@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { layoutMode, mapAvatarState } from './avatarState';
-import { listProfiles } from './db';
+import { bandConfig, currentBand, type BandId } from './bands';
+import { listProfiles, rememberLastProfileId } from './db';
 import type { Profile } from './db';
 import { useSession } from './useSession';
 import { initAnalytics, pageOpened } from './analytics';
-import ProfilePicker from './components/ProfilePicker';
+import Welcome from './components/Welcome';
 import Avatar from './components/Avatar';
 import Board from './components/Board';
 import BottomBar from './components/BottomBar';
@@ -31,7 +32,40 @@ export default function App() {
     }
   })();
   const { mobile, portrait, keyboard } = useViewport();
-  const session = useSession(mobile);
+  // Age band for this page load: ?band= wins, else the remembered choice,
+  // else the host (tutor2.* = high, tutor3.* = adult). A TUTOR_BAND set on
+  // the server (/api/config) applies only when the page names no band.
+  const [band, setBand] = useState<BandId>(() => {
+    try {
+      return currentBand(window.location.hostname, window.location.search);
+    } catch {
+      return 'primary';
+    }
+  });
+  useEffect(() => {
+    let cancelled = false;
+    const hasOverride = (() => {
+      try {
+        return new URLSearchParams(window.location.search).has('band') || localStorage.getItem('open-tutor-band') !== null;
+      } catch {
+        return true;
+      }
+    })();
+    if (hasOverride) return;
+    fetch('/api/config')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((config: { band?: string } | null) => {
+        if (!cancelled && (config?.band === 'primary' || config?.band === 'middle' || config?.band === 'upper')) {
+          setBand(config.band);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const config = bandConfig(band);
+  const session = useSession(mobile, band);
   // Narrow portrait phones get the two-view stage: big fox, or item + fox strip.
   const phonePortrait = mobile && portrait;
   const stage = usePhoneStage({
@@ -85,6 +119,7 @@ export default function App() {
 
   return (
     <div
+      data-band={band}
       className={`ot-root${mobile ? ' ot-phone' : ''}${phonePortrait ? ' ot-phone-portrait' : ''}${keyboard ? ' ot-keyboard' : ''}${inSession ? ' ot-in-session' : ''}`}
     >
       <header className="ot-topbar">
@@ -101,15 +136,21 @@ export default function App() {
               dragOver={session.dragOver}
               onCamera={() => cameraRef.current?.click()}
               onFiles={() => fileRef.current?.click()}
+              onSwitchStudent={session.backToProfiles}
+              switchLabel={config.copy.switchStudent}
             />
           )}
         </div>
       </header>
 
       {phase === 'profiles' && (
-        <ProfilePicker
+        <Welcome
           profiles={profiles}
-          onPick={(p) => void session.start(p)}
+          band={config}
+          onPick={(p) => {
+            rememberLastProfileId(p.id);
+            void session.start(p);
+          }}
           onStartGesture={session.prepareStart}
           starting={false}
         />
