@@ -843,7 +843,10 @@ once; nothing else about the image step changes (search, gates, store, delivery)
   0.25 s before the absolute image deadline so that decision, and the drain below, run
   on our own clock instead of the caller's outer timeout.
 - **Nothing is left running, nothing unreviewed ships.** Once a winner is chosen or the
-  deadline hits, every other download and review is cancelled and drained; a
+  deadline hits, every other download and review is cancelled and drained -- within the
+  time left before the image deadline (1 s at most), and a caller cancellation that lands
+  during that drain is re-raised instead of swallowed, so the page falls back to text
+  rather than shipping a picture after its own deadline; a
   still-running candidate is recorded as rejected (`cancelled: a better-ranked
   candidate was accepted`, or `image review cancelled or budget exhausted`), and a
   review that was accepted but outranked says so. Only the winner reaches
@@ -853,8 +856,10 @@ once; nothing else about the image step changes (search, gates, store, delivery)
   The text fallback for the slot comes from the best-ranked rejection that offered one,
   instead of from whichever review happened to finish last.
 - **Provider calls do not multiply.** A hedged review can start the same review on the
-  backup provider, so hedging all N would spend up to 2N calls per list. Only the slot's
-  best-ranked review keeps the hedge/failover; the rest are single attempts
+  backup provider, so hedging all N would spend up to 2N calls per list. Only the first
+  review a slot actually admits keeps the hedge/failover, whichever source serves it
+  (with `SCREEN_IMAGES=parallel`, or a Commons list that came back empty, that first
+  review is a Parallel one and it still gets its failover); the rest are single attempts
   (`_call_model(hedge=False)`, recorded as `single_attempt` in the call stats when a
   backup was armed). A slot therefore costs at most N+1 calls per source list, and the
   concurrency is itself the redundancy a hedge would have bought.
@@ -868,9 +873,27 @@ once; nothing else about the image step changes (search, gates, store, delivery)
   review costs nothing: the best finished acceptance is taken), cancellation and drain
   (losers cancelled, no `page-image-review-*` task left), isolation (one failing review
   rejects only its candidate), concurrency (three at once, `1` sequential), the per-page
-  gate, only the best-ranked review hedging, and only the winning Parallel bytes
+  gate, only the first review hedging, and only the winning Parallel bytes
   reaching the review store. Server side: `_call_model(hedge=False)` makes exactly one
-  call with a backup armed, and `SCREEN_IMAGE_REVIEWS` parsing.
+  call with a backup armed, and `SCREEN_IMAGE_REVIEWS` parsing. The three review fixes
+  have their own regressions (they fail on the branch as first pushed): a cancellation
+  that lands in the drain, the gate counting reaped provider work through the real
+  `Screen` wrapper and its reaper with a fake provider seam, and a `SCREEN_IMAGES=parallel`
+  slot failing over to a healthy backup.
+- **Review fixes (GPT-6.1 Sol cross-family review, 2026-11-18; all three reproduced,
+  tests added).** (1) The drain of the losers caught `CancelledError` and carried on to
+  storage and rendering, so a caller cancellation landing there (a loser's HTTP response
+  or client close being slow) let an outer `wait_for`/`timeout_at` see a normal return
+  and the page render after its deadline; the drain is now bounded and re-raises the
+  caller's cancellation, while our own cancels of the losers still only raise inside
+  them. (2) The per-page review gate was released when the review callback returned,
+  but the cancelled provider request lives on in the reaper (cancel plus stream close),
+  so a page could run 5 provider requests across 2 gate slots with a concurrency of 3;
+  an image review now waits, bounded (1 s), for the request it gave up on to finish
+  before releasing its slot, tracked per owning task. (3) Every Parallel review was
+  called with `hedge=False`, so with `SCREEN_IMAGES=parallel` (or an empty Commons list)
+  a slot's first and only review had no failover and a failing primary meant text; the
+  hedge now belongs to the slot's first actual review, not to the Commons path.
 - **Live comparison** (`screen/review/2026-11-18-concurrent-reviews/`, `origin/main` vs
   this branch, eight fictional asks, two runs each, real providers): acceptance 11/16 →
   12/16, median image slot 4.74 s → 4.86 s, runs the budget cut 5 → 1, completed vision

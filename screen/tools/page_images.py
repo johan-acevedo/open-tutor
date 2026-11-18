@@ -151,6 +151,13 @@ MAX_REVIEW_CONCURRENCY = 6
 # of the caller's outer timeout at the same instant.
 REVIEW_DEADLINE_RESERVE_S = 0.25
 
+# How long a slot waits for its cancelled reviews to unwind once the decision is
+# made, and never past what is left of the image budget. They are already
+# cancelled at that point: this only gives a slow HTTP response or client close
+# room to finish before the page is built, and a caller cancellation that lands
+# during it is re-raised (see ``_drain_reviews``).
+DRAIN_BOUND_S = 1.0
+
 
 @dataclass
 class _CandidateReview:
@@ -442,6 +449,17 @@ class PageImages:
         finally:
             review.finished_s = round(time.monotonic() - slot_start, 2)
 
+    def _note_cancelled(self, reviews: list[_CandidateReview], latencies: dict[str, float],
+                        slot_start: float) -> None:
+        """Record every review a cancelled slot never got a verdict from."""
+        now = round(time.monotonic() - slot_start, 2)
+        for review in reviews:
+            if not review.settled:
+                review.finished_s = now
+                self.events.append(self._review_event(
+                    review, latencies, decision="rejected",
+                    reason="image review cancelled or budget exhausted"))
+
     @staticmethod
     def _best_accept(reviews: list[_CandidateReview]) -> _CandidateReview | None:
         """The ranking rule: the best-ranked acceptance whose betters are done.
@@ -465,17 +483,30 @@ class PageImages:
 
         Called once a winner is chosen or the deadline hits: no download and
         no vision review outlives the decision, and nothing unreviewed can
-        still be running when the slot's HTML is built."""
+        still be running when the slot's HTML is built.
+
+        The wait is bounded and the caller's own cancellation is re-raised.
+        Our ``cancel()`` calls raise only inside the losers, so a
+        ``CancelledError`` here is always the caller cutting this slot (the
+        image deadline, the job limit, a discarded prefetch) -- and this is
+        the slot's last await, so it lands here whenever a loser's download or
+        client close is slow. Swallowing it let an outer
+        ``wait_for``/``timeout_at`` see a normal return and the page ship a
+        picture after its own deadline."""
         tasks = [task for task in in_flight if not task.done()]
         for task in tasks:
             task.cancel()
         if not tasks:
             return
+        bound = min(DRAIN_BOUND_S, self.deadline - time.monotonic())
+        if bound <= 0:
+            return  # no time left: the losers are cancelled and unwind on their own
         try:
-            await asyncio.gather(*tasks, return_exceptions=True)
+            await asyncio.wait(tasks, timeout=bound)
         except asyncio.CancelledError:
-            # The slot itself is being cancelled: its reviews are cancelled too.
-            pass
+            # The caller is cutting this slot while its losers unwind; they are
+            # already cancelled, so stop waiting and let the cancellation through.
+            raise
 
     def _review_event(self, review: _CandidateReview, latencies: dict[str, float], *,
                       decision: str, reason: str) -> dict:
@@ -495,7 +526,8 @@ class PageImages:
 
     async def _review_candidates(self, slot: ImageSlot, key: SlotKey,
                                  candidates: list[commons.Candidate], query: str,
-                                 latencies: dict[str, float], *, hedge: bool = True
+                                 latencies: dict[str, float], *,
+                                 first_review: list[bool] | None = None
                                  ) -> SlotDecision | None:
         """Download and review the top candidates concurrently; rank decides.
 
@@ -506,7 +538,15 @@ class PageImages:
         pre-empts a better-ranked one that is still being judged -- and once
         the deadline hits, the best-ranked acceptance among those that did
         finish. Everything still running is then cancelled and drained, so no
-        unreviewed candidate and no stray download outlives the slot."""
+        unreviewed candidate and no stray download outlives the slot.
+
+        ``first_review`` is the slot's own flag, shared by both of its sources
+        (a one-element list): the first review this slot actually admits keeps
+        the hedge/failover, whichever source serves it. Later ones run alone
+        once there is concurrency: a hedged call can start the same review on
+        the backup provider, so N concurrent reviews are their own redundancy
+        and cost N provider calls instead of 2N."""
+        first_review = [True] if first_review is None else first_review
         if not candidates:
             return None
         slot_start = time.monotonic()
@@ -517,14 +557,16 @@ class PageImages:
         admitted = 0
         winner: _CandidateReview | None = None
         deadline_hit = False
+        recorded = False
         try:
             while True:
                 while admitted < len(reviews) and len(in_flight) < self.review_concurrency:
                     review = reviews[admitted]
                     review.start_s = round(time.monotonic() - slot_start, 2)
                     admitted += 1
+                    hedged, first_review[0] = first_review[0], False
                     task = asyncio.create_task(
-                        self._review_one(slot, review, slot_start, hedge and admitted == 1),
+                        self._review_one(slot, review, slot_start, hedged),
                         name=f"page-image-review-{review.rank}")
                     in_flight[task] = review
                 winner = self._best_accept(reviews[:admitted])
@@ -544,16 +586,19 @@ class PageImages:
         except asyncio.CancelledError:
             # The slot itself is being cut (job budget, a discarded prefetch):
             # its reviews are cancelled and recorded as such, then it stops.
-            now = round(time.monotonic() - slot_start, 2)
-            for review in reviews[:admitted]:
-                if not review.settled:
-                    review.finished_s = now
-                    self.events.append(self._review_event(
-                        review, latencies, decision="rejected",
-                        reason="image review cancelled or budget exhausted"))
+            self._note_cancelled(reviews[:admitted], latencies, slot_start)
+            recorded = True
             raise
         finally:
-            await self._drain_reviews(in_flight)
+            try:
+                await self._drain_reviews(in_flight)
+            except asyncio.CancelledError:
+                # The caller cut the slot while its cancelled losers unwound
+                # (the image deadline): record what produced no verdict here,
+                # since the loop below never runs, then let it through.
+                if not recorded:
+                    self._note_cancelled(reviews[:admitted], latencies, slot_start)
+                raise
         if deadline_hit:
             # The deadline overrides the wait, not the preference: among the
             # reviews that did finish, the best-ranked acceptance still wins.
@@ -620,7 +665,14 @@ class PageImages:
         reviewed while a Commons candidate may still be accepted. Only the
         slot's first review may hedge: a hedged call can start the same
         review on the backup provider, and N concurrent reviews are already
-        their own redundancy."""
+        their own redundancy -- but that first review is not necessarily a
+        Commons one (``SCREEN_IMAGES=parallel``, or a Commons search that
+        returned nothing), so the flag lives on the slot rather than on the
+        source."""
+        # The slot's first actual review keeps the hedge/failover, whichever
+        # source serves it: with SCREEN_IMAGES=parallel it is the slot's only
+        # review, and a failing primary must still reach the backup.
+        first_review = [True]
         query = slot.attrs.get("query", "")
         key = slot_key(slot)
         use_commons = self.image_mode in ("commons", "commons+parallel")
@@ -644,7 +696,7 @@ class PageImages:
                 noted += len(result.rejected)
                 seen.extend(result.candidates)
                 decision = await self._review_candidates(slot, key, result.candidates, query,
-                                                         latencies, hedge=True)
+                                                         latencies, first_review=first_review)
                 if decision is not None:
                     if parallel_task is not None and parallel_task.done() and not parallel_task.cancelled():
                         # Already answered: keep its rejections for the record.
@@ -664,7 +716,7 @@ class PageImages:
                 noted += len(result.rejected)
                 seen.extend(result.candidates)
                 decision = await self._review_candidates(slot, key, result.candidates, query,
-                                                         latencies, hedge=False)
+                                                         latencies, first_review=first_review)
                 if decision is not None:
                     return decision
             if not seen and noted == 0:

@@ -431,3 +431,94 @@ async def test_only_the_winning_parallel_bytes_reach_the_store(monkeypatch):
     assert store.saved == [first]  # only the winner's bytes, never the superseded one
     accepted_event = [e for e in images.events if e["decision"] == "accepted"][0]
     assert accepted_event["rank"] == 0 and accepted_event["served_as"] == attrs["src"]
+
+
+# ---- review findings (cross-family review of this branch, 2026-11-18) -------
+
+
+@pytest.mark.asyncio
+async def test_a_cancellation_landing_in_the_drain_still_ends_the_slot():
+    """A slow loser teardown must not turn the caller's deadline into an image.
+
+    The drain of the losers is the last await of a slot, so the caller's own
+    cancellation (image deadline, job budget, a discarded prefetch) can land
+    there — a cancelled download whose HTTP response or client close is slow.
+    Swallowing it let an outer ``wait_for``/``timeout_at`` see a normal return
+    and the page ship a picture after its deadline."""
+
+    async def review(user, photo, hedge=True):
+        if RANK0 in user:
+            return ACCEPT
+        try:
+            await asyncio.Future()
+        finally:
+            await asyncio.sleep(0.5)  # a cancelled download that unwinds slowly
+
+    http, _ = transport()
+    async with httpx.AsyncClient(transport=http) as client:
+        images = PageImages("Rom", review, time.monotonic() + 0.35, client=client)
+        started = time.monotonic()
+        body = await images.prepare(SLOT)
+        elapsed = time.monotonic() - started
+    # The deadline is the caller's: the slot falls back to text instead of
+    # delivering the accepted picture after it.
+    assert "ot-image" not in body and "<section" in body
+    assert elapsed < 0.35 + 0.2
+    assert not accepted_ranks(images)
+    # The losers still reach the record, as they do on every other cut.
+    cancelled = [e for e in images.events if "rank" in e]
+    assert [(e["rank"], e["decision"]) for e in cancelled] == [(1, "rejected"), (2, "rejected")]
+    assert all("cancelled" in e["reason"] for e in cancelled)
+
+
+EMPTY_COMMONS = {**SEARCH, "query": {"pages": {}}}  # a Commons search with no candidates
+PARALLEL_TITLES = ("Wrong flag map", "Historical map")
+
+
+@pytest.mark.parametrize("mode,commons_payload", [
+    ("parallel", SEARCH),                # Commons is not consulted in this mode
+    ("commons+parallel", EMPTY_COMMONS),  # Commons is asked first and finds nothing
+])
+@pytest.mark.asyncio
+async def test_a_slots_first_review_hedges_even_on_the_parallel_path(monkeypatch, mode, commons_payload):
+    """``hedge=False`` was passed for every Parallel review, so with
+    ``SCREEN_IMAGES=parallel`` (or a Commons list that came back empty) the
+    slot's first and only review ran without the hedge: a failing primary left
+    it with text instead of the backup provider's verdict."""
+    from screen.tools import parallel_images as parallel
+
+    monkeypatch.setattr(parallel, "_default_resolve", lambda host: ["93.184.216.34"])
+
+    async def get(url, pins):
+        return 200, {"content-type": "image/jpeg"}, PHOTO
+
+    monkeypatch.setattr(parallel, "_fetch", get)
+    monkeypatch.setenv("PARALLEL_API_KEY", "test-key")
+    payload = {"search_id": "s", "session_id": "s", "results": [
+        {"title": title, "image_url": f"https://example.com/{index}.jpg",
+         "source_page_url": f"https://example.com/{index}"}
+        for index, title in enumerate(PARALLEL_TITLES)]}
+
+    def handle(request):
+        if request.url.host == "api.parallel.ai":
+            return httpx.Response(200, json=payload)
+        raise AssertionError(f"unexpected host {request.url.host}")
+
+    log = []
+
+    async def review(user, photo, hedge=True):
+        title = next(key for key in PARALLEL_TITLES if key in user)
+        log.append({"title": title, "hedge": hedge})
+        await asyncio.sleep(0)
+        return REJECT
+
+    http, _ = transport(commons_payload)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(
+            lambda request: handle(request) if request.url.host == "api.parallel.ai"
+            else http.handle_request(request))) as client:
+        images = PageImages("Årskurs 6, stormaktstiden", review, time.monotonic() + 5,
+                            client=client, image_mode=mode)
+        await images.prepare(SLOT)
+    assert log, "no review ran"
+    assert log[0]["hedge"] is True  # the slot's first actual review keeps the hedge
+    assert [entry["hedge"] for entry in log[1:]] == [False]  # later ones stay single attempts

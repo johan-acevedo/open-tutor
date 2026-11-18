@@ -54,6 +54,12 @@ JOB_TIMEOUT_S = 20.0
 # A discarded screen side's cancel/close never delays the winner, the call or
 # shutdown: bounded the same way as the tutor's loser cleanup (log once).
 SCREEN_LOSER_CLEANUP_BOUND_S = 2.0
+# How long one image review keeps its slot of the page-wide review gate while
+# the provider request it gave up on is cancelled and closed. The reaper owns
+# that work after the callback returns, and a review that overlapped it would
+# put more provider requests in flight than SCREEN_IMAGE_REVIEWS allows. Short:
+# a stream close takes milliseconds, and a stuck one is reaped anyway.
+IMAGE_REVIEW_SETTLE_BOUND_S = 1.0
 # A fallback call that cannot run this long is not started: the page could not
 # be rendered and delivered in what is left anyway. The job then fails as it
 # does with no fallback configured.
@@ -478,6 +484,11 @@ class Screen:
         self._requests: dict[asyncio.Task[Any], str] = {}
         self._streams: dict[Any, str] = {}
         self._request_streams: dict[asyncio.Task[Any], Any] = {}
+        # Which task asked for each request, and what the reaper still owns of
+        # the requests this task gave up on: an image review waits for its own
+        # (bounded) before releasing its gate slot, see ``_settle_reaped``.
+        self._request_owners: dict[asyncio.Task[Any], asyncio.Task[Any]] = {}
+        self._reaped: dict[asyncio.Task[Any], set[asyncio.Future[Any]]] = {}
         self._model_call = model_call or self._default_model_call
         # The backup model call (Command Code when SCREEN_FALLBACK=cc). None means
         # the default backup path; tests inject a fake here just like model_call.
@@ -1017,7 +1028,15 @@ class Screen:
 
     def _own_request(self, task: asyncio.Task[Any], route: str) -> asyncio.Task[Any]:
         self._requests[task] = route
-        task.add_done_callback(lambda done: self._requests.pop(done, None))
+        owner = asyncio.current_task()
+        if owner is not None:
+            self._request_owners[task] = owner
+
+        def forget(done: asyncio.Task[Any]) -> None:
+            self._requests.pop(done, None)
+            self._request_owners.pop(done, None)
+
+        task.add_done_callback(forget)
         return task
 
     def _close_stream(self, stream: Any) -> None:
@@ -1028,8 +1047,46 @@ class Screen:
     def _stop_request(self, task: asyncio.Task[Any], route: str) -> None:
         stream = self._request_streams.get(task)
         stream_route = self._streams.pop(stream, None) if stream is not None else None
-        self._reaper.stop(stream_route or route, [task],
-                          stream.close() if stream_route is not None else None)
+        owner = self._request_owners.pop(task, None)
+        owned = self._reaper.stop(stream_route or route, [task],
+                                  stream.close() if stream_route is not None else None)
+        if owner is not None and owned:
+            self._reaped.setdefault(owner, set()).update(owned)
+            for future in owned:
+                future.add_done_callback(lambda done, owner=owner: self._forget_reaped(owner, done))
+
+    def _forget_reaped(self, owner: asyncio.Task[Any], future: asyncio.Future[Any]) -> None:
+        """Drop one finished teardown from its owner's wait set (never a task left over)."""
+        owned = self._reaped.get(owner)
+        if owned is None:
+            return
+        owned.discard(future)
+        if not owned:
+            self._reaped.pop(owner, None)
+
+    async def _settle_reaped(self, bound: float = IMAGE_REVIEW_SETTLE_BOUND_S) -> None:
+        """Wait, bounded, for the provider requests this task gave up on to end.
+
+        A call that lost a hedge or ran out of budget is cancelled and handed to
+        the reaper together with its stream close; that is not the same as gone,
+        and the provider request keeps running while it unwinds. The image review
+        awaits it here before it returns, so the slot it holds of the page-wide
+        review gate covers real provider work: one page never has more requests
+        in flight than ``SCREEN_IMAGE_REVIEWS`` (review finding: counting only
+        the review callback let 5 provider tasks run across 2 gate slots)."""
+        owner = asyncio.current_task()
+        if owner is None:
+            return
+        pending = {future for future in self._reaped.get(owner, ()) if not future.done()}
+        if not pending:
+            self._reaped.pop(owner, None)
+            return
+        try:
+            await asyncio.wait(pending, timeout=max(0.0, bound))
+        finally:
+            # Whatever is still unwinding stays the reaper's, expired at its
+            # own bound; this task does not hold its gate slot for it.
+            self._reaped.pop(owner, None)
 
     async def _request_with_timeout(self, call: Awaitable[Any], *, route: str,
                                     timeout: float | None) -> Any:
@@ -1878,7 +1935,15 @@ class Screen:
         deadline = t0 + self.timeout - FINAL_RENDER_RESERVE_S - DELIVERY_RESERVE_S
 
         async def review_with_deadline(user: str, image: bytes | None, hedge: bool = True) -> str:
-            return await review(user, image, deadline, hedge)
+            # The review owns a slot of the page-wide review gate until this
+            # coroutine returns, so it waits (bounded) for a provider request it
+            # gave up on: the reaper keeps cancelling it after the callback
+            # would otherwise have freed the slot, and the page must never run
+            # more provider requests at once than SCREEN_IMAGE_REVIEWS allows.
+            try:
+                return await review(user, image, deadline, hedge)
+            finally:
+                await self._settle_reaped()
 
         from .reviewed_images import ReviewedImageStore, reviewed_images_dir
 
