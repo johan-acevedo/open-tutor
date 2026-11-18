@@ -20,7 +20,7 @@ switches mid-session or on later visits; unknown hosts default to band 1
 ## 2. First learner journey
 
 1. The child opens the URL. No install, no login, no access code.
-2. First visit: the page asks only for a first name ("Vad heter du?"). No profile grid, no grade picker. The next visit assumes the same student and offers a short "Hej <name>, starta" (or starts straight into the call). "Byt elev" (switch/add student) lives behind the hamburger menu. Profiles stay in browser storage.
+2. First visit: the page asks only for a first name ("Vad heter du?"). No profile grid, no grade picker. The next visit assumes the same student: "Hej <name>!" with one Starta button. "Byt elev" (switch/add student) lives behind the hamburger menu. Profiles stay in browser storage.
 3. One tap starts the session and grants microphone access. This is the only setup step.
 4. A large tutor character fills the page and **speaks first**: a greeting, a mention of last time if there was one, and an invitation to share what they're working on.
 5. The child talks, types, drops a file or photo, or pastes a screenshot or text. The homework appears on the board where both can see it.
@@ -37,7 +37,7 @@ switches mid-session or on later visits; unknown hosts default to band 1
 - Default: a profile holds a first name, a school year (null until known), and the tutor's notes on past sessions. No PIN between siblings.
 - Default: the school year sets the tutor's register. A 15-year-old is spoken to like a young adult; a 9-year-old gets simpler language and smaller steps. An unknown school year defaults to the band until the tutor learns it (åk 1–6 / högstadiet / gymnasiet-or-adult).
 - Agreed (2026-11-18): if the grade is unknown, the tutor finds it out naturally early in the first call — never as a form; inferring it from shared homework counts — and stores it with the `set_learner_grade` tool, so the browser profile and later calls start with it. On band 3 the tutor finds out naturally whether the learner is a gymnasiet student (and which year) or an adult; only adults skip the grade, and the tutor asks what they are working on.
-- Agreed (2026-11-18): if someone else takes over ("this is Leo now"), the tutor confirms, asks the name when it is new, then switches via the `switch_student` tool. The browser switches or creates that student's profile and hands the tutor their notes from then on.
+- Agreed (2026-11-18): if someone else takes over ("this is Leo now"), the tutor confirms, asks the name when it is new, then switches via the `switch_student` tool: the current lesson ends like Avsluta (its note saved for the current student), and the start page then shows the other student's name with one Starta button. Their own notes load when their lesson starts.
 
 ### 3.2 Live call and presence
 

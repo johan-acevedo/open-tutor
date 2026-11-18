@@ -443,7 +443,7 @@ class Tutor(Agent):
         profile = data.get("profile") if isinstance(data.get("profile"), dict) else {}
         record_active("switch_student", {"name": clean, "profile_id": profile.get("id")})
         # End A's lesson exactly like Avsluta; the goodbye comes through the
-        # normal end path, and the browser reconnects fresh. Say nothing more.
+        # normal end path, and the browser then shows B's start page. Say nothing more.
         if self.end_event is not None:
             self.end_event.set()
         raise StopResponse()
