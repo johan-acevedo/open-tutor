@@ -1128,3 +1128,15 @@ ask emitted the `Swedish Empire 1658 map` slot and shipped an accepted Commons m
 (`Swedish Empire 1658.jpg`, search latency 0.2 s) in 19.5 s. Caveat: three earlier same-budget
 runs rejected two Commons flag-silhouette maps and starved the good candidate (Parallel prefetch
 timeout, ~12 s image spend) -- more evidence for the review-concurrency follow-up.
+
+### ot-map fits the highlighted marks (2026-11-18)
+
+A production test call showed a realm map fitted to all of Europe: the page had written
+an explicit `view="europa"` around an `<ot-area>` plus two `<ot-place>` markers. The shell
+(`screen/shell/shell.js`) now widens mark-only fits smaller than 8° lon × 6° lat to that
+regional minimum, so a single city gets a regional frame instead of a street-level zoom or
+an empty sea; an explicit `view` still wins and the län map keeps its own fitting.
+`screen/REFERENCE.md` tells the writer to leave `view` out when highlighting. Fictional
+repro (realm + Stockholm + Riga, with/without view, single city) at 370×610 and 840×743
+before/after, plus all nine example screens rendered with lint (zero diffs), are in
+`screen/review/2026-11-18-map-fit/`.

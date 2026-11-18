@@ -95,7 +95,10 @@ Leave room around it: text has no automatic line avoidance or visible pointing f
 ```
 
 **Map** (vector map, no tiles). `view`: `europa`, `norden` (with Island), `skandinavien`, `sverige`, `världen`, `medelhavet`, `afrika`, `asien`,
-`nordamerika`, `sydamerika`, `mellanöstern`; without `view` it fits what you mark.
+`nordamerika`, `sydamerika`, `mellanöstern`. Without `view` the map fits what you mark, with room to breathe (a single
+city gets a regional frame, never a street-level zoom): leave `view` out when you highlight something, so it fills the
+frame. An explicit `view` always wins and shows the whole region instead -- use it only for context, never around a
+highlighted realm you want big.
 ```html
 <ot-map view="europa">
   <ot-country name="Frankrike" color="cyan">Frankrike</ot-country>   <!-- Swedish, English or ISO code -->

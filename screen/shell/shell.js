@@ -2014,6 +2014,20 @@
     else if (focus.length) target = { type: 'FeatureCollection', features: focus };
     else target = bboxFeature(VIEWS.europe);
     var b = d3.geoBounds(target);
+    // A map that only marks places or areas, without an explicit view, is fitted to the
+    // marks. Marks alone can have almost no extent (one city is a point), which would zoom
+    // to street level or an empty sea: widen tiny bounds to a regional minimum instead.
+    // An explicit view still wins; the full län map above keeps its own fitting.
+    if (!regions && !view && focus.length) {
+      var spanLon = b[1][0] - b[0][0], spanLat = b[1][1] - b[0][1];
+      var needLon = Math.max(0, 8 - spanLon) / 2, needLat = Math.max(0, 6 - spanLat) / 2;
+      if (needLon > 0 || needLat > 0) {
+        var x0 = Math.max(-180, b[0][0] - needLon), y0 = Math.max(-84, b[0][1] - needLat);
+        var x1 = Math.min(180, b[1][0] + needLon), y1 = Math.min(84, b[1][1] + needLat);
+        b = [[x0, y0], [x1, y1]];
+        target = bboxFeature([x0, y0, x1, y1]);
+      }
+    }
     var lon0 = (b[0][0] + b[1][0]) / 2, lat0 = (b[0][1] + b[1][1]) / 2;
     var wide = !regions && (b[1][0] - b[0][0]) > 150;
     function mapProj(areaW, areaH) {

@@ -1,0 +1,176 @@
+{
+ "brak": {
+  "370x610": {
+   "fontPx": 17.5,
+   "issues": [],
+   "patch_issues": [],
+   "fontPx_after": 17.5
+  },
+  "840x743": {
+   "fontPx": 25.5,
+   "issues": [],
+   "patch_issues": [],
+   "fontPx_after": 25.5
+  }
+ },
+ "division": {
+  "370x610": {
+   "fontPx": 15.75,
+   "issues": [
+    {
+     "kind": "dense",
+     "msg": "text is only 15.75px on this screen (minimum 16px). Keep one teaching step and one main visual; cut text or split the page."
+    }
+   ],
+   "patch_issues": [
+    {
+     "kind": "dense",
+     "msg": "text is only 15.25px on this screen (minimum 16px). Keep one teaching step and one main visual; cut text or split the page."
+    }
+   ],
+   "fontPx_after": 15.25
+  },
+  "840x743": {
+   "fontPx": 25.25,
+   "issues": [],
+   "patch_issues": [],
+   "fontPx_after": 25.25
+  }
+ },
+ "ekvation": {
+  "370x610": {
+   "fontPx": 17.5,
+   "issues": [],
+   "patch_issues": [],
+   "fontPx_after": 17.5
+  },
+  "840x743": {
+   "fontPx": 22.75,
+   "issues": [],
+   "patch_issues": [],
+   "fontPx_after": 22.75
+  }
+ },
+ "engelska": {
+  "370x610": {
+   "fontPx": 15.5,
+   "issues": [
+    {
+     "kind": "dense",
+     "msg": "text is only 15.5px on this screen (minimum 16px). Keep one teaching step and one main visual; cut text or split the page."
+    }
+   ],
+   "patch_issues": [],
+   "fontPx_after": 15.5
+  },
+  "840x743": {
+   "fontPx": 26.75,
+   "issues": [],
+   "patch_issues": [],
+   "fontPx_after": 26.75
+  }
+ },
+ "klockan": {
+  "370x610": {
+   "fontPx": 17.5,
+   "issues": [],
+   "patch_issues": [],
+   "fontPx_after": 17.5
+  },
+  "840x743": {
+   "fontPx": 26.75,
+   "issues": [],
+   "patch_issues": [],
+   "fontPx_after": 26.75
+  }
+ },
+ "linjer": {
+  "370x610": {
+   "fontPx": 16.25,
+   "issues": [],
+   "patch_issues": [],
+   "fontPx_after": 16.25
+  },
+  "840x743": {
+   "fontPx": 24.25,
+   "issues": [],
+   "patch_issues": [],
+   "fontPx_after": 24.25
+  }
+ },
+ "regioner": {
+  "370x610": {
+   "fontPx": 17.5,
+   "issues": [
+    {
+     "kind": "crowded",
+     "msg": "1 of 21 regions have no letter on the map at this size (their rows in the key are dimmed): give the map more height or show fewer regions",
+     "where": "<ot-map id=\"karta\">"
+    }
+   ],
+   "patch_issues": [
+    {
+     "kind": "crowded",
+     "msg": "4 of 18 regions have no letter on the map at this size (their rows in the key are dimmed): give the map more height or show fewer regions",
+     "where": "<ot-map id=\"karta\">"
+    }
+   ],
+   "fontPx_after": 17.5
+  },
+  "840x743": {
+   "fontPx": 32.25,
+   "issues": [],
+   "patch_issues": [
+    {
+     "kind": "crowded",
+     "msg": "4 of 18 regions have no letter on the map at this size (their rows in the key are dimmed): give the map more height or show fewer regions",
+     "where": "<ot-map id=\"karta\">"
+    }
+   ],
+   "fontPx_after": 32.25
+  }
+ },
+ "romarriket": {
+  "370x610": {
+   "fontPx": 14.5,
+   "issues": [
+    {
+     "kind": "dense",
+     "msg": "text is only 14.5px on this screen (minimum 16px). Keep one teaching step and one main visual; cut text or split the page."
+    }
+   ],
+   "patch_issues": [
+    {
+     "kind": "dense",
+     "msg": "text is only 14.25px on this screen (minimum 16px). Keep one teaching step and one main visual; cut text or split the page."
+    }
+   ],
+   "fontPx_after": 14.25
+  },
+  "840x743": {
+   "fontPx": 23.75,
+   "issues": [],
+   "patch_issues": [],
+   "fontPx_after": 23.75
+  }
+ },
+ "vattnet": {
+  "370x610": {
+   "fontPx": 13,
+   "issues": [
+    {
+     "kind": "dense",
+     "msg": "text is only 13px on this screen (minimum 16px). Keep one teaching step and one main visual; cut text or split the page."
+    }
+   ],
+   "patch_issues": [],
+   "fontPx_after": 13
+  },
+  "840x743": {
+   "fontPx": 22,
+   "issues": [],
+   "patch_issues": [],
+   "fontPx_after": 22
+  }
+ }
+}
