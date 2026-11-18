@@ -35,7 +35,7 @@ describe('Board greeting lives in the empty state', () => {
     rerender(
       <Board
         learnerName="Leo"
-        items={[{ id: 't1', kind: 'text', title: 'Ekvationer', markdown: 'Vi löser **3x = 15**.' }]}
+        items={[{ id: 't1', kind: 'homework', title: 'Ekvationer', text: 'Vi löser 3x = 15.' }]}
         focused={null}
         onItemMounted={noop}
         onResourceClosed={noop}
@@ -103,28 +103,26 @@ describe('Header menu inbox', () => {
 });
 
 describe('Mobile board continuity', () => {
-  const equation: BoardItem = { id: 'a', kind: 'steps', title: 'Equation', steps: [{ tex: '3x=15' }, { tex: 'x=5' }] };
-  const other: BoardItem = { id: 'b', kind: 'text', title: 'Other task', markdown: 'A different task' };
-  const defaults = { learnerName: 'Leo', onResourceClosed: noop, mobile: true };
+  const equation: BoardItem = { id: 'a', kind: 'homework', title: 'Equation', text: '3x=15' };
+  const other: BoardItem = { id: 'b', kind: 'homework', title: 'Other task', text: 'A different task' };
+  const defaults = { learnerName: 'Leo', onResourceClosed: noop };
 
-  it('keeps the selected older item in focus and reveals future steps as you turn the page', () => {
+  it('keeps the selected older item in focus as you turn the page', () => {
     const { container } = render(
       <Board
         {...defaults}
         items={[equation, other]}
-        focused={{ id: 'a', step: 0 }}
+        focused={{ id: 'a' }}
         activeItemId="a"
         onItemMounted={noop}
       />,
     );
     expect(container.querySelector('[data-board-id="b"]')?.parentElement?.hidden).toBe(true);
-    expect(container.querySelector('[data-step="1"]')?.closest('[hidden]')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /Framåt/ }));
     expect(container.querySelector('[data-board-id="b"]')?.parentElement?.hidden).toBe(false);
     expect(screen.getByText('2 / 2')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /Tillbaka/ }));
     expect(container.querySelector('[data-board-id="a"]')?.parentElement?.hidden).toBe(false);
-    expect(container.querySelector('[data-step="1"]')?.closest('[hidden]')).toBeTruthy();
   });
 
   it('confirms a same-id update after mounting the changed content', async () => {
@@ -132,7 +130,7 @@ describe('Mobile board continuity', () => {
     const { rerender } = render(<Board {...defaults} items={[other]} focused={null} onItemMounted={ack} />);
     await waitFor(() => expect(ack).toHaveBeenCalledTimes(1));
     rerender(
-      <Board {...defaults} items={[{ ...other, markdown: 'Updated task' }]} focused={null} onItemMounted={ack} />,
+      <Board {...defaults} items={[{ ...other, text: 'Updated task' }]} focused={null} onItemMounted={ack} />,
     );
     await waitFor(() => expect(ack).toHaveBeenCalledTimes(2));
     expect(screen.getByText('Updated task')).toBeTruthy();

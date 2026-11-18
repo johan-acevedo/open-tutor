@@ -1,50 +1,22 @@
 import pytest
 from pydantic import ValidationError
 
-from open_tutor.board import Ids, MaterialItem, StepsItem, board_item, youtube_embed
+from open_tutor.board import Ids, PageItem, board_item, youtube_embed
 from open_tutor.config import llm_route
 from open_tutor.prompt import instructions, learner_context
 
 
 def test_board_items_round_trip_with_discriminator():
-    item = board_item.validate_python({"id": "b1", "kind": "steps", "steps": [{"tex": "3x+5=20", "op": "-5"}]})
-    assert isinstance(item, StepsItem)
+    page = board_item.validate_python({"id": "p1", "kind": "page", "title": "Klockan", "body": "<h1>x</h1>"})
+    assert isinstance(page, PageItem)
+    pending = board_item.validate_python({"id": "b1", "kind": "pending", "title": "Ritar…"})
+    assert pending.kind == "pending"
     with pytest.raises(ValidationError):
         board_item.validate_python({"id": "b2", "kind": "script", "src": "x"})
-    with pytest.raises(ValidationError):
-        StepsItem(id="b3", steps=[])
-
-
-def test_material_item_carries_a_catalogue_id_not_a_url():
-    item = board_item.validate_python(
-        {
-            "id": "b9",
-            "kind": "material",
-            "title": "A simple circuit",
-            "section_id": "sec-ecd16baf9e4fee44",
-        }
-    )
-    assert isinstance(item, MaterialItem)
-    assert item.section_id == "sec-ecd16baf9e4fee44"
-    assert not hasattr(item, "url")
-    # The agent can never invent a section ID or supply a material URL.
-    with pytest.raises(ValidationError):
-        board_item.validate_python(
-            {"id": "b9", "kind": "material", "title": "X", "section_id": "sec-xyz"}
-        )
-    with pytest.raises(ValidationError):
-        board_item.validate_python(
-            {
-                "id": "b9",
-                "kind": "material",
-                "title": "X",
-                "section_id": "https://evil.example/page.html",
-            }
-        )
-    with pytest.raises(ValidationError):
-        board_item.validate_python(
-            {"id": "b9", "kind": "material", "section_id": "sec-ecd16baf9e4fee44"}
-        )
+    # 2026-11-18: the retired board kinds have no producer and no schema.
+    for gone in ("text", "steps", "mindmap", "svg", "html", "material"):
+        with pytest.raises(ValidationError):
+            board_item.validate_python({"id": "b3", "kind": gone, "title": "x"})
 
 
 def test_ids_are_short_and_sequential():

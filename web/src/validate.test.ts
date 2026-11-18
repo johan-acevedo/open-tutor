@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { validateBoardFocus, validateBoardItem, validateBoardLoading, validateBoardPageOp } from './validate';
 
 describe('validateBoardItem', () => {
-  it('accepts a minimal text item', () => {
-    const r = validateBoardItem({ id: 'a1', kind: 'text', markdown: 'Hej **Leo**' });
+  it('accepts a minimal homework item', () => {
+    const r = validateBoardItem({ id: 'h1', kind: 'homework', title: 'matte.jpg' });
     expect(r.ok).toBe(true);
-    if (r.ok) expect(r.item.kind).toBe('text');
+    if (r.ok) expect(r.item.kind).toBe('homework');
   });
 
   it('rejects unknown kinds with an error', () => {
@@ -14,33 +14,16 @@ describe('validateBoardItem', () => {
     if (!r.ok) expect(r.error).toMatch(/unknown board kind/i);
   });
 
+  it('rejects the retired board kinds', () => {
+    // 2026-11-18: nothing produces these any more; they are not accepted on the wire either.
+    for (const kind of ['text', 'steps', 'mindmap', 'svg', 'html', 'material']) {
+      const r = validateBoardItem({ id: 'x1', kind, title: 'x' });
+      expect(r.ok).toBe(false);
+    }
+  });
+
   it('rejects missing id', () => {
-    expect(validateBoardItem({ kind: 'text', markdown: 'x' }).ok).toBe(false);
-  });
-
-  it('validates steps rows', () => {
-    const good = validateBoardItem({
-      id: 's1',
-      kind: 'steps',
-      steps: [
-        { tex: '3x + 5 = 20', op: '−5' },
-        { tex: '3x = 15', note: 'Vi tar bort 5 på båda sidor.' },
-      ],
-    });
-    expect(good.ok).toBe(true);
-    const bad = validateBoardItem({ id: 's1', kind: 'steps', steps: [{ note: 'saknar tex' }] });
-    expect(bad.ok).toBe(false);
-    const empty = validateBoardItem({ id: 's1', kind: 'steps', steps: [] });
-    expect(empty.ok).toBe(false);
-  });
-
-  it('validates mindmap ideas', () => {
-    expect(
-      validateBoardItem({ id: 'm1', kind: 'mindmap', center: 'Boken', ideas: ['a', 'b'] }).ok,
-    ).toBe(true);
-    expect(validateBoardItem({ id: 'm1', kind: 'mindmap', center: 'Boken', ideas: [1, 2] }).ok).toBe(
-      false,
-    );
+    expect(validateBoardItem({ kind: 'homework', title: 'x' }).ok).toBe(false);
   });
 
   it('validates resource and image items', () => {
@@ -61,63 +44,12 @@ describe('validateBoardItem', () => {
     expect(validateBoardItem({ id: 'h1', kind: 'homework', title: 42 }).ok).toBe(false);
   });
 
-  it('accepts pending and html/sizes', () => {
+  it('accepts pending with its placeholder height', () => {
     expect(validateBoardItem({ id: 'p1', kind: 'pending', title: 'Ritar…' }).ok).toBe(true);
     const sized = validateBoardItem({ id: 'p1', kind: 'pending', title: 'Ritar…', height: 360 });
     expect(sized.ok).toBe(true);
     if (sized.ok) expect(sized.item).toEqual({ id: 'p1', kind: 'pending', title: 'Ritar…', height: 360 });
     expect(validateBoardItem({ id: 'p1', kind: 'pending', title: 'Ritar…', height: 'tall' }).ok).toBe(false);
-    expect(validateBoardItem({ id: 'h1', kind: 'html', html: '<b>x</b>', height: 'tall' }).ok).toBe(false);
-    expect(validateBoardItem({ id: 'h1', kind: 'html', html: '<b>x</b>', height: 420 }).ok).toBe(true);
-    expect(validateBoardItem({ id: 'h1', kind: 'html', html: '<b>x</b>', width: 'wide' }).ok).toBe(false);
-    const sizedHtml = validateBoardItem({ id: 'h1', kind: 'html', html: '<b>x</b>', height: 420, width: 640 });
-    expect(sizedHtml.ok).toBe(true);
-    if (sizedHtml.ok) expect(sizedHtml.item).toEqual({ id: 'h1', kind: 'html', html: '<b>x</b>', height: 420, width: 640 });
-    // Legacy boards without width still validate (fluid-width fit).
-    expect(validateBoardItem({ id: 'h1', kind: 'html', html: '<b>x</b>' }).ok).toBe(true);
-  });
-
-  it('validates material section references', () => {
-    const good = validateBoardItem({
-      id: 'm1',
-      kind: 'material',
-      title: 'A simple circuit',
-      section_id: 'sec-ecd16baf9e4fee44',
-    });
-    expect(good.ok).toBe(true);
-    if (good.ok) {
-      expect(good.item).toEqual({
-        id: 'm1',
-        kind: 'material',
-        title: 'A simple circuit',
-        section_id: 'sec-ecd16baf9e4fee44',
-      });
-    }
-    // Not a catalogue ID: rejected, never turned into a URL.
-    expect(
-      validateBoardItem({ id: 'm1', kind: 'material', title: 'X', section_id: 'sec-xyz' }).ok,
-    ).toBe(false);
-    expect(
-      validateBoardItem({
-        id: 'm1',
-        kind: 'material',
-        title: 'X',
-        section_id: 'https://evil.example/page.html',
-      }).ok,
-    ).toBe(false);
-    // An agent-supplied URL is dropped: the item carries no URL at all.
-    const withUrl = validateBoardItem({
-      id: 'm1',
-      kind: 'material',
-      title: 'X',
-      section_id: 'sec-ecd16baf9e4fee44',
-      url: 'https://evil.example/page.html',
-    });
-    expect(withUrl.ok).toBe(true);
-    if (withUrl.ok) expect('url' in withUrl.item).toBe(false);
-    expect(validateBoardItem({ id: 'm1', kind: 'material', section_id: 'sec-ecd16baf9e4fee44' }).ok).toBe(
-      false,
-    );
   });
 });
 
@@ -182,15 +114,13 @@ describe('validateBoardLoading', () => {
 });
 
 describe('validateBoardFocus', () => {
-  it('accepts id with optional step', () => {
-    expect(validateBoardFocus({ id: 's1', step: 2 }).ok).toBe(true);
-    expect(validateBoardFocus({ id: 's1' }).ok).toBe(true);
+  it('accepts an id', () => {
+    expect(validateBoardFocus({ id: 'p1' })).toEqual({ ok: true, focus: { id: 'p1' } });
   });
 
   it('rejects bad shapes', () => {
-    expect(validateBoardFocus({ step: 1 }).ok).toBe(false);
-    expect(validateBoardFocus({ id: 's1', step: -1 }).ok).toBe(false);
-    expect(validateBoardFocus({ id: 's1', step: 1.5 }).ok).toBe(false);
+    expect(validateBoardFocus({}).ok).toBe(false);
+    expect(validateBoardFocus({ id: '' }).ok).toBe(false);
     expect(validateBoardFocus(null).ok).toBe(false);
   });
 });

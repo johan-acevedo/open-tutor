@@ -1,7 +1,8 @@
 """The Go route through LiveKit's Responses adapter, replaying a recorded Go stream.
 
-The fixture is a real OpenCode Go response (fictional prompt) with spoken text, a
-structured `show_steps` call and a usage block without `cache_write_tokens`.
+The fixture replays the recorded shape of a real OpenCode Go response (fictional
+prompt): spoken text, a structured `ask_screen` call whose arguments stream in two
+deltas, and a usage block without `cache_write_tokens`.
 """
 
 import json
@@ -11,8 +12,7 @@ import httpx2
 import pytest
 from livekit.agents.llm import ChatContext, FunctionCall, FunctionCallOutput
 
-from open_tutor.agent import Tutor
-from open_tutor.board import StepsItem
+from open_tutor.agent import SmartTutor
 from open_tutor.config import llm_route
 from open_tutor.tutor_llm import GoResponsesLLM, build_llm, build_route_llm
 
@@ -24,6 +24,17 @@ def go_env(monkeypatch):
     for name in ("TUTOR_LLM", "TUTOR_LLM_MODEL", "TUTOR_LLM_BASE_URL", "TUTOR_LLM_REASONING"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("OPENCODE_GO_API_KEY", "test-key")
+
+
+class StubScreen:
+    """The tutor only needs a screen object it can point at the pane size."""
+
+    def set_pane_source(self, source):
+        self.pane_source = source
+
+
+def smart_tutor(learner=None):
+    return SmartTutor(learner or {"name": "Leo"}, room=None, screen=StubScreen())
 
 
 def recorded_go(requests):
@@ -56,16 +67,16 @@ async def test_tool_call_is_structured_and_never_in_the_text(go_env):
     requests = []
     model = build_llm("tutor-room-1", http_client=recorded_go(requests))
     assert isinstance(model, GoResponsesLLM)
-    text, calls, usage = await run(model, context(), Tutor({"name": "Leo"}, room=None))
+    text, calls, usage = await run(model, context(), smart_tutor())
 
     # The words are speech; the call is a call. Nothing of the call leaks into the text.
-    assert text.strip() == "Visar lösningen på tavlan."
-    assert [call.name for call in calls] == ["show_steps"]
-    for fragment in ("show_steps", "{", '"tex"', "3x"):
+    assert text.strip() == "Jag fixar en sida om ekvationen."
+    assert [call.name for call in calls] == ["ask_screen"]
+    for fragment in ("ask_screen", "{", '"ask"', "3x"):
         assert fragment not in text
-    # Arguments are complete JSON and pass the board's own validation.
+    # Streamed argument deltas are reassembled into complete JSON.
     arguments = json.loads(calls[0].arguments)
-    StepsItem(id="b1", title=arguments["title"], steps=arguments["steps"])
+    assert arguments["show"] == "auto" and "3x + 5 = 20" in arguments["ask"]
     # Go's usage lacks cache_write_tokens; the turn still completes with usage.
     assert usage is not None and usage.prompt_tokens == 666
 
@@ -75,7 +86,7 @@ async def test_tool_call_is_structured_and_never_in_the_text(go_env):
 async def test_requests_identify_the_app_and_carry_no_server_state(go_env):
     requests = []
     model = build_llm("tutor-room-1", http_client=recorded_go(requests))
-    tutor = Tutor({"name": "Leo"}, room=None)
+    tutor = smart_tutor()
     ctx = context()
     _, calls, _ = await run(model, ctx, tutor)
     ctx.items.append(FunctionCall(call_id=calls[0].call_id, name=calls[0].name, arguments=calls[0].arguments))
@@ -107,8 +118,8 @@ async def test_each_session_gets_its_own_model_and_session_id(go_env):
     a = build_llm("tutor-room-1", http_client=recorded_go(first))
     b = build_llm("tutor-room-2", http_client=recorded_go(second))
     assert a is not b
-    await run(a, context(), Tutor({"name": "Leo"}, room=None))
-    await run(b, context(), Tutor({"name": "Leo"}, room=None))
+    await run(a, context(), smart_tutor())
+    await run(b, context(), smart_tutor())
     assert first[0].headers["x-opencode-session"] == "tutor-room-1"
     assert second[0].headers["x-opencode-session"] == "tutor-room-2"
     await a.aclose()
@@ -124,9 +135,9 @@ async def test_cc_route_calls_command_code_responses_with_the_session_header():
     model = build_route_llm(route, "tutor-room-9", http_client=recorded_go(requests))
     try:
         assert isinstance(model, GoResponsesLLM)
-        text, calls, _ = await run(model, context(), Tutor({"name": "Leo"}, room=None))
-        assert text.strip() == "Visar lösningen på tavlan."
-        assert [call.name for call in calls] == ["show_steps"]
+        text, calls, _ = await run(model, context(), smart_tutor())
+        assert text.strip() == "Jag fixar en sida om ekvationen."
+        assert [call.name for call in calls] == ["ask_screen"]
         assert str(requests[0].url) == "https://api.commandcode.ai/provider/v1/responses"
         assert requests[0].headers["authorization"] == "Bearer cc-key"
         assert requests[0].headers["x-opencode-session"] == "tutor-room-9"
@@ -147,13 +158,14 @@ def test_warm_up_builds_the_event_models():
 async def test_progress_reply_omits_tools_without_sending_unsupported_none(go_env):
     requests = []
     model = build_llm("tutor-progress", http_client=recorded_go(requests))
-    tutor = Tutor({"name": "Leo"}, room=None)
+    tutor = smart_tutor()
     tools = list(tutor.tools)
     ctx = context()
-    ctx.items.append(FunctionCall(call_id="drawing", name="commission_board",
-                                  arguments='{"need":"fractions","background":"Leo"}'))
-    ctx.items.append(FunctionCallOutput(call_id="drawing", name="commission_board",
-                                        output="Drawing in progress.", is_error=False))
+    ctx.items.append(FunctionCall(call_id="page", name="ask_screen",
+                                  arguments='{"ask":"En sida om bråk","show":"auto"}'))
+    ctx.items.append(FunctionCallOutput(call_id="page", name="ask_screen",
+                                        output="The screen is working on it now (job s1).",
+                                        is_error=False))
     try:
         async with model.chat(chat_ctx=ctx, tools=tools, tool_choice="none") as stream:
             async for _ in stream:
@@ -161,9 +173,9 @@ async def test_progress_reply_omits_tools_without_sending_unsupported_none(go_en
         body = json.loads(requests[0].content)
         assert not body.get("tools")
         assert body.get("tool_choice", "auto") == "auto"
-        assert body["input"][-1]["call_id"] == "drawing"
+        assert body["input"][-1]["call_id"] == "page"
         assert body["input"][-1]["type"] == "function_call_output"
-        # Only the progress reply loses tools. The finished board can use them again.
+        # Only the progress reply loses tools. The next turn can use them again.
         await run(model, ctx, tutor)
         assert json.loads(requests[1].content)["tools"]
         assert tools == list(tutor.tools)

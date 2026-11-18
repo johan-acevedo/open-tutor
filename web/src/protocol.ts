@@ -1,15 +1,6 @@
 // Browser ↔ tutor protocol types.
 // Mirrors docs/protocol.md. Change together with server/open_tutor/board.py.
 
-export type Step = {
-  /** KaTeX display equation, e.g. "3x = 15" */
-  tex: string;
-  /** Optional spoken hint shown under the step */
-  note?: string;
-  /** Balance operation shown between rows, e.g. "−5" or "÷3" */
-  op?: string;
-};
-
 export type Note = {
   /** ISO timestamp when the note was written */
   at: string;
@@ -24,14 +15,8 @@ export type Note = {
 };
 
 export type BoardItem =
-  | { id: string; kind: 'text'; title?: string; markdown: string }
-  | { id: string; kind: 'steps'; title?: string; steps: Step[] }
-  | { id: string; kind: 'mindmap'; title?: string; center: string; ideas: string[] }
-  | { id: string; kind: 'svg'; title?: string; svg: string }
-  | { id: string; kind: 'html'; title?: string; html: string; height?: number; width?: number }
   | { id: string; kind: 'image'; title?: string; url: string; alt: string }
   | { id: string; kind: 'page'; title: string; body: string }
-  | { id: string; kind: 'material'; title: string; section_id: string }
   | { id: string; kind: 'pending'; title: string; height?: number }
   | {
       id: string;
@@ -48,7 +33,6 @@ export type BoardItem =
 /** Payload for the board.focus RPC method. */
 export type BoardFocusPayload = {
   id: string;
-  step?: number;
 };
 
 export type SessionLearner = {
@@ -102,7 +86,6 @@ export type TutorMode = 'talking' | 'quiet' | 'resource' | 'ending';
 export const BOARD_RPC_SHOW = 'board.show';
 export const BOARD_RPC_UPDATE = 'board.update';
 export const BOARD_RPC_FOCUS = 'board.focus';
-export const BOARD_RPC_REMOVE = 'board.remove';
 export const BOARD_RPC_PATCH = 'board.patch';
 export const BOARD_RPC_REVEAL = 'board.reveal';
 export const BOARD_RPC_POINT = 'board.point';

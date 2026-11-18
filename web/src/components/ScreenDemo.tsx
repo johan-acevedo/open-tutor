@@ -56,7 +56,6 @@ export default function ScreenDemo() {
       focused={null}
       onItemMounted={() => {}}
       onResourceClosed={() => {}}
-      mobile={phone}
       showEmptyState={!phone}
       activeItemId={activeId}
       registerPageFrame={(id, send) => {

@@ -8,47 +8,9 @@ from typing import Annotated, Literal, Union
 from pydantic import BaseModel, Field, TypeAdapter
 
 
-class Step(BaseModel):
-    tex: str = Field(max_length=400)
-    note: str | None = Field(default=None, max_length=200)
-    op: str | None = Field(default=None, max_length=40)
-
-
 class _Item(BaseModel):
     id: str = Field(max_length=40)
     title: str | None = Field(default=None, max_length=120)
-
-
-class TextItem(_Item):
-    kind: Literal["text"] = "text"
-    markdown: str = Field(max_length=4000)
-
-
-class StepsItem(_Item):
-    kind: Literal["steps"] = "steps"
-    steps: list[Step] = Field(min_length=1, max_length=12)
-
-
-class MindmapItem(_Item):
-    kind: Literal["mindmap"] = "mindmap"
-    center: str = Field(max_length=80)
-    ideas: list[str] = Field(min_length=1, max_length=8)
-
-
-class SvgItem(_Item):
-    kind: Literal["svg"] = "svg"
-    svg: str = Field(max_length=60000)
-
-
-class HtmlItem(_Item):
-    kind: Literal["html"] = "html"
-    html: str = Field(max_length=100000)
-    # The commissioned design size (the visible .ot-board-scroll content box
-    # at commission time). The client scales this design box down to fit the
-    # current pane, preserving aspect, so fixed-pixel board content always
-    # fits without clipping. Upper bounds match BOARD_MAX in agent.py.
-    height: int | None = Field(default=None, ge=120, le=3840)
-    width: int | None = Field(default=None, ge=120, le=3840)
 
 
 class ImageItem(_Item):
@@ -66,19 +28,13 @@ class PageItem(_Item):
 
 
 class PendingItem(_Item):
+    """"Ritar…" placeholder. Kept: it is the client's arrival state for a card that
+    takes a moment, and the browser still validates it."""
     kind: Literal["pending"] = "pending"
     title: str = Field(max_length=120)
     # Expected frame height so the placeholder has the finished size.
     # Upper bound matches BOARD_MAX in agent.py (the client-reported size clamp).
     height: int | None = Field(default=None, ge=80, le=3840)
-
-
-class MaterialItem(_Item):
-    kind: Literal["material"] = "material"
-    title: str = Field(min_length=1, max_length=200)
-    # Stable catalogue section ID only. The browser derives the page URL from
-    # this ID; the model can never supply a material URL.
-    section_id: str = Field(pattern=r"^sec-[0-9a-f]{16}$")
 
 
 class ResourceItem(_Item):
@@ -92,15 +48,9 @@ class ResourceItem(_Item):
 
 BoardItem = Annotated[
     Union[
-        TextItem,
-        StepsItem,
-        MindmapItem,
-        SvgItem,
-        HtmlItem,
         ImageItem,
         PendingItem,
         ResourceItem,
-        MaterialItem,
         PageItem,
     ],
     Field(discriminator="kind"),

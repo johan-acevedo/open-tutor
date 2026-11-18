@@ -7,26 +7,11 @@ export type ValidateOk = { ok: true; item: BoardItem };
 export type ValidateErr = { ok: false; error: string };
 export type ValidateResult = ValidateOk | ValidateErr;
 
-const KNOWN_KINDS = new Set([
-  'text',
-  'steps',
-  'mindmap',
-  'svg',
-  'html',
-  'image',
-  'pending',
-  'resource',
-  'homework',
-  'page',
-  'material',
-]);
+// 2026-11-18: text, steps, mindmap, svg, html and material are gone; nothing produces them.
+const KNOWN_KINDS = new Set(['image', 'pending', 'resource', 'homework', 'page']);
 
 // LiveKit RPC payloads stay small; only the body travels, the web app holds the shell.
 const PAGE_BODY_MAX = 20000;
-
-// Stable catalogue section IDs only (sec- + 16 lowercase hex). The browser
-// derives the page URL from this ID; the agent can never supply a URL.
-const SECTION_ID_RE = /^sec-[0-9a-f]{16}$/;
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -52,72 +37,6 @@ export function validateBoardItem(raw: unknown): ValidateResult {
   const title = raw.title as string | undefined;
 
   switch (raw.kind) {
-    case 'text': {
-      if (typeof raw.markdown !== 'string') return { ok: false, error: 'text item needs markdown string' };
-      return { ok: true, item: { id, kind: 'text', title, markdown: raw.markdown } };
-    }
-    case 'steps': {
-      if (!Array.isArray(raw.steps) || raw.steps.length === 0) {
-        return { ok: false, error: 'steps item needs a non-empty steps array' };
-      }
-      for (const s of raw.steps) {
-        if (!isRecord(s) || typeof s.tex !== 'string') {
-          return { ok: false, error: 'each step needs a tex string' };
-        }
-        if (s.note !== undefined && typeof s.note !== 'string') {
-          return { ok: false, error: 'step note must be a string' };
-        }
-        if (s.op !== undefined && typeof s.op !== 'string') {
-          return { ok: false, error: 'step op must be a string' };
-        }
-      }
-      return {
-        ok: true,
-        item: {
-          id,
-          kind: 'steps',
-          title,
-          steps: raw.steps.map((s) => {
-            const r = s as Record<string, unknown>;
-            const step: { tex: string; note?: string; op?: string } = { tex: r.tex as string };
-            if (typeof r.note === 'string') step.note = r.note;
-            if (typeof r.op === 'string') step.op = r.op;
-            return step;
-          }),
-        },
-      };
-    }
-    case 'mindmap': {
-      if (typeof raw.center !== 'string') return { ok: false, error: 'mindmap item needs center string' };
-      if (!Array.isArray(raw.ideas) || !raw.ideas.every((i) => typeof i === 'string')) {
-        return { ok: false, error: 'mindmap item needs ideas string array' };
-      }
-      return { ok: true, item: { id, kind: 'mindmap', title, center: raw.center, ideas: raw.ideas } };
-    }
-    case 'svg': {
-      if (typeof raw.svg !== 'string') return { ok: false, error: 'svg item needs svg string' };
-      return { ok: true, item: { id, kind: 'svg', title, svg: raw.svg } };
-    }
-    case 'html': {
-      if (typeof raw.html !== 'string') return { ok: false, error: 'html item needs html string' };
-      if (raw.height !== undefined && typeof raw.height !== 'number') {
-        return { ok: false, error: 'html height must be a number' };
-      }
-      if (raw.width !== undefined && typeof raw.width !== 'number') {
-        return { ok: false, error: 'html width must be a number' };
-      }
-      return {
-        ok: true,
-        item: {
-          id,
-          kind: 'html',
-          title,
-          html: raw.html,
-          ...(typeof raw.height === 'number' ? { height: raw.height } : {}),
-          ...(typeof raw.width === 'number' ? { width: raw.width } : {}),
-        },
-      };
-    }
     case 'image': {
       if (typeof raw.url !== 'string' || typeof raw.alt !== 'string') {
         return { ok: false, error: 'image item needs url and alt strings' };
@@ -173,15 +92,6 @@ export function validateBoardItem(raw: unknown): ValidateResult {
       }
       return { ok: true, item: { id, kind: 'page', title: raw.title, body: raw.body } };
     }
-    case 'material': {
-      if (typeof raw.title !== 'string' || !raw.title) {
-        return { ok: false, error: 'material item needs a non-empty title string' };
-      }
-      if (typeof raw.section_id !== 'string' || !SECTION_ID_RE.test(raw.section_id)) {
-        return { ok: false, error: 'material item needs a valid section_id (sec-…)' };
-      }
-      return { ok: true, item: { id, kind: 'material', title: raw.title, section_id: raw.section_id } };
-    }
     case 'homework': {
       if (typeof raw.title !== 'string') return { ok: false, error: 'homework item needs title string' };
       if (raw.images !== undefined && (!Array.isArray(raw.images) || !raw.images.every((i) => typeof i === 'string'))) {
@@ -209,17 +119,11 @@ export function validateBoardItem(raw: unknown): ValidateResult {
 export type FocusOk = { ok: true; focus: BoardFocusPayload };
 export type FocusErr = { ok: false; error: string };
 
-/** Parse + validate a board.focus payload: { id, step? }. */
+/** Parse + validate a board.focus payload: { id }. */
 export function validateBoardFocus(raw: unknown): FocusOk | FocusErr {
   if (!isRecord(raw)) return { ok: false, error: 'focus payload must be an object' };
   if (!isNonEmptyString(raw.id)) return { ok: false, error: 'focus payload needs id string' };
-  if (raw.step !== undefined && (typeof raw.step !== 'number' || !Number.isInteger(raw.step) || raw.step < 0)) {
-    return { ok: false, error: 'focus step must be a non-negative integer' };
-  }
-  return {
-    ok: true,
-    focus: { id: raw.id, ...(typeof raw.step === 'number' ? { step: raw.step } : {}) },
-  };
+  return { ok: true, focus: { id: raw.id } };
 }
 
 export type PageOpOk = { ok: true; id: string; arg: string };

@@ -49,12 +49,15 @@ and installed LiveKit client 2.23.0 source.
 ```sh
 npm ci --prefix web
 npm run build --prefix web
-uv run --with playwright python web/e2e/mobile_probe.py
 # Optional real local call, with a local LiveKit server executable:
 uv run --project server --with playwright python web/e2e/livekit_probe.py --server /path/to/livekit-server
 ```
 
-The first probe builds the real app with a **test-only transport alias**.
+Historical note (2026-11-18): the multi-card probe (`web/e2e/mobile_probe.py`) was removed
+with the legacy board items it checked (steps, text, focus-by-step). `livekit_probe.py`
+remains and sends a Smart Screen page.
+
+The probe builds the real app with a **test-only transport alias**.
 Production builds do not load it. It exercises 360×800, 390×844, 430×932, 844×390,
 820×900, 900×700 and 1366×768: board acknowledgements and focus, history, player
 continuity, photo confirmation, keyboard simulation, send focus, recovery and end

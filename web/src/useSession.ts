@@ -10,7 +10,6 @@ import {
   BOARD_RPC_LOADING,
   BOARD_RPC_PATCH,
   BOARD_RPC_POINT,
-  BOARD_RPC_REMOVE,
   BOARD_RPC_REVEAL,
   BOARD_RPC_SHOW,
   BOARD_RPC_UPDATE,
@@ -313,9 +312,9 @@ export function useSession(mobile = false) {
     }
   }, []);
 
-  // A card reports a terminal render failure (e.g. the material section or
-  // its frame failed to load). Reject now so the board RPC answers with an
-  // error instead of timing out — a failed render is never acknowledged.
+  // A card reports a terminal render failure (e.g. a page frame that never
+  // loaded). Reject now so the board RPC answers with an error instead of
+  // timing out — a failed render is never acknowledged.
   const rejectMounted = useCallback((id: string, message: string) => {
     const list = mountResolvers.current.get(id);
     if (list) {
@@ -395,7 +394,6 @@ export function useSession(mobile = false) {
       BOARD_RPC_SHOW,
       BOARD_RPC_UPDATE,
       BOARD_RPC_FOCUS,
-      BOARD_RPC_REMOVE,
       BOARD_RPC_PATCH,
       BOARD_RPC_REVEAL,
       BOARD_RPC_POINT,
@@ -691,7 +689,7 @@ export function useSession(mobile = false) {
         setFocused(null);
         setActiveItemId(v.item.id);
         setBoardSignal((n) => n + 1);
-        await waitForMounted(v.item.id, v.item.kind === 'material' ? 10000 : MOUNT_TIMEOUT_MS);
+        await waitForMounted(v.item.id);
         // For the first pending item this mount flips arrival->teaching:
         // report the size only once that transition has settled, so the
         // tutor commissions the finished pane, not the arrival one.
@@ -725,25 +723,9 @@ export function useSession(mobile = false) {
         });
         setActiveItemId(v.item.id);
         setBoardSignal((n) => n + 1);
-        await waitForMounted(v.item.id, v.item.kind === 'material' ? 10000 : MOUNT_TIMEOUT_MS);
+        await waitForMounted(v.item.id);
         await waitForBoardLayout();
         return JSON.stringify({ ok: true, board: readBoardSize() });
-      });
-
-      registerRpc(room, BOARD_RPC_REMOVE, async (data) => {
-        let parsed: unknown;
-        try {
-          parsed = JSON.parse(data.payload);
-        } catch {
-          throw new RpcError(1500, 'board.remove payload is not JSON');
-        }
-        const id =
-          typeof parsed === 'object' && parsed !== null
-            ? (parsed as Record<string, unknown>).id
-            : undefined;
-        if (typeof id !== 'string' || !id) throw new RpcError(1500, 'board.remove needs id string');
-        setItems((prev) => prev.filter((b) => b.id !== id));
-        return '{"ok":true}';
       });
 
       const pageOp = (field: 'patch' | 'part', method: string) => async (data: RpcInvocationData) => {

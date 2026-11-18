@@ -4,6 +4,48 @@ Lead: the thread "state of the project" (Claude, 2026-11-12). The lead keeps thi
 Workers read it before starting and report against it. Decisions here were agreed with Johan
 on 2026-11-12 unless marked open.
 
+## 2026-11-18: the Smart Screen is the only mode, and the legacy board is deleted
+
+Johan's decision. Production and dev already ran with `TUTOR_SCREEN=smart`; the code default
+was still the retired card board, and the textbook materials library had never been tried in
+a call. One PR removed both. Read the rest of this file as history: phrases like "behind
+`TUTOR_SCREEN=smart`", `commission_board`, `edit_board`, `search_materials` and
+`show_material` describe what no longer exists.
+
+Removed:
+
+- **The `TUTOR_SCREEN` switch.** The worker always builds the Screen and `SmartTutor`. An env
+  file that still sets `TUTOR_SCREEN=smart` keeps working unchanged; any other value is
+  logged as ignored at session start. Prod and dev env files were not edited.
+- **The board model.** `board_model.py`, `board_budget.js`, the `commission_board`,
+  `edit_board` and the drawing tools with their placeholders, and `BOARD_MODEL`,
+  `BOARD_THINKING`, `BOARD_MAX_TOKENS`. `test_board_render.py`, `test_board_budget.py` and
+  `web/e2e/board_render_check.py` went with them.
+- **Board item kinds with no producer:** `text`, `steps`, `mindmap`, `svg`, `html` and their
+  web renderers, KaTeX-in-the-page markdown, the SVG sanitiser, and the focus-by-step state.
+  Kept: `page` (the Smart Screen), `resource`, `homework`, `image` and `pending`. `pending`
+  has no producer either; it stays because it is the client's arrival state and still
+  validates on both sides.
+- **The materials library, entirely:** `server/open_tutor/materials/`, the `/api/materials`
+  and `/materials/...` routes, the `search_materials`/`show_material` tools and their
+  `material` board kind, the `ml` dependency group (EmbeddingGemma/torch), `TUTOR_MATERIAL_INDEX`
+  and the other `TUTOR_MATERIAL*` variables, `server/scripts` that only served it, its tests,
+  `docs/material-library/`, `deploy/materials-preview.sh`, the `material-tools` CI job,
+  `tools/skolverket`, `tools/siyavula` (and the in-repo `skolverket` skill that pointed at
+  them), and the MaterialSection card.
+- **The single prompt.** `prompt.smart_instructions()` is folded into `BASE`: the removed
+  board-commissioning and school-book sections are replaced by the screen guidance that the
+  live worker used. `instructions()` is the only prompt.
+
+Kept on purpose: `fillers.py` and `noise.py` with their flags, Playwright/Chromium (the
+Screen renders pages with it), the `screen/review/` evidence, and the screen's own review and
+benchmark tools.
+
+Not done in that PR: no deploy and no service restart; prod and dev still run the previous
+build until the lead deploys. Things outside this repository that now have no consumer are
+listed in the PR description (the materials preview services on elitebook, its env file, the
+served corpora and cached indexes).
+
 ## Where things run
 
 - Trunk: `main`. The Smart Screen branch was merged on 2026-11-13 (PR #51); branch from `main`.

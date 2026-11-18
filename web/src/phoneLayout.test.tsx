@@ -8,8 +8,8 @@ import { usePhoneStage } from './phoneStage';
 afterEach(() => cleanup());
 
 const pill: Pill = { label: 'Pratar', icon: 'bars', tone: 'cyan', animateBars: true };
-const task: BoardItem = { id: 't1', kind: 'text', title: 'Ekvationer', markdown: 'Vi löser 3x = 15.' };
-const other: BoardItem = { id: 't2', kind: 'text', title: 'Ekvationer 2', markdown: '3x = 15' };
+const task: BoardItem = { id: 't1', kind: 'homework', title: 'Ekvationer', text: 'Vi löser 3x = 15.' };
+const other: BoardItem = { id: 't2', kind: 'homework', title: 'Ekvationer 2', text: '3x = 15' };
 
 type HarnessProps = {
   items: BoardItem[];

@@ -23,10 +23,9 @@ The browser shows homework on the board itself as soon as the child adds it (kin
 
 | Channel | Topic / method | Payload |
 |---|---|---|
-| RPC to browser | `board.show` | `BoardItem` JSON. The browser renders it, scrolls to it, and responds `{ "ok": true, "board": { "w", "h", "device" } }` after mounting and the layout transition finishes (images: after load). Dimensions describe the visible drawing area. The tutor speaks about the item only after this reply. |
-| RPC to browser | `board.focus` | `{ "id", "step"?: number }` highlights one step of a `steps` item, or the whole item. Responds `{ "ok": true }`. |
-| RPC to browser | `board.update` | `BoardItem` with an existing `id` replaces it in place. New drawings replace their placeholder; edits replace the existing board. It returns the same acknowledgement and dimensions as `board.show`. |
-| RPC to browser | `board.remove` | `{ "id" }` removes that board item, for example a `pending` placeholder whose drawing failed. Responds `{ "ok": true }`. |
+| RPC to browser | `board.show` | `BoardItem` JSON. The browser renders it, turns to it, and responds `{ "ok": true, "board": { "w", "h", "device" } }` after mounting and the layout transition finishes (images: after load). Dimensions describe the visible drawing area. The tutor speaks about the item only after this reply. |
+| RPC to browser | `board.focus` | `{ "id" }` turns to an existing item. Responds `{ "ok": true }`. |
+| RPC to browser | `board.update` | `BoardItem` with an existing `id` replaces it in place. It returns the same acknowledgement and dimensions as `board.show`. |
 | RPC to browser | `board.patch` | `{ "id", "patch" }` applies `<ot-patch>` HTML to that page's shell. Responds `{ "ok": true }`; rejects when no page frame with that id is mounted. |
 | RPC to browser | `board.reveal` | `{ "id", "part" }` uncovers a hidden answer or `later` part on that page. Responds `{ "ok": true }`. |
 | RPC to browser | `board.point` | `{ "id", "part" }` highlights one part of that page. Responds `{ "ok": true }`. |
@@ -40,36 +39,31 @@ The browser shows homework on the board itself as soon as the child adds it (kin
 
 ```ts
 type BoardItem =
-  | { id: string; kind: "text"; title?: string; markdown: string }            // short Markdown, $…$ and $$…$$ KaTeX
-  | { id: string; kind: "steps"; title?: string; steps: Step[] }             // worked equation or process
-  | { id: string; kind: "mindmap"; title?: string; center: string; ideas: string[] }
-  | { id: string; kind: "svg"; title?: string; svg: string }                 // sanitised, no scripts
-  | { id: string; kind: "html"; title?: string; html: string; height?: number; width?: number } // sandboxed iframe, scripts allowed, no same-origin; width+height = commissioned design box, scaled to fit the current pane
+  | { id: string; kind: "page"; title: string; body: string }              // one Smart Screen page; the body only
   | { id: string; kind: "image"; title?: string; url: string; alt: string }
-  | { id: string; kind: "pending"; title: string; height?: number }       // "Ritar…" placeholder
+  | { id: string; kind: "pending"; title: string; height?: number }        // "Ritar…" placeholder; kept, nothing produces one now
   | { id: string; kind: "resource"; title: string; url: string; embedUrl?: string; source?: string; prompt?: string }
-  | { id: string; kind: "material"; title: string; section_id: string } // original book section; the browser derives the page URL from the catalogue ID, the agent never supplies a URL
   | { id: string; kind: "homework"; title: string; images?: string[]; text?: string }; // browser-created only
 
-type Step = { tex: string; note?: string; op?: string };  // op/note: how this row came from the previous one (LaTeX op, e.g. "-5", "\\div 3")
 type Note = { at: string; topic: string; clicked?: string; tricky?: string; next?: string };
 ```
 
-Generated HTML runs in `<iframe sandbox="allow-scripts">` with a strict CSP and no access to the page, learner storage or credentials. Links in resources open in a new tab.
+The board has one screen mode (2026-11-18). The `text`, `steps`, `mindmap`, `svg`, `html` and
+`material` kinds are gone: the Smart Screen renders pages in its own shell, so nothing
+produced them any more and both sides reject them now.
 
-Original book sections run in `<iframe sandbox="">` (empty token list: no scripts, opaque origin, no same-origin access) with the served page's own strict CSP and no access to the page, learner storage or credentials. The browser fetches that section's metadata first, then loads the packaged page from the same origin (`/materials/sections/{section_id}/index.html`, derived from the validated catalogue ID). The `board.show`/`board.update` acknowledgement for `material` answers only after metadata parses and the frame's `load` fires; metadata failure, frame error, unmount, or a superseding section rejects the RPC instead of acknowledging. Frame `load` proves the top-level document loaded, not that every image inside finished — image completeness is never claimed from it. A one-line source attribution (book, section, licence) sits under the frame; the item never switches the avatar into quiet/resource mode.
+A page body travels alone; the web app holds the shell (`screen/shell/`, bundled as text) and
+composes the frame itself, because LiveKit RPC payloads are limited to about 15 kB. The frame
+is `<iframe sandbox="allow-scripts">` with the shell's CSP and no access to the page, learner
+storage or credentials. A page with an answer box or a hidden answer keeps what the child
+typed across pages, because an earlier page's frame stays mounted when the book turns.
+Links in resources open in a new tab.
 
-The frame preserves its commissioned `width` and `height`. It scales down proportionally when the visible `.ot-board-scroll` content box becomes smaller. Controls remain interactive after scaling. HTML items without `width` keep their fluid width.
+## Pages and changes
 
-## Slow drawings
-
-`commission_board` publishes a `pending` placeholder through `board.show`, asks the board
-model for the drawing, and replaces the placeholder through `board.update` with the same `id`.
-The tutor says one short waiting sentence and teaches when the tool returns. Räven uses the
-working pose while a board is pending. If generation or display fails, the worker removes
-the placeholder through `board.remove` and the tutor explains in words.
-
-`edit_board` sends a saved board's HTML back to the renderer with the requested change.
-The placeholder and revised board use the original id. Failed edits restore the saved
-board through `board.update`, rather than removing it. The tutor receives a new screenshot
-after a successful edit. Saved HTML belongs to the session and is discarded when it ends.
+The tutor never draws. It asks the Screen for a page or a change; the Screen writes it in the
+background and the worker delivers the result through the RPCs above. A finished page appears
+on the screen by itself (`ask_screen(show="hold")` keeps it hidden until `show_page`), and a
+change to the visible page is applied with `board.patch`. `board.loading` dims the old page
+while the next one is prepared. Nothing is shown while it is being written, and a page that
+fails to render is never sent.

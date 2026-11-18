@@ -7,9 +7,9 @@ from unittest.mock import AsyncMock
 import pytest
 from livekit.agents.llm.tool_context import find_function_tools
 
-from open_tutor.agent import SmartTutor, Tutor
+from open_tutor.agent import SmartTutor
 from open_tutor.board import PageItem, board_item
-from open_tutor.prompt import instructions, smart_instructions
+from open_tutor.prompt import instructions
 from open_tutor.screen import (
     PatchResult,
     PageResult,
@@ -687,27 +687,32 @@ async def test_patch_jobs_never_use_the_lint_retry(tmp_path, monkeypatch):
 # ---- tool surface ----------------------------------------------------------
 
 
-def test_non_smart_mode_still_exposes_boards():
-    assert tool_names(Tutor) == {"commission_board", "edit_board", "find_resources",
-                                 "share_resource", "start_quiet_work", "stay_quiet",
-                                 "save_note", "search_materials", "show_material"}
-    text = instructions({"name": "Leo"})
-    assert "commission_board" in text and "ask_screen" not in text
+def test_a_leftover_screen_switch_is_silent_or_reported():
+    """2026-11-18: TUTOR_SCREEN is gone; prod/dev env files were not edited."""
+    from open_tutor.agent import screen_mode_notice
+
+    assert screen_mode_notice({}) is None
+    assert screen_mode_notice({"TUTOR_SCREEN": "smart"}) is None
+    assert screen_mode_notice({"TUTOR_SCREEN": "  smart  "}) is None
+    notice = screen_mode_notice({"TUTOR_SCREEN": "board"})
+    assert notice and "board" in notice and "only mode" in notice
 
 
-def test_smart_mode_exposes_screen_tools_instead_of_boards():
+def test_the_smart_tutor_is_the_only_tutor_and_the_only_tool_surface():
+    # 2026-11-18: the legacy board path is gone; the worker always runs SmartTutor.
     assert tool_names(SmartTutor) == {"ask_screen", "show_page", "reveal", "point",
                                       "screen_loading", "screen_status",
                                       "find_resources", "share_resource", "start_quiet_work",
                                       "stay_quiet", "save_note"}
 
 
-def test_smart_prompt_teaches_the_six_tools():
-    text = smart_instructions({"name": "Leo", "grade": 3})
+def test_the_single_prompt_teaches_the_six_screen_tools():
+    text = instructions({"name": "Leo", "grade": 3})
     for word in ("ask_screen", "show_page", "reveal", "point",
                  "screen_loading", "screen_status"):
         assert word in text
     assert "commission_board" not in text and "edit_board" not in text
+    assert "search_materials" not in text and "show_material" not in text
     assert "Never read out a hidden answer" in text
     assert "appears on the screen by itself" in text
 
@@ -2126,25 +2131,3 @@ async def test_board_changes_serialize_through_one_lock(tmp_path, monkeypatch):
     await screen.aclose()
 
 
-async def test_board_remove_waits_for_the_delivery_lock(tmp_path):
-    """board.remove is a board change too: it may not reach the browser while
-    another delivery holds the lock."""
-    screen = make_screen(tmp_path)
-    room = FakeRoom()
-    tutor = smart_tutor(room, screen)
-    sent: list[str] = []
-    orig = room.local_participant.perform_rpc
-
-    async def record(*, destination_identity, method, payload, response_timeout):
-        sent.append(method)
-        return await orig(destination_identity=destination_identity, method=method,
-                          payload=payload, response_timeout=response_timeout)
-
-    room.local_participant.perform_rpc = record
-    async with tutor._board_lock:
-        task = asyncio.create_task(tutor._remove("ph1"))
-        await asyncio.sleep(0.1)
-        assert sent == []  # held back while the lock is taken
-    await asyncio.wait_for(task, timeout=5)
-    assert sent == ["board.remove"]
-    await screen.aclose()

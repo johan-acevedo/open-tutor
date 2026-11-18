@@ -119,10 +119,8 @@ async def test_healed_turn_sends_provider_valid_history(go_env):
     await model.aclose()
 
 
-async def test_streamed_valid_call_still_draws(go_env):
-    """A normal tool call is untouched by healing and passes the board's validation."""
-    from open_tutor.board import StepsItem
-
+async def test_streamed_valid_call_is_untouched_by_healing(go_env):
+    """A normal tool call is untouched by healing and arrives as complete JSON."""
     requests = []
     model = build_llm("tutor-room-9", http_client=recorded_go(requests))
     tutor = Tutor({"name": "Leo"}, room=None)
@@ -134,12 +132,12 @@ async def test_streamed_valid_call_still_draws(go_env):
         async for chunk in stream:
             if chunk.delta:
                 calls += chunk.delta.tool_calls or []
-    assert [c.name for c in calls] == ["show_steps"]
+    assert [c.name for c in calls] == ["ask_screen"]
     raw = calls[0].arguments
     assert heal_tool_arguments(ctx) == 0  # nothing to heal on a clean turn
     assert calls[0].arguments == raw  # streamed arguments retained exactly
     arguments = json.loads(raw)
-    StepsItem(id="b1", title=arguments["title"], steps=arguments["steps"])
+    assert arguments["show"] == "auto" and arguments["ask"]
     await model.aclose()
 
 

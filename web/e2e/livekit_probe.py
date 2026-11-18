@@ -68,8 +68,9 @@ try:
         page.get_by_label('Förnamn',exact=True).fill('Leo')
         page.get_by_role('button',name='Starta',exact=True).click()
         page.locator('.ot-mic-btn.live').wait_for(timeout=15000)
-        report['board_ack']=run(board('board.show',{'id':'live-equation','kind':'steps','title':'Ekvationer','steps':[{'tex':'3x+5=20'},{'tex':'3x=15','op':'-5'}]}))
-        report['focus_ack']=run(board('board.focus',{'id':'live-equation','step':1}))
+        PAGE={'id':'live-page','kind':'page','title':'Ekvationer','body':'<h1>Ekvationer</h1><p>3x + 5 = 20</p>'}
+        report['board_ack']=run(board('board.show',PAGE))
+        report['focus_ack']=run(board('board.focus',{'id':'live-page'}))
         future=asyncio.run_coroutine_threadsafe(audio(),loop)
         page.wait_for_function("probeContexts.some(c=>c.state==='running') && document.querySelector('audio').srcObject?.getAudioTracks().length>0",timeout=15000)
         page.wait_for_timeout(900)
