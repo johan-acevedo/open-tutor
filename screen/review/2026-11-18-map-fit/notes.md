@@ -46,6 +46,39 @@ Rendered with `screen/tools/screenkit.py` at 370×610 and 840×743, before
 (this change): all nine example screens with their patches at 370×610 and
 840×743 -- lint issues, patch issues and fitted font sizes are identical
 (zero diffs, including `romarriket` with area + places and no view, and
-`regioner` with the län map). Reproduce with `/tmp/check_examples.py`
-(not committed): `python /tmp/check_examples.py <shell-dir> <out.json>`
+`regioner` with the län map). Reproduce with `screen/tools/check_examples.py`:
+`uv run --project server python screen/tools/check_examples.py <shell-dir> <out.json>`
 with an empty shell-dir for the working tree.
+
+## Edge cases: antimeridian, poles, `later` marks (2026-11-18 review follow-up)
+
+Cross-family review found two regressions in the minimum-extent padding above:
+
+- Antimeridian: places at (179°, 10°) and (-179°, 10°) measured a -358° span,
+  padded a box around Greenwich, and both markers disappeared (`place outside
+  the map`). The fit now unwraps `d3.geoBounds` output that spans the
+  antimeridian (`b[1][0] < b[0][0]`) to the shorter arc and pads around it;
+  the fit centre is normalised back into range for the projection rotation.
+- Poles: places at (0°, 86°) and (8°, 87°) had the widened north edge capped
+  at 84°, leaving the marks outside (the south edge the same, and past 89°
+  the cap even inverted the box). The padded frame is still kept inside the
+  valid map, but never cut past the marks themselves -- the marks always win.
+
+Bodies (fictional): `c1-antimeridian.html` (two places across the date line),
+`c2-poles.html` (two northern + two southern near-pole stations),
+`c3-later-place.html` (Stockholm + Visby with `later`). Rendered at 370×610
+and 840×743 with the shell from `origin/main` (`before-c*`), with this PR
+before the fix (`place outside the map` on all of c1/c2, zero dots), and with
+the fix (`after-c*`): c1 shows both date-line dots with no lint issues, c2
+shows all four polar dots with no lint issues -- the same markers that were
+visible on `origin/main`.
+
+Also fixed while here (pre-existing, few lines): an `<ot-place later>` was
+drawn immediately -- `drawMap` ignored `later`/`hidden` on map children and
+`ot.reveal` never redrew the map. `later`/`hidden` marks are now skipped for
+focus and drawing, and reveal redraws the closest `ot-map` (the newly shown
+mark joins the fit). c3 (`before-c3`: old shell draws both dots up front;
+`after-c3`: one dot pre-reveal in `-hidden.png`, two post-reveal in `-revealed.png`)
+was verified by dot counts at both sizes (2/2 before the fix, 1/2 after). Limitation kept:
+revealing a whole container at once does not redraw a nested map, same as
+nested graphs.

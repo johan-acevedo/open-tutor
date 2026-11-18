@@ -1139,4 +1139,9 @@ an empty sea; an explicit `view` still wins and the län map keeps its own fitti
 `screen/REFERENCE.md` tells the writer to leave `view` out when highlighting. Fictional
 repro (realm + Stockholm + Riga, with/without view, single city) at 370×610 and 840×743
 before/after, plus all nine example screens rendered with lint (zero diffs), are in
-`screen/review/2026-11-18-map-fit/`.
+`screen/review/2026-11-18-map-fit/`. Review follow-up the same day: the padding
+collapsed fits across the antimeridian onto Greenwich and capped near-pole fits at
+±84°, dropping the marks (`place outside the map`) -- the fit now unwraps the shorter
+arc and never cuts the marks themselves; a `later` place also no longer draws before
+its reveal. Edge-case renders (date line, both poles, `later`) before/after are in
+the same review directory; the nine examples still diff zero.

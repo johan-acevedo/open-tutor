@@ -1952,6 +1952,7 @@
     var focus = [];
     var countries = $$(':scope > ot-country', el), areas = $$(':scope > ot-area', el), places = $$(':scope > ot-place', el);
     countries.forEach(function (ch) {
+      if (ch.hasAttribute('later') || ch.hasAttribute('hidden')) { ch._ft = null; return; }
       var ft = matchCountry(world, ch.getAttribute('name') || ch.textContent);
       if (!ft) { issue('map', 'unknown country "' + (ch.getAttribute('name') || ch.textContent.trim()) + '"', ch); return; }
       ch._ft = ft; focus.push(biggestPart(ft));
@@ -1970,12 +1971,14 @@
       focus.push(rewind(regionFeature(data, r)));
     });
     areas.forEach(function (ch) {
+      if (ch.hasAttribute('later') || ch.hasAttribute('hidden')) { ch._ft = null; return; }
       if (!hist) { issue('map', 'ot-area needs year="..." on ot-map', ch); return; }
       var ft = matchArea(hist, ch.getAttribute('name'));
       if (!ft) { issue('map', 'no area named "' + ch.getAttribute('name') + '" in year ' + nearestHistory(num(el.getAttribute('year'))), ch); return; }
       ch._ft = ft; focus.push(ft);
     });
     places.forEach(function (ch) {
+      if (ch.hasAttribute('later') || ch.hasAttribute('hidden')) { ch._ll = null; return; }
       var lat = num(ch.getAttribute('lat')), lon = num(ch.getAttribute('lon') || ch.getAttribute('lng'));
       if (isNaN(lat) || isNaN(lon)) { issue('map', 'place needs lat and lon', ch); return; }
       ch._ll = [lon, lat]; focus.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [lon, lat] } });
@@ -2018,18 +2021,33 @@
     // marks. Marks alone can have almost no extent (one city is a point), which would zoom
     // to street level or an empty sea: widen tiny bounds to a regional minimum instead.
     // An explicit view still wins; the full län map above keeps its own fitting.
+    // d3.geoBounds spans the antimeridian as b[1][0] < b[0][0]: unwrap to the shorter arc,
+    // or two close places (179° and -179°) would measure a -358° span, pad a box around
+    // Greenwich, and both markers would fall outside the map. Out-of-range longitudes
+    // project fine; the centre below is normalised back into range for the rotation.
+    var wraps = b[1][0] < b[0][0];
+    if (wraps) b = [[b[0][0], b[0][1]], [b[1][0] + 360, b[1][1]]];
+    var spanLon = b[1][0] - b[0][0], spanLat = b[1][1] - b[0][1];
     if (!regions && !view && focus.length) {
-      var spanLon = b[1][0] - b[0][0], spanLat = b[1][1] - b[0][1];
       var needLon = Math.max(0, 8 - spanLon) / 2, needLat = Math.max(0, 6 - spanLat) / 2;
       if (needLon > 0 || needLat > 0) {
-        var x0 = Math.max(-180, b[0][0] - needLon), y0 = Math.max(-84, b[0][1] - needLat);
-        var x1 = Math.min(180, b[1][0] + needLon), y1 = Math.min(84, b[1][1] + needLat);
+        // In wrapped space the padded box may run past 180°; bboxFeature only feeds
+        // fitExtent, so the fit pads around the antimeridian instead of collapsing
+        // onto Greenwich.
+        var x0 = wraps ? b[0][0] - needLon : Math.max(-180, b[0][0] - needLon);
+        var x1 = wraps ? b[1][0] + needLon : Math.min(180, b[1][0] + needLon);
+        // Keep the frame inside the valid map, but never cut the marks themselves: near
+        // a pole the padded edge would otherwise cap at ±84° and leave the marks outside
+        // (past 89° the cap would even invert the box), so the marks always win.
+        var y0 = Math.max(-84, b[0][1] - needLat), y1 = Math.min(84, b[1][1] + needLat);
+        y0 = Math.min(y0, b[0][1]); y1 = Math.max(y1, b[1][1]);
         b = [[x0, y0], [x1, y1]];
         target = bboxFeature([x0, y0, x1, y1]);
       }
     }
     var lon0 = (b[0][0] + b[1][0]) / 2, lat0 = (b[0][1] + b[1][1]) / 2;
-    var wide = !regions && (b[1][0] - b[0][0]) > 150;
+    if (lon0 > 180) lon0 -= 360;
+    var wide = !regions && spanLon > 150;
     function mapProj(areaW, areaH) {
       var p = wide ? d3.geoEqualEarth() : d3.geoAzimuthalEqualArea().rotate([-lon0, -lat0]);
       // A region map is padded by a few percent of its box, so edge codes keep a little air;
@@ -2731,6 +2749,9 @@
     else issue('reveal', '"' + id + '" has nothing hidden to reveal', el);
     var graph = el.closest('ot-graph');
     if (graph && graph.redraw) graph.redraw();
+    // Revealed map marks join the drawing and the fit, like revealed graph parts.
+    var map = el.closest('ot-map');
+    if (map && map.redraw) map.redraw();
     // Newly visible figures get their length check; invisible ones stayed quiet.
     lintLengths();
     flash(shown);
