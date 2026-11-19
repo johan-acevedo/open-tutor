@@ -3,7 +3,7 @@ import asyncio
 from open_tutor.page_answers import PageAnswers, answers_text
 
 
-def make(settle=0.02, window=4.0, clock=None):
+def make(settle=0.02, window=4.0, clock=None, wait_free=None):
     prompts, notes, records = [], [], []
 
     async def note(text):
@@ -12,6 +12,8 @@ def make(settle=0.02, window=4.0, clock=None):
     kwargs = {"settle_s": settle, "spoken_window_s": window}
     if clock is not None:
         kwargs["clock"] = clock
+    if wait_free is not None:
+        kwargs["wait_free"] = wait_free
     box = PageAnswers(prompts.append, note, lambda kind, data: records.append((kind, data)), **kwargs)
     return box, prompts, notes, records
 
@@ -84,3 +86,61 @@ def test_resending_a_box_keeps_the_last_value():
 
     prompts = asyncio.run(run())
     assert len(prompts) == 1 and ": 7" in prompts[0] and ": 6" not in prompts[0]
+
+
+def test_answer_waits_until_the_tutor_has_finished_speaking():
+    # Real call 2026-11-19: an answer sent while the tutor spoke cut its sentence off.
+    async def run():
+        free = asyncio.Event()
+
+        async def wait_free():
+            await free.wait()
+
+        box, prompts, notes, _ = make(wait_free=wait_free)
+        box.add("p1", "svar", "16")
+        await asyncio.sleep(0.08)
+        before = list(prompts)
+        free.set()
+        await asyncio.sleep(0.02)
+        return before, prompts, notes
+
+    before, prompts, notes = asyncio.run(run())
+    assert before == [] and len(prompts) == 1 and notes == []
+
+
+def test_child_speaking_during_the_wait_gets_one_reply_not_two():
+    async def run():
+        free = asyncio.Event()
+
+        async def wait_free():
+            await free.wait()
+
+        box, prompts, notes, _ = make(wait_free=wait_free)
+        box.add("p1", "svar", "16")
+        await asyncio.sleep(0.05)
+        box.child_spoke()
+        free.set()
+        await asyncio.sleep(0.02)
+        return prompts, notes
+
+    prompts, notes = asyncio.run(run())
+    assert prompts == [] and len(notes) == 1
+
+
+def test_wait_until_free_returns_when_speech_ends():
+    from types import SimpleNamespace
+
+    from open_tutor.agent import wait_until_free
+
+    async def run():
+        session = SimpleNamespace(agent_state="speaking", user_state="listening")
+
+        async def finish():
+            await asyncio.sleep(0.03)
+            session.agent_state = "listening"
+
+        asyncio.create_task(finish())
+        await asyncio.wait_for(wait_until_free(session, poll_s=0.01), timeout=1)
+        return session.agent_state
+
+    assert asyncio.run(run()) == "listening"

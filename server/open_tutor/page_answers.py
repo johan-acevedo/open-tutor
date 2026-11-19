@@ -34,8 +34,13 @@ class PageAnswers:
         settle_s: float = SETTLE_S,
         spoken_window_s: float = SPOKEN_WINDOW_S,
         clock: Callable[[], float] = time.monotonic,
+        wait_free: Callable[[], Awaitable[None]] | None = None,
     ) -> None:
         self._prompt, self._note, self._record = prompt, note, record
+        # Waits until neither the tutor nor the child is speaking. A reply
+        # requested mid-sentence cuts the tutor off ("the voice interrupted
+        # itself", real call 2026-11-19), so the answer waits its turn.
+        self._wait_free = wait_free
         self._settle_s, self._spoken_window_s, self._clock = settle_s, spoken_window_s, clock
         self._pending: list[tuple[str, str, str]] = []
         self._task: asyncio.Task | None = None
@@ -55,6 +60,8 @@ class PageAnswers:
 
     async def _settle(self) -> None:
         await asyncio.sleep(self._settle_s)
+        if self._wait_free is not None:
+            await self._wait_free()
         answers, self._pending = self._pending, []
         if not answers:
             return

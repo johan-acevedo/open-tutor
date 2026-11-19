@@ -4,6 +4,32 @@ Lead: the thread "state of the project" (Claude, 2026-11-12). The lead keeps thi
 Workers read it before starting and report against it. Decisions here were agreed with Johan
 on 2026-11-12 unless marked open.
 
+## 2026-11-19: first real call on the new build (middle band, 17 min)
+
+One production call on `0bec30e` by a test learner in åk 7, desktop, 1019 s, 35 spoken
+turns, 47 tutor replies, 5 screen pages, ended with Avsluta. Counts and timings only.
+
+- **Voice-first naming works:** the name was said, confirmed and saved at 55 s
+  (`set_learner_name`, one call); the grade was learned at 106 s.
+- **"The voice interrupted itself" (learner's words): found.** Three times an answer
+  typed on a page arrived while the tutor was speaking; the page-answer reply
+  (`generate_reply`) started at once and cut the sentence off (the cut utterance never
+  reached the transcript). Board pages already waited (`_prompt_when_free`); page answers
+  did not. Fix: `PageAnswers` now awaits `wait_until_free` before deciding, so an answer
+  waits its turn, and a child who speaks meanwhile gets one reply, not two.
+- Reply speed: median 2.0 s from the end of the child's turn to the tutor's voice, p90
+  3.7 s; two turns took ~6 s (slow LLM on both routes, TTFT 6.0 s once).
+- Screen: 5 pages, 7.7–9.0 s each, all shown; the look pass timed out twice and was
+  skipped once on the page budget. The preferred write route lost the hedge 4 of 5 times.
+- 3 Deepgram TTS errors (recoverable), each while a hedged LLM turn was being decided and
+  before the tutor spoke; no audible gap found. 2 false interruptions (`resumed`), one
+  1 s after unmuting.
+- The learner muted the mic 12 times (338 s in all) to talk to a parent. The tutor started
+  speaking 7 times while muted, mostly finishing a reply already under way. Open: should
+  muting pause proactive prompts (page ready, page answers)?
+- The companion changed size and position with caption length and pose (seen by the
+  parent); fix in progress on `t3/steady-companion`.
+
 ## 2026-11-19: ready for more languages (catalogues, no second language)
 
 Swedish copy is no longer scattered through the code. One catalogue per surface,
