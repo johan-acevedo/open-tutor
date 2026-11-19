@@ -750,13 +750,7 @@ class SmartTutor(Tutor):
     async def _prompt_when_free(self, session: AgentSession, text: str) -> None:
         """Prompt the tutor once it is not speaking; while it (or the child)
         is speaking, wait for that speech to finish first (bounded)."""
-        try:
-            for _ in range(100):
-                if session.agent_state != "speaking" and session.user_state != "speaking":
-                    break
-                await asyncio.sleep(0.3)
-        except Exception:
-            pass
+        await wait_until_free(session)
         prompt_event(session, text)
 
     async def _clear_loading(self, page_id: str | None = None) -> bool:
@@ -862,6 +856,19 @@ class SmartTutor(Tutor):
             session,
             f"The screen failed: {message} Tell the child in one short sentence that "
             "the picture did not work, and carry on teaching in words.")
+
+
+async def wait_until_free(session: Any, *, poll_s: float = 0.3, max_polls: int = 100) -> None:
+    """Return once neither the tutor nor the child is speaking (bounded, ~30 s).
+
+    A generate_reply while the tutor speaks cuts its sentence off."""
+    try:
+        for _ in range(max_polls):
+            if session.agent_state != "speaking" and session.user_state != "speaking":
+                return
+            await asyncio.sleep(poll_s)
+    except Exception:  # noqa: BLE001 - a missing state never blocks the prompt
+        return
 
 
 def prompt_event(session: AgentSession, text: str):
@@ -1177,7 +1184,10 @@ async def entrypoint(ctx: JobContext) -> None:
 
     page_answers = PageAnswers(
         prompt=lambda text: prompt_event(session, text),
-        note=note_page_answer, record=debug.record)
+        note=note_page_answer, record=debug.record,
+        wait_free=lambda: wait_until_free(session))
+    # An answer still waiting for its turn must not reply into a closed session.
+    session.on("close", lambda _event: page_answers.close())
 
     @session.on("conversation_item_added")
     def forward_screen_turn(event) -> None:
@@ -1196,7 +1206,7 @@ async def entrypoint(ctx: JobContext) -> None:
         if not text or (role == "user" and text.startswith("[Session event")):
             return
         if role == "user":
-            page_answers.child_spoke()
+            page_answers.child_spoke(text)
         screen.add_turn("child" if role == "user" else "tutor", text)
 
     # ---- homework intake ----------------------------------------------------------

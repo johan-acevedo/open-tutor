@@ -10,11 +10,20 @@ when the child's own words have just started a reply, only a note in the history
 from __future__ import annotations
 
 import asyncio
+import re
 import time
 from typing import Any, Awaitable, Callable
 
 SETTLE_S = 1.2  # wait for more boxes from the same page
 SPOKEN_WINDOW_S = 4.0  # a spoken turn this close to the answers already gets the reply
+
+
+def _norm(text: str) -> str:
+    """Lower-case words and numbers, decimal comma as point, other punctuation
+    dropped. Signs and operators stay part of a number ("-16", "3/4", "3+4"),
+    so a corrected "-16" never matches a spoken "16"."""
+    text = re.sub(r"(\d),(\d)", r"\1.\2", (text or "").lower())
+    return " ".join(re.findall(r"[-+]?\d+(?:[./*+\-]\d+)*(?:\.\d+)?|\w+", text))
 
 
 def answers_text(answers: list[tuple[str, str, str]]) -> str:
@@ -34,34 +43,68 @@ class PageAnswers:
         settle_s: float = SETTLE_S,
         spoken_window_s: float = SPOKEN_WINDOW_S,
         clock: Callable[[], float] = time.monotonic,
+        wait_free: Callable[[], Awaitable[None]] | None = None,
     ) -> None:
         self._prompt, self._note, self._record = prompt, note, record
+        # Waits until neither the tutor nor the child is speaking. A reply
+        # requested mid-sentence cuts the tutor off ("the voice interrupted
+        # itself", real call 2026-11-19), so the answer waits its turn.
+        self._wait_free = wait_free
         self._settle_s, self._spoken_window_s, self._clock = settle_s, spoken_window_s, clock
         self._pending: list[tuple[str, str, str]] = []
         self._task: asyncio.Task | None = None
-        self._last_spoken: float | None = None
+        # The child's own recent turns (time committed, words) and when the
+        # pending batch was first sent. An answer counts as "said aloud" only
+        # when a spoken turn since shortly before that send contains it: timing
+        # alone mixed up unrelated questions, resends and long turns.
+        self._spoken: list[tuple[float, str]] = []
+        self._first_add: float | None = None
 
-    def child_spoke(self) -> None:
+    def child_spoke(self, text: str = "") -> None:
         """The child's own words were just committed as a turn (they get a reply)."""
-        self._last_spoken = self._clock()
+        now = self._clock()
+        self._spoken = [(t, w) for t, w in self._spoken if now - t <= 120.0] + [(now, text)]
+
+    def _said_aloud(self, answers: list[tuple[str, str, str]]) -> bool:
+        """Every sent value appears in the child's spoken turns since just before
+        the first send (e.g. "16" typed and "det blir 16" said)."""
+        if self._first_add is None:
+            return False
+        since = self._first_add - self._spoken_window_s
+        heard = " ".join(_norm(w) for t, w in self._spoken if t >= since)
+        if not heard:
+            return False
+        padded = f" {heard} "
+        return all(_norm(v) and f" {_norm(v)} " in padded for _, _, v in answers)
 
     def add(self, page: str, part: str, value: str) -> None:
         # A second send from the same box replaces the first.
         self._pending = [a for a in self._pending if (a[0], a[1]) != (page, part)]
         self._pending.append((page, part, value))
+        if self._first_add is None:
+            self._first_add = self._clock()
         if self._task is not None and not self._task.done():
             self._task.cancel()
         self._task = asyncio.create_task(self._settle(), name="page-answers")
 
+    def close(self) -> None:
+        """The session ended: drop pending answers and stop a waiting reply."""
+        self._pending = []
+        self._first_add = None
+        if self._task is not None and not self._task.done():
+            self._task.cancel()
+
     async def _settle(self) -> None:
         await asyncio.sleep(self._settle_s)
+        if self._wait_free is not None:
+            await self._wait_free()
         answers, self._pending = self._pending, []
         if not answers:
+            self._first_add = None
             return
+        spoken = self._said_aloud(answers)
+        self._first_add = None
         text = answers_text(answers)
-        spoken = self._last_spoken is not None and (
-            self._clock() - self._last_spoken <= self._spoken_window_s + self._settle_s
-        )
         self._record("prompt", {"kind": "page_answer", "parts": len(answers),
                                 "page": answers[0][0], "reply": not spoken})
         if spoken:
