@@ -110,10 +110,10 @@ fox and style), `tutor2.*` = åk 7–9 (middle, högstadiet), `tutor3.*` = gymna
 (upper). One codebase; the host picks the band (per page load, never mid-session), and the
 band decides the look (companion, theme, copy: `web/src/bands.ts`, `[data-band]` CSS).
 Unknown hosts default to primary; `?band=` or server `TUTOR_BAND` override for testing.
-Companion art/themes for bands 2–3 are placeholders (fox + distinct tokens) until the
-design thread lands `design/bands/<band>/` — wiring points in `design/bands/README.md`.
-- **Name-only start.** First visit asks only "Vad heter du?"; no grid, no grade picker.
-Next visit assumes the same student ("Hej <name>, starta"); "Byt elev" is in the menu.
+Companions and themes: Räven (primary), Lodjuret (middle), Björnen (upper), PR #79.
+- **Voice-first start (PR #80, replaces the name-only start).** One button, no name field;
+the tutor asks the name in the call and saves it. Next visit assumes the same student
+("Hej <name>! Ska vi köra?"); "Inte <name>? Byt" and "Byt elev" in the menu.
 - **The tutor learns the grade** (`learner.setGrade` RPC → serialized browser queue →
 stored profile; stale targets rejected, failed calls change nothing) and **switches
 student in-call as end-and-prefill** (`learner.switch` RPC resolves/creates the profile
@@ -177,10 +177,13 @@ served corpora and cached indexes).
 
 - Trunk: `main`. The Smart Screen branch was merged on 2026-11-13 (PR #51); branch from `main`.
 - Production: ThinkCentre (https://tutor.labtopia.dev), `main`, Smart Screen on since
-  2026-11-13 (the only mode since PR #73). Last deploy 2026-11-18: `9063c47` (PRs #75
-  and #76), `SCREEN_IMAGES=commons+parallel` and
-  `PARALLEL_API_KEY` added to the env file, `TUTOR_INTERRUPT_MIN_S=1.6`. Rollback commit
-  `0705f22`, env backup `env.bak-20261118-before-parallel`. It is a public test: deploy only with Johan's go, and never
+  2026-11-13 (the only mode since PR #73). Last deploy 2026-11-19: `0bec30e` (PRs #77–#81:
+  bands on tutor/tutor2/tutor3, companions, voice-first start, catalogues).
+  `TUTOR_ACCESS_CODE` removed from the env file: access is Sweden-only
+  (`TUTOR_ALLOWED_COUNTRIES=SE`) with `TUTOR_MAX_SESSIONS_PER_HOUR=12` as the only cost cap.
+  Rollback commit `9063c47`, env backup `env.bak-20261119-predeploy`. The restart cut
+  one lesson that started 13 s after the idle check (LiveKit re-dispatched it to the new
+  worker): check for a live call in the same command as the restart. It is a public test: deploy only with Johan's go, and never
   restart during a call. `deploy/install.sh` over ssh reports a failed health check because
   it probes 127.0.0.1 while the service binds the tailnet address; check that address instead.
 - Development: dell5500, services `open-tutor-smart-dev-agent` and `-web`, run from a checkout

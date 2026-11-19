@@ -7,7 +7,7 @@ technical solutions: those are ours to explore.
 ## What this is
 
 Open Tutor is a live voice tutor for school children, high-school students and adults. A learner opens a page, talks with
-"Räven", a fox, about their real homework or work, and sees explanations on a screen beside it. It
+a companion (Räven the fox for the youngest, a lynx and a bear for older learners) about their real homework or work, and sees explanations on a screen beside it. It
 is used by the owner's own children, aged 9 to 15 in Sweden, and by a small public test.
 
 The product speaks Swedish. Code, comments, docs, commits and PRs are in English.
@@ -42,8 +42,8 @@ differ, the brief wins.
 
 Left out on purpose until the owner asks for them: accounts, sync between devices, parent
 dashboards and parent instructions, billing, resource ratings, a whiteboard the child edits,
-formal curriculum integration. One companion and theme per age band is in scope (bands 2–3
-still reuse the fox as a placeholder); see `design/bands/README.md`.
+formal curriculum integration. One companion and theme per age band is in scope (Räven the fox,
+Lodjuret the lynx, Björnen the bear); see `design/bands/README.md`.
 
 What we are trying to learn from real use, and what any change should be judged against:
 
