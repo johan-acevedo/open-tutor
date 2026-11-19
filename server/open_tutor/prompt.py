@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import random
 from typing import Any
 
@@ -190,7 +192,9 @@ def learner_context(learner: dict[str, Any]) -> str:
 def learner_locale(learner: dict[str, Any]) -> str:
     """Session language, default Swedish. Only "sv" exists for now."""
     loc = str((learner or {}).get("locale") or "sv").strip().lower()
-    return loc or "sv"
+    # The locale comes from the browser: keep it to a language tag so it is
+    # safe in a file name or an HTML attribute later.
+    return loc if re.fullmatch(r"[a-z]{2,3}(-[a-z0-9]{2,8})?", loc) else "sv"
 
 
 def companion_name(learner: dict[str, Any]) -> str:

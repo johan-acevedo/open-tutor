@@ -15,6 +15,7 @@ import argparse
 import html as htmllib
 import json
 import pathlib
+import re
 import sys
 import time
 
@@ -31,9 +32,15 @@ CSP = ("default-src 'none'; "
        "connect-src https://cdn.jsdelivr.net https://commons.wikimedia.org")
 
 
+def _safe_locale(locale: str | None) -> str:
+    """A language tag or "sv": the value ends up in a file name and an HTML attribute."""
+    loc = (locale or "sv").strip().lower()
+    return loc if re.fullmatch(r"[a-z]{2,3}(-[a-z0-9]{2,8})?", loc) else "sv"
+
+
 def _shell_strings(shell: pathlib.Path, locale: str = "sv") -> dict:
     """Visible shell labels, from screen/shell/locales/<locale>.json (default Swedish)."""
-    loc = (locale or "sv").strip().lower() or "sv"
+    loc = _safe_locale(locale)
     candidate = shell / "locales" / f"{loc}.json"
     if not candidate.is_file():
         candidate = shell / "locales" / "sv.json"
@@ -49,6 +56,7 @@ def compose(body: str, shell: pathlib.Path | None = None, *, band: str = "primar
     exported to disk), which is how the map checks are also run on an older shell.
     The frame language follows `locale`, and the shell's visible labels are
     injected as JSON (default Swedish)."""
+    locale = _safe_locale(locale)
     shell = pathlib.Path(shell) if shell else SHELL
     frame = (shell / "frame.html").read_text()
     css = (shell / "shell.css").read_text()
