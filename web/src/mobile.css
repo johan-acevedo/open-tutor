@@ -235,6 +235,10 @@
   border: none;
   max-height: 100%;
   overflow: hidden;
+  flex: 0 0 auto;
+}
+.ot-phone .ot-pill-row {
+  min-height: 30px;
 }
 .ot-phone .ot-pill {
   padding: 5px 10px;
@@ -247,6 +251,10 @@
   line-height: 1.35;
   -webkit-line-clamp: 5;
   line-clamp: 5;
+  /* Reserve all five lines so the companion box never moves with the text. */
+  height: calc(1.35em * 5);
+  min-height: calc(1.35em * 5);
+  flex: 0 0 auto;
 }
 .ot-phone .ot-board-scroll {
   padding: 0 10px 4px;
@@ -332,11 +340,19 @@
   flex: 0 0 44px;
 }
 .ot-phone .ot-banner {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 72px;
+  margin: 0;
+  z-index: 30;
   padding: 6px 10px;
-  flex: 0 0 auto;
   font-size: 14px;
   max-height: 25%;
   overflow: auto;
+}
+.ot-phone .ot-banner ~ .ot-banner {
+  bottom: 120px;
 }
 .ot-phone .ot-sent-chip {
   display: none;
@@ -362,6 +378,8 @@
   font-size: 15px;
   -webkit-line-clamp: 3;
   line-clamp: 3;
+  height: calc(1.35em * 3);
+  min-height: calc(1.35em * 3);
 }
 .ot-phone.ot-keyboard .ot-bottombar {
   padding-bottom: 8px;
@@ -430,6 +448,10 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
+  /* One pill row, always: the figure below never moves when the button
+     row is empty or the pill changes. */
+  min-height: 32px;
+  flex: 0 0 auto;
 }
 .ot-fox-hero-figure {
   flex: 1 1 auto;
@@ -525,9 +547,13 @@
   max-height: 100%;
 }
 
-/* Speech bubble: light, dark text, trimmed to the latest lines. */
+/* Speech bubble: light, dark text, trimmed to the latest lines. The height
+   is fixed to four lines so the figure below never moves with the text. */
 .ot-fox-bubble {
   flex: 0 0 auto;
+  width: 100%;
+  height: calc(1.4em * 4);
+  min-height: calc(1.4em * 4);
   background: #eef0f7;
   color: #171a24;
   border-radius: 14px;
@@ -542,16 +568,18 @@
   overflow: hidden;
   transition: opacity 0.6s ease;
 }
-/* Kept in the DOM while empty so the live region is there when speech starts. */
+/* Kept in the DOM while empty so the live region is there when speech starts.
+   Empty keeps the same reserved height (transparent) so the figure never moves. */
 .ot-fox-bubble:empty {
-  padding: 0;
-  min-height: 0;
   background: transparent;
 }
 .ot-fox-bubble-strip {
   font-size: 14px;
   line-height: 1.35;
-  /* Three lines plus padding must stay inside the strip, or text is cut. */
+  /* Three lines plus padding must stay inside the strip, or text is cut.
+     Fixed to three lines so the strip row never changes height. */
+  height: calc(1.35em * 3 + 12px);
+  min-height: calc(1.35em * 3 + 12px);
   padding: 6px 11px;
   border-radius: 12px;
   -webkit-line-clamp: 3;
@@ -600,6 +628,8 @@
 }
 .ot-phone.ot-phone-portrait.ot-keyboard .ot-fox-bubble {
   -webkit-line-clamp: 2;
+  height: calc(1.4em * 2);
+  min-height: calc(1.4em * 2);
 }
 .ot-phone.ot-phone-portrait.ot-keyboard .ot-fox-hero-head {
   padding-bottom: 0;
@@ -665,6 +695,8 @@
     font-size: 15px;
     -webkit-line-clamp: 2;
     line-clamp: 2;
+    height: calc(1.35em * 2);
+    min-height: calc(1.35em * 2);
   }
 
   .ot-phone.ot-keyboard .ot-main .ot-companion {
