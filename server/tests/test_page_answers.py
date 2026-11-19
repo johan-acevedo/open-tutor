@@ -185,3 +185,51 @@ def test_close_drops_a_waiting_answer():
 
     prompts, notes = asyncio.run(run())
     assert prompts == [] and notes == []
+
+
+def test_resend_during_the_wait_keeps_the_spoken_decision():
+    # Re-check of PR #83: speak+send at 0 s, resend at 12 s, tutor done at 30 s.
+    async def run():
+        now = [0.0]
+        free = asyncio.Event()
+
+        async def wait_free():
+            await free.wait()
+
+        box, prompts, notes, _ = make(window=4.0, clock=lambda: now[0], wait_free=wait_free)
+        box.child_spoke()
+        box.add("p1", "svar", "16")
+        await asyncio.sleep(0.05)
+        now[0] = 12.0
+        box.add("p1", "svar", "17")
+        await asyncio.sleep(0.05)
+        now[0] = 30.0
+        free.set()
+        await asyncio.sleep(0.02)
+        return prompts, notes
+
+    prompts, notes = asyncio.run(run())
+    assert prompts == [] and len(notes) == 1 and "17" in notes[0]
+
+
+def test_unrelated_question_during_the_wait_still_gets_answer_feedback():
+    # Re-check of PR #83: send 16, then ask something else while it waits.
+    async def run():
+        now = [0.0]
+        free = asyncio.Event()
+
+        async def wait_free():
+            await free.wait()
+
+        box, prompts, notes, _ = make(window=4.0, clock=lambda: now[0], wait_free=wait_free)
+        box.add("p1", "svar", "16")
+        await asyncio.sleep(0.05)
+        now[0] = 10.0
+        box.child_spoke()  # an unrelated question, well after the send
+        now[0] = 20.0
+        free.set()
+        await asyncio.sleep(0.02)
+        return prompts, notes
+
+    prompts, notes = asyncio.run(run())
+    assert len(prompts) == 1 and notes == []

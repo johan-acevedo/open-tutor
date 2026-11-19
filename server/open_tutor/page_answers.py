@@ -44,16 +44,36 @@ class PageAnswers:
         self._settle_s, self._spoken_window_s, self._clock = settle_s, spoken_window_s, clock
         self._pending: list[tuple[str, str, str]] = []
         self._task: asyncio.Task | None = None
-        self._last_spoken: float | None = None
+        # When the child's own turns were committed (recent ones only), and
+        # when the pending batch was first and last sent. "Said aloud" is
+        # judged against those times, never against when the wait ends.
+        self._spoken_at: list[float] = []
+        self._first_add: float | None = None
+        self._last_add: float | None = None
 
     def child_spoke(self) -> None:
         """The child's own words were just committed as a turn (they get a reply)."""
-        self._last_spoken = self._clock()
+        now = self._clock()
+        self._spoken_at = [t for t in self._spoken_at if now - t <= 120.0] + [now]
+
+    def _said_aloud(self) -> bool:
+        """A spoken turn close to when this batch was sent: just before the first
+        send, or within the window after the last one. Speech later than that
+        (e.g. a question while the answer waits its turn) is unrelated."""
+        if self._first_add is None or self._last_add is None:
+            return False
+        start = self._first_add - self._spoken_window_s
+        end = self._last_add + max(self._settle_s, self._spoken_window_s)
+        return any(start <= t <= end for t in self._spoken_at)
 
     def add(self, page: str, part: str, value: str) -> None:
         # A second send from the same box replaces the first.
         self._pending = [a for a in self._pending if (a[0], a[1]) != (page, part)]
         self._pending.append((page, part, value))
+        now = self._clock()
+        if self._first_add is None:
+            self._first_add = now
+        self._last_add = now
         if self._task is not None and not self._task.done():
             self._task.cancel()
         self._task = asyncio.create_task(self._settle(), name="page-answers")
@@ -61,22 +81,17 @@ class PageAnswers:
     def close(self) -> None:
         """The session ended: drop pending answers and stop a waiting reply."""
         self._pending = []
+        self._first_add = self._last_add = None
         if self._task is not None and not self._task.done():
             self._task.cancel()
 
     async def _settle(self) -> None:
         await asyncio.sleep(self._settle_s)
-        # Decide "also said aloud" when the answer settles, not after the wait:
-        # a long tutor reply must not let the spoken turn expire and cause a
-        # second reply. Speech during the wait counts too.
-        spoken_before = self._last_spoken
-        spoken = spoken_before is not None and (
-            self._clock() - spoken_before <= self._spoken_window_s + self._settle_s
-        )
         if self._wait_free is not None:
             await self._wait_free()
-            spoken = spoken or self._last_spoken != spoken_before
+        spoken = self._said_aloud()
         answers, self._pending = self._pending, []
+        self._first_add = self._last_add = None
         if not answers:
             return
         text = answers_text(answers)
