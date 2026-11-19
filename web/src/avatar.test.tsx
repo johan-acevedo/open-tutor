@@ -15,7 +15,7 @@ const pill: Pill = { label: 'Ritar…', icon: 'pencil', tone: 'violet', animateB
 describe('Avatar pose image fallback', () => {
   it.each<BandId>(['primary', 'middle', 'upper'])('renders every shipped %s pose through the band context', (band) => {
     for (const [pose, path] of Object.entries(BANDS[band].companion.poses)) {
-      expect(existsSync(resolve('public', path.slice(1))), `${band}/${pose}`).toBe(true);
+      expect(existsSync(resolve('public', path.slice(1).split('?')[0])), `${band}/${pose}`).toBe(true);
     }
     render(<BandProvider band={band}><Avatar pose="pointing" pill={pill} caption="" captionFading={false} /></BandProvider>);
     expect(screen.getByAltText('Tutorn').getAttribute('src')).toBe(BANDS[band].companion.poses.pointing);
@@ -23,7 +23,7 @@ describe('Avatar pose image fallback', () => {
   it('loads the working pose image while a board is drawing', () => {
     render(<Avatar pose="working" pill={pill} caption="" captionFading={false} />);
     const img = screen.getByAltText('Tutorn');
-    expect(img.getAttribute('src')).toBe('/character/working.webp');
+    expect(img.getAttribute('src')).toBe('/character/working.webp?v=20261119');
   });
 
   it('retries the new pose image instead of sticking on the fallback', () => {
@@ -35,6 +35,6 @@ describe('Avatar pose image fallback', () => {
     // …but the next pose change tries its image again instead of sticking.
     rerender(<Avatar pose="speaking" pill={pill} caption="" captionFading={false} />);
     const img = screen.getByAltText('Tutorn');
-    expect(img.getAttribute('src')).toBe('/character/speaking.webp');
+    expect(img.getAttribute('src')).toBe('/character/speaking.webp?v=20261119');
   });
 });

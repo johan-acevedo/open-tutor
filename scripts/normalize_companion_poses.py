@@ -12,6 +12,9 @@ Reproducible (run it on the original exports; a rerun only re-encodes): same inp
 outputs for a given Pillow version (no timestamps are stored in the
 files; canvas size derives only from the input dimensions).
 
+After a re-export, bump POSE_VERSION in web/src/bands.ts so caches fetch
+the new files.
+
 Never touches the artwork sources under design/ — only the derived
 WebP files served to the page.
 """

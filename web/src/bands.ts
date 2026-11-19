@@ -15,15 +15,21 @@ import { sv } from './locales/sv';
 
 export type BandId = 'primary' | 'middle' | 'upper';
 
+// Bump when the pose files change (scripts/normalize_companion_poses.py):
+// public/ files keep their names, and Cloudflare and browsers cache them for
+// hours, so without a new URL the old poses linger after a deploy.
+export const POSE_VERSION = '20261119';
+
 function poseImages(directory: string): Record<Pose, string> {
+  const url = (pose: Pose) => `${directory}/${pose}.webp?v=${POSE_VERSION}`;
   return {
-    greeting: `${directory}/greeting.webp`,
-    listening: `${directory}/listening.webp`,
-    speaking: `${directory}/speaking.webp`,
-    thinking: `${directory}/thinking.webp`,
-    working: `${directory}/working.webp`,
-    waiting: `${directory}/waiting.webp`,
-    pointing: `${directory}/pointing.webp`,
+    greeting: url('greeting'),
+    listening: url('listening'),
+    speaking: url('speaking'),
+    thinking: url('thinking'),
+    working: url('working'),
+    waiting: url('waiting'),
+    pointing: url('pointing'),
   };
 }
 
