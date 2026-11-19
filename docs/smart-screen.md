@@ -35,7 +35,10 @@ turns, 47 tutor replies, 5 screen pages, ended with Avsluta. Counts and timings 
   speaking 7 times while muted, mostly finishing a reply already under way. Open: should
   muting pause proactive prompts (page ready, page answers)?
 - The companion changed size and position with caption length and pose (seen by the
-  parent); fix in progress on `t3/steady-companion`.
+  parent); fixed in PR #84 (fixed caption/pill space, one character height per band).
+  Deployed the same evening: Cloudflare (max-age 4 h) and browsers kept serving the old
+  pose files, and the tunnel's API token cannot purge the cache, so pose URLs now carry
+  `?v=POSE_VERSION` (`web/src/bands.ts`); bump it whenever the pose files change.
 
 ## 2026-11-19: ready for more languages (catalogues, no second language)
 
@@ -210,7 +213,7 @@ served corpora and cached indexes).
 
 - Trunk: `main`. The Smart Screen branch was merged on 2026-11-13 (PR #51); branch from `main`.
 - Production: ThinkCentre (https://tutor.labtopia.dev), `main`, Smart Screen on since
-  2026-11-13 (the only mode since PR #73). Last deploy 2026-11-19: `0bec30e` (PRs #77–#81:
+  2026-11-13 (the only mode since PR #73). Last deploy 2026-11-19 evening: `f4356d8` (#83 page answers wait, #84 steady companion), before that 2026-11-19: `0bec30e` (PRs #77–#81:
   bands on tutor/tutor2/tutor3, companions, voice-first start, catalogues).
   `TUTOR_ACCESS_CODE` removed from the env file: access is Sweden-only
   (`TUTOR_ALLOWED_COUNTRIES=SE`) with `TUTOR_MAX_SESSIONS_PER_HOUR=12` as the only cost cap.

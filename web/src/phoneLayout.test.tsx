@@ -53,7 +53,7 @@ describe('Phone portrait: the fox fills the screen until something is shown', ()
     expect(bubble?.getAttribute('aria-live')).toBe('polite');
     expect(bubble?.textContent).toBe('Hej Johan! Vad jobbar du med idag?');
     expect(container.querySelector('.ot-fox-hero img.ot-avatar-img')?.getAttribute('src')).toBe(
-      '/character/speaking.webp',
+      '/character/speaking.webp?v=20261119',
     );
     // The state pill stays visible near the fox.
     expect(screen.getByRole('status', { name: 'Pratar' })).toBeTruthy();
