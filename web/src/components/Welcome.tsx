@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { BandConfig } from '../bands';
 import { getLastProfileId, newProfileId } from '../db';
 import type { Profile } from '../db';
+import { sv } from '../locales/sv';
 
 type Props = {
   profiles: Profile[];
@@ -22,9 +23,10 @@ function bubbleText(template: string, name: string): string {
 /** Voice-first start. First visit: the companion, a static welcome bubble and
  *  one start button — no name field, no profile grid, no speaking animation
  *  before the call. The tutor asks for the name by voice after starting.
- *  Later visits assume the same student ("Hej <name>, ska vi köra?"); the
- *  small "Inte <name>? Byt" link and the menu's switch entry both return to
- *  the nameless first-visit page. Profiles stay in browser storage. */
+ *  Later visits assume the same student; the
+ *  small not-you link and the menu's switch entry both return to
+ *  the nameless first-visit page. Profiles stay in browser storage. Copy lives
+ *  in web/src/locales/sv.ts (band.* keys). */
 export default function Welcome({ profiles, band, onPick, starting, onStartGesture, startOpen, assumeId }: Props) {
   const lastId = getLastProfileId();
   const assumed =
@@ -70,11 +72,10 @@ export default function Welcome({ profiles, band, onPick, starting, onStartGestu
             disabled={starting}
             onClick={beginNameless}
           >
-            {starting ? 'Startar…' : copy.startButton}
+            {starting ? sv['welcome.starting'] : copy.startButton}
           </button>
           <p className="ot-start-note">
-            Prata om läxan med rösten — tutorn frågar vad du heter.
-            Mikrofonen sätts på när du startar. Allt sparas bara i den här webbläsaren.
+            {sv['welcome.voiceNote']}
           </p>
         </>
       ) : (
@@ -88,7 +89,7 @@ export default function Welcome({ profiles, band, onPick, starting, onStartGestu
             disabled={starting}
             onClick={() => beginAssumed(assumed)}
           >
-            {starting ? 'Startar…' : copy.startButton}
+            {starting ? sv['welcome.starting'] : copy.startButton}
           </button>
           <p className="ot-start-note">
             <button type="button" className="ot-link-btn" onClick={() => setShowFirst(true)}>

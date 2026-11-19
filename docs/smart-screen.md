@@ -4,6 +4,46 @@ Lead: the thread "state of the project" (Claude, 2026-11-12). The lead keeps thi
 Workers read it before starting and report against it. Decisions here were agreed with Johan
 on 2026-11-12 unless marked open.
 
+## 2026-11-19: ready for more languages (catalogues, no second language)
+
+Swedish copy is no longer scattered through the code. One catalogue per surface,
+all defaulting to Swedish, no behaviour or wording change:
+
+- Web app: `web/src/locales/sv.ts` is the only place user-visible Swedish lives.
+  Components look strings up with a tiny `t('key', {name})` helper (no i18next:
+  one language, ~120 keys, compile-time `SvKey` so a missing key is a type
+  error). Band copy (companion names, welcome bubbles,
+  start buttons with `{name}` interpolation, switch labels) lives there too;
+  `web/src/bands.ts` references the catalogue and carries no Swedish. The page
+  `lang` follows the active locale (`htmlLang`, currently `sv`).
+- Board shell: `screen/shell/locales/sv.json` holds the shell's visible labels
+  (send/sent, answer/gap defaults, `Laddar {topic} …`, era suffixes, historical
+  map credit). Both composers inject it — `web/src/shell.ts composePage` and
+  `screen/tools/screenkit.py compose` (new `locale` param, default `sv`) — via
+  `#ot-strings` JSON plus `{{LANG}}`; `shell.js` reads the injection and falls
+  back to its one Swedish defaults object. No other Swedish literals in the
+  shell's visible paths; region-matching keys (`lan`, `Skane`, ...) stay because
+  they match Swedish page content, not UI chrome.
+- Tutor: `server/open_tutor/locales/sv.py` holds the fixed spoken lines (greeting
+  variants incl. nameless, provider-failure apology, default note topic,
+  loading template). `prompt.greeting_line` and the worker pick the
+  session locale via `learner["locale"]` (default `sv`, plumbed from the page
+  through `POST /api/session`); the system prompt itself stays English and keeps
+  telling the model to speak the session's language.
+
+Rules for later work (also in AGENTS.md): no text baked into images (companions,
+icons, generated art); every new visible string goes into the catalogue;
+image-generation prompts must say "no text, no letters". A CI-friendly web test
+(`web/src/locales/guard.test.ts`) fails on any Swedish-looking literal in
+string literals outside `locales/` and `*.test.*` files.
+
+Verified: web suite (175 tests incl. the new guard) and typecheck pass; server
+suite (572 tests) passes; browser/server frame compose agree per band (theme +
+`data-band`, `lang="sv"`, injected shell strings). Behaviour and every visible
+string unchanged by construction (same literals, moved). Not run here: a live
+voice call (provider cost) and real-call screenshots — the lead tries those on
+dev before deploy.
+
 ## 2026-11-19: voice-first start (B's bubble, C's start button)
 
 Johan's selected landing direction, implemented (`t3/voice-first-start-page`, PR #78's

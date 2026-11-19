@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { t } from '../locales/sv';
 
 export type HomeworkDraft =
   | { kind: 'picker' }
@@ -28,21 +29,21 @@ function FilePreview({ file }: { file: File }) {
       {url && (
         <img
           src={url}
-          alt="Förhandsvisning av läxan"
+          alt={t('tray.previewAlt')}
           onError={(event) => {
             event.currentTarget.hidden = true;
           }}
         />
       )}
-      <span>{file.name || 'Foto'}</span>
+      <span>{file.name || t('tray.fallbackName')}</span>
     </>
   );
 }
 
 export default function HomeworkTray({ draft, busy, onCamera, onFiles, onRemove, onCancel, onSend }: Props) {
   return (
-    <section className="ot-homework-tray" aria-label="Lägg till läxa" aria-busy={busy}>
-      <h2>{draft.kind === 'picker' ? 'Visa mig din läxa' : 'Redo att skicka?'}</h2>
+    <section className="ot-homework-tray" aria-label={t('tray.label')} aria-busy={busy}>
+      <h2>{draft.kind === 'picker' ? t('tray.pickerTitle') : t('tray.readyTitle')}</h2>
       {draft.kind === 'files' && (
         <ul>
           {draft.files.map((file, index) => (
@@ -52,9 +53,9 @@ export default function HomeworkTray({ draft, busy, onCamera, onFiles, onRemove,
                 type="button"
                 disabled={busy}
                 onClick={() => onRemove(index)}
-                aria-label={`Ta bort ${file.name || 'foto'}`}
+                aria-label={t('tray.removeAria', { name: file.name || t('tray.fallbackName') })}
               >
-                Ta bort
+                {t('tray.remove')}
               </button>
             </li>
           ))}
@@ -64,24 +65,24 @@ export default function HomeworkTray({ draft, busy, onCamera, onFiles, onRemove,
       {draft.kind !== 'text' && (
         <div className="ot-tray-actions">
           <button type="button" disabled={busy} onClick={onCamera}>
-            {draft.kind === 'picker' ? 'Fota läxan' : 'Ta om foto'}
+            {draft.kind === 'picker' ? t('tray.photo') : t('tray.retake')}
           </button>
           <button type="button" disabled={busy} onClick={onFiles}>
-            Välj bild eller PDF
+            {t('tray.choose')}
           </button>
         </div>
       )}
       <div className="ot-tray-actions">
         <button type="button" disabled={busy} onClick={onCancel}>
-          Avbryt
+          {t('tray.cancel')}
         </button>
         {draft.kind !== 'picker' && (
           <button type="button" className="ot-primary" disabled={busy} onClick={onSend}>
-            {busy ? 'Skickar…' : 'Skicka till tutorn'}
+            {busy ? t('tray.sending') : t('tray.send')}
           </button>
         )}
       </div>
-      <p className="ot-tray-hint">Kontrollera att texten går att läsa innan du skickar.</p>
+      <p className="ot-tray-hint">{t('tray.hint')}</p>
     </section>
   );
 }

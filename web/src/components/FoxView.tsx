@@ -2,6 +2,7 @@ import type { Pill, Pose } from '../avatarState';
 import { captionTail } from '../useSession';
 import { PillIcon, PoseImage } from './Avatar';
 import { useBand } from '../BandContext';
+import { t } from '../locales/sv';
 
 // The strip has room for about three lines, the big bubble for about four.
 // Trimming to the tail keeps the latest words (the caption itself is already
@@ -49,9 +50,9 @@ export function FoxHero({
               type="button"
               className="ot-show-page"
               onClick={onShowPage}
-              title={pageTitle ? `Visa sidan: ${pageTitle}` : 'Visa sidan'}
+              title={pageTitle ? t('fox.showPageWithTitle', { title: pageTitle }) : t('fox.showPage')}
             >
-              <span aria-hidden="true">▤</span> Visa sidan
+              <span aria-hidden="true">▤</span> {t('fox.showPage')}
             </button>
           )}
         </div>
@@ -77,8 +78,8 @@ export function FoxStrip({ pose, pill, caption, captionFading, onShowFox }: Capt
         type="button"
         className={`ot-fox-head ot-fox-head-${pill.tone}${pill.animateBars ? ' ot-fox-head-speaking' : ''}`}
         onClick={onShowFox}
-        aria-label={`Visa ${companion.name}`}
-        title={`Visa ${companion.name}`}
+        aria-label={t('fox.showCompanion', { name: companion.name })}
+        title={t('fox.showCompanion', { name: companion.name })}
       >
         <PoseImage pose={pose} decorative />
       </button>

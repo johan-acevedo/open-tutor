@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import re
+
 import random
 from typing import Any
+
+from .locales import get_locale
 
 BASE = """\
 Your name is Räven.
@@ -185,8 +189,18 @@ def learner_context(learner: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def learner_locale(learner: dict[str, Any]) -> str:
+    """Session language, default Swedish. Only "sv" exists for now."""
+    loc = str((learner or {}).get("locale") or "sv").strip().lower()
+    # The locale comes from the browser: keep it to a language tag so it is
+    # safe in a file name or an HTML attribute later.
+    return loc if re.fullmatch(r"[a-z]{2,3}(-[a-z0-9]{2,8})?", loc) else "sv"
+
+
 def companion_name(learner: dict[str, Any]) -> str:
-    return {"middle": "Lodjuret", "upper": "Björnen"}.get(str(learner.get("band") or "").lower(), "Räven")
+    table = get_locale(learner_locale(learner))
+    band = str((learner or {}).get("band") or "").lower()
+    return dict(table.COMPANIONS).get(band, table.COMPANIONS.get("primary", "Räven"))
 
 
 def instructions(learner: dict[str, Any]) -> str:
@@ -218,11 +232,13 @@ def greeting_instruction(learner: dict[str, Any]) -> str:
 # first LLM call timed out three times at 10 s each and the child waited about 50 s for a
 # greeting. Each variant is two short spoken sentences: who it is, that it helps with
 # homework and schoolwork, and what the child is working on today. No emoji, no lists.
-GREETING_VARIANTS = (
-    "Hej {name}, jag heter {companion} och hjälper dig med läxor och skolarbete. Vad jobbar du med idag?",
-    "Hej hej {name}, {companion} här! Jag hjälper dig med läxor och skoluppgifter, så vad jobbar du med idag?",
-    "Hej {name}, kul att du är här! Jag är {companion} och hjälper dig med läxor och skolan, vad jobbar du med idag?",
-    "Hej {name}, det är {companion}! Jag hjälper dig med läxor och skolarbete, så vad jobbar du med idag?",
+# Fixed lines live in server/open_tutor/locales/sv.py; these aliases keep the
+# previous import paths working.
+from .locales.sv import (
+    GREETING_VARIANTS,
+    NAMELESS_GREETING_VARIANTS,
+    NAMELESS_UPPER_GREETING_VARIANTS,
+    UPPER_GREETING_VARIANTS,
 )
 
 
@@ -230,34 +246,18 @@ def learner_name(learner: dict[str, Any]) -> str:
     return str(learner.get("name") or "").strip()[:40]
 
 
-# Band 3 (gymnasiet or adult, still unknown at greeting time) gets a greeting
-# without school framing, so it fits both.
-UPPER_GREETING_VARIANTS = (
-    "Hej {name}, jag heter {companion} och hjälper dig att förstå och komma vidare. Vad jobbar du med idag?",
-    "Hej hej {name}, {companion} här! Jag hjälper dig att förstå och komma vidare, så vad jobbar du med idag?",
-)
-
-# Voice-first start (2026-11-19): the call begins with no name. The fixed greeting
-# greets without one and asks for it, so the learner is never "du"'d by the fox.
-NAMELESS_GREETING_VARIANTS = (
-    "Hej! Jag heter {companion} och hjälper dig med läxor och skolarbete. Vad heter du?",
-    "Hej hej! {companion} här! Jag hjälper dig med läxor och skoluppgifter, så vad heter du?",
-)
-
-NAMELESS_UPPER_GREETING_VARIANTS = (
-    "Hej! Jag heter {companion} och hjälper dig att förstå och komma vidare. Vad heter du?",
-    "Hej hej! {companion} här! Jag hjälper dig att förstå och komma vidare, så vad heter du?",
-)
+# Greeting tables live in server/open_tutor/locales/sv.py (see aliases above).
 
 
 def greeting_line(learner: dict[str, Any], index: int | None = None) -> tuple[str, int]:
     """The fixed greeting and the variant it came from (chosen at random by default)."""
+    table = get_locale(learner_locale(learner))
     name = learner_name(learner)
-    upper = str(learner.get("band") or "").lower() == "upper"
+    upper = str((learner or {}).get("band") or "").lower() == "upper"
     if name:
-        variants = UPPER_GREETING_VARIANTS if upper else GREETING_VARIANTS
+        variants = table.UPPER_GREETING_VARIANTS if upper else table.GREETING_VARIANTS
     else:
-        variants = NAMELESS_UPPER_GREETING_VARIANTS if upper else NAMELESS_GREETING_VARIANTS
+        variants = table.NAMELESS_UPPER_GREETING_VARIANTS if upper else table.NAMELESS_GREETING_VARIANTS
     if index is None:
         index = random.randrange(len(variants))
     line = variants[index % len(variants)].format(name=name or "du", companion=companion_name(learner))

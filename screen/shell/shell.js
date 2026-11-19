@@ -10,14 +10,14 @@
  * Parent -> frame (postMessage):  {ot:'patch', html}  {ot:'point', id|null}
  *                                  {ot:'reveal', id}   {ot:'restore', state}
  *                                  {ot:'loading', topic} (dim the page and show
- *                                    "Laddar <topic>…" at once; empty topic clears)
+ *                                    the loading label at once; empty topic clears)
  *                                  {ot:'hello'}         (the frame posts its ready message again:
  *                                    at once when it is already ready, otherwise when it becomes ready)
  * Frame -> parent:                 {ot:'ready', fontPx, issues, w, h}
  *                                  {ot:'patched', issues}   (only issues new since the previous
  *                                    ready/patched report; also posted at once when point/reveal
  *                                    name an id that does not exist)
- *                                  {ot:'answer', id, value}   (child pressed Skicka / chose)
+ *                                  {ot:'answer', id, value}   (child pressed send / chose)
  *                                  {ot:'input', id, value}    (draft text, for keeping state)
  * The same calls exist as window.ot.patch / point / reveal / restore / loading.
  */
@@ -42,6 +42,41 @@
     1783, 1800, 1815, 1878, 1880, 1900, 1914, 1920, 1930, 1938, 1945, 1960, 1994, 2000, 2010];
 
   var ot = window.ot = { issues: [], ready: null, fontPx: 0 };
+  // Visible labels live in one catalogue, injected by the composer
+  // (web/src/shell.ts, screen/tools/screenkit.py) as #ot-strings JSON and
+  // defaulting to Swedish. No other Swedish string literals below.
+  var STRINGS_SV = {
+    send: 'Skicka',
+    sent: 'Skickat \u2713',
+    answerLabel: 'Ditt svar',
+    gapLabel: 'Lucka',
+    loading: 'Laddar {topic} \u2026',
+    bc: 'f.Kr.',
+    ad: 'e.Kr.',
+    mapCreditHistorical: 'Gr\u00e4nser: historical-basemaps \u00b7 Natural Earth',
+    mapCredit: 'Natural Earth'
+  };
+  function readStrings() {
+    try {
+      var el = document.getElementById('ot-strings');
+      if (el && el.textContent) {
+        var parsed = JSON.parse(el.textContent);
+        if (parsed && typeof parsed === 'object') return parsed;
+      }
+    } catch (e) { /* fall through to defaults */ }
+    try {
+      if (window.otStrings && typeof window.otStrings === 'object') return window.otStrings;
+    } catch (e) { /* fall through */ }
+    return {};
+  }
+  var otStrings = (function () {
+    var out = {}, k;
+    for (k in STRINGS_SV) out[k] = STRINGS_SV[k];
+    var injected = readStrings();
+    for (k in injected) if (typeof injected[k] === 'string') out[k] = injected[k];
+    return out;
+  })();
+  function loadingText(topic) { return String(otStrings.loading).replace('{topic}', String(topic)); }
   var booted = false;
   var page = null;
   var MIN_FONT = 11, SMALL_FONT = 14;
@@ -340,7 +375,7 @@
       reveal() { this.setAttribute('data-revealed', ''); return this.querySelector('.ot-hidden-body'); }
     });
 
-    // ---- ot-answer: input + Skicka. What the child sends reaches the tutor.
+    // ---- ot-answer: input + send. What the child sends reaches the tutor.
     define('ot-answer', class extends Base {
       build() {
         var id = this.id || (this.id = autoId('svar'));
@@ -354,20 +389,20 @@
         input.spellcheck = false;
         if (this.getAttribute('kind') !== 'text') input.inputMode = 'decimal';
         input.placeholder = this.getAttribute('placeholder') || '';
-        input.setAttribute('aria-label', lab || 'Ditt svar');
+        input.setAttribute('aria-label', lab || otStrings.answerLabel);
         var btn = document.createElement('button');
-        btn.type = 'button'; btn.className = 'ot-send'; btn.textContent = 'Skicka';
+        btn.type = 'button'; btn.className = 'ot-send'; btn.textContent = otStrings.send;
         var self = this;
         function send() {
           var v = input.value.trim();
           if (!v) { input.focus(); return; }
-          btn.textContent = 'Skickat ✓'; btn.setAttribute('data-sent', '');
+          btn.textContent = otStrings.sent; btn.setAttribute('data-sent', '');
           post({ ot: 'answer', id: id, value: v });
         }
         btn.addEventListener('click', send);
         input.addEventListener('keydown', function (e) { if (e.key === 'Enter') send(); });
         input.addEventListener('input', function () {
-          btn.textContent = 'Skicka'; btn.removeAttribute('data-sent');
+          btn.textContent = otStrings.send; btn.removeAttribute('data-sent');
           draft(id, input.value);
         });
         this.textContent = '';
@@ -417,7 +452,7 @@
         var input = document.createElement('input');
         input.type = 'text'; input.autocomplete = 'off'; input.spellcheck = false;
         input.setAttribute('autocapitalize', 'off');
-        input.setAttribute('aria-label', this.getAttribute('label') || 'Lucka');
+        input.setAttribute('aria-label', this.getAttribute('label') || otStrings.gapLabel);
         input.size = Math.max(3, Math.min(18, (this.getAttribute('size') | 0) || ans.length + 1 || 5));
         input.style.width = (input.size + 0.5) + 'ch';
         input.addEventListener('change', function () { if (input.value.trim()) post({ ot: 'answer', id: id, value: input.value.trim() }); });
@@ -493,7 +528,7 @@
         var bce = evs.some(function (e) { return num(e.getAttribute('year')) < 0; });
         evs.forEach(function (e) {
           var y = num(e.getAttribute('year'));
-          var text = e.getAttribute('label') || (isNaN(y) ? '' : y < 0 ? fmtYear(-y) + ' f.Kr.' : fmtYear(y) + (bce ? ' e.Kr.' : ''));
+          var text = e.getAttribute('label') || (isNaN(y) ? '' : y < 0 ? fmtYear(-y) + ' ' + otStrings.bc : fmtYear(y) + (bce ? ' ' + otStrings.ad : ''));
           var span = e.querySelector(':scope > .ot-ev-year');
           if (span) span.textContent = text;
         });
@@ -1994,7 +2029,7 @@
     var lay = el.layer();
     lay.innerHTML = '';
     lay.classList.remove('ot-map-split', 'ot-map-key-side');
-    var credit = hist ? 'Gränser: historical-basemaps · Natural Earth' : 'Natural Earth';
+    var credit = hist ? otStrings.mapCreditHistorical : otStrings.mapCredit;
     // The key gets its own normal-flow box, never an overlay over sea or country: a strip under
     // the drawing box on a phone, an upright column beside it on a wide pane. The map is drawn
     // into what is left, so Sweden fills its box instead of sharing it with the key.
@@ -2707,7 +2742,7 @@
     return true;
   };
 
-  // Dim the finished page and show "Laddar <topic>…" at once, so the child
+  // Dim the finished page and show the loading label at once, so the child
   // never reads yesterday's page while the tutor talks about the new subject.
   // An empty topic clears. A successful patch clears too: fresh content has
   // arrived, so a stale overlay must not cover it. The topic travels as text
@@ -2735,7 +2770,7 @@
       document.body.appendChild(veil);
     }
     var label = veil.querySelector('.ot-loading-label');
-    if (label) label.textContent = 'Laddar ' + topic + ' …';
+    if (label) label.textContent = loadingText(topic);
     return true;
   };
 
@@ -2827,7 +2862,7 @@
         if (reducedMotion() || !el.animate) { el.remove(); settle(true); return; }
         animEnd(el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 350, easing: 'ease-in', fill: 'forwards' }), 350, function () { el.remove(); settle(true); });
       });
-      // Fresh content has arrived: a stale "Laddar …" must not cover it.
+      // Fresh content has arrived: a stale loading veil must not cover it.
       ot.loading(null);
       return flushPatched();
     } catch (e) {

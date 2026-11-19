@@ -7,14 +7,16 @@ import Avatar from './components/Avatar';
 import PageCard from './components/PageCard';
 import BottomBar from './components/BottomBar';
 import { useViewport } from './useViewport';
+import { htmlLang, sv } from './locales/sv';
+try { document.documentElement.lang = htmlLang; } catch { /* ignore */ }
 import './styles.css';
 import './mobile.css';
 import './bandStyles.css';
 
 const poses: Pose[] = ['greeting', 'listening', 'speaking', 'thinking', 'working', 'waiting', 'pointing'];
 const item = {
-  kind: 'page', id: 'review-units', title: 'Enheter och samband',
-  body: '<h1>Enheter och samband</h1><div class="card"><p class="big">sträcka = hastighet × tid</p></div><p>Vilken enhet mäter sträcka?</p><ot-answer id="unit" label="Ditt svar"></ot-answer>',
+  kind: 'page', id: 'review-units', title: sv['review.exampleTitle'],
+  body: sv['review.exampleBody'],
 } satisfies Parameters<typeof PageCard>[0]['item'];
 
 function Review() {
@@ -25,10 +27,10 @@ function Review() {
   const speaking = pose === 'speaking' || pose === 'pointing';
   const preparing = pose === 'working' || pose === 'thinking';
   const pill: Pill = speaking
-    ? { label: 'Pratar', icon: 'bars', tone: 'cyan', animateBars: true }
+    ? { label: sv['pill.speaking'], icon: 'bars', tone: 'cyan', animateBars: true }
     : preparing
-      ? { label: pose === 'working' ? 'Förbereder tavlan' : 'Tänker…', icon: pose === 'working' ? 'pencil' : 'sparkle', tone: 'violet', animateBars: false }
-      : { label: pose === 'waiting' ? 'Väntar' : 'Lyssnar', icon: pose === 'waiting' ? 'circle' : 'ear', tone: pose === 'waiting' ? 'grey' : 'cyan', animateBars: false };
+      ? { label: pose === 'working' ? sv['review.preparing'] : sv['pill.thinking'], icon: pose === 'working' ? 'pencil' : 'sparkle', tone: 'violet', animateBars: false }
+      : { label: pose === 'waiting' ? sv['pill.waiting'] : sv['pill.listening'], icon: pose === 'waiting' ? 'circle' : 'ear', tone: pose === 'waiting' ? 'grey' : 'cyan', animateBars: false };
   return (
     <BandProvider band={band}>
       <div className={`ot-root${mobile ? ' ot-phone' : ''}`} data-band={band}>
@@ -42,7 +44,7 @@ function Review() {
             <output>{answer}</output>
           </section>
           <aside className="ot-avatar-col">
-            <Avatar pose={pose} pill={pill} caption={speaking ? 'Vi börjar med vad vi vet.' : ''} captionFading={false} />
+            <Avatar pose={pose} pill={pill} caption={speaking ? sv['review.exampleCaption'] : ''} captionFading={false} />
           </aside>
         </main>
         <BottomBar mobile={mobile} micEnabled micBlocked={false} sending={false} onSendText={() => {}} onToggleMic={() => {}} onAttach={() => {}} />

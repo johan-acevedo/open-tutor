@@ -18,8 +18,17 @@ import HomeworkTray from './components/HomeworkTray';
 import ScreenDemo from './components/ScreenDemo';
 import { useViewport } from './useViewport';
 import { usePhoneStage } from './phoneStage';
+import { htmlLang, t } from './locales/sv';
 
 export default function App() {
+  // The page language follows the active locale (Swedish for now).
+  useEffect(() => {
+    try {
+      document.documentElement.lang = htmlLang;
+    } catch {
+      /* ignore */
+    }
+  }, []);
   // Product analytics warm up once: a no-op until /api/config names a key.
   useEffect(() => {
     void initAnalytics().then(() => pageOpened());
@@ -35,7 +44,7 @@ export default function App() {
   })();
   const { mobile, portrait, keyboard } = useViewport();
   // Age band for this page load: ?band= wins, else the remembered choice,
-  // else the host (tutor2.* = åk 7–9, tutor3.* = gymnasiet + adults). A TUTOR_BAND set on
+  // else the host (tutor2.* = middle school, tutor3.* = upper secondary + adults). A TUTOR_BAND set on
   // the server (/api/config) applies only when the page names no band.
   const [band, setBand] = useState<BandId>(() => {
     try {
@@ -128,8 +137,8 @@ export default function App() {
         <div className="ot-wordmark">Open Tutor</div>
         <div className="ot-topbar-right">
           {inSession && (
-            <button type="button" className="ot-end-btn ot-end-top" onClick={() => void session.endSession()} aria-label="Avsluta sessionen">
-              Avsluta
+            <button type="button" className="ot-end-btn ot-end-top" onClick={() => void session.endSession()} aria-label={t('app.endButtonAria')}>
+              {t('app.endButton')}
             </button>
           )}
           {inSession && (
@@ -167,7 +176,7 @@ export default function App() {
 
       {phase === 'connecting' && (
         <div className="ot-endcard" role="status">
-          <p>Ansluter till tutorn…</p>
+          <p>{t('app.connecting')}</p>
         </div>
       )}
 
@@ -231,43 +240,43 @@ export default function App() {
       {session.micBlocked && showBottomBar && (
         <div className="ot-banner ot-banner-amber" role="alert">
           <span aria-hidden="true">⚠️</span>
-          <span>Jag hör dig inte just nu. Du kan skriva här under.</span>
+          <span>{t('app.micBlockedText')}</span>
           <button
             type="button"
             onClick={() => {
               void session.retryMic().then(() => focusChatInput());
             }}
           >
-            Försök igen
+            {t('app.retry')}
           </button>
         </div>
       )}
       {(session.audioBlocked || session.resumeNeeded) && showBottomBar && (
         <div className="ot-banner ot-banner-amber" role="alert">
           <button type="button" onClick={() => void session.resumeMedia()}>
-            {session.resumeNeeded ? 'Fortsätt samtalet' : 'Tryck för att höra mig'}
+            {session.resumeNeeded ? t('app.resumeContinue') : t('app.resumeListen')}
           </button>
         </div>
       )}
 
       {session.connBanner === 'reconnecting' && (
         <div className="ot-banner ot-banner-amber" role="alert">
-          <span>Tappade kontakten – försöker igen…</span>
+          <span>{t('app.reconnecting')}</span>
         </div>
       )}
 
       {session.connBanner === 'disconnected' && (
         <div className="ot-banner ot-banner-amber" role="alert">
-          <span>Tappade kontakten.</span>
+          <span>{t('app.disconnected')}</span>
           <button type="button" onClick={() => profile && void session.start(profile)}>
-            Starta igen
+            {t('app.restart')}
           </button>
         </div>
       )}
 
       {phase === 'ending' && (
         <div className="ot-banner ot-banner-info" role="status">
-          <span>Avslutar samtalet…</span>
+          <span>{t('app.ending')}</span>
         </div>
       )}
 
@@ -277,7 +286,7 @@ export default function App() {
         </div>
       )}
 
-      {session.lastSent && showBottomBar && <div className="ot-sent-chip">Du: {session.lastSent}</div>}
+      {session.lastSent && showBottomBar && <div className="ot-sent-chip">{t('app.youPrefix')} {session.lastSent}</div>}
 
       {showBottomBar && (
         <BottomBar
@@ -313,7 +322,7 @@ export default function App() {
         hidden
         accept="image/*"
         capture="environment"
-        aria-label="Fota läxan"
+        aria-label={t('app.cameraInputAria')}
         onChange={(event) => {
           if (event.target.files?.length) session.queueFiles(event.target.files);
           event.target.value = '';

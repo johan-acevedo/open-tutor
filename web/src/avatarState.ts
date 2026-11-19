@@ -1,9 +1,10 @@
 // Avatar pose + status pill mapping.
 // Input: LiveKit agent state (lk.agent.state), tutor mode (tutor.mode),
-// whether a pending ("Ritar…") board item exists, and session flags.
+// whether a pending board item exists, and session flags.
 // Waveform/bars only ever in the speaking state.
 
 import type { AgentState, TutorMode } from './protocol';
+import { sv } from './locales/sv';
 
 export type Pose = 'greeting' | 'listening' | 'speaking' | 'thinking' | 'waiting' | 'pointing' | 'working';
 
@@ -42,60 +43,60 @@ export function mapAvatarState(input: AvatarInput): AvatarOutput {
   if (agentState === 'speaking') {
     return {
       pose: isTeaching ? 'pointing' : 'speaking',
-      pill: { label: 'Pratar', icon: 'bars', tone: 'cyan', animateBars: true },
+      pill: { label: sv['pill.speaking'], icon: 'bars', tone: 'cyan', animateBars: true },
     };
   }
   if (tutorMode === 'quiet') {
     return {
       pose: 'waiting',
-      pill: { label: 'Jag väntar', icon: 'circle', tone: 'grey', animateBars: false },
+      pill: { label: sv['pill.waiting'], icon: 'circle', tone: 'grey', animateBars: false },
     };
   }
   if (tutorMode === 'resource') {
     return {
       pose: 'waiting',
-      pill: { label: 'Väntar medan du tittar', icon: 'circle', tone: 'grey', animateBars: false },
+      pill: { label: sv['pill.watching'], icon: 'circle', tone: 'grey', animateBars: false },
     };
   }
   if (hasPending) {
     return {
       pose: 'working',
-      pill: { label: 'Ritar…', icon: 'pencil', tone: 'violet', animateBars: false },
+      pill: { label: sv['pill.drawing'], icon: 'pencil', tone: 'violet', animateBars: false },
     };
   }
   if (agentState === 'thinking') {
     return {
       pose: 'thinking',
-      pill: { label: 'Tänker…', icon: 'sparkle', tone: 'violet', animateBars: false },
+      pill: { label: sv['pill.thinking'], icon: 'sparkle', tone: 'violet', animateBars: false },
     };
   }
   if (micBlocked) {
     return {
       pose: 'waiting',
-      pill: { label: 'Väntar på text', icon: 'circle', tone: 'grey', animateBars: false },
+      pill: { label: sv['pill.textWaiting'], icon: 'circle', tone: 'grey', animateBars: false },
     };
   }
   if (agentState === 'listening') {
     if (!hasSpokenFirst) {
       return {
         pose: 'greeting',
-        pill: { label: 'Lyssnar', icon: 'ear', tone: 'cyan', animateBars: false },
+        pill: { label: sv['pill.listening'], icon: 'ear', tone: 'cyan', animateBars: false },
       };
     }
     return {
       pose: 'listening',
-      pill: { label: 'Lyssnar', icon: 'ear', tone: 'cyan', animateBars: false },
+      pill: { label: sv['pill.listening'], icon: 'ear', tone: 'cyan', animateBars: false },
     };
   }
   if (!hasSpokenFirst) {
     return {
       pose: 'greeting',
-      pill: { label: 'Hej!', icon: 'ear', tone: 'cyan', animateBars: false },
+      pill: { label: sv['pill.hello'], icon: 'ear', tone: 'cyan', animateBars: false },
     };
   }
   return {
     pose: 'waiting',
-    pill: { label: 'Jag väntar', icon: 'circle', tone: 'grey', animateBars: false },
+    pill: { label: sv['pill.waiting'], icon: 'circle', tone: 'grey', animateBars: false },
   };
 }
 

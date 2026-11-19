@@ -54,6 +54,10 @@ class Learner(BaseModel):
     # Age band for this page load (primary | middle | upper). Chosen by the
     # request host; validated loosely so older pages keep working.
     band: str | None = Field(default=None, max_length=12)
+    # Session language (BCP-47 style, e.g. "sv"). Only Swedish exists for now;
+    # the worker falls back to it for anything else. Sent by the page from
+    # web/src/locales/sv.ts so later languages need no protocol change.
+    locale: str = Field(default="sv", max_length=12, pattern=r"^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$")
 
 
 class SessionRequest(BaseModel):
