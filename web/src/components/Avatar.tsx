@@ -94,10 +94,14 @@ export default function Avatar({ pose, pill, caption, captionFading, decorative 
         <PoseImage pose={pose} decorative={decorative} />
       </div>
       <div className="ot-voice-bubble">
-        {!decorative && pill && (
-          <div className={`ot-pill ${toneClass}`} role="status" aria-label={pill.label}>
-            <PillIcon pill={pill} />
-            <span>{pill.label}</span>
+        {!decorative && (
+          <div className="ot-pill-row">
+            {pill && (
+              <div className={`ot-pill ${toneClass}`} role="status" aria-label={pill.label}>
+                <PillIcon pill={pill} />
+                <span>{pill.label}</span>
+              </div>
+            )}
           </div>
         )}
         {!decorative && (

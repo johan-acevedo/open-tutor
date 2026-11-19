@@ -73,6 +73,7 @@ a:focus-visible {
 /* ---------- App frame ---------- */
 
 .ot-root {
+  position: relative;
   height: 100dvh;
   display: flex;
   flex-direction: column;
@@ -550,6 +551,17 @@ a:focus-visible {
   flex: 0 0 auto;
 }
 
+/* Pill row reserves the pill height even when no pill is shown, so the
+   avatar box above never moves when the state changes. */
+.ot-pill-row {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 37px;
+  flex: 0 0 auto;
+  max-width: 100%;
+}
+
 .ot-caption {
   font-size: 18px;
   line-height: 1.5;
@@ -562,7 +574,11 @@ a:focus-visible {
   -webkit-box-orient: vertical;
   overflow: hidden;
   transition: opacity 0.6s ease;
-  min-height: 1.5em;
+  /* Exactly two lines, always: empty, 1-line and 2-line captions take the
+     same space, so the avatar image above never resizes. */
+  height: 3em;
+  min-height: 3em;
+  flex: 0 0 auto;
 }
 
 .ot-caption-fading {
@@ -960,15 +976,30 @@ a:focus-visible {
 
 /* ---------- Banners / toast / end card ---------- */
 
+/* Banners overlay the content instead of pushing it: they are out of flow
+   so the avatar box keeps its size while a banner (e.g. "Avslutar
+   samtalet…") is showing. Multiple banners stack upward. */
 .ot-banner {
-  margin: 0 24px 8px;
+  position: absolute;
+  left: 24px;
+  right: 24px;
+  bottom: 76px;
+  margin: 0;
+  z-index: 30;
   border-radius: 12px;
   padding: 10px 16px;
   display: flex;
   align-items: center;
   gap: 12px;
   font-size: 16px;
-  flex: 0 0 auto;
+}
+
+.ot-banner ~ .ot-banner {
+  bottom: 140px;
+}
+
+.ot-banner ~ .ot-banner ~ .ot-banner {
+  bottom: 204px;
 }
 
 .ot-banner-amber {
@@ -1052,6 +1083,9 @@ a:focus-visible {
   .ot-pill {
     font-size: 13px;
     padding: 6px 12px;
+  }
+  .ot-pill-row {
+    min-height: 30px;
   }
   .ot-caption {
     font-size: 16px;

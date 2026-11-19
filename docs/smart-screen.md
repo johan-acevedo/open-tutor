@@ -1390,3 +1390,43 @@ collapsed fits across the antimeridian onto Greenwich and capped near-pole fits 
 arc and never cuts the marks themselves; a `later` place also no longer draws before
 its reveal. Edge-case renders (date line, both poles, `later`) before/after are in
 the same review directory; the nine examples still diff zero.
+
+### Steady companion: the avatar no longer moves while the tutor talks (2026-11-19)
+
+A real lesson on the middle band showed the companion avatar changing size and
+position while the tutor talked. Two causes, both fixed on `t3/steady-companion`:
+
+- Caption height varied. The desktop caption reserved only `min-height: 1.5em`
+  for up to 2 lines, so a 1-line vs 2-line caption resized the image above it
+  (measured: avatar `<img>` box moved up to 27 px between caption lengths at
+  1280x800). The caption now keeps exactly 2 lines (`height: 3em`) and the
+  state pill lives in an always-rendered `.ot-pill-row` (37 px, 30 px compact),
+  so the `.ot-companion` box never depends on text. The phone caption
+  (5/3/2 lines by layout state), the fox hero bubble (4 lines) and the strip
+  bubble (3 lines) reserve their maxima the same way; empty bubbles stay
+  transparent but keep their height.
+- Pose canvases differed. Fox poses were 386-661 px wide, lynx 674-925,
+  bear 708-891, so each pose painted at a different scale inside the same box
+  (derived painted-character spread before: up to 114 px desktop, 348 px phone
+  hero). `scripts/normalize_companion_poses.py` (Pillow, reproducible) crops
+  each band's 7 poses to the character, scales them to the band's median
+  character height (the fox's working pose was drawn ~1.6x larger than the
+  others; padding alone would have shrunk the fox in six poses), and pads them
+  bottom-centre onto one canvas (primary 486x571, middle 776x850, upper
+  784x776), WebP quality 85 with alpha kept. Character height varies under 3 %
+  within a band. Artwork sources under `design/` untouched.
+  `server/tests/test_companion_canvas.py` fails if any pose drifts off its
+  band canvas or character height again.
+- Banners overlay instead of pushing. `.ot-banner` (desktop and phone) is now
+  an absolute overlay stacked upward, so e.g. "Avslutar samtalet…" no longer
+  shrinks the avatar column (before: main -52 px, image -37 px). Toasts and the
+  sent chip already overlayed.
+
+Measured with a Playwright harness (real stylesheets, real served images,
+7 poses x 3 bands x caption lengths 0/1/2/long, pill present, 1280x800 and
+390x844): avatar `<img>` box max variation before 27 px desktop / 63 px phone
+hero (painted content up to 114/348 px), after 0 px everywhere within one
+layout state; banner on/off moves nothing after. Caveat: the harness replays
+the layout outside a live session (no LiveKit) with Linux font metrics, and
+the painted-content numbers are derived geometrically -- direction and scale
+are representative, not device-exact. Not tested: a real lesson with children.
