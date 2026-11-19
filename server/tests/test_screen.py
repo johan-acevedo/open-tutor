@@ -704,7 +704,7 @@ def test_the_smart_tutor_is_the_only_tutor_and_the_only_tool_surface():
                                       "screen_loading", "screen_status",
                                       "find_resources", "share_resource", "start_quiet_work",
                                       "stay_quiet", "save_note",
-                                      "set_learner_grade", "switch_student"}
+                                      "set_learner_name", "set_learner_grade", "switch_student"}
 
 
 def test_the_single_prompt_teaches_the_six_screen_tools():

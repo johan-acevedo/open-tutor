@@ -1,6 +1,6 @@
 # Landing-page alternatives
 
-Generated with the built-in image generation tool on 2026-11-18 from Johan's [sketch](owner-sketch.png). Johan selected a B+C combination on 2026-11-19. No B+C onboarding behaviour has been implemented yet. [Exploration prompts](prompts.json).
+Generated with the built-in image generation tool on 2026-11-18 from Johan's [sketch](owner-sketch.png). Johan selected a B+C combination on 2026-11-19. Implemented the same day (`t3/voice-first-start-page`): the nameless start page, the voice-learned name (`set_learner_name` / `learner.setName`), and the start states in `web/src/components/Welcome.tsx`. [Exploration prompts](prompts.json).
 
 ## Selected direction: B's bubble and C's start button
 

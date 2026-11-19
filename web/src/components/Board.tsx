@@ -88,7 +88,7 @@ export default function Board({
       <div className="ot-board-scroll" data-book={items.length}>
         {items.length === 0 && showEmptyState && (
           <div className="ot-board-empty" role="status" aria-label="Whiteboard">
-            <h1 className="ot-board-empty-greeting">Hej {learnerName}!</h1>
+            <h1 className="ot-board-empty-greeting">Hej{learnerName.trim() !== '' ? ` ${learnerName}` : ''}!</h1>
             <p>Här hamnar det vi jobbar med.</p>
             <span>Säg hej — tutorn ritar upp här.</span>
           </div>

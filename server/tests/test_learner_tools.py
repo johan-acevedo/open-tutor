@@ -17,6 +17,7 @@ from livekit.agents import StopResponse
 from open_tutor import prompt
 from open_tutor.agent import (
     LEARNER_RPC_SET_GRADE,
+    LEARNER_RPC_SET_NAME,
     LEARNER_RPC_SWITCH,
     Tutor,
 )
@@ -56,6 +57,43 @@ def tutor(learner=None, **room_kwargs):
     t.child_identity = "learner-1"
     t.end_event = asyncio.Event()
     return t
+
+
+async def test_set_learner_name_acks_then_updates_call():
+    t = tutor({"id": "temp-1", "name": "", "grade": None},
+              replies={LEARNER_RPC_SET_NAME: {"ok": True, "profile": {"id": "p9", "name": "Noa", "grade": None}}})
+    result = await Tutor.set_learner_name(t, FakeCtx(), "Noa")
+    assert t.learner["id"] == "p9"
+    assert t.learner["name"] == "Noa"
+    assert "Noa" in result
+    [(method, payload)] = t.room.local_participant.calls
+    assert method == LEARNER_RPC_SET_NAME == "learner.setName"
+    assert payload == {"profileId": "temp-1", "name": "Noa"}
+
+
+async def test_set_learner_name_attaches_known_grade():
+    t = tutor({"id": "temp-1", "name": "", "grade": None},
+              replies={LEARNER_RPC_SET_NAME: {"ok": True, "profile": {"id": "p3", "name": "Moa", "grade": 5}}})
+    result = await Tutor.set_learner_name(t, FakeCtx(), " Moa ")
+    assert t.learner["name"] == "Moa"
+    assert t.learner["grade"] == 5
+    assert "5" in result
+
+
+async def test_set_learner_name_failure_saves_nothing():
+    t = tutor({"id": "temp-1", "name": "", "grade": None}, error=RpcFailed("gone"))
+    result = await Tutor.set_learner_name(t, FakeCtx(), "Noa")
+    assert t.learner["name"] == ""
+    assert t.learner["id"] == "temp-1"
+    assert "could not save" in result
+    assert t.room.local_participant.calls == [(LEARNER_RPC_SET_NAME, {"profileId": "temp-1", "name": "Noa"})]
+
+
+async def test_set_learner_name_needs_a_name():
+    t = tutor({"id": "temp-1", "name": ""})
+    result = await Tutor.set_learner_name(t, FakeCtx(), "   ")
+    assert t.room.local_participant.calls == []
+    assert "type it" in result or "Ask" in result
 
 
 async def test_set_learner_grade_acks_then_updates():
@@ -124,6 +162,37 @@ def test_unknown_grade_defaults_to_ak_1_6():
     assert "åk 1–6" in text
 
 
+def test_nameless_call_asks_repeats_and_saves_the_name():
+    text = prompt.learner_context({"name": "", "grade": None})
+    assert "not known yet" in text
+    assert "set_learner_name" in text
+    assert "repeat the name back" in text
+    assert "text field" in text
+    # The grade flow is unchanged underneath the naming.
+    assert "set_learner_grade" in text
+    assert "åk 1–6" in text
+
+
+def test_nameless_call_still_pitches_to_the_band():
+    assert "högstadiet" in prompt.learner_context({"name": "", "grade": None, "band": "middle"})
+    upper = prompt.learner_context({"name": "", "grade": None, "band": "upper"})
+    assert "gymnasiet student or an adult" in upper
+
+
+def test_nameless_greeting_asks_for_the_name_without_using_one():
+    line, _ = prompt.greeting_line({"name": "", "band": "primary"}, index=0)
+    assert "Vad heter du?" in line and "Räven" in line
+    assert "du," not in line and "Hej du" not in line
+    upper, _ = prompt.greeting_line({"name": "", "band": "upper"}, index=0)
+    assert "Vad heter du?" in upper and "Björnen" in upper
+
+
+def test_nameless_fallback_greeting_asks_for_the_name():
+    line, _ = prompt.greeting_line({"name": ""}, index=0)
+    assert "do not know it yet" in prompt.greeting_instruction({"name": ""})
+    assert "what they are called" in prompt.greeting_instruction({"name": ""})
+
+
 def test_unknown_grade_defaults_to_hogstadiet_on_band_2():
     text = prompt.learner_context({"name": "Leo", "grade": None, "band": "middle"})
     assert "not known yet" in text and "högstadiet" in text
@@ -146,8 +215,83 @@ def test_band_3_gets_greeting_without_school_framing():
     assert "läxor" not in line and "skol" not in line
 
 
+def test_nameless_greeting_names_the_band_companion():
+    assert "Lodjuret" in prompt.greeting_line({"name": "", "band": "middle"}, index=0)[0]
+    assert "Björnen" in prompt.greeting_line({"name": "", "band": "upper"}, index=1)[0]
+
+
 def test_prompt_bans_grade_forms_and_midcall_switching_rules():
     text = prompt.instructions({"name": "Leo", "grade": None})
     assert "never as a form" in text
     assert "set_learner_grade" in text
     assert "switch_student" in text
+
+
+@pytest.mark.parametrize("bad", ["Moa2", "<b>Moa</b>", "a b c d", "x" * 41, "Erik!", "   "])
+async def test_set_learner_name_rejects_invalid_names_without_rpc(bad):
+    # Finding 6: digits and markup are rejected before anything is stored —
+    # the tool asks again and no RPC goes out.
+    t = tutor({"id": "temp-1", "name": ""})
+    result = await Tutor.set_learner_name(t, FakeCtx(), bad)
+    assert t.room.local_participant.calls == []
+    assert t.learner["name"] == ""
+    assert "Ask once more" in result
+
+
+@pytest.mark.parametrize("good", ["Noa", "Anna-Lisa", "Mary Jane", "Åsa", "Linnéa"])
+async def test_set_learner_name_accepts_real_first_names(good):
+    t = tutor({"id": "temp-1", "name": "", "grade": None},
+              replies={LEARNER_RPC_SET_NAME: {"ok": True, "profile": {"id": "p9", "name": good, "grade": None}}})
+    result = await Tutor.set_learner_name(t, FakeCtx(), f"  {good}  ")
+    assert t.learner["name"] == good
+    assert good in result
+    [(method, payload)] = t.room.local_participant.calls
+    assert method == LEARNER_RPC_SET_NAME
+    assert payload == {"profileId": "temp-1", "name": good}
+
+
+async def test_set_learner_name_attach_replaces_grade_and_restores_notes():
+    # Findings 3 + 5: attaching to a different profile replaces the grade
+    # (including null/unknown) and adopts its notes, and the instructions are
+    # refreshed with the same context a returning start gets.
+    notes = [{"topic": "multiplikationstabellen", "at": "2026-11-19"}]
+    t = tutor({"id": "p9", "name": "Moa", "grade": 5, "notes": [{"topic": "bråk", "at": "2026-11-18"}]},
+              replies={LEARNER_RPC_SET_NAME: {"ok": True, "profile": {"id": "pX", "name": "Noa",
+                                                                      "grade": None, "notes": notes}}})
+    seen: list[str] = []
+
+    async def fake_update(text: str) -> None:
+        seen.append(text)
+
+    t.update_instructions = fake_update
+    result = await Tutor.set_learner_name(t, FakeCtx(), "Noa")
+    assert t.learner["id"] == "pX"
+    assert t.learner["name"] == "Noa"
+    assert t.learner["grade"] is None
+    assert t.learner["notes"] == notes
+    assert "årskurs 5" not in result
+    assert len(seen) == 1
+    assert "Noa" in seen[0]
+    assert "multiplikationstabellen" in seen[0]
+    assert "årskurs 5" not in seen[0]
+
+
+async def test_set_learner_name_same_profile_correction_keeps_grade():
+    # Findings 2 + 3 (worker side): renaming the same profile in place keeps
+    # its school year and refreshes the instructions with the new name.
+    notes = [{"topic": "bråk", "at": "2026-11-18"}]
+    t = tutor({"id": "p9", "name": "Moa", "grade": 5, "notes": notes},
+              replies={LEARNER_RPC_SET_NAME: {"ok": True, "profile": {"id": "p9", "name": "Noa",
+                                                                      "grade": 5, "notes": notes}}})
+    seen: list[str] = []
+
+    async def fake_update(text: str) -> None:
+        seen.append(text)
+
+    t.update_instructions = fake_update
+    result = await Tutor.set_learner_name(t, FakeCtx(), "Noa")
+    assert t.learner["id"] == "p9"
+    assert t.learner["grade"] == 5
+    assert "årskurs 5" in result
+    assert len(seen) == 1
+    assert "Noa" in seen[0] and "årskurs 5" in seen[0]

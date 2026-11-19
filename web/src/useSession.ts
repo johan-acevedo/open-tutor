@@ -21,10 +21,12 @@ import {
   TOPIC_SESSION_EVENT,
   TOPIC_TRANSCRIPTION,
   LEARNER_RPC_SET_GRADE,
+  LEARNER_RPC_SET_NAME,
   LEARNER_RPC_SWITCH,
 } from './protocol';
-import { enqueueNote, enqueueProfileGrade, enqueueProfileSwitch } from './db';
-import { handleNote, handleSetGrade, handleSwitch } from './learnerRpc';
+import { enqueueNote, enqueueProfileGrade, enqueueProfileName, enqueueProfileSwitch, rememberLastProfileId } from './db';
+import type { NamingSession } from './db';
+import { handleNote, handleSetGrade, handleSetName, handleSwitch } from './learnerRpc';
 import { createEndGate, routeAfterEnd } from './lessonEnd';
 import type { Profile } from './db';
 import {
@@ -233,8 +235,19 @@ export function useSession(mobile = false, band: BandId = 'primary') {
   const [prefillId, setPrefillId] = useState<string | null>(null);
   // Session generation: handlers capture the generation they were registered
   // in and never touch UI or profile state from an old one (delayed note or
-  // grade callbacks from A must not land on B).
+  // grade callbacks from A must not land on B). A name RPC from an ended or
+  // previous session writes nothing: the generation is checked before its
+  // persistence, and every end path bumps it.
   const sessionGenRef = useRef(0);
+  // Lesson generation: bumped only when a new lesson starts. The end-of-lesson
+  // note arrives after Avsluta has already bumped sessionGenRef, and it must
+  // still reach this lesson's end card; only a newer lesson replaces it.
+  const lessonGenRef = useRef(0);
+  // Voice-naming state for this session: which profile this session's naming
+  // created, if any. Reset when a session starts; the store uses it to tell a
+  // temporary profile this session created (safe to rename or supersede)
+  // from a stored profile from an earlier visit.
+  const namingRef = useRef<NamingSession>({ createdId: null });
   // One end transition per lesson: double leave, Avsluta during goodbye, or
   // tutor switch plus menu at once all share it — exactly one end, the note
   // saved once, cleanup touching only its own room. See lessonEnd.ts.
@@ -404,6 +417,10 @@ export function useSession(mobile = false, band: BandId = 'primary') {
     // Only delivered events survive session cleanup. Overflow is counted,
     // but a lost final tail cannot be detected by sequence gaps.
     diagRef.current = null;
+    // The room is gone: no learner RPC still in flight from it may persist.
+    // Bumping here covers every end path (Avsluta, menu leave, in-call
+    // switch, unmount); start() bumps again for the new session.
+    sessionGenRef.current += 1;
     const room = roomRef.current;
     roomRef.current = null;
     preparedRoomRef.current = null;
@@ -424,6 +441,7 @@ export function useSession(mobile = false, band: BandId = 'primary') {
       BOARD_RPC_POINT,
       BOARD_RPC_LOADING,
       LEARNER_RPC_SET_GRADE,
+      LEARNER_RPC_SET_NAME,
       LEARNER_RPC_SWITCH,
         ])
       unregisterRpc(room, m);
@@ -480,8 +498,10 @@ export function useSession(mobile = false, band: BandId = 'primary') {
       setPrefillId(null);
       setProfilesOpen(false);
       // A new generation: callbacks from the previous session (delayed
-      // notes, grades) never touch this one's UI or profile.
+      // notes, grades, names) never touch this one's UI or profile.
       sessionGenRef.current += 1;
+      lessonGenRef.current += 1;
+      namingRef.current = { createdId: null };
       profileRef.current = p;
       setProfile(p);
       setItems([]);
@@ -545,7 +565,9 @@ export function useSession(mobile = false, band: BandId = 'primary') {
           throw new Error(`session ${res.status}`);
         }
         session = (await res.json()) as SessionResponse;
-        identifyLearner(p.name, p.grade);
+        // A nameless start has no identity yet: it is identified when the
+        // tutor's set_learner_name tool attaches the name (see applyName).
+        if (p.name.trim() !== '') identifyLearner(p.name, p.grade);
       } catch {
         sessionFailed(failStatus);
         showToast('Kunde inte starta sessionen. Kontrollera anslutningen och försök igen.');
@@ -786,17 +808,42 @@ export function useSession(mobile = false, band: BandId = 'primary') {
       registerRpc(room, BOARD_RPC_REVEAL, pageOp('part', BOARD_RPC_REVEAL));
       registerRpc(room, BOARD_RPC_POINT, pageOp('part', BOARD_RPC_POINT));
 
-      // Learner RPCs for the tutor's set_learner_grade / switch_student tools.
-      // Acknowledged: the tool returns only after the browser answers, so a
-      // failed call leaves the call exactly as it was. Handlers are pure
-      // (learnerRpc.ts); this only wires real browser state. Profile writes
-      // run through one serialized queue (db.ts); stale targets are rejected.
-      // The generation is captured here: a callback from an old session
-      // (delayed grade after a restart) never touches the current UI, and a
-      // grade update never changes which profile is active.
+      // Learner RPCs for the tutor's set_learner_name / set_learner_grade /
+      // switch_student tools. Acknowledged: the tool returns only after the
+      // browser answers, so a failed call leaves the call exactly as it was.
+      // Handlers are pure (learnerRpc.ts); this only wires real browser
+      // state. Profile writes run through one serialized queue (db.ts);
+      // stale targets are rejected. The generation is captured here: a
+      // callback from an old session (delayed grade after a restart) never
+      // touches the current UI, and a grade update never changes which
+      // profile is active. Naming a voice-first call does change it: the
+      // session started with no stored profile, and the name either creates
+      // it or attaches to an existing one with the same name.
       const myGen = sessionGenRef.current;
       const isCurrent = () => myGen === sessionGenRef.current;
+      // The profile this session's notes belong to: the start profile, or
+      // the named one once a voice-first call learns the name (applyName).
+      let noteProfileId = p.id;
       const learnerDeps = {
+        applyName: async (profileId: string, name: string) => {
+          // A name RPC from an ended or previous session writes nothing:
+          // reject before the serialized write, not after it.
+          if (!isCurrent()) return undefined;
+          const updated = await enqueueProfileName(
+            profileId, name, () => profileRef.current?.id ?? null,
+            { isCurrentSession: isCurrent, naming: namingRef.current },
+          );
+          if (updated && isCurrent()) {
+            // The session's note binding follows the naming: notes saved
+            // before the name was known would otherwise land nowhere.
+            noteProfileId = updated.id;
+            profileRef.current = updated;
+            setProfile(updated);
+            rememberLastProfileId(updated.id);
+            identifyLearner(updated.name, updated.grade);
+          }
+          return isCurrent() ? updated : undefined;
+        },
         applyGrade: async (profileId: string, grade: number) => {
           const updated = await enqueueProfileGrade(
             profileId, grade, () => profileRef.current?.id ?? null,
@@ -816,6 +863,7 @@ export function useSession(mobile = false, band: BandId = 'primary') {
           pendingPrefillRef.current = next;
         },
       };
+      registerRpc(room, LEARNER_RPC_SET_NAME, (data) => handleSetName(data, learnerDeps));
       registerRpc(room, LEARNER_RPC_SET_GRADE, (data) => handleSetGrade(data, learnerDeps));
       registerRpc(room, LEARNER_RPC_SWITCH, (data) => handleSwitch(data, learnerDeps));
 
@@ -869,14 +917,15 @@ export function useSession(mobile = false, band: BandId = 'primary') {
 
       // Notes are bound to the profile id (and generation) this session
       // started with: a delayed note from lesson A is stored under A but
-      // never touches B's UI or live profile.
-      const noteGen = sessionGenRef.current;
-      const myProfileId = p.id;
+      // never touches B's UI or live profile. A voice-first naming updates
+      // the binding (see applyName): the session started with no stored
+      // profile, and the named one owns the notes from then on.
+      const noteGen = lessonGenRef.current;
       room.registerTextStreamHandler(TOPIC_NOTE, async (reader) => {
         try {
           await handleNote(await reader.readAll(), {
-            sessionProfileId: myProfileId,
-            isCurrentSession: () => noteGen === sessionGenRef.current,
+            getSessionProfileId: () => noteProfileId,
+            isCurrentSession: () => noteGen === lessonGenRef.current,
             getActiveId: () => profileRef.current?.id ?? null,
             onNote: (note, updated) => {
               setSessionNotes((prev) => [...prev, note]);
@@ -1140,6 +1189,9 @@ export function useSession(mobile = false, band: BandId = 'primary') {
     const room = roomRef.current;
     if (!room || phase !== 'live') return;
     if (!endGateRef.current.claim()) return;
+    // Ending invalidates the generation at once: a late learner RPC from
+    // this room is rejected before it persists, even before disconnect.
+    sessionGenRef.current += 1;
     try {
       intentionalEndRef.current = true;
       trackSessionEnd('ended_by_child');
@@ -1194,6 +1246,9 @@ export function useSession(mobile = false, band: BandId = 'primary') {
 
   const backToProfiles = useCallback(() => {
     intentionalEndRef.current = true;
+    // No lesson is running, but invalidate anyway: a learner RPC still in
+    // flight from a dying room must not persist into the profiles page.
+    sessionGenRef.current += 1;
     cleanupRoom();
     setProfilesOpen(false);
     setPhase('profiles');
@@ -1201,8 +1256,16 @@ export function useSession(mobile = false, band: BandId = 'primary') {
     setConnBanner(null);
   }, [cleanupRoom]);
 
+  /** Pre-call menu switch entry: forget any in-call switch prefill and show
+   *  the nameless first-visit page. */
+  const showFirstVisit = useCallback(() => {
+    pendingPrefillRef.current = null;
+    setPrefillId(null);
+    setProfilesOpen(true);
+  }, []);
+
   /** Menu "leave": send `end` so the worker saves the note, then open the
-   *  name entry directly (no second click). The end transition itself owns
+   *  nameless start page directly (no second click). The end transition itself owns
    *  idempotency (see endSession): a second call while one is in flight
    *  stands down, and an end already running is only steered to the name
    *  entry — never cut short. */
@@ -1466,6 +1529,7 @@ export function useSession(mobile = false, band: BandId = 'primary') {
     endSession,
     backToProfiles,
     leaveToProfiles,
+    showFirstVisit,
     profilesOpen,
     prefillId,
     addFiles,

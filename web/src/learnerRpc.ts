@@ -1,11 +1,16 @@
 import { RpcError } from 'livekit-client';
 import type { RpcInvocationData } from 'livekit-client';
+import { cleanLearnerName, isValidLearnerName } from './learnerName';
 import type { Note } from './protocol';
 import type { Profile } from './db';
 
 /** Worker → browser learner RPCs (see docs/protocol.md). Pure handlers with
  *  injected browser state, so the acknowledgement contract is unit-testable:
  *
+ *  - set_learner_name creates the local profile (or attaches to an existing
+ *    one with the same name) and applies only when the target is still the
+ *    active profile; anything else is rejected as stale, and the tool on the
+ *    worker leaves the call exactly as it was. A correction is the same call.
  *  - set_learner_grade applies only when the target is still the active
  *    profile; anything else is rejected as stale, and the tool on the worker
  *    leaves the call exactly as it was. Grade updates never change which
@@ -17,6 +22,7 @@ import type { Profile } from './db';
  *    student's session actually starts.
  */
 export type LearnerRpcDeps = {
+  applyName: (profileId: string, name: string) => Promise<Profile | undefined>;
   applyGrade: (profileId: string, grade: number) => Promise<Profile | undefined>;
   resolveStudent: (name: string) => Promise<Profile>;
   armPrefill: (profile: Profile) => void;
@@ -33,6 +39,31 @@ function parsePayload(data: RpcInvocationData, method: string): Record<string, u
   return parsed as Record<string, unknown>;
 }
 
+export async function handleSetName(data: RpcInvocationData, deps: LearnerRpcDeps): Promise<string> {
+  const msg = parsePayload(data, 'learner.setName');
+  const name = cleanLearnerName(typeof msg.name === 'string' ? msg.name : '');
+  // A misheard fragment, digit or markup is rejected before anything is
+  // stored, the same rule the worker checks before calling.
+  if (!isValidLearnerName(name)) throw new RpcError(1500, 'learner.setName needs a first name');
+  const updated = await deps.applyName(
+    typeof msg.profileId === 'string' ? msg.profileId : '',
+    name,
+  );
+  if (!updated) throw new RpcError(1501, 'name target is stale or invalid');
+  // The full learner context, the same a returning start gets: when the
+  // name attaches to an existing profile, the worker adopts its school year
+  // and notes from this ack and refreshes its instructions with them.
+  return JSON.stringify({
+    ok: true,
+    profile: {
+      id: updated.id,
+      name: updated.name,
+      grade: updated.grade,
+      notes: updated.notes.slice(-5).reverse(),
+    },
+  });
+}
+
 export async function handleSetGrade(data: RpcInvocationData, deps: LearnerRpcDeps): Promise<string> {
   const msg = parsePayload(data, 'learner.setGrade');
   const grade = typeof msg.grade === 'number' ? msg.grade : NaN;
@@ -45,14 +76,16 @@ export async function handleSetGrade(data: RpcInvocationData, deps: LearnerRpcDe
 }
 
 export type NoteDeps = {
-  /** The profile id this session started with: notes are bound to it. */
-  sessionProfileId: string;
+  /** The profile id this session's notes belong to: the start profile, or the
+   *  named profile once a voice-first call learns the name. Passed lazily
+   *  (see handleNote) so a naming that lands first is honoured. */
+  getSessionProfileId: () => string;
   /** False once a newer session started: old callbacks touch nothing. */
   isCurrentSession: () => boolean;
   /** The live profile is updated only when it is still the note's target. */
   getActiveId: () => string | null;
   onNote: (note: Note, updated: Profile | undefined) => void;
-  saveNote: (profileId: string, note: Note) => Promise<Profile | undefined>;
+  saveNote: (profileId: string | (() => string), note: Note) => Promise<Profile | undefined>;
 };
 
 export async function handleNote(text: string, deps: NoteDeps): Promise<void> {
@@ -72,7 +105,10 @@ export async function handleNote(text: string, deps: NoteDeps): Promise<void> {
     ...(typeof data.next === 'string' ? { next: data.next } : {}),
   };
   if (!note.topic) return;
-  const updated = await deps.saveNote(deps.sessionProfileId, note);
+  // The target stays a thunk until the serialized write runs: a note that
+  // arrived while a naming was in flight lands on the named profile once the
+  // naming write ahead of it has run, instead of the transient start id.
+  const updated = await deps.saveNote(() => deps.getSessionProfileId(), note);
   // A delayed note from lesson A is stored under A but never touches B's UI.
   if (!deps.isCurrentSession()) return;
   if (updated && deps.getActiveId() !== updated.id) return;

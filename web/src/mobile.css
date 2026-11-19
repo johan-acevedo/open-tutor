@@ -172,30 +172,15 @@
   height: 44px;
   flex-basis: 44px;
 }
-.ot-phone .ot-profiles {
-  padding: 8px 16px 20px;
-  gap: 0;
-  position: relative;
+.ot-phone .ot-start {
+  padding: 8px 16px calc(20px + env(safe-area-inset-bottom, 0px));
+  gap: 16px;
 }
-.ot-phone .ot-profiles-left {
-  flex: 1;
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+.ot-phone .ot-start-companion img {
+  width: min(220px, 52vw);
 }
-.ot-phone .ot-profiles h1 {
-  margin: 12px 0 18px;
-  font-size: 26px;
-}
-.ot-phone .ot-profile-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-.ot-phone .ot-profile-card {
-  min-width: 0;
-  padding: 12px;
-}
-.ot-phone .ot-profiles-side {
-  display: none;
+.ot-phone .ot-start-bubble {
+  font-size: 20px;
 }
 .ot-phone .ot-start-btn {
   width: 100%;
@@ -681,18 +666,7 @@
     -webkit-line-clamp: 2;
     line-clamp: 2;
   }
-  .ot-phone .ot-profiles-side {
-    display: flex;
-    position: absolute;
-    bottom: 0;
-    right: 10px;
-    width: 25%;
-    pointer-events: none;
-    opacity: 0.25;
-  }
-  .ot-phone .ot-profiles-left {
-    z-index: 1;
-  }
+
   .ot-phone.ot-keyboard .ot-main .ot-companion {
     display: none;
   }

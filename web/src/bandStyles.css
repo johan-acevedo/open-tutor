@@ -10,7 +10,7 @@
   border-radius: var(--ot-radius);
 }
 
-.ot-root:is([data-band="middle"], [data-band="upper"]) .ot-profiles-side img {
+.ot-root:is([data-band="middle"], [data-band="upper"]) .ot-start-companion img {
   border-radius: 0;
 }
 

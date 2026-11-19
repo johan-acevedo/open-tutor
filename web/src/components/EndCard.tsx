@@ -10,7 +10,7 @@ export default function EndCard({ learnerName, notes, onBack }: Props) {
   const last = notes.length > 0 ? notes[notes.length - 1] : null;
   return (
     <div className="ot-endcard">
-      <h1>Bra jobbat idag, {learnerName}!</h1>
+      <h1>{learnerName.trim() !== '' ? `Bra jobbat idag, ${learnerName}!` : 'Bra jobbat idag!'}</h1>
       {(last?.topic || last?.next) && (
         <div className="ot-endcard-notes">
           {last?.topic && (

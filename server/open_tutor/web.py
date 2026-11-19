@@ -43,10 +43,12 @@ class BoardInfo(BaseModel):
 
 
 class Learner(BaseModel):
-    # Browser profile id, so the worker's learner RPCs (learner.setGrade)
-    # can name their target. Sent by the page, echoed in metadata.
+    # Browser profile id, so the worker's learner RPCs (learner.setName,
+    # learner.setGrade) can name their target. Sent by the page, echoed in metadata.
     id: str | None = Field(default=None, max_length=100)
-    name: str = Field(min_length=1, max_length=40)
+    # Empty on a voice-first start: the call begins with no name and the tutor
+    # learns it by voice (set_learner_name) early in the call.
+    name: str = Field(default="", max_length=40)
     grade: int | None = Field(default=None, ge=1, le=12)
     notes: list[NoteIn] = Field(default_factory=list, max_length=5)
     # Age band for this page load (primary | middle | upper). Chosen by the
@@ -152,7 +154,7 @@ def create_app(environ: dict[str, str] | None = None) -> FastAPI:
         token = (
             api.AccessToken(env["LIVEKIT_API_KEY"], env["LIVEKIT_API_SECRET"])
             .with_identity(identity)
-            .with_name(body.learner.name)
+            .with_name(body.learner.name or "elev")
             .with_metadata(metadata)
             .with_ttl(TOKEN_TTL)
             .with_grants(api.VideoGrants(room_join=True, room=room, can_publish=True, can_subscribe=True,

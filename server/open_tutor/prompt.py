@@ -136,11 +136,25 @@ The replacement did not help there; it does not mean the method cannot be learne
 
 
 def learner_context(learner: dict[str, Any]) -> str:
-    name = str(learner.get("name") or "").strip()[:40] or "eleven"
+    name = str(learner.get("name") or "").strip()[:40]
     grade = learner.get("grade")
     band = str(learner.get("band") or "primary").strip().lower()
     grown_up = band == "upper" and (not isinstance(grade, int) or grade >= 10)
-    lines = [f"The {'learner' if grown_up else 'child'} is called {name}."]
+    who = "learner" if grown_up else "child"
+    lines = []
+    if name:
+        lines.append(f"The {who} is called {name}.")
+    else:
+        # Voice-first start (2026-11-19): the call began with no name. The fixed
+        # greeting already asked for it; when they answer, repeat it back to confirm,
+        # then save it with `set_learner_name` once so later calls start with it.
+        # An existing local profile with the same name is attached automatically.
+        lines.append(f"The {who}'s name is not known yet: this call started without one. "
+                     "The greeting already asked what they are called. When they answer, "
+                     "repeat the name back to confirm it, then call `set_learner_name` once. "
+                     "If you are unsure what you heard, ask once more; the child can also "
+                     "type their name in the text field (it works even when the microphone "
+                     "is blocked). A correction later is the same tool call again.")
     if isinstance(grade, int) and 1 <= grade <= 12:
         lines.append(f"They are in årskurs {grade}." if grade <= 9 else f"They are in gymnasiet, year {grade - 9}.")
     elif band == "upper":
@@ -181,6 +195,14 @@ def instructions(learner: dict[str, Any]) -> str:
 
 
 def greeting_instruction(learner: dict[str, Any]) -> str:
+    if not learner_name(learner):
+        # Voice-first start: the fixed greeting already asked for the name, so the
+        # fallback reply (typed before the greeting played) asks for it too.
+        return (
+            f"Greet warmly and briefly in Swedish, without using any name (you do not know it yet). "
+            f"Introduce yourself as {companion_name(learner)}, say briefly that you help with homework, "
+            f"and ask what they are called. Two short sentences."
+        )
     if learner.get("notes"):
         return (
             "Greet the child by name, warmly and briefly in Swedish. Mention in a few words what you "
@@ -215,11 +237,27 @@ UPPER_GREETING_VARIANTS = (
     "Hej hej {name}, {companion} här! Jag hjälper dig att förstå och komma vidare, så vad jobbar du med idag?",
 )
 
+# Voice-first start (2026-11-19): the call begins with no name. The fixed greeting
+# greets without one and asks for it, so the learner is never "du"'d by the fox.
+NAMELESS_GREETING_VARIANTS = (
+    "Hej! Jag heter {companion} och hjälper dig med läxor och skolarbete. Vad heter du?",
+    "Hej hej! {companion} här! Jag hjälper dig med läxor och skoluppgifter, så vad heter du?",
+)
+
+NAMELESS_UPPER_GREETING_VARIANTS = (
+    "Hej! Jag heter {companion} och hjälper dig att förstå och komma vidare. Vad heter du?",
+    "Hej hej! {companion} här! Jag hjälper dig att förstå och komma vidare, så vad heter du?",
+)
+
 
 def greeting_line(learner: dict[str, Any], index: int | None = None) -> tuple[str, int]:
     """The fixed greeting and the variant it came from (chosen at random by default)."""
     name = learner_name(learner)
-    variants = UPPER_GREETING_VARIANTS if str(learner.get("band") or "").lower() == "upper" else GREETING_VARIANTS
+    upper = str(learner.get("band") or "").lower() == "upper"
+    if name:
+        variants = UPPER_GREETING_VARIANTS if upper else GREETING_VARIANTS
+    else:
+        variants = NAMELESS_UPPER_GREETING_VARIANTS if upper else NAMELESS_GREETING_VARIANTS
     if index is None:
         index = random.randrange(len(variants))
     line = variants[index % len(variants)].format(name=name or "du", companion=companion_name(learner))

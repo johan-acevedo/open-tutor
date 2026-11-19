@@ -4,6 +4,41 @@ Lead: the thread "state of the project" (Claude, 2026-11-12). The lead keeps thi
 Workers read it before starting and report against it. Decisions here were agreed with Johan
 on 2026-11-12 unless marked open.
 
+## 2026-11-19: voice-first start (B's bubble, C's start button)
+
+Johan's selected landing direction, implemented (`t3/voice-first-start-page`, PR #78's
+pre-call name field removed). First visit: brand top-left, menu top-right, band companion
+centred, a static welcome bubble ("Hej! Ska vi prata?") and one button
+("Prata med Räven / Lodjuret / Björnen"). No name field, no profile grid, no speaking
+animation before the call. Returning visit: "Hej {name}! Ska vi köra?", the same button
+and an "Inte {name}? Byt" link; the menu's switch entry and that link both return to the
+nameless first visit. The menu also holds "Om tjänsten" and "Integritet" notes.
+
+The call starts with no name (`POST /api/session` accepts `name: ""`). The fixed greeting
+greets without one and asks for it; the tutor repeats it back to confirm and saves it via
+the new `set_learner_name` tool → `learner.setName` RPC (modelled on the grade path:
+acknowledged, stale targets rejected, the call updates only on ack). The browser creates the
+local profile then — an aborted nameless call leaves nothing behind — or attaches to an
+existing local profile with the same name (its grade and recent notes are adopted and the
+worker refreshes its instructions with them, as on a returning start), and remembers it
+as the assumed student. A correction later is the same tool call again: correcting a name
+learned in the call renames the profile in place (grade and notes kept); only a corrected
+name matching a different stored profile attaches there instead (its notes and grade win,
+the temporary profile is dropped). Names that are not names (digits, markup, more than
+three words) are rejected by the tool and the browser before anything is stored, and a
+name RPC from an ended session writes nothing. A typed name in the call (the text route
+works with the microphone blocked) recovers from mishearing. Notes bind to the session
+profile and follow the naming, resolving the target inside the write queue. `switch_student`
+is unchanged and now lands on the nameless start page, or the returning page when the
+target profile is known. Grade learning is unchanged. Band copy lives in `web/src/bands.ts`;
+the protocol in `docs/protocol.md`; the start states have web tests (first, returning, Byt,
+switch prefill) and the name tool/RPC has server and browser tests.
+
+Not tested: the real voice name capture (no paid live call ran here) — Johan tries it on
+dev. Verification screenshots (built app, first + returning × 3 bands × desktop + phone)
+are in `design/bands/verification/`. No public deploy or live-service restart is part of
+this work.
+
 ## 2026-11-18: age-band design decisions
 
 Johan's corrected ranges: `tutor.labtopia.dev` serves åk 1–6 with the current fox and style;
