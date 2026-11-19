@@ -91,13 +91,13 @@ The exact final-art prompts are in [production-pair-prompts.json](production-pai
 
 The app's `BandProvider` supplies a stable per-band config to the arrival image, every call pose, the phone companion, and each teaching frame. The new bands' fixed spoken greeting and tutor self-introduction use their selected companion name; the primary greeting and instructions remain byte-identical to the host-selection base. TTS voice configuration is unchanged. `theme.css` is the single token source for both web and shell names. Vite bundles it as text; the server's preview renderer reads that same file from the learner's band. Primary uses its original style declarations.
 
-Johan requested [landing alternatives A/B/C](landing-exploration/README.md) while the companion exports were underway. Those remain generated mock images awaiting his choice. No A/B/C flow is selected or implemented. No merge, deploy, or live-service restart is authorised.
+Johan requested [landing alternatives A/B/C](landing-exploration/README.md) while the companion exports were underway. On 2026-11-19 he chose B's welcome bubble with C's single start button and no pre-call name field. The tutor learns the name by voice in the call, with typed recovery when needed. The refined mock images and implementation handoff are in that record. This flow is selected but not implemented yet. No merge, deploy, or live-service restart is authorised.
 
 These concept images do not verify readability in the running app, state transitions, motion, or voice synchronisation. No live lesson or service is changed by this pass.
 
 ## Host-selection integration contract
 
-This integration builds on PR #78 (`t3/age-bands`, initially `40617e9`). It retains that branch's host resolver, name-only onboarding, learner tools and copy. The design PR targets main and depends on #78. Review design-specific code against that branch until #78 merges.
+This integration includes the reviewed PR #78 host-selection implementation now merged into main at `f0c6d64`. It retains that implementation's host resolver, name-only onboarding and learner tools. The design PR targets main; the selected B+C flow is a separate pending implementation.
 
 - `web/src/bands.ts` owns `companion.asset`, `companion.name`, the complete `companion.poses` map, and `theme.stylesheet`.
 - `web/src/BandContext.tsx` exposes that config without resolving the host again in child components.

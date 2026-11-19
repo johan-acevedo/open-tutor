@@ -1,6 +1,33 @@
 # Landing-page alternatives
 
-Generated with the built-in image generation tool on 2026-11-18 from Johan's [sketch](owner-sketch.png). These are proposals awaiting his choice. No A/B/C onboarding behaviour has been implemented. [Exact prompts](prompts.json).
+Generated with the built-in image generation tool on 2026-11-18 from Johan's [sketch](owner-sketch.png). Johan selected a B+C combination on 2026-11-19. No B+C onboarding behaviour has been implemented yet. [Exploration prompts](prompts.json).
+
+## Selected direction: B's bubble and C's start button
+
+Johan's choice combines the companion's welcome bubble with a single action that starts the conversation. There is no name field before the call. The tutor asks for the name by voice after the learner starts and grants microphone access.
+
+The proposed first-visit bubble is "Hej! Ska vi prata?", with "Prata med Räven" as the start action. This avoids asking a question that the learner cannot answer while the microphone is still off. The same pattern uses "Prata med Lodjuret" and "Prata med Björnen" on the other bands.
+
+A returning learner sees "Hej Alva! Ska vi köra?", the same start button, and a small "Inte Alva? Byt" link. Alva is fictional. The menu stays at top right, with "Byt elev" or "Byt person", "Om tjänsten", and "Integritet".
+
+These refinements are mock images, generated using the [selected-direction prompts](selected-bc-prompts.json). They replace the separate B and C proposals below.
+
+![Selected B+C, desktop](selected-bc-desktop.png)
+
+![Selected B+C, phone](selected-bc-phone.png)
+
+![Selected B+C, returning visits across the three bands](selected-bc-returning.png)
+
+### Implementation handoff
+
+- Start without inventing or preselecting a name for a new learner. Microphone permission follows the start action.
+- Ask for the name naturally in the call, then associate the session with the existing local profile or create one. A returning profile can start directly.
+- Keep a typed-name recovery path inside the call when speech recognition fails, including the existing text route if the microphone is unavailable.
+- Switching the assumed learner must return to the nameless start flow, without a pre-call name field or profile grid.
+- The static welcome bubble is not audio playback. Do not animate speaking indicators before the call starts.
+- Check the real first-visit, returning-visit, wrong-person, blocked-microphone, and misheard-name paths before claiming that voice-first onboarding works.
+
+The current implementation from PR #78 still asks for a name before starting. The selected flow needs coordinated frontend and tutor identity handling; this design update does not claim that behaviour is shipped.
 
 All directions keep the companion centred, the brand at top left, and the menu at top right. The first visit explains the purpose, the next microphone step, and where to read about privacy. The primary band keeps its dark slate, blue fox, and cyan accent. The two other bands use their selected companions and palettes as quick reskins.
 
@@ -44,4 +71,4 @@ These are quick portability checks, not replacement production character assets.
 
 ## Recommendation
 
-Start with B if the first release should establish the learner before the call. It makes the purpose of the field part of meeting the companion. Keep C as a separate interaction choice: it needs a real name-recognition and recovery check before replacing typed entry.
+The initial recommendation was B with typed entry. Johan chose B's visual welcome with C's voice-first entry instead. Preserve the single-button arrival and prove the in-call name and recovery paths during implementation.

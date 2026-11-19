@@ -29,5 +29,13 @@
       "companion": "V3 Björnen",
       "theme": "forest-grey, linen and brass"
     }
-  ]
+  ],
+  "landing": {
+    "selectedOn": "2026-11-19",
+    "direction": "B+C",
+    "welcome": "speech bubble",
+    "start": "one conversation button, no pre-call name field",
+    "name": "asked by voice after starting; typed recovery inside the call if needed",
+    "status": "mock images and implementation handoff; flow not implemented"
+  }
 }

@@ -19,8 +19,11 @@ The design integration builds on PR #78. All seven poses use transparent WebP un
 `web/public/character/middle/` and `upper/`. The per-band `theme.css` under `design/bands/`
 is shared by the app and teaching frame, including server previews. The fox assets and
 primary theme stay unchanged. Fixed greetings and tutor self-introductions use the selected
-companion name on the new bands, with the same TTS voice. Johan's landing alternatives A/B/C remain mock images awaiting
-a choice. Verification and exact export commands live in the design record. No public
+companion name on the new bands, with the same TTS voice. On 2026-11-19 Johan selected B's speech bubble with C's single start button: no
+name field before the call, the tutor asks by voice after starting, typed recovery inside
+the call if needed. Refined mock images and the implementation handoff are in
+`design/bands/landing-exploration/README.md`; the voice-first flow is not implemented yet.
+Verification and exact export commands live in the design record. No public
 deploy or live-service restart is part of this work.
 
 ## 2026-11-18: age bands, name-only start, no access code
