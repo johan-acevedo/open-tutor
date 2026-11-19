@@ -16,7 +16,10 @@ turns, 47 tutor replies, 5 screen pages, ended with Avsluta. Counts and timings 
   (`generate_reply`) started at once and cut the sentence off (the cut utterance never
   reached the transcript). Board pages already waited (`_prompt_when_free`); page answers
   did not. Fix: `PageAnswers` now awaits `wait_until_free` before deciding, so an answer
-  waits its turn, and a child who speaks meanwhile gets one reply, not two.
+  waits its turn. "Also said aloud" (one reply, not two) now means a spoken turn
+  since just before the first send contains the sent value(s); timing alone
+  (review rounds on PR #83) mixed up unrelated questions, resends and long turns.
+  The words are kept in memory for 2 minutes only, never logged by this class.
 - Reply speed: median 2.0 s from the end of the child's turn to the tutor's voice, p90
   3.7 s; two turns took ~6 s (slow LLM on both routes, TTFT 6.0 s once).
 - Screen: 5 pages, 7.7–9.0 s each, all shown; the look pass timed out twice and was

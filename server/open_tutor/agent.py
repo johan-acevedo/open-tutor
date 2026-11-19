@@ -1206,7 +1206,7 @@ async def entrypoint(ctx: JobContext) -> None:
         if not text or (role == "user" and text.startswith("[Session event")):
             return
         if role == "user":
-            page_answers.child_spoke()
+            page_answers.child_spoke(text)
         screen.add_turn("child" if role == "user" else "tutor", text)
 
     # ---- homework intake ----------------------------------------------------------
