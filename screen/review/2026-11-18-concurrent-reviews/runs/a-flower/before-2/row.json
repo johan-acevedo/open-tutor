@@ -1,0 +1,33 @@
+{
+  "ask": "a-flower",
+  "label": "before",
+  "run": 2,
+  "wall_s": 7.5,
+  "failures": [],
+  "total_s": 7.5,
+  "issues": [],
+  "strategy": "commons+parallel",
+  "image_s": 4.78,
+  "review_concurrency": null,
+  "reviews": 1,
+  "accepted": {
+    "image_source": "commons",
+    "title": "File:Tulip Tulipa clusiana 'Lady Jane' Rock Ledge Flower Edit 2000px.jpg",
+    "rank": null,
+    "served": "https://commons.wikimedia.org/wiki/File:Tulip_Tulipa_clusiana_%27Lady_Jane%27_Rock_Ledge_Flower_Edit_2000px.jpg",
+    "reason": "Tydlig och fin närbild av en blomma (tulpan) som passar bra för att visa vad en blomma är."
+  },
+  "candidates": [
+    {
+      "rank": null,
+      "title": "File:Tulip Tulipa clusiana 'Lady Jane' Rock Ledge Flower Edi",
+      "decision": "accepted",
+      "source": "commons",
+      "download_s": null,
+      "review_s": null,
+      "finished_s": null,
+      "reason": "Tydlig och fin närbild av en blomma (tulpan) som passar bra för att visa vad en blomma är."
+    }
+  ],
+  "ships_image": true
+}

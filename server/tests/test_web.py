@@ -22,12 +22,14 @@ def test_session_token_carries_learner_and_agent_dispatch():
 
 
 def test_session_carries_band_and_config_advertises_testing_band():
-    body = {"learner": {"name": "Leo", "grade": None, "notes": [], "band": "middle"}}
+    body = {"learner": {"id": "p9", "name": "Leo", "grade": None, "notes": [], "band": "middle"}}
     client = TestClient(create_app(ENV))
     response = client.post("/api/session", json=body)
     assert response.status_code == 200
     claims = jwt.decode(response.json()["token"], ENV["LIVEKIT_API_SECRET"], algorithms=["HS256"])
-    assert json.loads(claims["metadata"])["learner"]["band"] == "middle"
+    learner_meta = json.loads(claims["metadata"])["learner"]
+    assert learner_meta["band"] == "middle"
+    assert learner_meta["id"] == "p9"
     # Older pages send no band: still accepted, nothing stored.
     legacy = client.post("/api/session", json=LEARNER)
     assert legacy.status_code == 200

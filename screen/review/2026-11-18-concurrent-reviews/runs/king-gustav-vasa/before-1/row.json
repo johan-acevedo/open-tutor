@@ -1,0 +1,33 @@
+{
+  "ask": "king-gustav-vasa",
+  "label": "before",
+  "run": 1,
+  "wall_s": 9.01,
+  "failures": [],
+  "total_s": 9.0,
+  "issues": [],
+  "strategy": "commons+parallel",
+  "image_s": 2.62,
+  "review_concurrency": null,
+  "reviews": 1,
+  "accepted": {
+    "image_source": "commons",
+    "title": "File:Gustav Vasa.jpg",
+    "rank": null,
+    "served": "https://commons.wikimedia.org/wiki/File:Gustav_Vasa.jpg",
+    "reason": "A clear, authentic 1542 portrait painting of Gustav Vasa, appropriate for a 6th-grade history lesson."
+  },
+  "candidates": [
+    {
+      "rank": null,
+      "title": "File:Gustav Vasa.jpg",
+      "decision": "accepted",
+      "source": "commons",
+      "download_s": null,
+      "review_s": null,
+      "finished_s": null,
+      "reason": "A clear, authentic 1542 portrait painting of Gustav Vasa, appropriate for a 6th-grade history lesson."
+    }
+  ],
+  "ships_image": true
+}

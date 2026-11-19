@@ -108,6 +108,7 @@ The worker logs the route at the start of each session (`tutor TTS route elevenl
 | `SCREEN_HEDGE_AFTER_S` | Default `5`. Seconds a screen model call (page, look, retry) runs on the primary alone before the same call also starts on `SCREEN_FALLBACK`; first output text wins, the loser is cancelled and its stream closed. Empty keeps the older flat-timeout failover (`SCREEN_PRIMARY_TIMEOUT_S`); the hedge never starts with under 2 s left in the job or step |
 | `SCREEN_RACE` | Off by default. `1`/`true`: with `SCREEN_FALLBACK` set, both providers start every model call at once and the first *completed* call wins (not first text), so a provider that stalls mid-page loses to the one that finishes. One side erroring waits for the other within the call's deadline; both failing raises as today. `screen_hedge` and the per-call notes gain `race: true`, the winner's total time and the loser's time/error when known |
 | `SCREEN_PRIMARY_TIMEOUT_S` | Default `10`. Only for the flat-timeout failover above: client timeout per screen model call before the fallback is tried, fitted inside the calling step's own budget |
+| `SCREEN_IMAGE_REVIEWS` | Default `3`, at most `6`. How many of a slot's image candidates are downloaded and vision-reviewed at once, and the ceiling on reviews in flight for the whole page (several slots resolve concurrently). `1` reviews them one after another, as before 2026-11-18. Each slot's best-ranked review keeps the hedge; the rest are single attempts, so N candidates cost at most N+1 provider calls per source list. See [concurrent candidate reviews](../docs/smart-screen.md) |
 | `SCREEN_IMAGES` | Smart Screen image source: `commons` (default, today's behaviour: Wikimedia Commons only), `commons+parallel` (search both at once via the Parallel Images API in fast mode; review Commons first, take the first candidate the vision review accepts), or `parallel` (Parallel only). Needs `PARALLEL_API_KEY` (Infisical); without it, or while Parallel cools down after credit/auth errors (10 min) or transient failures (1 min), the job falls back to Commons-only silently. Per-image records (source, query, latency, verdict) land in meta.json `images`/`image_reviews`; Parallel ships with a `Källa: <site>` credit, and the existing vision review of the actual picture stays the gate. An accepted Parallel picture is stored under the session (`<session>/images/`, content-addressed `<sha256>.<ext>`) and served by the web app at `/api/images/<sha256>.<ext>` (immutable cache, nosniff); unknown hashes answer 404 |
 
 ### Open Sweden testing (no access code)
@@ -118,6 +119,11 @@ both the page and the web service; other hosts needing a gate should put it
 in a reverse proxy). Country checks cover the page, assets
 and session creation. The session-start cap still applies. IP geolocation is
 approximate and VPNs affect it.
+
+The `CF-IPCountry` header is forgeable by anyone who can reach the origin
+directly, so this check is only as strong as the ingress: keep the web service
+reachable solely through the Cloudflare tunnel (production binds a tailnet
+address) and never expose the origin itself.
 
 This restriction trusts Cloudflare's `CF-IPCountry` header. Enable Cloudflare IP
 Geolocation and keep the origin private behind its tunnel; a publicly reachable

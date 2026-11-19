@@ -1,0 +1,145 @@
+{
+ "job": "s1",
+ "kind": "page",
+ "page": "p1",
+ "title": "Gustav II Adolf",
+ "model": "gemini-4-hydrogen",
+ "api": "chat",
+ "reasoning": "low",
+ "pane": [
+  370,
+  610
+ ],
+ "provider": "google",
+ "failover": false,
+ "hedged": false,
+ "ttft_s": 0.0,
+ "model_s": 1.5,
+ "render_s": 1.24,
+ "look_s": 0.0,
+ "retry_s": 0.0,
+ "total_s": 8.16,
+ "issues": [],
+ "residual_lint": [],
+ "repair": {
+  "look": false,
+  "look_fix": false,
+  "retry": false,
+  "retry_applied": false,
+  "notes": [
+   "look pass skipped: page target budget"
+  ]
+ },
+ "reveal": "show",
+ "image_s": 5.42,
+ "image_reviews": [
+  {
+   "title": "File:Gustav II Adolf of Sweden.jpg",
+   "source": "https://commons.wikimedia.org/wiki/File:Gustav_II_Adolf_of_Sweden.jpg",
+   "decision": "accepted",
+   "reason": "Tydligt och passande porträtt av Gustav II Adolf som stämmer med lektionens syfte.",
+   "image_source": "commons",
+   "query": "Gustav II Adolf portrait painting",
+   "latency_s": 0.55,
+   "rank": 0,
+   "start_s": 0.0,
+   "download_s": 0.19,
+   "review_s": 5.07,
+   "finished_s": 5.26,
+   "sha256": "9f96804d5c3613ad642fefd8715453043928d9c7e2eb3edb5fb93a202c9866ad",
+   "bytes": 48366
+  },
+  {
+   "title": "File:Gustav II of Sweden.jpg",
+   "source": "https://commons.wikimedia.org/wiki/File:Gustav_II_of_Sweden.jpg",
+   "decision": "rejected",
+   "reason": "image review cancelled: a better-ranked candidate was accepted",
+   "image_source": "commons",
+   "query": "Gustav II Adolf portrait painting",
+   "latency_s": 0.55,
+   "rank": 1,
+   "start_s": 0.0,
+   "download_s": 0.96,
+   "review_s": 0.0,
+   "finished_s": 5.26,
+   "sha256": "5dbee93cd0f1e5384b919404623fb6ded21b3d9f37542a089f16d891bf110a11",
+   "bytes": 251903
+  },
+  {
+   "title": "File:Portrait of Gustav II Adolf (1594–1632), King of Sweden (by Michiel Jansz. van Mierevelt).jpg",
+   "source": "https://commons.wikimedia.org/wiki/File:Portrait_of_Gustav_II_Adolf_(1594%E2%80%931632),_King_of_Sweden_(by_Michiel_Jansz._van_Mierevelt).jpg",
+   "decision": "rejected",
+   "reason": "a better-ranked candidate was also accepted",
+   "image_source": "commons",
+   "query": "Gustav II Adolf portrait painting",
+   "latency_s": 0.55,
+   "rank": 2,
+   "start_s": 0.0,
+   "download_s": 0.95,
+   "review_s": 3.22,
+   "finished_s": 4.21,
+   "sha256": "e32620bd037dabb3965b927ae96d823e0b6c4f143d98df99e50b5ddca8260045",
+   "bytes": 261341
+  }
+ ],
+ "images": {
+  "strategy": "commons+parallel",
+  "seconds": 5.42,
+  "review_concurrency": 3,
+  "parallel": {
+   "available": true,
+   "reason": "",
+   "retry_in_s": 0.0
+  },
+  "reviews": [
+   {
+    "title": "File:Gustav II Adolf of Sweden.jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:Gustav_II_Adolf_of_Sweden.jpg",
+    "decision": "accepted",
+    "reason": "Tydligt och passande porträtt av Gustav II Adolf som stämmer med lektionens syfte.",
+    "image_source": "commons",
+    "query": "Gustav II Adolf portrait painting",
+    "latency_s": 0.55,
+    "rank": 0,
+    "start_s": 0.0,
+    "download_s": 0.19,
+    "review_s": 5.07,
+    "finished_s": 5.26,
+    "sha256": "9f96804d5c3613ad642fefd8715453043928d9c7e2eb3edb5fb93a202c9866ad",
+    "bytes": 48366
+   },
+   {
+    "title": "File:Gustav II of Sweden.jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:Gustav_II_of_Sweden.jpg",
+    "decision": "rejected",
+    "reason": "image review cancelled: a better-ranked candidate was accepted",
+    "image_source": "commons",
+    "query": "Gustav II Adolf portrait painting",
+    "latency_s": 0.55,
+    "rank": 1,
+    "start_s": 0.0,
+    "download_s": 0.96,
+    "review_s": 0.0,
+    "finished_s": 5.26,
+    "sha256": "5dbee93cd0f1e5384b919404623fb6ded21b3d9f37542a089f16d891bf110a11",
+    "bytes": 251903
+   },
+   {
+    "title": "File:Portrait of Gustav II Adolf (1594–1632), King of Sweden (by Michiel Jansz. van Mierevelt).jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:Portrait_of_Gustav_II_Adolf_(1594%E2%80%931632),_King_of_Sweden_(by_Michiel_Jansz._van_Mierevelt).jpg",
+    "decision": "rejected",
+    "reason": "a better-ranked candidate was also accepted",
+    "image_source": "commons",
+    "query": "Gustav II Adolf portrait painting",
+    "latency_s": 0.55,
+    "rank": 2,
+    "start_s": 0.0,
+    "download_s": 0.95,
+    "review_s": 3.22,
+    "finished_s": 4.21,
+    "sha256": "e32620bd037dabb3965b927ae96d823e0b6c4f143d98df99e50b5ddca8260045",
+    "bytes": 261341
+   }
+  ]
+ }
+}

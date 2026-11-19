@@ -1,0 +1,70 @@
+{
+ "job": "s1",
+ "kind": "page",
+ "page": "p1",
+ "title": "Gustav Vasa",
+ "model": "gemini-4-hydrogen",
+ "api": "chat",
+ "reasoning": "low",
+ "pane": [
+  370,
+  610
+ ],
+ "provider": "google",
+ "failover": false,
+ "hedged": false,
+ "ttft_s": 0.0,
+ "model_s": 1.5,
+ "render_s": 1.39,
+ "look_s": 3.5,
+ "retry_s": 0.0,
+ "total_s": 9.0,
+ "issues": [],
+ "residual_lint": [],
+ "repair": {
+  "look": true,
+  "look_fix": false,
+  "retry": false,
+  "retry_applied": false,
+  "notes": [
+   "look pass timed out"
+  ]
+ },
+ "reveal": "show",
+ "image_s": 2.62,
+ "image_reviews": [
+  {
+   "title": "File:Gustav Vasa.jpg",
+   "source": "https://commons.wikimedia.org/wiki/File:Gustav_Vasa.jpg",
+   "decision": "accepted",
+   "reason": "A clear, authentic 1542 portrait painting of Gustav Vasa, appropriate for a 6th-grade history lesson.",
+   "sha256": "10988e38dd806f8de1cadcb5c7ec8a32c78399fe511a0fdfda53568de9709281",
+   "bytes": 38585,
+   "image_source": "commons",
+   "query": "Gustav Vasa portrait painting",
+   "latency_s": 0.09
+  }
+ ],
+ "images": {
+  "strategy": "commons+parallel",
+  "seconds": 2.62,
+  "parallel": {
+   "available": true,
+   "reason": "",
+   "retry_in_s": 0.0
+  },
+  "reviews": [
+   {
+    "title": "File:Gustav Vasa.jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:Gustav_Vasa.jpg",
+    "decision": "accepted",
+    "reason": "A clear, authentic 1542 portrait painting of Gustav Vasa, appropriate for a 6th-grade history lesson.",
+    "sha256": "10988e38dd806f8de1cadcb5c7ec8a32c78399fe511a0fdfda53568de9709281",
+    "bytes": 38585,
+    "image_source": "commons",
+    "query": "Gustav Vasa portrait painting",
+    "latency_s": 0.09
+   }
+  ]
+ }
+}

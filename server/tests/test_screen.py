@@ -1054,6 +1054,7 @@ async def test_images_are_reviewed_before_page_or_patch_reaches_renderer_or_chil
     for result in (pages[0], patches[0]):
         meta = json.loads((result.directory / "meta.json").read_text())
         assert meta["image_reviews"][0]["decision"] == "accepted" and "image_s" in meta
+        assert meta["images"]["review_concurrency"] == 3  # the default, recorded
         assert (result.directory / "images.json").exists()
 
 
@@ -1100,6 +1101,92 @@ async def test_image_review_timeout_delivers_text_page_and_logs_the_rejected_can
     assert '<section id="bild" later="">' in pages[0].body and "ot-image" not in pages[0].body
     events = json.loads((pages[0].directory / "images.json").read_text())
     assert any(e.get("title") and "budget" in e["reason"] for e in events)
+
+
+async def test_a_parallel_only_slot_keeps_its_failover_to_the_backup(tmp_path, monkeypatch, commons_picture):
+    """The slot's first review hedges whichever source serves it.
+
+    Every Parallel review was called with ``hedge=False``, so with
+    ``SCREEN_IMAGES=parallel`` (or a Commons search that found nothing) the
+    slot's first and only review ran without the failover: a failing primary
+    left the slot with text while a healthy backup was armed."""
+    import time
+    from dataclasses import replace
+
+    from screen.tools import commons_images as commons
+    from screen.tools import parallel_images as parallel
+
+    monkeypatch.setenv("SCREEN_LOOK", "0")
+    monkeypatch.setenv("SCREEN_IMAGES", "parallel")
+    monkeypatch.setenv("SCREEN_FALLBACK", "cc")
+    monkeypatch.setenv("SCREEN_HEDGE_AFTER_S", "5")  # the primary fails before it
+    candidate, photo, _ = commons_picture
+    found = replace(candidate, source="parallel", image_url="https://example.com/map.jpg",
+                    title="Historical map")
+    monkeypatch.setattr(parallel, "search_images",
+                        AsyncMock(return_value=commons.SearchResult([found])))
+    monkeypatch.setattr(parallel, "download_image",
+                        AsyncMock(return_value=(photo, "image/jpeg")))
+    calls = []
+
+    async def primary(system, user, images, picture):
+        calls.append("go")
+        raise RuntimeError("go is down")
+
+    async def backup(system, user, images, picture):
+        calls.append("cc")
+        return '{"accept":true,"reason":"Relevant historical map."}'
+
+    screen = make_screen(tmp_path, model_call=primary, fallback_call=backup)
+    try:
+        job = screen._image_job("En karta över Rom", time.monotonic())
+        body = await job.prepare('<ot-image query="Romarrikets karta" alt="Karta"></ot-image>')
+    finally:
+        await screen.aclose()
+    assert calls == ["go", "cc"]  # the backup was asked, not skipped
+    assert body.count("/api/images/") == 1 and "Utan bild" not in body
+
+
+async def test_a_review_holds_its_gate_slot_until_its_cancelled_request_is_gone(
+        tmp_path, monkeypatch, commons_picture):
+    """The page-wide review gate counts real provider work, not callbacks.
+
+    A review whose provider call lost (a hedge loser, a timeout) is cancelled and
+    handed to the reaper, which keeps cancelling and closing it in the background.
+    Releasing the gate when the review callback returned let one page run more
+    provider requests at once than SCREEN_IMAGE_REVIEWS allows."""
+    import time
+
+    monkeypatch.setenv("SCREEN_LOOK", "0")
+    monkeypatch.setenv("SCREEN_IMAGE_REVIEWS", "1")  # one review at a time, page-wide
+    monkeypatch.setenv("SCREEN_FALLBACK", "cc")
+    monkeypatch.setenv("SCREEN_HEDGE_AFTER_S", "0.05")
+    _, photo, _ = commons_picture
+    live = {"now": 0, "peak": 0}
+
+    async def primary(system, user, images, picture):
+        if picture is not photo:
+            return "<h1>Rom</h1>"
+        live["now"] += 1
+        live["peak"] = max(live["peak"], live["now"])
+        try:
+            await asyncio.Future()  # never answers: the hedge takes the call over
+        finally:
+            await asyncio.sleep(0.15)  # a cancel that takes a while to unwind
+            live["now"] -= 1
+
+    async def backup(system, user, images, picture):
+        return '{"accept":true,"reason":"Relevant architecture."}'
+
+    screen = make_screen(tmp_path, model_call=primary, fallback_call=backup)
+    try:
+        job = screen._image_job("En sida om Rom", time.monotonic())
+        body = await job.prepare('<ot-image query="Colosseum" alt="Valv"></ot-image>'
+                                 '<ot-image query="Colosseum" alt="Bågar"></ot-image>')
+    finally:
+        await screen.aclose()
+    assert body.count("Diliff") == 2  # both slots got their reviewed picture
+    assert live["peak"] == 1  # the second review waited for the first's request to die
 
 
 # ---- patch images are loaded before the preview screenshot ------------------

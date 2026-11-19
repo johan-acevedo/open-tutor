@@ -1,0 +1,53 @@
+{
+  "ask": "king-gustav-vasa",
+  "label": "after",
+  "run": 1,
+  "wall_s": 8.76,
+  "failures": [],
+  "total_s": 8.76,
+  "issues": [],
+  "strategy": "commons+parallel",
+  "image_s": 2.76,
+  "review_concurrency": 3,
+  "reviews": 3,
+  "accepted": {
+    "image_source": "commons",
+    "title": "File:Gustav Vasa.jpg",
+    "rank": 0,
+    "served": "https://commons.wikimedia.org/wiki/File:Gustav_Vasa.jpg",
+    "reason": "Klassiskt och tydligt porträtt av Gustav Vasa som passar perfekt för åk 6 och frågan."
+  },
+  "candidates": [
+    {
+      "rank": 0,
+      "title": "File:Gustav Vasa.jpg",
+      "decision": "accepted",
+      "source": "commons",
+      "download_s": 0.17,
+      "review_s": 2.55,
+      "finished_s": 2.71,
+      "reason": "Klassiskt och tydligt porträtt av Gustav Vasa som passar perfekt för åk 6 och frågan."
+    },
+    {
+      "rank": 1,
+      "title": "File:Gustav Vasa small profile.jpeg",
+      "decision": "rejected",
+      "source": "commons",
+      "download_s": 0.15,
+      "review_s": 0.0,
+      "finished_s": 2.71,
+      "reason": "image review cancelled: a better-ranked candidate was accepted"
+    },
+    {
+      "rank": 2,
+      "title": "File:Vasa Museum - Gustav Adolf.jpg",
+      "decision": "rejected",
+      "source": "commons",
+      "download_s": 0.19,
+      "review_s": 0.0,
+      "finished_s": 2.71,
+      "reason": "image review cancelled: a better-ranked candidate was accepted"
+    }
+  ],
+  "ships_image": true
+}

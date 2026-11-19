@@ -1,0 +1,143 @@
+{
+ "job": "s1",
+ "kind": "page",
+ "page": "p1",
+ "title": "Gustav Vasa",
+ "model": "gemini-4-hydrogen",
+ "api": "chat",
+ "reasoning": "low",
+ "pane": [
+  370,
+  610
+ ],
+ "provider": "google",
+ "failover": false,
+ "hedged": false,
+ "ttft_s": 0.0,
+ "model_s": 1.5,
+ "render_s": 1.26,
+ "look_s": 2.5,
+ "retry_s": 0.0,
+ "total_s": 7.88,
+ "issues": [],
+ "residual_lint": [],
+ "repair": {
+  "look": true,
+  "look_fix": false,
+  "retry": false,
+  "retry_applied": false,
+  "notes": []
+ },
+ "reveal": "show",
+ "image_s": 2.61,
+ "image_reviews": [
+  {
+   "title": "File:Gustav Vasa.jpg",
+   "source": "https://commons.wikimedia.org/wiki/File:Gustav_Vasa.jpg",
+   "decision": "accepted",
+   "reason": "A clear, age-appropriate historical portrait painting of Gustav Vasa that directly matches the lesson context and requested label.",
+   "image_source": "commons",
+   "query": "Gustav Vasa portrait painting",
+   "latency_s": 0.09,
+   "rank": 0,
+   "start_s": 0.0,
+   "download_s": 0.16,
+   "review_s": 2.83,
+   "finished_s": 2.99,
+   "sha256": "10988e38dd806f8de1cadcb5c7ec8a32c78399fe511a0fdfda53568de9709281",
+   "bytes": 38585
+  },
+  {
+   "title": "File:Gustav Vasa small profile.jpeg",
+   "source": "https://commons.wikimedia.org/wiki/File:Gustav_Vasa_small_profile.jpeg",
+   "decision": "rejected",
+   "reason": "image review cancelled: a better-ranked candidate was accepted",
+   "image_source": "commons",
+   "query": "Gustav Vasa portrait painting",
+   "latency_s": 0.09,
+   "rank": 1,
+   "start_s": 0.0,
+   "download_s": 0.11,
+   "review_s": 0.0,
+   "finished_s": 2.99,
+   "sha256": "66ba8fd182a191d9881ac4923003bdb7f8c336501ebe8ec44838cd26b2ee8838",
+   "bytes": 19731
+  },
+  {
+   "title": "File:Vasa Museum - Gustav Adolf.jpg",
+   "source": "https://commons.wikimedia.org/wiki/File:Vasa_Museum_-_Gustav_Adolf.jpg",
+   "decision": "rejected",
+   "reason": "image review cancelled: a better-ranked candidate was accepted",
+   "image_source": "commons",
+   "query": "Gustav Vasa portrait painting",
+   "latency_s": 0.09,
+   "rank": 2,
+   "start_s": 0.0,
+   "download_s": 0.19,
+   "review_s": 0.0,
+   "finished_s": 2.99,
+   "sha256": "f3c10d6d15f805b366dd10883b2fb66ff11ca3968366939758388b797c4fbe2a",
+   "bytes": 448825
+  }
+ ],
+ "images": {
+  "strategy": "commons+parallel",
+  "seconds": 2.61,
+  "review_concurrency": 3,
+  "parallel": {
+   "available": true,
+   "reason": "",
+   "retry_in_s": 0.0
+  },
+  "reviews": [
+   {
+    "title": "File:Gustav Vasa.jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:Gustav_Vasa.jpg",
+    "decision": "accepted",
+    "reason": "A clear, age-appropriate historical portrait painting of Gustav Vasa that directly matches the lesson context and requested label.",
+    "image_source": "commons",
+    "query": "Gustav Vasa portrait painting",
+    "latency_s": 0.09,
+    "rank": 0,
+    "start_s": 0.0,
+    "download_s": 0.16,
+    "review_s": 2.83,
+    "finished_s": 2.99,
+    "sha256": "10988e38dd806f8de1cadcb5c7ec8a32c78399fe511a0fdfda53568de9709281",
+    "bytes": 38585
+   },
+   {
+    "title": "File:Gustav Vasa small profile.jpeg",
+    "source": "https://commons.wikimedia.org/wiki/File:Gustav_Vasa_small_profile.jpeg",
+    "decision": "rejected",
+    "reason": "image review cancelled: a better-ranked candidate was accepted",
+    "image_source": "commons",
+    "query": "Gustav Vasa portrait painting",
+    "latency_s": 0.09,
+    "rank": 1,
+    "start_s": 0.0,
+    "download_s": 0.11,
+    "review_s": 0.0,
+    "finished_s": 2.99,
+    "sha256": "66ba8fd182a191d9881ac4923003bdb7f8c336501ebe8ec44838cd26b2ee8838",
+    "bytes": 19731
+   },
+   {
+    "title": "File:Vasa Museum - Gustav Adolf.jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:Vasa_Museum_-_Gustav_Adolf.jpg",
+    "decision": "rejected",
+    "reason": "image review cancelled: a better-ranked candidate was accepted",
+    "image_source": "commons",
+    "query": "Gustav Vasa portrait painting",
+    "latency_s": 0.09,
+    "rank": 2,
+    "start_s": 0.0,
+    "download_s": 0.19,
+    "review_s": 0.0,
+    "finished_s": 2.99,
+    "sha256": "f3c10d6d15f805b366dd10883b2fb66ff11ca3968366939758388b797c4fbe2a",
+    "bytes": 448825
+   }
+  ]
+ }
+}

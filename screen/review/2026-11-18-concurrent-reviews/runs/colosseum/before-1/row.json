@@ -1,0 +1,33 @@
+{
+  "ask": "colosseum",
+  "label": "before",
+  "run": 1,
+  "wall_s": 9.01,
+  "failures": [],
+  "total_s": 9.01,
+  "issues": [],
+  "strategy": "commons+parallel",
+  "image_s": 3.09,
+  "review_concurrency": null,
+  "reviews": 1,
+  "accepted": {
+    "image_source": "commons",
+    "title": "File:Photo of The Colosseum in Rome, Italy.jpg",
+    "rank": null,
+    "served": "https://commons.wikimedia.org/wiki/File:Photo_of_The_Colosseum_in_Rome,_Italy.jpg",
+    "reason": "Tydlig och relevant bild av Colosseum i Rom som passar bra för årskurs 6."
+  },
+  "candidates": [
+    {
+      "rank": null,
+      "title": "File:Photo of The Colosseum in Rome, Italy.jpg",
+      "decision": "accepted",
+      "source": "commons",
+      "download_s": null,
+      "review_s": null,
+      "finished_s": null,
+      "reason": "Tydlig och relevant bild av Colosseum i Rom som passar bra för årskurs 6."
+    }
+  ],
+  "ships_image": true
+}

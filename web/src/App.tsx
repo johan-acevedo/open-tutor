@@ -45,13 +45,12 @@ export default function App() {
   });
   useEffect(() => {
     let cancelled = false;
-    const hasOverride = (() => {
-      try {
-        return new URLSearchParams(window.location.search).has('band') || localStorage.getItem('open-tutor-band') !== null;
-      } catch {
-        return true;
-      }
-    })();
+    let hasOverride = false;
+    try {
+      hasOverride = new URLSearchParams(window.location.search).has('band');
+    } catch {
+      hasOverride = true;
+    }
     if (hasOverride) return;
     fetch('/api/config')
       .then((res) => (res.ok ? res.json() : null))
@@ -138,7 +137,7 @@ export default function App() {
               dragOver={session.dragOver}
               onCamera={() => cameraRef.current?.click()}
               onFiles={() => fileRef.current?.click()}
-              onSwitchStudent={session.backToProfiles}
+              onSwitchStudent={() => void session.leaveToProfiles()}
               switchLabel={config.copy.switchStudent}
             />
           )}
@@ -155,6 +154,8 @@ export default function App() {
           }}
           onStartGesture={session.prepareStart}
           starting={false}
+          startOpen={session.profilesOpen}
+          assumeId={session.prefillId}
         />
       )}
 

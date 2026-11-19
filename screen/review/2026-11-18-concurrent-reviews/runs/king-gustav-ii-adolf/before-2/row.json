@@ -1,0 +1,33 @@
+{
+  "ask": "king-gustav-ii-adolf",
+  "label": "before",
+  "run": 2,
+  "wall_s": 7.42,
+  "failures": [],
+  "total_s": 7.42,
+  "issues": [],
+  "strategy": "commons+parallel",
+  "image_s": 4.69,
+  "review_concurrency": null,
+  "reviews": 1,
+  "accepted": {
+    "image_source": "commons",
+    "title": "File:Gustav II Adolf of Sweden.jpg",
+    "rank": null,
+    "served": "https://commons.wikimedia.org/wiki/File:Gustav_II_Adolf_of_Sweden.jpg",
+    "reason": "A clear, age-appropriate historical portrait painting of Gustav II Adolf that matches the request."
+  },
+  "candidates": [
+    {
+      "rank": null,
+      "title": "File:Gustav II Adolf of Sweden.jpg",
+      "decision": "accepted",
+      "source": "commons",
+      "download_s": null,
+      "review_s": null,
+      "finished_s": null,
+      "reason": "A clear, age-appropriate historical portrait painting of Gustav II Adolf that matches the request."
+    }
+  ],
+  "ships_image": true
+}

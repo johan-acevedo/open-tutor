@@ -116,8 +116,8 @@ clicked, what is still tricky and what to try next. Keep each part to a short ph
 - Never call `save_note` at the greeting or before any teaching has happened: a greeting is not a \
 milestone, and there is nothing to save yet.
 - If someone says they are a different person ("this is Leo now"), confirm briefly, ask the name \
-when it is new, then call `switch_student`. Their notes arrive as a session event right after; \
-greet them and continue from those notes.
+when it is new, then call `switch_student`. This lesson ends like Avsluta and the start page opens \
+prefilled for the new student; say nothing more after the call.
 - `clicked` is optional: empty is normal when unclear or when the work was mostly guided. Describe \
 helped versus independent plainly in the existing text. Do not force a success story. A prior \
 `clicked` is what was written then, not diagnosed mastery; check with a fresh small step next time.
@@ -255,14 +255,6 @@ BAND_REGISTER_HINT = {
     "middle": "högstadiet (åk 7–9): speak like a peer, compact explanations.",
     "upper": "gymnasiet or adult: direct and grown-up; find out naturally which.",
 }
-
-
-def switched_student_context(learner: dict[str, Any]) -> str:
-    """What the tutor is told when the browser has switched profiles mid-call."""
-    lines = [learner_context(learner)]
-    lines.append("This student just took over the screen. Greet them by name and continue "
-                 "from their notes above; do not ask about the previous student.")
-    return "\n".join(lines)
 
 
 END_INSTRUCTION = (

@@ -200,6 +200,60 @@ export function forgetLastProfileId(): void {
   }
 }
 
+// ---- Serialized profile writes -------------------------------------------------
+//
+// Learner RPCs from the worker (learner.setGrade, learner.switch) and the UI share
+// this browser. Every write runs through one queue so concurrent calls cannot
+// interleave: each message carries the profile it targets, and a write whose target
+// is no longer the active profile is dropped as stale. Switching twice to the same
+// new name resolves the same stored profile, so one profile is created.
+
+let profileQueue: Promise<unknown> = Promise.resolve();
+
+function enqueue<T>(job: () => Promise<T>): Promise<T> {
+  const next = profileQueue.then(job, job);
+  profileQueue = next.catch(() => undefined);
+  return next;
+}
+
+/** Find the named profile or create it, atomically within the queue. */
+export function enqueueProfileSwitch(name: string): Promise<Profile> {
+  const wanted = name.trim().slice(0, 40);
+  return enqueue(async () => {
+    const stored = await listProfiles();
+    return resolveProfileSwitch(stored, wanted) ?? createProfile(wanted);
+  });
+}
+
+/** Append a tutor note to one profile by id (never "the current one": the
+ *  caller binds the session's own profile id, so a delayed note from lesson A
+ *  can never land on B). Returns the updated profile, or undefined when the
+ *  profile is gone. */
+export function enqueueNote(profileId: string, note: Note): Promise<Profile | undefined> {
+  return enqueue(async () => {
+    if (!profileId) return undefined;
+    return appendNote(profileId, note);
+  });
+}
+
+/** Apply a tutor-learned grade, but only when the target is still the active
+ *  profile at execution time. `getActiveId` is read inside the queue so a write
+ *  that lost its race with a switch (or arrives after a restart) is dropped as
+ *  stale. Returns the updated profile, or undefined when stale/invalid. */
+export function enqueueProfileGrade(
+  profileId: string, grade: number, getActiveId: () => string | null,
+): Promise<Profile | undefined> {
+  return enqueue(async () => {
+    const activeId = getActiveId();
+    if (!profileId || !activeId || profileId !== activeId) return undefined;
+    if (!Number.isInteger(grade) || grade < 1 || grade > 12) return undefined;
+    const current = await getProfile(activeId);
+    if (!current) return undefined;
+    if (current.grade === grade) return current;
+    return updateProfile(activeId, { grade });
+  });
+}
+
 /** Append a note to a profile, keeping the newest MAX_NOTES. */
 export async function appendNote(profileId: string, note: Note): Promise<Profile | undefined> {
   let profile: Profile | undefined;

@@ -1,0 +1,47 @@
+{
+  "ask": "water-cycle",
+  "label": "after",
+  "run": 2,
+  "wall_s": 17.59,
+  "failures": [],
+  "total_s": 17.59,
+  "issues": [],
+  "strategy": "commons+parallel",
+  "image_s": 15.05,
+  "review_concurrency": 3,
+  "reviews": 3,
+  "accepted": null,
+  "candidates": [
+    {
+      "rank": 0,
+      "title": "Vattnets Kretslopp för Skolo, The Water Cycle for Schools, S",
+      "decision": "rejected",
+      "source": "parallel",
+      "download_s": 0.59,
+      "review_s": 6.15,
+      "finished_s": 6.74,
+      "reason": "Bilden är skadad eller ofullständig (nästan helt grå)."
+    },
+    {
+      "rank": 1,
+      "title": "Vattnets Kretslopp för Skolo, The Water Cycle for Schools, S",
+      "decision": "rejected",
+      "source": "parallel",
+      "download_s": 0.64,
+      "review_s": 0.0,
+      "finished_s": 14.56,
+      "reason": "image review cancelled or budget exhausted"
+    },
+    {
+      "rank": 2,
+      "title": "Vattnets Kretslopp för Skolo, The Water Cycle for Schools, S",
+      "decision": "rejected",
+      "source": "parallel",
+      "download_s": 0.62,
+      "review_s": 6.16,
+      "finished_s": 6.78,
+      "reason": "Bilden är trasig och visar bara en liten del längst upp medan resten är grå."
+    }
+  ],
+  "ships_image": false
+}

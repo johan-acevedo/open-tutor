@@ -22,6 +22,7 @@ primary theme stay unchanged. Fixed greetings and tutor self-introductions use t
 companion name on the new bands, with the same TTS voice. Johan's landing alternatives A/B/C remain mock images awaiting
 a choice. Verification and exact export commands live in the design record. No public
 deploy or live-service restart is part of this work.
+
 ## 2026-11-18: age bands, name-only start, no access code
 
 Johan's evolution of the PRD (this PR, `t3/age-bands`; voice/LLM call not re-tested):
@@ -35,13 +36,20 @@ Companion art/themes for bands 2–3 are placeholders (fox + distinct tokens) un
 design thread lands `design/bands/<band>/` — wiring points in `design/bands/README.md`.
 - **Name-only start.** First visit asks only "Vad heter du?"; no grid, no grade picker.
 Next visit assumes the same student ("Hej <name>, starta"); "Byt elev" is in the menu.
-- **The tutor learns the grade** (`set_learner_grade` → browser topic `profile` → stored
-profile) and **switches student in-call** (`switch_student` → browser switches/creates the
-profile and returns their notes as a `profile-switched` session-event). On band 3 the tutor
+- **The tutor learns the grade** (`learner.setGrade` RPC → serialized browser queue →
+stored profile; stale targets rejected, failed calls change nothing) and **switches
+student in-call as end-and-prefill** (`learner.switch` RPC resolves/creates the profile
+and acks with its id; the worker then ends this lesson exactly like Avsluta and the
+browser shows the start page prefilled for B — no automatic reconnect, no continuation
+session; failed calls never arm anything and keep A. B counts as a new session under
+the hourly cap. B is remembered as active only when B's session starts). On band 3 the tutor
 finds out naturally whether the learner is a gymnasiet student (which year) or an adult;
 only adults skip the grade. Unknown grades default to the band in the tutor and screen prompts.
-- **No access code.** The gate is gone from page and server; Sweden-only check
-(`cf-ipcountry`) and `TUTOR_MAX_SESSIONS_PER_HOUR` stay. Same voice on all bands.
+- **No access code.** The gate is gone from page and server (incl. `?kod=` links and
+probe headers); Sweden-only check (`cf-ipcountry`) and `TUTOR_MAX_SESSIONS_PER_HOUR` stay.
+The header is forgeable by direct-origin callers, so the web service must only be reachable
+through the Cloudflare tunnel (production binds a tailnet address) — no ingress auth is
+built; see `server/README.md` and `deploy/README.md`. Same voice on all bands.
 - Docs: PRD (bands, onboarding, grade learning, switching, adults + companions in
 scope), AGENTS.md users line, README, `docs/protocol.md`, `server/README.md` settings.
 
@@ -843,7 +851,8 @@ it takes effect when the code deploys there.
   pictures on both modes and falls back to text. Caveat: a slot gets ~17 s of
   search + review, so six sequential vision reviews do not fit when both
   sources return full lists and the provider is slow -- review concurrency is
-  the follow-up if real lessons hit this. No cool-down triggered; error paths
+  the follow-up if real lessons hit this (done the same day, below). No
+  cool-down triggered; error paths
   are unit-tested with recorded responses, including private-IP and
   redirect-to-private refusals.
 - **Security review (GPT-6.1 Sol, 2026-11-18, all five reproduced and fixed
@@ -856,6 +865,94 @@ it takes effect when the code deploys there.
   briefly, per-source isolation, cancel and drain); malformed 2xx JSON never
   cooling down (now a transient failure; a legitimate empty `results: []`
   stays a normal empty result).
+
+### Concurrent candidate reviews (2026-11-18)
+
+Branch `t3/concurrent-image-reviews`. The follow-up the parallel-image caveat above
+asked for: candidates for one `<ot-image>` slot were downloaded and vision-reviewed
+one after another, so ~17 s of image budget fitted about four reviews, and when the
+first candidates were bad (a flag-silhouette map, the wrong flowers) the good one was
+never judged and the page fell back to text. Now the top of the list is judged at
+once; nothing else about the image step changes (search, gates, store, delivery).
+
+- **How many at once.** `SCREEN_IMAGE_REVIEWS` (default 3, max 6): the candidates
+  admitted in rank order, further ones admitted as reviews settle. Three is a search
+  list, so a whole Commons list is judged while the first answer is still on its way;
+  `1` restores the sequential behaviour exactly. The prefetch pool resolves several
+  slots concurrently, so the same number is a per-page gate on reviews in flight: two
+  slots do not double what the screen model route is asked to serve. `commons+parallel`
+  keeps its phase order, so Commons candidates are all judged before any Parallel one.
+- **The ordering rule** (also in `page_images.py`): walk the candidates in preference
+  order (Commons by search rank, then Parallel by search rank). A finished rejection or
+  failure is stepped over; a review still in flight blocks, because a better-ranked
+  candidate may yet be accepted. So the winner is *the best-ranked acceptance whose
+  better-ranked reviews have all finished* -- a faster lower-ranked acceptance never
+  pre-empts a better-ranked review that is still being judged -- and once the deadline
+  hits, the best-ranked acceptance among the reviews that did finish. The reviews stop
+  0.25 s before the absolute image deadline so that decision, and the drain below, run
+  on our own clock instead of the caller's outer timeout.
+- **Nothing is left running, nothing unreviewed ships.** Once a winner is chosen or the
+  deadline hits, every other download and review is cancelled and drained -- within the
+  time left before the image deadline (1 s at most), and a caller cancellation that lands
+  during that drain is re-raised instead of swallowed, so the page falls back to text
+  rather than shipping a picture after its own deadline; a
+  still-running candidate is recorded as rejected (`cancelled: a better-ranked
+  candidate was accepted`, or `image review cancelled or budget exhausted`), and a
+  review that was accepted but outranked says so. Only the winner reaches
+  `_keep_approved_bytes`, so Parallel bytes are stored (and served as
+  `/api/images/<sha256>.<ext>`) only for the picture that actually ships: a lost
+  acceptance leaves neither an event that claims a served image nor a file behind.
+  The text fallback for the slot comes from the best-ranked rejection that offered one,
+  instead of from whichever review happened to finish last.
+- **Provider calls do not multiply.** A hedged review can start the same review on the
+  backup provider, so hedging all N would spend up to 2N calls per list. Only the first
+  review a slot actually admits keeps the hedge/failover, whichever source serves it
+  (with `SCREEN_IMAGES=parallel`, or a Commons list that came back empty, that first
+  review is a Parallel one and it still gets its failover); the rest are single attempts
+  (`_call_model(hedge=False)`, recorded as `single_attempt` in the call stats when a
+  backup was armed). A slot therefore costs at most N+1 calls per source list, and the
+  concurrency is itself the redundancy a hedge would have bought.
+- **Records.** Each candidate's `image_reviews`/`images.reviews` entry keeps today's
+  keys and gains `rank`, `start_s`, `download_s`, `review_s`, `finished_s`; entries stay
+  in rank order regardless of completion order, and `images` gains
+  `review_concurrency`. Charge for the change: a slot now judges up to N candidates
+  even when the first is accepted (≈0.5 extra vision call per slot in the run below).
+- **Tests.** The ranking rule (a slower better-ranked acceptance still wins; quick
+  lower-ranked acceptances wait for their betters), the deadline (a hung better-ranked
+  review costs nothing: the best finished acceptance is taken), cancellation and drain
+  (losers cancelled, no `page-image-review-*` task left), isolation (one failing review
+  rejects only its candidate), concurrency (three at once, `1` sequential), the per-page
+  gate, only the first review hedging, and only the winning Parallel bytes
+  reaching the review store. Server side: `_call_model(hedge=False)` makes exactly one
+  call with a backup armed, and `SCREEN_IMAGE_REVIEWS` parsing. The three review fixes
+  have their own regressions (they fail on the branch as first pushed): a cancellation
+  that lands in the drain, the gate counting reaped provider work through the real
+  `Screen` wrapper and its reaper with a fake provider seam, and a `SCREEN_IMAGES=parallel`
+  slot failing over to a healthy backup.
+- **Review fixes (GPT-6.1 Sol cross-family review, 2026-11-18; all three reproduced,
+  tests added).** (1) The drain of the losers caught `CancelledError` and carried on to
+  storage and rendering, so a caller cancellation landing there (a loser's HTTP response
+  or client close being slow) let an outer `wait_for`/`timeout_at` see a normal return
+  and the page render after its deadline; the drain is now bounded and re-raises the
+  caller's cancellation, while our own cancels of the losers still only raise inside
+  them. (2) The per-page review gate was released when the review callback returned,
+  but the cancelled provider request lives on in the reaper (cancel plus stream close),
+  so a page could run 5 provider requests across 2 gate slots with a concurrency of 3;
+  an image review now waits, bounded (1 s), for the request it gave up on to finish
+  before releasing its slot, tracked per owning task. (3) Every Parallel review was
+  called with `hedge=False`, so with `SCREEN_IMAGES=parallel` (or an empty Commons list)
+  a slot's first and only review had no failover and a failing primary meant text; the
+  hedge now belongs to the slot's first actual review, not to the Commons path.
+- **Live comparison** (`screen/review/2026-11-18-concurrent-reviews/`, `origin/main` vs
+  this branch, eight fictional asks, two runs each, real providers): acceptance 11/16 →
+  12/16, median image slot 4.74 s → 4.86 s, runs the budget cut 5 → 1, completed vision
+  reviews 22 → 34. The acceptance gained is the Swedish Empire map that timed out on
+  `main`; the dandelion ask now judges all five candidates in ~12 s instead of two to
+  four in 15.3 s, and correctly rejects all of them. Preference order held everywhere
+  (identical accepted file as `main` whenever Commons ranked a good picture first). The
+  Parallel water-cycle diagrams are rejected as cropped/grey in both checkouts, so that
+  is the source's content, not this change. Not tested live: a real lesson, and a
+  multi-slot page (the gate is unit-tested only).
 
 ### What Johan's test calls settled (2026-11-13)
 
@@ -1169,3 +1266,20 @@ ask emitted the `Swedish Empire 1658 map` slot and shipped an accepted Commons m
 (`Swedish Empire 1658.jpg`, search latency 0.2 s) in 19.5 s. Caveat: three earlier same-budget
 runs rejected two Commons flag-silhouette maps and starved the good candidate (Parallel prefetch
 timeout, ~12 s image spend) -- more evidence for the review-concurrency follow-up.
+
+### ot-map fits the highlighted marks (2026-11-18)
+
+A production test call showed a realm map fitted to all of Europe: the page had written
+an explicit `view="europa"` around an `<ot-area>` plus two `<ot-place>` markers. The shell
+(`screen/shell/shell.js`) now widens mark-only fits smaller than 8° lon × 6° lat to that
+regional minimum, so a single city gets a regional frame instead of a street-level zoom or
+an empty sea; an explicit `view` still wins and the län map keeps its own fitting.
+`screen/REFERENCE.md` tells the writer to leave `view` out when highlighting. Fictional
+repro (realm + Stockholm + Riga, with/without view, single city) at 370×610 and 840×743
+before/after, plus all nine example screens rendered with lint (zero diffs), are in
+`screen/review/2026-11-18-map-fit/`. Review follow-up the same day: the padding
+collapsed fits across the antimeridian onto Greenwich and capped near-pole fits at
+±84°, dropping the marks (`place outside the map`) -- the fit now unwraps the shorter
+arc and never cuts the marks themselves; a `later` place also no longer draws before
+its reveal. Edge-case renders (date line, both poles, `later`) before/after are in
+the same review directory; the nine examples still diff zero.

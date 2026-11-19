@@ -43,6 +43,9 @@ class BoardInfo(BaseModel):
 
 
 class Learner(BaseModel):
+    # Browser profile id, so the worker's learner RPCs (learner.setGrade)
+    # can name their target. Sent by the page, echoed in metadata.
+    id: str | None = Field(default=None, max_length=100)
     name: str = Field(min_length=1, max_length=40)
     grade: int | None = Field(default=None, ge=1, le=12)
     notes: list[NoteIn] = Field(default_factory=list, max_length=5)

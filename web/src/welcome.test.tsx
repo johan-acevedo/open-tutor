@@ -47,13 +47,22 @@ it('creates a profile with unknown grade and unlocks audio before persisting', a
   await waitFor(() => expect(pick).toHaveBeenCalledTimes(1));
 });
 
-it('second visit assumes the same student with a short start', () => {
+it('second visit assumes the same student: one greeting, one Starta', () => {
   const pick = vi.fn();
   render(
     <Welcome profiles={[profile()]} band={bandConfig('primary')} onPick={pick} starting={false} />,
   );
-  fireEvent.click(screen.getByRole('button', { name: 'Hej Elsa, starta' }));
+  expect(screen.getByRole('heading', { name: 'Hej Elsa!' })).toBeDefined();
+  fireEvent.click(screen.getByRole('button', { name: 'Starta' }));
   expect(pick).toHaveBeenCalledWith(profile());
+});
+
+it('opens the switch list directly when asked', () => {
+  render(
+    <Welcome profiles={[profile()]} band={bandConfig('primary')} onPick={() => {}} starting={false} startOpen />,
+  );
+  expect(screen.getByRole('heading', { name: 'Byt elev' })).toBeDefined();
+  expect(screen.queryByRole('heading', { name: 'Hej Elsa!' })).toBeNull();
 });
 
 it('Byt elev lists stored students and adds a new one by name', async () => {
@@ -66,11 +75,26 @@ it('Byt elev lists stored students and adds a new one by name', async () => {
 });
 
 it('the upper band switches the copy and keeps name-only start', () => {
+  const pick = vi.fn();
   render(
-    <Welcome profiles={[profile({ name: 'Bo', grade: null })]} band={bandConfig('upper')} onPick={() => {}} starting={false} />,
+    <Welcome profiles={[profile({ name: 'Bo', grade: null })]} band={bandConfig('upper')} onPick={pick} starting={false} />,
   );
-  expect(screen.getByRole('button', { name: 'Hej Bo, starta' })).toBeDefined();
+  fireEvent.click(screen.getByRole('button', { name: 'Starta' }));
+  expect(pick).toHaveBeenCalledTimes(1);
   fireEvent.click(screen.getByRole('button', { name: 'Byt person' }));
   expect(screen.getByLabelText('Förnamn')).toBeDefined();
   expect(screen.queryByLabelText('Årskurs')).toBeNull();
+});
+
+it('prefills the assumed student after an in-call switch', () => {
+  const profiles = [profile(), profile({ id: 'p2', name: 'Noa', grade: null })];
+  const pick = vi.fn();
+  // Last visit was Elsa, but the switch armed Noa: Noa is assumed.
+  localStorage.setItem('open-tutor-last-profile', 'p1');
+  render(
+    <Welcome profiles={profiles} band={bandConfig('primary')} onPick={pick} starting={false} assumeId="p2" />,
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Starta' }));
+  expect(pick).toHaveBeenCalledWith(profiles[1]);
+  localStorage.clear();
 });
