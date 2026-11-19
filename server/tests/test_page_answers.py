@@ -323,3 +323,20 @@ def test_decimal_comma_and_several_boxes_match_what_was_said():
 
     prompts, notes = asyncio.run(run())
     assert prompts == [] and len(notes) == 1
+
+
+def test_signs_and_operators_stay_part_of_the_value():
+    from open_tutor.page_answers import _norm
+
+    assert _norm("-16") == "-16" and _norm("3/4") == "3/4" and _norm("3+4") == "3+4"
+    assert _norm("3/4") != _norm("3+4")
+
+    async def run():
+        box, prompts, notes, _ = make()
+        box.child_spoke("det blir 16")
+        box.add("p1", "svar", "-16")
+        await asyncio.sleep(0.08)
+        return prompts, notes
+
+    prompts, notes = asyncio.run(run())
+    assert len(prompts) == 1 and notes == []

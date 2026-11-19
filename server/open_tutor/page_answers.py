@@ -19,9 +19,11 @@ SPOKEN_WINDOW_S = 4.0  # a spoken turn this close to the answers already gets th
 
 
 def _norm(text: str) -> str:
-    """Lower-case words and numbers, decimal comma as point, punctuation dropped."""
+    """Lower-case words and numbers, decimal comma as point, other punctuation
+    dropped. Signs and operators stay part of a number ("-16", "3/4", "3+4"),
+    so a corrected "-16" never matches a spoken "16"."""
     text = re.sub(r"(\d),(\d)", r"\1.\2", (text or "").lower())
-    return " ".join(re.findall(r"\d+(?:\.\d+)?|\w+", text))
+    return " ".join(re.findall(r"[-+]?\d+(?:[./*+\-]\d+)*(?:\.\d+)?|\w+", text))
 
 
 def answers_text(answers: list[tuple[str, str, str]]) -> str:

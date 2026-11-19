@@ -20,6 +20,10 @@ turns, 47 tutor replies, 5 screen pages, ended with Avsluta. Counts and timings 
   since just before the first send contains the sent value(s); timing alone
   (review rounds on PR #83) mixed up unrelated questions, resends and long turns.
   The words are kept in memory for 2 minutes only, never logged by this class.
+  Known limits (accepted): an unrelated question that contains the same value
+  ("vad betyder uppgift 16") suppresses the separate feedback reply (the answer is
+  still in the history); numbers said as words ("sexton") or with spelled-out units
+  get one extra short reply after the tutor finishes.
 - Reply speed: median 2.0 s from the end of the child's turn to the tutor's voice, p90
   3.7 s; two turns took ~6 s (slow LLM on both routes, TTFT 6.0 s once).
 - Screen: 5 pages, 7.7–9.0 s each, all shown; the look pass timed out twice and was
