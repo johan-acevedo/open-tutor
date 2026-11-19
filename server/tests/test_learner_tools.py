@@ -142,7 +142,7 @@ def test_known_grade_still_wins_over_the_band():
 
 def test_band_3_gets_greeting_without_school_framing():
     line, _ = prompt.greeting_line({"name": "Bo", "band": "upper"}, index=0)
-    assert "Bo" in line and "Räven" in line
+    assert "Bo" in line and "Björnen" in line
     assert "läxor" not in line and "skol" not in line
 
 

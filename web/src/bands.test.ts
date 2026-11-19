@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyServerBand, bandConfig, bandFromHostname, bandFromSearch, BANDS, currentBand } from './bands';
+import { applyServerBand, bandConfig, bandFromHostname, bandFromSearch, currentBand } from './bands';
 
 describe('bandFromHostname', () => {
   it('picks the band by subdomain prefix', () => {
@@ -53,14 +53,11 @@ describe('applyServerBand', () => {
 });
 
 describe('band configs', () => {
-  it('ships distinct theme tokens so the switch is visible', () => {
-    const accents = new Set(Object.values(BANDS).map((b) => b.theme.accentFrom));
-    expect(accents.size).toBe(3);
-  });
-  it('reuses the fox as a placeholder for bands 2 and 3', () => {
+  it('keeps the fox theme and selects the chosen companions for the other bands', () => {
+    expect(bandConfig('primary').theme.stylesheet).toBe('');
     expect(bandConfig('primary').companion.asset).toBe('fox');
-    expect(bandConfig('middle').companion.asset).toBe('fox-placeholder');
-    expect(bandConfig('upper').companion.asset).toBe('fox-placeholder');
+    expect(bandConfig('middle').companion.asset).toBe('lynx');
+    expect(bandConfig('upper').companion.asset).toBe('bear');
   });
   it('gives the tutor a register hint per band', () => {
     expect(bandConfig('primary').registerHint).toContain('1–6');

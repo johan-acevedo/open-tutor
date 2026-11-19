@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { layoutMode, mapAvatarState } from './avatarState';
 import { bandConfig, currentBand, type BandId } from './bands';
+import { BandProvider } from './BandContext';
 import { listProfiles, rememberLastProfileId } from './db';
 import type { Profile } from './db';
 import { useSession } from './useSession';
@@ -33,7 +34,7 @@ export default function App() {
   })();
   const { mobile, portrait, keyboard } = useViewport();
   // Age band for this page load: ?band= wins, else the remembered choice,
-  // else the host (tutor2.* = high, tutor3.* = adult). A TUTOR_BAND set on
+  // else the host (tutor2.* = åk 7–9, tutor3.* = gymnasiet + adults). A TUTOR_BAND set on
   // the server (/api/config) applies only when the page names no band.
   const [band, setBand] = useState<BandId>(() => {
     try {
@@ -71,7 +72,7 @@ export default function App() {
     hasItem: session.items.length > 0,
     itemSignal: session.boardSignal,
   });
-  if (screenDemo) return <ScreenDemo />;
+  if (screenDemo) return <BandProvider band={band}><ScreenDemo /></BandProvider>;
   const { phase, profile } = session;
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -117,6 +118,7 @@ export default function App() {
   ) : null;
 
   return (
+    <BandProvider band={band}>
     <div
       data-band={band}
       className={`ot-root${mobile ? ' ot-phone' : ''}${phonePortrait ? ' ot-phone-portrait' : ''}${keyboard ? ' ot-keyboard' : ''}${inSession ? ' ot-in-session' : ''}`}
@@ -313,5 +315,6 @@ export default function App() {
       />
       <audio ref={session.audioRef} aria-hidden="true" autoPlay />
     </div>
+    </BandProvider>
   );
 }

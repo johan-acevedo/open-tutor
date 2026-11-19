@@ -1,0 +1,41 @@
+{
+  "date": "2026-11-18",
+  "source": "Johan's direct feedback in the age-band design thread",
+  "voice": "same across bands",
+  "selection": "address selects the band for the entire visit",
+  "bands": [
+    {
+      "host": "tutor.labtopia.dev",
+      "schoolYears": "1–6",
+      "companion": "current blue fox",
+      "theme": "current screen style",
+      "status": "keep existing design"
+    },
+    {
+      "host": "tutor2.labtopia.dev",
+      "schoolYears": "7–9",
+      "audience": "högstadiet, ages 13–15",
+      "companion": "G1 Lodjuret",
+      "theme": "graphite and amber proposal",
+      "status": "companion locked",
+      "gestures": "two articulated hands, full hands and elbows inside export framing"
+    },
+    {
+      "host": "tutor3.labtopia.dev",
+      "schoolYears": "10+",
+      "audience": "gymnasiet and adults together",
+      "status": "companion locked",
+      "gestures": "two articulated arms and expressive hands",
+      "companion": "V3 Björnen",
+      "theme": "forest-grey, linen and brass"
+    }
+  ],
+  "landing": {
+    "selectedOn": "2026-11-19",
+    "direction": "B+C",
+    "welcome": "speech bubble",
+    "start": "one conversation button, no pre-call name field",
+    "name": "asked by voice after starting; typed recovery inside the call if needed",
+    "status": "mock images and implementation handoff; flow not implemented"
+  }
+}

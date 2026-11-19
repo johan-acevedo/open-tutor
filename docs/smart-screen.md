@@ -4,6 +4,28 @@ Lead: the thread "state of the project" (Claude, 2026-11-12). The lead keeps thi
 Workers read it before starting and report against it. Decisions here were agreed with Johan
 on 2026-11-12 unless marked open.
 
+## 2026-11-18: age-band design decisions
+
+Johan's corrected ranges: `tutor.labtopia.dev` serves åk 1–6 with the current fox and style;
+`tutor2.labtopia.dev` serves åk 7–9, ages 13–15; `tutor3.labtopia.dev` serves gymnasiet and
+adults together, åk 10+. The address fixes the band for the visit. The voice stays the same.
+
+G1 Lodjuret is locked as the tutor2 companion. Expressive hands are a requirement for
+teaching gestures. Johan selected V3 Björnen for tutor3, gymnasiet and adults together. The design record and exact generation prompts are in
+[`design/bands/`](../design/bands/README.md); the corrected mapping and selections are in
+[`decisions.json`](../design/bands/decisions.json).
+
+The design integration builds on PR #78. All seven poses use transparent WebP under
+`web/public/character/middle/` and `upper/`. The per-band `theme.css` under `design/bands/`
+is shared by the app and teaching frame, including server previews. The fox assets and
+primary theme stay unchanged. Fixed greetings and tutor self-introductions use the selected
+companion name on the new bands, with the same TTS voice. On 2026-11-19 Johan selected B's speech bubble with C's single start button: no
+name field before the call, the tutor asks by voice after starting, typed recovery inside
+the call if needed. Refined mock images and the implementation handoff are in
+`design/bands/landing-exploration/README.md`; the voice-first flow is not implemented yet.
+Verification and exact export commands live in the design record. No public
+deploy or live-service restart is part of this work.
+
 ## 2026-11-18: age bands, name-only start, no access code
 
 Johan's evolution of the PRD (this PR, `t3/age-bands`; voice/LLM call not re-tested):

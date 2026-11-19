@@ -2,10 +2,20 @@ import { describe, expect, it } from 'vitest';
 import { composePage, PAGE_CSP } from './shell';
 import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
+import { BANDS, type BandId } from './bands';
 
 // The browser composes the frame the same way screen/tools/screenkit.py
 // compose() does: frame.html with CSP, shell CSS, shell JS and the body.
 describe('composePage', () => {
+  it.each<BandId>(['primary', 'middle', 'upper'])('uses the same %s theme in browser and server previews', (band) => {
+    const python = execFileSync('python3', ['-c',
+      'import sys; sys.path.insert(0, "screen/tools"); import screenkit; sys.stdout.write(screenkit.compose(sys.stdin.read(), band=sys.argv[1]))', band,
+    ], { input: '<h1>Enheter</h1>', encoding: 'utf8', cwd: resolve(process.cwd(), '..') });
+    const browser = composePage('<h1>Enheter</h1>', BANDS[band]);
+    const style = /<style>([\s\S]*?)<\/style>/;
+    expect(browser.match(style)?.[1]?.trim()).toBe(python.match(style)?.[1]?.trim());
+    expect(browser).toContain(`data-band="${band}"`);
+  });
   const body = '<h1>Vad är klockan?</h1><p>$3+4$</p>';
   const doc = composePage(body);
 

@@ -1,0 +1,33 @@
+.ot-root:is([data-band="middle"], [data-band="upper"]) {
+  font-family: var(--ot-font);
+}
+
+.ot-root:is([data-band="middle"], [data-band="upper"]) :is(
+  .ot-text-field, .ot-start-btn, .ot-chat-input, .ot-bottom-bar,
+  .ot-homework-card, .ot-page-frame, .ot-menu-panel, .ot-endcard-notes,
+  .ot-board-book, .ot-homework-tray, .ot-drop-zone
+) {
+  border-radius: var(--ot-radius);
+}
+
+.ot-root:is([data-band="middle"], [data-band="upper"]) .ot-profiles-side img {
+  border-radius: 0;
+}
+
+.ot-root:is([data-band="middle"], [data-band="upper"]) .ot-fox-bubble {
+  background: var(--ot-paper);
+  color: var(--ot-paper-ink);
+  border-radius: var(--ot-radius);
+}
+
+.ot-root:is([data-band="middle"], [data-band="upper"]) .ot-fox-bubble-state {
+  color: inherit;
+}
+
+.ot-root:is([data-band="middle"], [data-band="upper"]) .ot-fox-head .ot-avatar-img {
+  width: 220%;
+  height: 220%;
+  max-width: none;
+  object-fit: contain;
+  transform: translate(-27%, -4%);
+}

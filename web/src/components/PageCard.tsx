@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { BoardItem } from '../protocol';
 import { composePage } from '../shell';
+import { useBand } from '../BandContext';
 
 /** Messages the parent may pass to a page's shell (see screen/shell/shell.js). */
 export type PageShellMessage =
@@ -24,6 +25,7 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 }
 
 export default function PageCard({ item, onMounted, registerSend, onAnswer }: Props) {
+  const band = useBand();
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   const readyRef = useRef(false);
   const queueRef = useRef<PageShellMessage[]>([]);
@@ -31,7 +33,7 @@ export default function PageCard({ item, onMounted, registerSend, onAnswer }: Pr
   const answerRef = useRef(onAnswer);
   answerRef.current = onAnswer;
 
-  const srcDoc = useMemo(() => composePage(item.body), [item.body]);
+  const srcDoc = useMemo(() => composePage(item.body, band), [item.body, band]);
 
   // Report the mount (frame element in the DOM) so board.show can ack;
   // the shell reports ready separately once the page is finished.

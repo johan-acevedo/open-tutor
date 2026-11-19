@@ -148,7 +148,7 @@ export default function Welcome({ profiles, band, onPick, starting, onStartGestu
       </div>
       <div className="ot-profiles-side" aria-hidden="true">
         <img
-          src={band.companion.greetingImage}
+          src={band.companion.poses.greeting}
           alt=""
           onError={(e) => ((e.target as HTMLImageElement).style.display = 'none')}
         />
