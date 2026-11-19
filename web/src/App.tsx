@@ -12,6 +12,7 @@ import Board from './components/Board';
 import BottomBar from './components/BottomBar';
 import PhoneStage from './components/PhoneStage';
 import TopMenu from './components/TopMenu';
+import StartMenu from './components/StartMenu';
 import EndCard from './components/EndCard';
 import HomeworkTray from './components/HomeworkTray';
 import ScreenDemo from './components/ScreenDemo';
@@ -141,6 +142,9 @@ export default function App() {
               switchLabel={config.copy.switchStudent}
             />
           )}
+          {phase === 'profiles' && (
+            <StartMenu switchLabel={config.copy.switchStudent} onSwitch={session.showFirstVisit} />
+          )}
         </div>
       </header>
 
@@ -149,7 +153,9 @@ export default function App() {
           profiles={profiles}
           band={config}
           onPick={(p) => {
-            rememberLastProfileId(p.id);
+            // A nameless start has no stored profile yet: the tutor's
+            // set_learner_name tool remembers it once the name is known.
+            if (p.name.trim() !== '') rememberLastProfileId(p.id);
             void session.start(p);
           }}
           onStartGesture={session.prepareStart}

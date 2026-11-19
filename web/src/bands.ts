@@ -38,13 +38,20 @@ export type BandConfig = {
   theme: {
     stylesheet: string;
   };
-  /** Band copy for the web app (Swedish). */
+  /** Band copy for the voice-first start page (Swedish). `{name}` is filled
+   *  in with the remembered learner. No name is ever asked in a field: the
+   *  tutor learns it by voice after the single start button is pressed. */
   copy: {
-    landingTitle: string;
-    namePrompt: string;
+    /** Static first-visit bubble beside the companion. */
+    welcomeBubble: string;
+    /** Returning-visit bubble, with the remembered learner's name. */
+    returningBubble: string;
+    /** Small link under the start button when the assumed learner is wrong. */
+    notYou: string;
+    /** The single start action, naming the band companion. */
     startButton: string;
+    /** Menu entry that returns to the nameless first-visit page. */
     switchStudent: string;
-    newStudent: string;
   };
   /** One-line register hint for the tutor prompt when the grade is unknown. */
   registerHint: string;
@@ -57,11 +64,11 @@ export const BANDS: Record<BandId, BandConfig> = {
     companion: { asset: 'fox', name: 'Räven', poses: poseImages('/character') },
     theme: { stylesheet: '' },
     copy: {
-      landingTitle: 'Vad heter du?',
-      namePrompt: 'Förnamn',
-      startButton: 'Starta',
+      welcomeBubble: 'Hej! Ska vi prata?',
+      returningBubble: 'Hej {name}! Ska vi köra?',
+      notYou: 'Inte {name}? Byt',
+      startButton: 'Prata med Räven',
       switchStudent: 'Byt elev',
-      newStudent: 'Ny elev',
     },
     registerHint: 'åk 1–6: friendly, concrete, small steps',
   },
@@ -71,11 +78,11 @@ export const BANDS: Record<BandId, BandConfig> = {
     companion: { asset: 'lynx', name: 'Lodjuret', poses: poseImages('/character/middle') },
     theme: { stylesheet: middleTheme },
     copy: {
-      landingTitle: 'Vad heter du?',
-      namePrompt: 'Förnamn',
-      startButton: 'Starta',
+      welcomeBubble: 'Hej! Ska vi prata?',
+      returningBubble: 'Hej {name}! Ska vi köra?',
+      notYou: 'Inte {name}? Byt',
+      startButton: 'Prata med Lodjuret',
       switchStudent: 'Byt elev',
-      newStudent: 'Ny elev',
     },
     registerHint: 'högstadiet (åk 7–9): speak like a peer, compact explanations',
   },
@@ -85,11 +92,11 @@ export const BANDS: Record<BandId, BandConfig> = {
     companion: { asset: 'bear', name: 'Björnen', poses: poseImages('/character/upper') },
     theme: { stylesheet: upperTheme },
     copy: {
-      landingTitle: 'Vad heter du?',
-      namePrompt: 'Förnamn',
-      startButton: 'Starta',
+      welcomeBubble: 'Hej! Ska vi prata?',
+      returningBubble: 'Hej {name}! Ska vi köra?',
+      notYou: 'Inte {name}? Byt',
+      startButton: 'Prata med Björnen',
       switchStudent: 'Byt person',
-      newStudent: 'Ny person',
     },
     registerHint: 'gymnasiet or adult — find out naturally which; gymnasiet years are 10–12, adults skip the grade',
   },

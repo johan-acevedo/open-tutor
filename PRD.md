@@ -1,6 +1,6 @@
 # Open Tutor: product requirements (first draft)
 
-Status: draft, 2026-11-03; age bands added 2026-11-18. Intent comes from the founding brief in [README.md](README.md). This document describes what a learner should experience; technical design is separate work. "Child" below covers every band; gymnasiet students and adults (band 3) are in scope since 2026-11-18.
+Status: draft, 2026-11-03; age bands added 2026-11-18; voice-first start added 2026-11-19. Intent comes from the founding brief in [README.md](README.md). This document describes what a learner should experience; technical design is separate work. "Child" below covers every band; gymnasiet students and adults (band 3) are in scope since 2026-11-18.
 
 **Agreed** marks what the brief or Johan has stated. **Default** marks a proposal we build unless someone objects, and change after real sessions. Open decisions are in section 5.
 
@@ -20,7 +20,7 @@ switches mid-session or on later visits; unknown hosts default to band 1
 ## 2. First learner journey
 
 1. The child opens the URL. No install, no login, no access code.
-2. First visit: the page asks only for a first name ("Vad heter du?"). No profile grid, no grade picker. The next visit assumes the same student: "Hej <name>!" with one Starta button. "Byt elev" (switch/add student) lives behind the hamburger menu. Profiles stay in browser storage.
+2. First visit: the companion, a static welcome bubble ("Hej! Ska vi prata?") and one "Prata med {companion}" button. No name field, no profile grid, no grade picker. The tutor asks for the name by voice after starting, repeats it back to confirm, and saves it; a typed name and a voice correction recover from mishearing. The next visit assumes the same student: "Hej <name>, ska vi köra?" with the same button, plus a small "Inte <name>? Byt" link. "Byt elev" (band 3: "Byt person") lives behind the hamburger menu and returns to the nameless first visit. Profiles stay in browser storage.
 3. One tap starts the session and grants microphone access. This is the only setup step.
 4. A large tutor character fills the page and **speaks first**: a greeting, a mention of last time if there was one, and an invitation to share what they're working on.
 5. The child talks, types, drops a file or photo, or pastes a screenshot or text. The homework appears on the board where both can see it.
@@ -36,6 +36,7 @@ switches mid-session or on later visits; unknown hosts default to band 1
 - Agreed: a new child can start immediately.
 - Default: a profile holds a first name, a school year (null until known), and the tutor's notes on past sessions. No PIN between siblings.
 - Default: the school year sets the tutor's register. A 15-year-old is spoken to like a young adult; a 9-year-old gets simpler language and smaller steps. An unknown school year defaults to the band until the tutor learns it (åk 1–6 / högstadiet / gymnasiet-or-adult).
+- Agreed (2026-11-19): the call starts with no name. The tutor greets without one, asks the learner's name early, repeats it back to confirm, and stores it with the `set_learner_name` tool — creating the local profile, or attaching to an existing local profile with the same name — so later visits start with it. A correction later is the same tool call again. If the microphone is blocked, typing the name works; if the tutor mishears, the learner corrects by voice or by typing.
 - Agreed (2026-11-18): if the grade is unknown, the tutor finds it out naturally early in the first call — never as a form; inferring it from shared homework counts — and stores it with the `set_learner_grade` tool, so the browser profile and later calls start with it. On band 3 the tutor finds out naturally whether the learner is a gymnasiet student (and which year) or an adult; only adults skip the grade, and the tutor asks what they are working on.
 - Agreed (2026-11-18): if someone else takes over ("this is Leo now"), the tutor confirms, asks the name when it is new, then switches via the `switch_student` tool: the current lesson ends like Avsluta (its note saved for the current student), and the start page then shows the other student's name with one Starta button. Their own notes load when their lesson starts.
 
@@ -118,7 +119,7 @@ Settled 2026-11-03: the child writes long work (book review, essay) where school
 
 Before a child uses it unsupervised on homework, Johan should be able to check each item on a school Chromebook and on the Windows PC:
 
-- From opening the URL to hearing the tutor greet takes no more than about 15 seconds and one tap after the name (returning: one tap on "Hej <name>, starta").
+- From opening the URL to hearing the tutor greet takes no more than about 15 seconds and one tap (returning: one tap on "Hej <name>, ska vi köra?").
 - Saying "vänta" mid-sentence stops the tutor promptly.
 - A 30-second silence while the child calculates does not make the tutor speak, unless it says one short, useful thing.
 - A pasted screenshot, a dropped PDF and a phone photo of a handwritten maths test each appear on the board, and the tutor describes them correctly.
@@ -139,7 +140,7 @@ Raster mockups to generate after clarification, one image per state.
 
 | # | View / state | What it must show | Suggested Swedish copy |
 |---|---|---|---|
-| 1 | Name-only start | First-name field, start button that grants the mic; returning visit: "Hej <name>, starta"; switch/add behind the menu | "Vad heter du?" · "Hej Leo, starta" · "Byt elev" · "Starta" |
+| 1 | Voice-first start | Static welcome bubble, one start button, no name field; returning visit: "Hej <name>, ska vi köra?" with an "Inte <name>? Byt" link; switch behind the menu returns to the nameless first visit | "Hej! Ska vi prata?" · "Prata med Räven" · "Hej Leo, ska vi köra?" · "Inte Leo? Byt" · "Byt elev" |
 | 2 | Greeting | Large character speaking, empty board hint, caption, bottom bar | "Hej Leo! Förra gången körde vi ekvationer. Vad har du med dig idag?" · "Släpp en fil eller klistra in (Ctrl+V)" |
 | 3 | Homework arrives | Photo of a handwritten maths test pinned on the board, character confirming | "Jag ser uppgift 3 och 4. Ska vi börja med 3?" |
 | 4 | Visual teaching: maths | Board main, character in side panel speaking, equation steps with one step highlighted, "Ritar…" placeholder | "3x + 5 = 20 → 3x = 15 → x = 5" · "Vi tar bort 5 på båda sidor." |

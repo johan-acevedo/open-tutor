@@ -166,6 +166,24 @@ export async function updateProfile(profileId: string, patch: { grade?: number |
   return updated;
 }
 
+/** Create the local profile for a voice-learned name, or attach to the stored
+ *  profile with the same name — atomically within the queue, so a repeated
+ *  name resolves the same profile and never duplicates it. The target check
+ *  keeps a stale call (after a switch or a restart) from creating anything.
+ *  Returns the profile, or undefined when stale/invalid. */
+export function enqueueProfileName(
+  profileId: string, name: string, getActiveId: () => string | null,
+): Promise<Profile | undefined> {
+  const wanted = name.trim().slice(0, 40);
+  if (!wanted) return Promise.resolve(undefined);
+  return enqueue(async () => {
+    const activeId = getActiveId();
+    if (!profileId || !activeId || profileId !== activeId) return undefined;
+    const stored = await listProfiles();
+    return resolveProfileSwitch(stored, wanted) ?? createProfile(wanted);
+  });
+}
+
 /** Find a stored profile by first name (case-insensitive), for in-call switching. */
 export function resolveProfileSwitch(profiles: Profile[], name: string): Profile | undefined {
   const wanted = name.trim().toLowerCase();

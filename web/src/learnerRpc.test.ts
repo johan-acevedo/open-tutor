@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { RpcError } from 'livekit-client';
-import { handleNote, handleSetGrade, handleSwitch, type LearnerRpcDeps, type NoteDeps } from './learnerRpc';
+import { handleNote, handleSetGrade, handleSetName, handleSwitch, type LearnerRpcDeps, type NoteDeps } from './learnerRpc';
 import type { Profile } from './db';
 
 function profile(over: Partial<Profile> = {}): Profile {
@@ -9,6 +9,7 @@ function profile(over: Partial<Profile> = {}): Profile {
 
 function deps(over: Partial<LearnerRpcDeps> = {}): LearnerRpcDeps {
   return {
+    applyName: vi.fn() as LearnerRpcDeps['applyName'],
       applyGrade: vi.fn() as LearnerRpcDeps['applyGrade'],
     resolveStudent: vi.fn() as LearnerRpcDeps['resolveStudent'],
     armPrefill: vi.fn() as LearnerRpcDeps['armPrefill'],
@@ -61,11 +62,35 @@ describe('handleSwitch', () => {
   });
 });
 
+describe('handleSetName', () => {
+  it('creates or attaches the profile and acks with its id, name and grade', async () => {
+    const d = deps();
+    vi.mocked(d.applyName).mockResolvedValue(profile({ id: 'p9', name: 'Noa', grade: 3 }));
+    const reply = await handleSetName(rpc(JSON.stringify({ profileId: 'temp-1', name: '  Noa ' })), d);
+    expect(JSON.parse(reply)).toEqual({ ok: true, profile: { id: 'p9', name: 'Noa', grade: 3 } });
+    expect(d.applyName).toHaveBeenCalledWith('temp-1', 'Noa');
+  });
+  it('rejects a stale target or a missing name so nothing is saved', async () => {
+    const d = deps();
+    vi.mocked(d.applyName).mockResolvedValue(undefined);
+    await expect(handleSetName(rpc(JSON.stringify({ profileId: 'old', name: 'Noa' })), d)).rejects.toBeInstanceOf(
+      RpcError,
+    );
+    await expect(handleSetName(rpc(JSON.stringify({ profileId: 'temp-1', name: '   ' })), d)).rejects.toBeInstanceOf(
+      RpcError,
+    );
+  });
+  it('rejects malformed payloads', async () => {
+    const d = deps();
+    await expect(handleSetName(rpc('not json'), d)).rejects.toBeInstanceOf(RpcError);
+  });
+});
+
 describe('handleNote', () => {
   const saved = (over = {}) => ({ id: 'pA', name: 'Leo', grade: null as number | null, notes: [], createdAt: 0, ...over });
   function noteDeps(over: Partial<NoteDeps> = {}) {
     return {
-      sessionProfileId: 'pA',
+      getSessionProfileId: () => 'pA',
       isCurrentSession: () => true,
       getActiveId: () => 'pA',
       onNote: vi.fn(),
@@ -73,6 +98,13 @@ describe('handleNote', () => {
       ...over,
     };
   }
+  it('follows a voice-first naming: notes land on the named profile', async () => {
+    let bound = 'temp-1';
+    const d = noteDeps({ getSessionProfileId: () => bound });
+    bound = 'p9';
+    await handleNote(wire('Ekvationer'), d);
+    expect(vi.mocked(d.saveNote)).toHaveBeenCalledWith('p9', expect.objectContaining({ topic: 'Ekvationer' }));
+  });
   const wire = (text: string) => JSON.stringify({ at: '2026-11-18', topic: text });
 
   it('stores the note under the session profile and shows it', async () => {

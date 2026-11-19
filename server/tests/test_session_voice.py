@@ -151,9 +151,11 @@ def test_every_greeting_variant_uses_the_name_and_two_sentences(index):
         assert word in line
 
 
-def test_greeting_without_a_name_still_reads():
+def test_greeting_without_a_name_asks_for_it():
+    # Voice-first start: the fixed greeting greets without a name and asks for it.
     line, _ = prompt.greeting_line({}, index=0)
-    assert "None" not in line and "du" in line
+    assert "None" not in line
+    assert "Vad heter du?" in line
 
 
 def test_greeting_note_keeps_what_the_greeting_instruction_carried():

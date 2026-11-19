@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   createProfile,
   enqueueProfileGrade,
+  enqueueProfileName,
   enqueueProfileSwitch,
   getLastProfileId,
   listProfiles,
@@ -70,5 +71,33 @@ describe('profiles without a grade', () => {
     const updated = await updateProfile(created.id, { grade: 8 });
     expect(updated?.grade).toBe(8);
     expect((await listProfiles()).find((p) => p.id === created.id)?.grade).toBe(8);
+  });
+});
+
+describe('voice-first naming (enqueueProfileName)', () => {
+  it('creates the local profile for the spoken name', async () => {
+    const named = await enqueueProfileName('temp-1', '  Noa ', () => 'temp-1');
+    expect(named?.name).toBe('Noa');
+    expect(named?.grade).toBeNull();
+    expect((await listProfiles()).find((p) => p.id === named?.id)?.name).toBe('Noa');
+  });
+  it('attaches to an existing local profile with the same name', async () => {
+    const existing = await createProfile('Moa');
+    await updateProfile(existing.id, { grade: 5 });
+    const named = await enqueueProfileName('temp-2', 'moa', () => 'temp-2');
+    expect(named?.id).toBe(existing.id);
+    expect(named?.grade).toBe(5);
+    expect((await listProfiles()).filter((p) => p.name.toLowerCase() === 'moa')).toHaveLength(1);
+  });
+  it('drops a naming that lost its race with a switch', async () => {
+    const before = (await listProfiles()).length;
+    const named = await enqueueProfileName('temp-3', 'StaleNamn', () => 'other-id');
+    expect(named).toBeUndefined();
+    expect((await listProfiles()).length).toBe(before);
+  });
+  it('rejects a blank name without creating anything', async () => {
+    const before = (await listProfiles()).length;
+    await expect(enqueueProfileName('temp-4', '   ', () => 'temp-4')).resolves.toBeUndefined();
+    expect((await listProfiles()).length).toBe(before);
   });
 });

@@ -57,6 +57,7 @@ BOARD_RPC_TIMEOUT = 6.0
 # Acknowledged request/response: the tool returns only after the browser answers,
 # so a failed call leaves the call exactly as it was. See docs/protocol.md.
 LEARNER_RPC_TIMEOUT = 6.0
+LEARNER_RPC_SET_NAME = "learner.setName"
 LEARNER_RPC_SET_GRADE = "learner.setGrade"
 LEARNER_RPC_SWITCH = "learner.switch"
 HOMEWORK_SETTLE = 1.2  # seconds to wait for more PDF pages before responding
@@ -386,6 +387,43 @@ class Tutor(Agent):
             return None
         record_active("learner_rpc", {"method": method, "ok": True})
         return data
+
+    @function_tool()
+    async def set_learner_name(self, context: RunContext, name: str) -> str:
+        """Save the learner's first name, so later calls start with it.
+
+        Call it once, right after they tell you their name early in a nameless
+        call: repeat the name back first to confirm you heard it. The browser
+        creates the local profile, or attaches to an existing local profile
+        with the same name (its school year is then already known). A later
+        correction ("I said Noa, not Moa") is the same call again. The name
+        here updates only on acknowledgement; grade learning is unchanged.
+
+        Args:
+            name: The learner's first name, as they said it.
+        """
+        clean = (name or "").strip()[:40]
+        if not clean:
+            return ("No name given. Ask once more what they are called \u2014 they can "
+                    "also type it in the text field \u2014 then call again.")
+        data = await self._learner_rpc(LEARNER_RPC_SET_NAME,
+                                       {"profileId": self.learner.get("id"), "name": clean})
+        if data is None:
+            return (f"The browser could not save the name {clean}, so nothing is saved. "
+                    "Use it in this call anyway and mention nothing.")
+        profile = data.get("profile") if isinstance(data.get("profile"), dict) else {}
+        self.learner["id"] = profile.get("id", self.learner.get("id"))
+        self.learner["name"] = profile.get("name", clean)
+        grade = profile.get("grade")
+        known = ""
+        if isinstance(grade, int) and 1 <= grade <= 12:
+            self.learner["grade"] = grade
+            known = (f" They are in \u00e5rskurs {grade}." if grade <= 9
+                     else f" They are in gymnasiet, year {grade - 9}.")
+        record_active("name", {"name": clean,
+                                 "profile_id": self.learner.get("id")})
+        return (f"Saved: the learner is called {clean}.{known} Use the name naturally "
+                "from here on, and carry on with the lesson.")
 
     @function_tool()
     async def set_learner_grade(self, context: RunContext, grade: int) -> str:
@@ -814,6 +852,15 @@ PROVIDER_FAILED_APOLOGY = (
 # message is answered with the greeting folded in, so the line is not spoken twice.
 TYPED_BEFORE_GREETING = (
     'The child typed this before they heard you. Greet them by name in one short sentence, '
+    'then answer what they wrote, in one reply. Your opening line was "{line}"; do not say '
+    "all of it."
+)
+
+# Voice-first start: the call began with no name, so the folded-in greeting asks for
+# it instead of using one.
+TYPED_BEFORE_GREETING_NAMELESS = (
+    'The child typed this before they heard you. Greet them warmly in one short sentence '
+    'without using any name (you do not know it yet), ask what they are called, '
     'then answer what they wrote, in one reply. Your opening line was "{line}"; do not say '
     "all of it."
 )
@@ -1258,10 +1305,12 @@ async def entrypoint(ctx: JobContext) -> None:
         # answered instead of lost. With nothing queued it calls `opening`, which speaks
         # the fixed greeting through TTS alone; with a queued message that message is
         # answered with the greeting folded into one reply, so the line is not repeated.
+        typed_greeting = (TYPED_BEFORE_GREETING_NAMELESS if not prompt.learner_name(learner)
+                          else TYPED_BEFORE_GREETING)
         await typed.start(
             prompt.greeting_instruction(learner),
             opening,
-            greet_instruction=TYPED_BEFORE_GREETING.format(line=greeting),
+            greet_instruction=typed_greeting.format(line=greeting),
         )
 
         outcome = await _run_until_done(ctx, session, tutor, debug, ending, provider_failed)

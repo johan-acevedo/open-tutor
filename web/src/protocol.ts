@@ -105,6 +105,12 @@ export const TOPIC_NOTE = 'note';
 /** Worker → browser RPCs for the tutor's learner tools. Acknowledged
  *  request/response (the tool returns only after the browser answers):
  *
+ *  - learner.setName { profileId, name }: the browser creates the local
+ *    profile for the name (or attaches to an existing one with the same
+ *    name), remembers it as the assumed student, and replies
+ *    { ok, profile: { id, name, grade } }. A repeat call with a corrected
+ *    name is the same path again; a failed call saves nothing.
+ *
  *  - learner.setGrade { profileId, grade }: the browser applies the grade
  *    only when profileId is still the active profile, else rejects as stale.
  *    Replies { ok, grade }.
@@ -115,6 +121,7 @@ export const TOPIC_NOTE = 'note';
  *    start page prefilled for the new student \u2014 no automatic reconnect, no
  *    continuation session. A failed call never arms anything.
  */
+export const LEARNER_RPC_SET_NAME = 'learner.setName';
 export const LEARNER_RPC_SET_GRADE = 'learner.setGrade';
 export const LEARNER_RPC_SWITCH = 'learner.switch';
 

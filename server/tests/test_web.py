@@ -44,7 +44,9 @@ def test_session_carries_band_and_config_advertises_testing_band():
 
 
 def test_rejects_bad_learner_and_missing_config():
-    assert TestClient(create_app(ENV)).post("/api/session", json={"learner": {"name": ""}}).status_code == 422
+    # An empty name is the voice-first start: the tutor learns it by voice.
+    assert TestClient(create_app(ENV)).post("/api/session", json={"learner": {"name": ""}}).status_code == 200
+    assert TestClient(create_app(ENV)).post("/api/session", json={"learner": {"name": "x" * 41}}).status_code == 422
     assert TestClient(create_app({})).post("/api/session", json=LEARNER).status_code == 503
 
 
