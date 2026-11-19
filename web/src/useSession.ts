@@ -28,6 +28,7 @@ import { enqueueNote, enqueueProfileGrade, enqueueProfileName, enqueueProfileSwi
 import type { NamingSession } from './db';
 import { handleNote, handleSetGrade, handleSetName, handleSwitch } from './learnerRpc';
 import { createEndGate, routeAfterEnd } from './lessonEnd';
+import { localeId, t } from './locales/sv';
 import type { Profile } from './db';
 import {
   getDeviceId,
@@ -548,14 +549,14 @@ export function useSession(mobile = false, band: BandId = 'primary') {
           return fetch('/api/session', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ learner: { id: p.id, name: p.name, grade: p.grade, notes, band: bandRef.current },
+            body: JSON.stringify({ learner: { id: p.id, name: p.name, grade: p.grade, notes, band: bandRef.current, locale: localeId },
               board, device_id: getDeviceId() }),
           });
         };
         const res = await request();
         if (res.status === 429) {
           sessionFailed(429);
-          showToast('Det är fullt just nu. Försök igen om en stund.');
+          showToast(t('toast.full'));
           cleanupRoom();
           setPhase('profiles');
           return;
@@ -570,7 +571,7 @@ export function useSession(mobile = false, band: BandId = 'primary') {
         if (p.name.trim() !== '') identifyLearner(p.name, p.grade);
       } catch {
         sessionFailed(failStatus);
-        showToast('Kunde inte starta sessionen. Kontrollera anslutningen och försök igen.');
+        showToast(t('toast.startFailed'));
         setPhase('profiles');
         cleanupRoom();
         return;
@@ -947,7 +948,7 @@ export function useSession(mobile = false, band: BandId = 'primary') {
         sessionStartAtRef.current = Date.now();
       } catch {
         sessionFailed('connect-failed');
-        showToast('Kunde inte ansluta till samtalet. Försök igen.');
+        showToast(t('toast.connectFailed'));
         cleanupRoom();
         setPhase('profiles');
         return;
@@ -1058,7 +1059,7 @@ export function useSession(mobile = false, band: BandId = 'primary') {
         sentTimer.current = window.setTimeout(() => setLastSent(null), 4000);
       } catch {
         setLastSent(null);
-        showToast('Kunde inte skicka meddelandet. Försök igen.');
+        showToast(t('toast.sendFailed'));
       } finally {
         setSending(false);
       }
@@ -1176,7 +1177,7 @@ export function useSession(mobile = false, band: BandId = 'primary') {
       try {
         await sendToAgent(JSON.stringify({ type: 'resource-closed', id }), TOPIC_SESSION_EVENT);
       } catch {
-        showToast('Kunde inte meddela tutorn. Försök igen.');
+        showToast(t('toast.notifyFailed'));
       }
     },
     [showToast],
@@ -1288,16 +1289,16 @@ export function useSession(mobile = false, band: BandId = 'primary') {
       const itemId = uid();
       try {
         const down = await downscaleImage(file);
-        const title = file.name || 'Bild';
+        const title = file.name || t('tray.fallbackImageTitle');
         setItems((prev) => [...prev, { id: itemId, kind: 'homework', title, images: [down.dataUrl] }]);
         setActiveItemId(itemId);
         homeworkShared('image');
         if (room) {
-          await sendHomeworkBytes(room, down.bytes, { kind, source: file.name || 'bild', itemId });
+          await sendHomeworkBytes(room, down.bytes, { kind, source: file.name || t('tray.fallbackImageSource'), itemId });
         }
         return true;
       } catch {
-        showToast('Bilden kunde inte läsas eller skickas. Prova JPG, PNG eller PDF och kontrollera anslutningen.');
+        showToast(t('toast.imageFailed'));
         return false;
       }
     },
@@ -1313,11 +1314,11 @@ export function useSession(mobile = false, band: BandId = 'primary') {
         const { renderPdfPages } = await import('./pdf');
         const pages = await renderPdfPages(file, 10, 1600);
         if (pages.length === 0) {
-          showToast('PDF:en verkar vara tom.');
+          showToast(t('toast.pdfEmpty'));
           return false;
         }
         const images = pages.map((pg) => pg.dataUrl);
-        setItems((prev) => [...prev, { id: itemId, kind: 'homework', title: file.name || 'PDF', images }]);
+        setItems((prev) => [...prev, { id: itemId, kind: 'homework', title: file.name || t('tray.fallbackPdfTitle'), images }]);
         setActiveItemId(itemId);
         homeworkShared('pdf');
         if (room) {
@@ -1326,7 +1327,7 @@ export function useSession(mobile = false, band: BandId = 'primary') {
             const bytes = dataUrlToBytes(pages[i].dataUrl);
             await sendHomeworkBytes(room, bytes, {
               kind: 'pdf-page',
-              source: file.name || 'pdf',
+              source: file.name || t('tray.fallbackPdfSource'),
               page: String(i + 1),
               pages: total,
               itemId,
@@ -1335,7 +1336,7 @@ export function useSession(mobile = false, band: BandId = 'primary') {
         }
         return true;
       } catch {
-        showToast('Kunde inte läsa PDF:en. Prova en annan fil.');
+        showToast(t('toast.pdfFailed'));
         return false;
       }
     },
@@ -1348,14 +1349,14 @@ export function useSession(mobile = false, band: BandId = 'primary') {
       const trimmed = text.trim();
       if (!trimmed) return;
       const itemId = uid();
-      setItems((prev) => [...prev, { id: itemId, kind: 'homework', title: 'Inklistrad text', text: trimmed }]);
+      setItems((prev) => [...prev, { id: itemId, kind: 'homework', title: t('tray.pastedTitle'), text: trimmed }]);
       setActiveItemId(itemId);
       homeworkShared('text');
       if (room) {
         try {
           await sendToAgent(trimmed, TOPIC_HOMEWORK_TEXT, { itemId });
         } catch {
-          showToast('Kunde inte skicka texten. Försök igen.');
+          showToast(t('toast.textFailed'));
           return false;
         }
       }
@@ -1375,7 +1376,7 @@ export function useSession(mobile = false, band: BandId = 'primary') {
         } else if (isPdf) {
           await addPdfFile(file);
         } else {
-          showToast('Den filtypen stöds inte ännu. Prova PDF, PNG eller JPG.');
+          showToast(t('toast.fileType'));
         }
       }
     },
@@ -1406,7 +1407,7 @@ export function useSession(mobile = false, band: BandId = 'primary') {
           if (!ok) failed.push(file);
         }
         setHomeworkDraft(failed.length ? { ...draft, files: failed } : null);
-        if (failed.length) showToast('Alla filer kunde inte skickas. Prova JPG, PNG eller PDF.');
+        if (failed.length) showToast(t('toast.allFailed'));
       }
     } finally {
       setHomeworkSending(false);

@@ -90,6 +90,14 @@ The code is in `web/` (the page), `server/` (the voice worker and web service), 
 CI runs the server and web test suites on every pull request; the commands are in
 `.github/workflows/` and `server/README.md`.
 
+Localisation (2026-11-19): the product is Swedish-only, but ready for more
+languages. User-visible Swedish lives in one catalogue per surface —
+`web/src/locales/sv.ts` (web app, tiny `t('key', {name})` helper), the shell's
+`screen/shell/locales/sv.json` (injected by both composers), and
+`server/open_tutor/locales/sv.py` (fixed spoken lines). Rules: no text baked
+into images (companions, icons, generated art); every new visible string goes
+into the catalogue; image-generation prompts must say "no text, no letters".
+
 ## Protecting the children and the people testing
 
 These are not technical preferences. They hold whatever the solution looks like.

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { BoardFocusPayload, BoardItem } from '../protocol';
+import { t } from '../locales/sv';
 import BoardCard from './Cards';
 import PageCard, { type PageAnswer, type PageShellMessage } from './PageCard';
 
@@ -59,7 +60,7 @@ export default function Board({
   return (
     <>
       {items.length > 1 && (
-        <nav className="ot-book-nav" aria-label="Bläddra i tavlan">
+        <nav className="ot-book-nav" aria-label={t('board.navLabel')}>
           <button
             type="button"
             disabled={index <= 0}
@@ -68,7 +69,7 @@ export default function Board({
               if (prev) turn(prev.id);
             }}
           >
-            ← Tillbaka
+            {t('board.back')}
           </button>
           <span className="ot-book-pos" aria-live="polite">
             {index + 1} / {items.length}
@@ -81,16 +82,16 @@ export default function Board({
               if (next) turn(next.id);
             }}
           >
-            Framåt →
+            {t('board.forward')}
           </button>
         </nav>
       )}
       <div className="ot-board-scroll" data-book={items.length}>
         {items.length === 0 && showEmptyState && (
           <div className="ot-board-empty" role="status" aria-label="Whiteboard">
-            <h1 className="ot-board-empty-greeting">Hej{learnerName.trim() !== '' ? ` ${learnerName}` : ''}!</h1>
-            <p>Här hamnar det vi jobbar med.</p>
-            <span>Säg hej — tutorn ritar upp här.</span>
+            <h1 className="ot-board-empty-greeting">{t('board.emptyGreeting', { name: learnerName.trim() !== '' ? ` ${learnerName}` : '' })}</h1>
+            <p>{t('board.emptyBody')}</p>
+            <span>{t('board.emptyHint')}</span>
           </div>
         )}
         {items.map((item) => (

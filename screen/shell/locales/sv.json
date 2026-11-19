@@ -1,0 +1,11 @@
+{
+  "send": "Skicka",
+  "sent": "Skickat ✓",
+  "answerLabel": "Ditt svar",
+  "gapLabel": "Lucka",
+  "loading": "Laddar {topic} …",
+  "bc": "f.Kr.",
+  "ad": "e.Kr.",
+  "mapCreditHistorical": "Gränser: historical-basemaps · Natural Earth",
+  "mapCredit": "Natural Earth"
+}

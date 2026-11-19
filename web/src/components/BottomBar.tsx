@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { t } from '../locales/sv';
 
 type Props = {
   micEnabled: boolean;
@@ -31,19 +32,19 @@ export default function BottomBar({
   }
 
   const micLabel = micBlocked
-    ? 'Mikrofon blockerad'
+    ? t('bottombar.micBlocked')
     : micEnabled
-      ? 'Stäng av mikrofonen'
-      : 'Mikrofon av — sätt på mikrofonen';
+      ? t('bottombar.micOff')
+      : t('bottombar.micOn');
 
   return (
-    <footer className="ot-bottombar" aria-label="Samtalskontroller">
+    <footer className="ot-bottombar" aria-label={t('bottombar.controlsLabel')}>
       <button
         type="button"
         className="ot-attach-btn"
         onClick={onAttach}
-        aria-label="Lägg till läxa — välj fil"
-        title="Lägg till läxa"
+        aria-label={t('bottombar.attachAria')}
+        title={t('bottombar.attachTitle')}
       >
         <span aria-hidden="true" className="ot-icon">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -61,12 +62,12 @@ export default function BottomBar({
         onKeyDown={(e) => {
           if (e.key === 'Enter') send();
         }}
-        placeholder="Skriv här om du vill…"
-        aria-label="Skriv här om du vill"
+        placeholder={t('bottombar.inputPlaceholder')}
+        aria-label={t('bottombar.inputAria')}
       />
       {mobile && draft.trim() && (
         <button type="button" className="ot-send-btn" disabled={sending} onClick={send}>
-          Skicka
+          {t('bottombar.send')}
         </button>
       )}
       <button
@@ -74,7 +75,7 @@ export default function BottomBar({
         className={`ot-mic-btn${micEnabled && !micBlocked ? ' live' : ' muted'}`}
         onClick={onToggleMic}
         aria-label={micLabel}
-        title={micEnabled ? 'Mikrofon på' : 'Mikrofon av'}
+        title={micEnabled ? t('bottombar.micOnTitle') : t('bottombar.micOffTitle')}
         aria-pressed={micEnabled}
       >
         <span className="ot-mic-glyph" aria-hidden="true">

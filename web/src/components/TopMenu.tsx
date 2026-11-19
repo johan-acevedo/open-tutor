@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { BoardItem } from '../protocol';
+import { t } from '../locales/sv';
 
 type Props = {
   items: BoardItem[];
@@ -39,7 +40,7 @@ export default function TopMenu({ items, dragOver, onCamera, onFiles, onSwitchSt
       <button
         type="button"
         className="ot-menu-btn"
-        aria-label="Meny"
+        aria-label={t('topmenu.menuLabel')}
         aria-expanded={open}
         onClick={() => {
           setOpen((value) => !value);
@@ -49,10 +50,10 @@ export default function TopMenu({ items, dragOver, onCamera, onFiles, onSwitchSt
         <span aria-hidden="true">☰</span>
       </button>
       {open && (
-        <div className="ot-menu-panel" aria-label="Meny">
+        <div className="ot-menu-panel" aria-label={t('topmenu.menuLabel')}>
           <div
             className={`ot-inbox${dragOver ? ' dragover' : ''}`}
-            aria-label="Inkorg för läxor"
+            aria-label={t('topmenu.inboxLabel')}
             aria-live="polite"
           >
             <span className="ot-inbox-icon" aria-hidden="true">
@@ -62,20 +63,20 @@ export default function TopMenu({ items, dragOver, onCamera, onFiles, onSwitchSt
               </svg>
             </span>
             <span className="ot-inbox-text">
-              {count === 0 ? 'Inkorg · tom' : `Inkorg · ${count} ${count === 1 ? 'uppgift' : 'uppgifter'}`}
+              {count === 0 ? t('topmenu.inboxEmpty') : count === 1 ? t('topmenu.inboxOne', { count }) : t('topmenu.inboxMany', { count })}
             </span>
-            <span className="ot-inbox-hint">släpp fil här</span>
+            <span className="ot-inbox-hint">{t('topmenu.dropHint')}</span>
           </div>
           <div className="ot-menu-actions">
             <button type="button" onClick={onCamera}>
-              Fota läxan
+              {t('topmenu.photo')}
             </button>
             <button type="button" onClick={onFiles}>
-              Välj bild
+              {t('topmenu.chooseImage')}
             </button>
             {onSwitchStudent && (
               <button type="button" onClick={onSwitchStudent}>
-                {switchLabel ?? 'Byt elev'}
+                {switchLabel ?? t('topmenu.switchFallback')}
               </button>
             )}
           </div>
@@ -85,13 +86,13 @@ export default function TopMenu({ items, dragOver, onCamera, onFiles, onSwitchSt
             aria-expanded={about}
             onClick={() => setAbout((value) => !value)}
           >
-            Om Open Tutor
+            {t('topmenu.aboutTitle')}
           </button>
           {about && (
-            <div className="ot-menu-about" role="dialog" aria-label="Om Open Tutor">
-              <p>by Johan Acevedo</p>
+            <div className="ot-menu-about" role="dialog" aria-label={t('topmenu.aboutTitle')}>
+              <p>{t('topmenu.aboutBy')}</p>
               <button type="button" onClick={() => setAbout(false)}>
-                Stäng
+                {t('topmenu.close')}
               </button>
             </div>
           )}

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { BoardItem } from '../protocol';
+import { t } from '../locales/sv';
 
 export const IMAGE_MOUNT_TIMEOUT_MS = 4000;
 
@@ -95,7 +96,7 @@ function PendingCard({ item, onMounted }: CardProps) {
       style={minHeight ? { minHeight } : undefined}
     >
       <div className="ot-pending" role="status">
-        Ritar…
+        {t('cards.drawing')}
       </div>
     </article>
   );
@@ -107,7 +108,7 @@ function ResourceCard({ item, onMounted, onResourceClosed }: CardProps) {
   return (
     <article className="ot-bcard" ref={ref} data-board-id={item.id} aria-label={item.title}>
       <h2>{item.title}</h2>
-      {item.source && <div className="ot-resource-meta">Källa: {item.source}</div>}
+      {item.source && <div className="ot-resource-meta">{t('cards.sourcePrefix')} {item.source}</div>}
       {item.embedUrl ? (
         <iframe
           className="ot-resource-frame"
@@ -118,13 +119,13 @@ function ResourceCard({ item, onMounted, onResourceClosed }: CardProps) {
         />
       ) : (
         <a className="ot-resource-open" href={item.url} target="_blank" rel="noopener noreferrer">
-          Öppna i ny flik
+          {t('cards.openNewTab')}
         </a>
       )}
-      {item.prompt && <div className="ot-prompt-chip">Fundera på: {item.prompt}</div>}
+      {item.prompt && <div className="ot-prompt-chip">{t('cards.thinkAboutPrefix')} {item.prompt}</div>}
       <div>
         <button type="button" className="ot-klar-btn" onClick={() => onResourceClosed?.(item.id)}>
-          Klar – prata vidare
+          {t('cards.doneTalk')}
         </button>
       </div>
     </article>
@@ -139,7 +140,7 @@ function HomeworkCard({ item, onMounted }: CardProps) {
       <div className="ot-paper">
         <h3>{item.title}</h3>
         {item.images?.map((src, i) => (
-          <img key={i} src={src} alt={`Inlämnad bild ${i + 1}`} />
+          <img key={i} src={src} alt={t('cards.submittedAlt', { n: i + 1 })} />
         ))}
         {item.text && <p>{item.text}</p>}
       </div>

@@ -1,4 +1,5 @@
 import type { Note } from '../protocol';
+import { t } from '../locales/sv';
 
 type Props = {
   learnerName: string;
@@ -10,28 +11,28 @@ export default function EndCard({ learnerName, notes, onBack }: Props) {
   const last = notes.length > 0 ? notes[notes.length - 1] : null;
   return (
     <div className="ot-endcard">
-      <h1>{learnerName.trim() !== '' ? `Bra jobbat idag, ${learnerName}!` : 'Bra jobbat idag!'}</h1>
+      <h1>{learnerName.trim() !== '' ? t('end.greetingNamed', { name: learnerName }) : t('end.greetingAnon')}</h1>
       {(last?.topic || last?.next) && (
         <div className="ot-endcard-notes">
           {last?.topic && (
             <p>
-              <strong>Det här pratade vi om:</strong> {last.topic}
+              <strong>{t('end.topicLabel')}</strong> {last.topic}
             </p>
           )}
           {last?.clicked && (
             <p>
-              <strong>Det här klickade:</strong> {last.clicked}
+              <strong>{t('end.clickedLabel')}</strong> {last.clicked}
             </p>
           )}
           {last?.next && (
             <p>
-              <strong>Nästa gång:</strong> {last.next}
+              <strong>{t('end.nextLabel')}</strong> {last.next}
             </p>
           )}
         </div>
       )}
       <button type="button" className="ot-start-btn" onClick={onBack}>
-        Tillbaka till start
+        {t('end.back')}
       </button>
     </div>
   );

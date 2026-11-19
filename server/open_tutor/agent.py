@@ -36,6 +36,7 @@ from livekit.plugins import cartesia, elevenlabs, silero, soniox
 from pydantic import ValidationError
 
 from . import noise, prompt
+from .locales import get_locale
 from .analytics import SessionTracker, get_analytics, sanitize_outcome, stable_distinct_id
 from .analytics import warm_up as warm_up_analytics
 from .board import Ids, Note, PageItem, ResourceItem, youtube_embed
@@ -695,7 +696,9 @@ class SmartTutor(Tutor):
             return ("The loading state could not be shown. "
                     "Keep teaching in words instead, briefly.")
         if topic:
-            return (f"The screen is dimmed and shows 'Laddar {topic}…'. "
+            template = get_locale(prompt.learner_locale(self.learner)).LOADING_TEMPLATE
+            shown = template.format(topic=topic)
+            return (f"The screen is dimmed and shows '{shown}'. "
                     "Keep talking about the new subject in words until its page appears.")
         return "The loading state is cleared."
 
@@ -886,10 +889,9 @@ def is_fatal_llm_error(event: Any) -> bool:
 
 # Spoken without the LLM, because the LLM is what failed. One short sentence; the room
 # is deleted afterwards, so the browser shows its disconnected notice with a restart button.
-PROVIDER_FAILED_APOLOGY = (
-    "Förlåt, jag fick ett tekniskt problem och kan inte fortsätta just nu. "
-    "Stäng fönstret och starta en ny session, så försöker vi igen."
-)
+# Fixed lines live in server/open_tutor/locales/sv.py; this alias keeps the
+# previous import path working. The worker picks the session locale at runtime.
+from .locales.sv import PROVIDER_FAILED_APOLOGY
 
 # The child typed before the fixed greeting could play (see text_input.TypedChat): their
 # message is answered with the greeting folded in, so the line is not spoken twice.
@@ -909,11 +911,12 @@ TYPED_BEFORE_GREETING_NAMELESS = (
 )
 
 
-async def say_provider_failed(session: AgentSession) -> None:
+async def say_provider_failed(session: AgentSession, locale: str = "sv") -> None:
     """Speak the apology through TTS only; never let this path raise."""
     record_active("provider_failed", {"apology": True})
     try:
-        handle = session.say(PROVIDER_FAILED_APOLOGY, allow_interruptions=False)
+        apology = get_locale(locale).PROVIDER_FAILED_APOLOGY
+        handle = session.say(apology, allow_interruptions=False)
         await asyncio.wait_for(handle.wait_for_playout(), timeout=20)
     except Exception as error:  # closing session, TTS down, or interrupted
         log.warning("could not say the provider-failure apology: %s", error)
@@ -1481,7 +1484,7 @@ async def _run_until_done(
         # and end; the 2026-11-06 note in safe_interrupt is the same lesson: a dead
         # provider must not leave the browser sitting in a silent room.
         outcome = "provider_error"
-        await say_provider_failed(session)
+        await say_provider_failed(session, prompt.learner_locale(learner))
     elif closed.is_set() and not ending.is_set() and not left.is_set():
         log.error("agent session closed before the child left or ended the session")
         outcome = "sdk_closed_early"
@@ -1501,7 +1504,7 @@ async def _run_until_done(
             log.warning("could not say goodbye, session already closed: %s", error)
             debug.record("goodbye", {"ok": False, "error": "session already closed"})
         if tutor.notes_saved == 0:
-            await tutor.send_note("Läxhjälp")
+            await tutor.send_note(get_locale(prompt.learner_locale(tutor.learner)).DEFAULT_NOTE_TOPIC)
     elif left.is_set():
         outcome = "child_left"
         debug.record("child_left", {})

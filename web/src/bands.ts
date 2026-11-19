@@ -3,14 +3,15 @@
 // mid-session or on later visits: it is resolved per page load.
 //
 // Bands (decided 2026-11-18, ranges corrected the same day):
-// - primary: tutor.*  — åk 1–6, today's fox and style.
-// - middle:  tutor2.* — åk 7–9 (högstadiet).
-// - upper:   tutor3.* — gymnasiet and adults. The tutor finds out naturally
-//   whether the learner is a gymnasiet student (and which year) or an adult;
+// - primary: tutor.* — years 1-6, today's fox and style.
+// - middle:  tutor2.* — years 7-9 (middle school).
+// - upper:   tutor3.* — upper secondary and adults. The tutor finds out naturally
+//   whether the learner is an upper-secondary student (and which year) or an adult;
 //   only adults skip the grade.
 //
 import type { Pose } from './avatarState';
 import { middleTheme, upperTheme } from 'virtual:band-themes';
+import { sv } from './locales/sv';
 
 export type BandId = 'primary' | 'middle' | 'upper';
 
@@ -38,9 +39,10 @@ export type BandConfig = {
   theme: {
     stylesheet: string;
   };
-  /** Band copy for the voice-first start page (Swedish). `{name}` is filled
+  /** Band copy for the voice-first start page. `{name}` is filled
    *  in with the remembered learner. No name is ever asked in a field: the
-   *  tutor learns it by voice after the single start button is pressed. */
+   *  tutor learns it by voice after the single start button is pressed. See
+   *  web/src/locales/sv.ts (band.* keys) for the Swedish copy. */
   copy: {
     /** Static first-visit bubble beside the companion. */
     welcomeBubble: string;
@@ -61,42 +63,42 @@ export const BANDS: Record<BandId, BandConfig> = {
   primary: {
     id: 'primary',
     hosts: ['tutor.'],
-    companion: { asset: 'fox', name: 'Räven', poses: poseImages('/character') },
+    companion: { asset: 'fox', name: sv['band.primary.companionName'], poses: poseImages('/character') },
     theme: { stylesheet: '' },
     copy: {
-      welcomeBubble: 'Hej! Ska vi prata?',
-      returningBubble: 'Hej {name}! Ska vi köra?',
-      notYou: 'Inte {name}? Byt',
-      startButton: 'Prata med Räven',
-      switchStudent: 'Byt elev',
+      welcomeBubble: sv['band.primary.welcomeBubble'],
+      returningBubble: sv['band.primary.returningBubble'],
+      notYou: sv['band.primary.notYou'],
+      startButton: sv['band.primary.startButton'],
+      switchStudent: sv['band.primary.switchStudent'],
     },
-    registerHint: 'åk 1–6: friendly, concrete, small steps',
+    registerHint: 'years 1–6: friendly, concrete, small steps',
   },
   middle: {
     id: 'middle',
     hosts: ['tutor2.'],
-    companion: { asset: 'lynx', name: 'Lodjuret', poses: poseImages('/character/middle') },
+    companion: { asset: 'lynx', name: sv['band.middle.companionName'], poses: poseImages('/character/middle') },
     theme: { stylesheet: middleTheme },
     copy: {
-      welcomeBubble: 'Hej! Ska vi prata?',
-      returningBubble: 'Hej {name}! Ska vi köra?',
-      notYou: 'Inte {name}? Byt',
-      startButton: 'Prata med Lodjuret',
-      switchStudent: 'Byt elev',
+      welcomeBubble: sv['band.middle.welcomeBubble'],
+      returningBubble: sv['band.middle.returningBubble'],
+      notYou: sv['band.middle.notYou'],
+      startButton: sv['band.middle.startButton'],
+      switchStudent: sv['band.middle.switchStudent'],
     },
-    registerHint: 'högstadiet (åk 7–9): speak like a peer, compact explanations',
+    registerHint: 'middle school (years 7–9): speak like a peer, compact explanations',
   },
   upper: {
     id: 'upper',
     hosts: ['tutor3.'],
-    companion: { asset: 'bear', name: 'Björnen', poses: poseImages('/character/upper') },
+    companion: { asset: 'bear', name: sv['band.upper.companionName'], poses: poseImages('/character/upper') },
     theme: { stylesheet: upperTheme },
     copy: {
-      welcomeBubble: 'Hej! Ska vi prata?',
-      returningBubble: 'Hej {name}! Ska vi köra?',
-      notYou: 'Inte {name}? Byt',
-      startButton: 'Prata med Björnen',
-      switchStudent: 'Byt person',
+      welcomeBubble: sv['band.upper.welcomeBubble'],
+      returningBubble: sv['band.upper.returningBubble'],
+      notYou: sv['band.upper.notYou'],
+      startButton: sv['band.upper.startButton'],
+      switchStudent: sv['band.upper.switchStudent'],
     },
     registerHint: 'gymnasiet or adult — find out naturally which; gymnasiet years are 10–12, adults skip the grade',
   },
@@ -105,7 +107,7 @@ export const BANDS: Record<BandId, BandConfig> = {
 export const BAND_IDS: BandId[] = ['primary', 'middle', 'upper'];
 
 /** Band from a hostname alone. Unknown hosts (localhost, tailnet dev URLs)
- *  default to primary (åk 1–6). */
+ *  default to primary (years 1-6). */
 export function bandFromHostname(hostname: string): BandId {
   const host = (hostname || '').toLowerCase();
   for (const id of BAND_IDS) {

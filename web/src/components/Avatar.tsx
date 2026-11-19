@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Pill, Pose } from '../avatarState';
 import { useBand } from '../BandContext';
+import { t } from '../locales/sv';
 
 type Props = {
   pose: Pose;
@@ -13,7 +14,7 @@ type Props = {
 /** Fallback silhouette shown when a pose image is missing (404). */
 export function AvatarFallback() {
   return (
-    <div className="ot-avatar-fallback" role="img" aria-label="Tutorn">
+    <div className="ot-avatar-fallback" role="img" aria-label={t('avatar.tutorLabel')}>
       <svg width="120" height="120" viewBox="0 0 120 120" aria-hidden="true">
         <circle cx="60" cy="44" r="22" fill="#9BA3B4" />
         <ellipse cx="60" cy="96" rx="34" ry="24" fill="#9BA3B4" />
@@ -39,7 +40,7 @@ export function PoseImage({ pose, decorative }: { pose: Pose; decorative?: boole
     <img
       className="ot-avatar-img"
       src={src}
-      alt={decorative ? '' : 'Tutorn'}
+      alt={decorative ? '' : t('avatar.tutorLabel')}
       onError={() => setMissing(true)}
     />
   );

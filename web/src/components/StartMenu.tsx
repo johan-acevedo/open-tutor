@@ -1,15 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
+import { t } from '../locales/sv';
 
 type Props = {
-  /** "Byt elev" (bands 1–2) or "Byt person" (band 3). */
+  /** Switch-student entry (bands 1-2) or switch-person entry (band 3). */
   switchLabel: string;
   /** Return to the nameless first-visit page. */
   onSwitch: () => void;
 };
 
 /** Pre-call menu: brand-adjacent hamburger with the switch entry plus short
- *  about and privacy notes. No session is running here, so there is no inbox. */
-export default function StartMenu({ switchLabel, onSwitch }: Props) {
+ *  about and privacy notes. No session is running here, so there is no inbox. */export default function StartMenu({ switchLabel, onSwitch }: Props) {
   const [open, setOpen] = useState(false);
   const [panel, setPanel] = useState<'about' | 'privacy' | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -39,7 +39,7 @@ export default function StartMenu({ switchLabel, onSwitch }: Props) {
       <button
         type="button"
         className="ot-menu-btn"
-        aria-label="Meny"
+        aria-label={t('topmenu.menuLabel')}
         aria-expanded={open}
         onClick={() => {
           setOpen((value) => !value);
@@ -49,7 +49,7 @@ export default function StartMenu({ switchLabel, onSwitch }: Props) {
         <span aria-hidden="true">☰</span>
       </button>
       {open && (
-        <div className="ot-menu-panel" aria-label="Meny">
+        <div className="ot-menu-panel" aria-label={t('topmenu.menuLabel')}>
           <div className="ot-menu-actions">
             <button
               type="button"
@@ -67,13 +67,12 @@ export default function StartMenu({ switchLabel, onSwitch }: Props) {
             aria-expanded={panel === 'about'}
             onClick={() => choose('about')}
           >
-            Om tjänsten
+            {t('startmenu.about')}
           </button>
           {panel === 'about' && (
-            <div className="ot-menu-about" role="dialog" aria-label="Om tjänsten">
+            <div className="ot-menu-about" role="dialog" aria-label={t('startmenu.about')}>
               <p>
-                Open Tutor är en rösttutor som hjälper dig med läxor och skolarbete.
-                Du pratar, och tutorn förklarar och visar på skärmen.
+                {t('startmenu.aboutText')}
               </p>
             </div>
           )}
@@ -83,14 +82,12 @@ export default function StartMenu({ switchLabel, onSwitch }: Props) {
             aria-expanded={panel === 'privacy'}
             onClick={() => choose('privacy')}
           >
-            Integritet
+            {t('startmenu.privacy')}
           </button>
           {panel === 'privacy' && (
-            <div className="ot-menu-about" role="dialog" aria-label="Integritet">
+            <div className="ot-menu-about" role="dialog" aria-label={t('startmenu.privacy')}>
               <p>
-                Din profil och anteckningar sparas bara i den här webbläsaren.
-                Röstsamtalet går via våra leverantörer så att tutorn kan höra dig.
-                Inget konto behövs.
+                {t('startmenu.privacyText')}
               </p>
             </div>
           )}
