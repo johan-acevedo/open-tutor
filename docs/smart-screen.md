@@ -1382,12 +1382,15 @@ position while the tutor talked. Two causes, both fixed on `t3/steady-companion`
 - Pose canvases differed. Fox poses were 386-661 px wide, lynx 674-925,
   bear 708-891, so each pose painted at a different scale inside the same box
   (derived painted-character spread before: up to 114 px desktop, 348 px phone
-  hero). `scripts/normalize_companion_poses.py` (Pillow, reproducible) pads
-  each band's 7 poses unscaled, bottom-centre aligned, onto that band's common
-  canvas (primary 661x900, middle 925x900, upper 891x900) and re-exports WebP
-  quality 85 with alpha kept. Artwork sources under `design/` untouched.
+  hero). `scripts/normalize_companion_poses.py` (Pillow, reproducible) crops
+  each band's 7 poses to the character, scales them to the band's median
+  character height (the fox's working pose was drawn ~1.6x larger than the
+  others; padding alone would have shrunk the fox in six poses), and pads them
+  bottom-centre onto one canvas (primary 486x571, middle 776x850, upper
+  784x776), WebP quality 85 with alpha kept. Character height varies under 3 %
+  within a band. Artwork sources under `design/` untouched.
   `server/tests/test_companion_canvas.py` fails if any pose drifts off its
-  band canvas again.
+  band canvas or character height again.
 - Banners overlay instead of pushing. `.ot-banner` (desktop and phone) is now
   an absolute overlay stacked upward, so e.g. "Avslutar samtalet…" no longer
   shrinks the avatar column (before: main -52 px, image -37 px). Toasts and the
