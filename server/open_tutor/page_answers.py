@@ -58,17 +58,28 @@ class PageAnswers:
             self._task.cancel()
         self._task = asyncio.create_task(self._settle(), name="page-answers")
 
+    def close(self) -> None:
+        """The session ended: drop pending answers and stop a waiting reply."""
+        self._pending = []
+        if self._task is not None and not self._task.done():
+            self._task.cancel()
+
     async def _settle(self) -> None:
         await asyncio.sleep(self._settle_s)
+        # Decide "also said aloud" when the answer settles, not after the wait:
+        # a long tutor reply must not let the spoken turn expire and cause a
+        # second reply. Speech during the wait counts too.
+        spoken_before = self._last_spoken
+        spoken = spoken_before is not None and (
+            self._clock() - spoken_before <= self._spoken_window_s + self._settle_s
+        )
         if self._wait_free is not None:
             await self._wait_free()
+            spoken = spoken or self._last_spoken != spoken_before
         answers, self._pending = self._pending, []
         if not answers:
             return
         text = answers_text(answers)
-        spoken = self._last_spoken is not None and (
-            self._clock() - self._last_spoken <= self._spoken_window_s + self._settle_s
-        )
         self._record("prompt", {"kind": "page_answer", "parts": len(answers),
                                 "page": answers[0][0], "reply": not spoken})
         if spoken:

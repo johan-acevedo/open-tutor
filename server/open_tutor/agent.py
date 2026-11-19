@@ -1186,6 +1186,8 @@ async def entrypoint(ctx: JobContext) -> None:
         prompt=lambda text: prompt_event(session, text),
         note=note_page_answer, record=debug.record,
         wait_free=lambda: wait_until_free(session))
+    # An answer still waiting for its turn must not reply into a closed session.
+    session.on("close", lambda _event: page_answers.close())
 
     @session.on("conversation_item_added")
     def forward_screen_turn(event) -> None:

@@ -144,3 +144,44 @@ def test_wait_until_free_returns_when_speech_ends():
         return session.agent_state
 
     assert asyncio.run(run()) == "listening"
+
+
+def test_spoken_turn_does_not_expire_during_a_long_wait():
+    # Review of PR #83: said and typed together, then a long tutor reply.
+    async def run():
+        now = [0.0]
+        free = asyncio.Event()
+
+        async def wait_free():
+            await free.wait()
+
+        box, prompts, notes, _ = make(window=4.0, clock=lambda: now[0], wait_free=wait_free)
+        box.child_spoke()
+        box.add("p1", "svar", "16")
+        await asyncio.sleep(0.05)
+        now[0] = 30.0  # the tutor spoke for a long time
+        free.set()
+        await asyncio.sleep(0.02)
+        return prompts, notes
+
+    prompts, notes = asyncio.run(run())
+    assert prompts == [] and len(notes) == 1
+
+
+def test_close_drops_a_waiting_answer():
+    async def run():
+        free = asyncio.Event()
+
+        async def wait_free():
+            await free.wait()
+
+        box, prompts, notes, _ = make(wait_free=wait_free)
+        box.add("p1", "svar", "16")
+        await asyncio.sleep(0.05)
+        box.close()
+        free.set()
+        await asyncio.sleep(0.02)
+        return prompts, notes
+
+    prompts, notes = asyncio.run(run())
+    assert prompts == [] and notes == []
