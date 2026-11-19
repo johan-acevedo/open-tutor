@@ -19,14 +19,20 @@ greets without one and asks for it; the tutor repeats it back to confirm and sav
 the new `set_learner_name` tool → `learner.setName` RPC (modelled on the grade path:
 acknowledged, stale targets rejected, the call updates only on ack). The browser creates the
 local profile then — an aborted nameless call leaves nothing behind — or attaches to an
-existing local profile with the same name (its grade is adopted), and remembers it as the
-assumed student. A correction later is the same tool call again; a typed name in the call
-(the text route works with the microphone blocked) recovers from mishearing. Notes bind to
-the session profile and follow the naming. `switch_student` is unchanged and now lands on
-the nameless start page, or the returning page when the target profile is known. Grade
-learning is unchanged. Band copy lives in `web/src/bands.ts`; the protocol in
-`docs/protocol.md`; the start states have web tests (first, returning, Byt, switch
-prefill) and the name tool/RPC has server and browser tests.
+existing local profile with the same name (its grade and recent notes are adopted and the
+worker refreshes its instructions with them, as on a returning start), and remembers it
+as the assumed student. A correction later is the same tool call again: correcting a name
+learned in the call renames the profile in place (grade and notes kept); only a corrected
+name matching a different stored profile attaches there instead (its notes and grade win,
+the temporary profile is dropped). Names that are not names (digits, markup, more than
+three words) are rejected by the tool and the browser before anything is stored, and a
+name RPC from an ended session writes nothing. A typed name in the call (the text route
+works with the microphone blocked) recovers from mishearing. Notes bind to the session
+profile and follow the naming, resolving the target inside the write queue. `switch_student`
+is unchanged and now lands on the nameless start page, or the returning page when the
+target profile is known. Grade learning is unchanged. Band copy lives in `web/src/bands.ts`;
+the protocol in `docs/protocol.md`; the start states have web tests (first, returning, Byt,
+switch prefill) and the name tool/RPC has server and browser tests.
 
 Not tested: the real voice name capture (no paid live call ran here) — Johan tries it on
 dev. Verification screenshots (built app, first + returning × 3 bands × desktop + phone)

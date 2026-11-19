@@ -67,8 +67,35 @@ describe('handleSetName', () => {
     const d = deps();
     vi.mocked(d.applyName).mockResolvedValue(profile({ id: 'p9', name: 'Noa', grade: 3 }));
     const reply = await handleSetName(rpc(JSON.stringify({ profileId: 'temp-1', name: '  Noa ' })), d);
-    expect(JSON.parse(reply)).toEqual({ ok: true, profile: { id: 'p9', name: 'Noa', grade: 3 } });
+    expect(JSON.parse(reply)).toEqual({ ok: true, profile: { id: 'p9', name: 'Noa', grade: 3, notes: [] } });
     expect(d.applyName).toHaveBeenCalledWith('temp-1', 'Noa');
+  });
+  it('acks the full learner context so an attach restores memory', async () => {
+    // Finding 5: attaching an existing profile returns its notes (newest
+    // first, like a returning start), so the worker can adopt them.
+    const d = deps();
+    const notes = [
+      { at: '2026-11-18', topic: 'Bråk' },
+      { at: '2026-11-19', topic: 'Ekvationer' },
+    ];
+    vi.mocked(d.applyName).mockResolvedValue(profile({ id: 'p3', name: 'Moa', grade: 5, notes }));
+    const reply = await handleSetName(rpc(JSON.stringify({ profileId: 'temp-1', name: 'Moa' })), d);
+    expect(JSON.parse(reply)).toEqual({
+      ok: true,
+      profile: { id: 'p3', name: 'Moa', grade: 5, notes: [...notes].reverse() },
+    });
+  });
+  it('rejects a name that is not a name before anything is stored', async () => {
+    // Finding 6: digits and markup never reach the store, even for the
+    // active target.
+    const d = deps();
+    vi.mocked(d.applyName).mockResolvedValue(profile());
+    for (const bad of ['Moa2', '<b>Moa</b>', 'Hej hej hej hej', 'x'.repeat(41)]) {
+      await expect(handleSetName(rpc(JSON.stringify({ profileId: 'temp-1', name: bad })), d)).rejects.toBeInstanceOf(
+        RpcError,
+      );
+    }
+    expect(d.applyName).not.toHaveBeenCalled();
   });
   it('rejects a stale target or a missing name so nothing is saved', async () => {
     const d = deps();
@@ -94,7 +121,7 @@ describe('handleNote', () => {
       isCurrentSession: () => true,
       getActiveId: () => 'pA',
       onNote: vi.fn(),
-      saveNote: vi.fn(async () => saved()),
+      saveNote: vi.fn(async (_pid: string | (() => string)) => saved()),
       ...over,
     };
   }
@@ -103,14 +130,39 @@ describe('handleNote', () => {
     const d = noteDeps({ getSessionProfileId: () => bound });
     bound = 'p9';
     await handleNote(wire('Ekvationer'), d);
-    expect(vi.mocked(d.saveNote)).toHaveBeenCalledWith('p9', expect.objectContaining({ topic: 'Ekvationer' }));
+    expect(vi.mocked(d.saveNote)).toHaveBeenCalledTimes(1);
+    const [namedTarget, namedNote] = vi.mocked(d.saveNote).mock.calls[0];
+    expect(typeof namedTarget === 'function' ? namedTarget() : namedTarget).toBe('p9');
+    expect(namedNote).toEqual(expect.objectContaining({ topic: 'Ekvationer' }));
   });
   const wire = (text: string) => JSON.stringify({ at: '2026-11-18', topic: text });
 
+  it('resolves the note target when the queued write runs, not when received', async () => {
+    // Finding 4: the target stays a thunk until the serialized write runs,
+    // so a naming that lands first is honoured instead of the transient id.
+    let bound = 'temp-1';
+    const seen: Array<string | (() => string)> = [];
+    const d = noteDeps({
+      getSessionProfileId: () => bound,
+      saveNote: vi.fn(async (pid) => {
+        seen.push(pid);
+        return saved();
+      }),
+    });
+    const pending = handleNote(wire('Bråk'), d);
+    bound = 'p9'; // the naming lands before the queued write runs
+    await pending;
+    expect(seen).toHaveLength(1);
+    expect(typeof seen[0]).toBe('function');
+    expect((seen[0] as () => string)()).toBe('p9');
+  });
   it('stores the note under the session profile and shows it', async () => {
     const d = noteDeps();
     await handleNote(wire('Ekvationer'), d);
-    expect(vi.mocked(d.saveNote)).toHaveBeenCalledWith('pA', expect.objectContaining({ topic: 'Ekvationer' }));
+    expect(vi.mocked(d.saveNote)).toHaveBeenCalledTimes(1);
+    const [target, note] = vi.mocked(d.saveNote).mock.calls[0];
+    expect(typeof target === 'function' ? target() : target).toBe('pA');
+    expect(note).toEqual(expect.objectContaining({ topic: 'Ekvationer' }));
     expect(vi.mocked(d.onNote)).toHaveBeenCalledTimes(1);
   });
   it('stores a delayed note under A but never touches the new session', async () => {
@@ -123,7 +175,10 @@ describe('handleNote', () => {
     const pending = handleNote(wire('Bråk'), d);
     release();
     await pending;
-    expect(vi.mocked(d.saveNote)).toHaveBeenCalledWith('pA', expect.objectContaining({ topic: 'Bråk' }));
+    expect(vi.mocked(d.saveNote)).toHaveBeenCalledTimes(1);
+    const [delayedTarget, delayedNote] = vi.mocked(d.saveNote).mock.calls[0];
+    expect(typeof delayedTarget === 'function' ? delayedTarget() : delayedTarget).toBe('pA');
+    expect(delayedNote).toEqual(expect.objectContaining({ topic: 'Bråk' }));
     expect(vi.mocked(d.onNote)).not.toHaveBeenCalled();
   });
   it('drops the UI update when the live profile is no longer the target', async () => {

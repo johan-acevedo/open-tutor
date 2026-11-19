@@ -2,6 +2,7 @@
 // Tiny wrapper, no library. If IndexedDB fails, fall back to memory silently.
 
 import type { Note } from './protocol';
+import { cleanLearnerName, isValidLearnerName } from './learnerName';
 
 export type Profile = {
   id: string;
@@ -166,21 +167,111 @@ export async function updateProfile(profileId: string, patch: { grade?: number |
   return updated;
 }
 
+/** Per-lesson voice-naming state, owned by the session: the profile this
+ *  session's naming created, if any. Reset when a session starts, so a
+ *  correction can tell a temporary profile this session created (safe to
+ *  rename in place, or to delete when attaching elsewhere) from a stored
+ *  profile from an earlier visit (never renamed nor deleted). */
+export type NamingSession = { createdId: string | null };
+
+/** Delete a profile (the temporary one a correction supersedes). */
+export async function deleteProfile(id: string): Promise<void> {
+  if (idbBroken) {
+    memoryFallback.delete(id);
+    return;
+  }
+  try {
+    await tx('readwrite', (store) => store.delete(id));
+  } catch {
+    idbBroken = true;
+    memoryFallback.delete(id);
+  }
+}
+
 /** Create the local profile for a voice-learned name, or attach to the stored
  *  profile with the same name — atomically within the queue, so a repeated
- *  name resolves the same profile and never duplicates it. The target check
- *  keeps a stale call (after a switch or a restart) from creating anything.
- *  Returns the profile, or undefined when stale/invalid. */
+ *  name resolves the same profile and never duplicates it.
+ *
+ *  Correction rule: the session's first naming creates a temporary profile.
+ *  Correcting it to another new name renames that profile in place, keeping
+ *  the grade and notes learned meanwhile. Only when the corrected name
+ *  matches a different existing profile do we attach to that profile
+ *  instead: the temporary profile is then deleted, any notes it gained this
+ *  session move onto the attached profile, and the attached profile keeps
+ *  its own grade when it has one (else it takes the temporary one's). A
+ *  stored profile from an earlier visit is never renamed nor deleted: a new
+ *  name for it creates a fresh profile.
+ *
+ *  The session generation (`isCurrentSession`) is checked before the write
+ *  is even enqueued and again inside the queue, so a name RPC from an ended
+ *  or previous session writes nothing. The target check keeps a stale call
+ *  (after a switch or a restart) from creating anything. Returns the
+ *  profile, or undefined when stale/invalid. */
 export function enqueueProfileName(
   profileId: string, name: string, getActiveId: () => string | null,
+  opts?: { isCurrentSession?: () => boolean; naming?: NamingSession },
 ): Promise<Profile | undefined> {
-  const wanted = name.trim().slice(0, 40);
-  if (!wanted) return Promise.resolve(undefined);
+  const wanted = cleanLearnerName(name);
+  if (!isValidLearnerName(wanted)) return Promise.resolve(undefined);
+  if (opts?.isCurrentSession && !opts.isCurrentSession()) return Promise.resolve(undefined);
   return enqueue(async () => {
+    if (opts?.isCurrentSession && !opts.isCurrentSession()) return undefined;
     const activeId = getActiveId();
     if (!profileId || !activeId || profileId !== activeId) return undefined;
     const stored = await listProfiles();
-    return resolveProfileSwitch(stored, wanted) ?? createProfile(wanted);
+    // The generation may have turned while the read was in flight: nothing
+    // has been written yet, so stand down.
+    if (opts?.isCurrentSession && !opts.isCurrentSession()) return undefined;
+    const markCreated = (id: string | null) => {
+      if (opts?.naming && (!opts?.isCurrentSession || opts.isCurrentSession())) opts.naming.createdId = id;
+    };
+    const current = stored.find((p) => p.id === profileId);
+    const match = resolveProfileSwitch(stored, wanted);
+    if (match && match.id !== current?.id) {
+      // The corrected name belongs to a different stored profile: attach to
+      // it. A temporary profile this session created is superseded — move
+      // its notes (all gained this session) onto the attached profile and
+      // drop it, so no orphan profile is left behind.
+      if (current && opts?.naming?.createdId === current.id) {
+        let attached: Profile = {
+          ...match,
+          notes: [...match.notes, ...current.notes].slice(-MAX_NOTES),
+        };
+        if (attached.grade == null && current.grade != null) attached = { ...attached, grade: current.grade };
+        await saveProfile(attached);
+        await deleteProfile(current.id);
+        markCreated(null);
+        return attached;
+      }
+      markCreated(null);
+      return match;
+    }
+    if (current) {
+      if (match) {
+        // Same profile, only the spelling changed: keep everything.
+        if (current.name !== wanted) return updateProfile(current.id, { name: wanted });
+        return current;
+      }
+      if (opts?.naming?.createdId === current.id) {
+        // A correction of a name learned earlier in this session: rename in
+        // place so the grade and notes learned meanwhile are kept.
+        return updateProfile(current.id, { name: wanted });
+      }
+      // A stored profile from an earlier visit, corrected to a new name:
+      // leave the stored one untouched and start a fresh profile.
+      const created = await createProfile(wanted);
+      markCreated(created.id);
+      return created;
+    }
+    // A nameless start has no stored profile yet (transient id): attach to
+    // the stored profile with this name, or create it.
+    if (match) {
+      markCreated(null);
+      return match;
+    }
+    const created = await createProfile(wanted);
+    markCreated(created.id);
+    return created;
   });
 }
 
@@ -245,12 +336,15 @@ export function enqueueProfileSwitch(name: string): Promise<Profile> {
 
 /** Append a tutor note to one profile by id (never "the current one": the
  *  caller binds the session's own profile id, so a delayed note from lesson A
- *  can never land on B). Returns the updated profile, or undefined when the
- *  profile is gone. */
-export function enqueueNote(profileId: string, note: Note): Promise<Profile | undefined> {
+ *  can never land on B). The id may be a thunk resolved inside the queue at
+ *  execution time, so a note that arrived while a naming was in flight lands
+ *  on the named profile once the naming write ahead of it has run. Returns
+ *  the updated profile, or undefined when the profile is gone. */
+export function enqueueNote(profileId: string | (() => string), note: Note): Promise<Profile | undefined> {
   return enqueue(async () => {
-    if (!profileId) return undefined;
-    return appendNote(profileId, note);
+    const id = typeof profileId === 'function' ? profileId() : profileId;
+    if (!id) return undefined;
+    return appendNote(id, note);
   });
 }
 

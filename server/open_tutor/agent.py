@@ -10,6 +10,7 @@ import base64
 import json
 import logging
 import os
+import re
 import time
 from datetime import datetime, timezone
 from typing import Any
@@ -141,6 +142,26 @@ def screen_mode_notice(environ: dict[str, str] | None = None) -> str | None:
     if value and value != "smart":
         return f"TUTOR_SCREEN={value} is ignored: the Smart Screen is the only mode"
     return None
+
+
+def is_valid_learner_name(name: Any) -> bool:
+    """A first name worth storing: Unicode letters plus space, hyphen and
+    apostrophe; 1-3 words; at most 40 chars; no digits or markup.
+
+    The browser enforces the same rule before persisting (see
+    web/src/learnerName.ts); the worker checks first so a misheard name is
+    never sent for storage. On rejection the tool asks again and stores nothing."""
+    if not isinstance(name, str):
+        return False
+    clean = " ".join(name.split())
+    if not clean or len(clean) > 40:
+        return False
+    if re.search(r"\d", clean):
+        return False
+    words = clean.split(" ")
+    if len(words) > 3:
+        return False
+    return all(re.fullmatch(r"[^\W_]+(?:['\u2019\-][^\W_]+)*", word) for word in words)
 
 
 def tts_route(engine) -> str:
@@ -395,16 +416,21 @@ class Tutor(Agent):
         Call it once, right after they tell you their name early in a nameless
         call: repeat the name back first to confirm you heard it. The browser
         creates the local profile, or attaches to an existing local profile
-        with the same name (its school year is then already known). A later
-        correction ("I said Noa, not Moa") is the same call again. The name
-        here updates only on acknowledgement; grade learning is unchanged.
+        with the same name (its school year and notes are then already known
+        and come back in the acknowledgement). A later correction ("I said
+        Noa, not Moa") is the same call again: a same-profile rename keeps
+        its year and notes, while attaching to a different profile replaces
+        them, including null/unknown. The call updates only on
+        acknowledgement; a name that is not a name is rejected before anything
+        is stored.
 
         Args:
             name: The learner's first name, as they said it.
         """
-        clean = (name or "").strip()[:40]
-        if not clean:
-            return ("No name given. Ask once more what they are called \u2014 they can "
+        clean = " ".join((name or "").split())
+        if not is_valid_learner_name(clean):
+            return ("That doesn't sound like a first name (letters only, up to three "
+                    "words). Ask once more what they are called \u2014 they can "
                     "also type it in the text field \u2014 then call again.")
         data = await self._learner_rpc(LEARNER_RPC_SET_NAME,
                                        {"profileId": self.learner.get("id"), "name": clean})
@@ -412,14 +438,31 @@ class Tutor(Agent):
             return (f"The browser could not save the name {clean}, so nothing is saved. "
                     "Use it in this call anyway and mention nothing.")
         profile = data.get("profile") if isinstance(data.get("profile"), dict) else {}
-        self.learner["id"] = profile.get("id", self.learner.get("id"))
-        self.learner["name"] = profile.get("name", clean)
-        grade = profile.get("grade")
+        new_id = profile.get("id", self.learner.get("id"))
+        new_name = profile.get("name", clean)
+        identity_changed = new_id != self.learner.get("id")
+        name_changed = new_name != self.learner.get("name")
+        self.learner["id"] = new_id
+        self.learner["name"] = new_name
+        if identity_changed:
+            # A different profile owns this call now: its school year replaces
+            # this call's, including null/unknown — keeping the old one would
+            # teach to the wrong year. Its notes arrive in the acknowledgement,
+            # the same context a returning start gets.
+            grade = profile.get("grade")
+            self.learner["grade"] = grade if isinstance(grade, int) and 1 <= grade <= 12 else None
+            notes = profile.get("notes")
+            if isinstance(notes, list):
+                self.learner["notes"] = notes
+        grade = self.learner.get("grade")
         known = ""
         if isinstance(grade, int) and 1 <= grade <= 12:
-            self.learner["grade"] = grade
             known = (f" They are in \u00e5rskurs {grade}." if grade <= 9
                      else f" They are in gymnasiet, year {grade - 9}.")
+        if identity_changed or name_changed:
+            # NB: Tutor._instructions, not self._instructions — the LiveKit
+            # base class stores the built prompt string under that name.
+            await self.update_instructions(Tutor._instructions(self.learner))
         record_active("name", {"name": clean,
                                  "profile_id": self.learner.get("id")})
         return (f"Saved: the learner is called {clean}.{known} Use the name naturally "

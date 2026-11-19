@@ -225,3 +225,73 @@ def test_prompt_bans_grade_forms_and_midcall_switching_rules():
     assert "never as a form" in text
     assert "set_learner_grade" in text
     assert "switch_student" in text
+
+
+@pytest.mark.parametrize("bad", ["Moa2", "<b>Moa</b>", "a b c d", "x" * 41, "Erik!", "   "])
+async def test_set_learner_name_rejects_invalid_names_without_rpc(bad):
+    # Finding 6: digits and markup are rejected before anything is stored —
+    # the tool asks again and no RPC goes out.
+    t = tutor({"id": "temp-1", "name": ""})
+    result = await Tutor.set_learner_name(t, FakeCtx(), bad)
+    assert t.room.local_participant.calls == []
+    assert t.learner["name"] == ""
+    assert "Ask once more" in result
+
+
+@pytest.mark.parametrize("good", ["Noa", "Anna-Lisa", "Mary Jane", "Åsa", "Linnéa"])
+async def test_set_learner_name_accepts_real_first_names(good):
+    t = tutor({"id": "temp-1", "name": "", "grade": None},
+              replies={LEARNER_RPC_SET_NAME: {"ok": True, "profile": {"id": "p9", "name": good, "grade": None}}})
+    result = await Tutor.set_learner_name(t, FakeCtx(), f"  {good}  ")
+    assert t.learner["name"] == good
+    assert good in result
+    [(method, payload)] = t.room.local_participant.calls
+    assert method == LEARNER_RPC_SET_NAME
+    assert payload == {"profileId": "temp-1", "name": good}
+
+
+async def test_set_learner_name_attach_replaces_grade_and_restores_notes():
+    # Findings 3 + 5: attaching to a different profile replaces the grade
+    # (including null/unknown) and adopts its notes, and the instructions are
+    # refreshed with the same context a returning start gets.
+    notes = [{"topic": "multiplikationstabellen", "at": "2026-11-19"}]
+    t = tutor({"id": "p9", "name": "Moa", "grade": 5, "notes": [{"topic": "bråk", "at": "2026-11-18"}]},
+              replies={LEARNER_RPC_SET_NAME: {"ok": True, "profile": {"id": "pX", "name": "Noa",
+                                                                      "grade": None, "notes": notes}}})
+    seen: list[str] = []
+
+    async def fake_update(text: str) -> None:
+        seen.append(text)
+
+    t.update_instructions = fake_update
+    result = await Tutor.set_learner_name(t, FakeCtx(), "Noa")
+    assert t.learner["id"] == "pX"
+    assert t.learner["name"] == "Noa"
+    assert t.learner["grade"] is None
+    assert t.learner["notes"] == notes
+    assert "årskurs 5" not in result
+    assert len(seen) == 1
+    assert "Noa" in seen[0]
+    assert "multiplikationstabellen" in seen[0]
+    assert "årskurs 5" not in seen[0]
+
+
+async def test_set_learner_name_same_profile_correction_keeps_grade():
+    # Findings 2 + 3 (worker side): renaming the same profile in place keeps
+    # its school year and refreshes the instructions with the new name.
+    notes = [{"topic": "bråk", "at": "2026-11-18"}]
+    t = tutor({"id": "p9", "name": "Moa", "grade": 5, "notes": notes},
+              replies={LEARNER_RPC_SET_NAME: {"ok": True, "profile": {"id": "p9", "name": "Noa",
+                                                                      "grade": 5, "notes": notes}}})
+    seen: list[str] = []
+
+    async def fake_update(text: str) -> None:
+        seen.append(text)
+
+    t.update_instructions = fake_update
+    result = await Tutor.set_learner_name(t, FakeCtx(), "Noa")
+    assert t.learner["id"] == "p9"
+    assert t.learner["grade"] == 5
+    assert "årskurs 5" in result
+    assert len(seen) == 1
+    assert "Noa" in seen[0] and "årskurs 5" in seen[0]

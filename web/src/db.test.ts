@@ -1,15 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import {
   createProfile,
+  enqueueNote,
   enqueueProfileGrade,
   enqueueProfileName,
   enqueueProfileSwitch,
   getLastProfileId,
+  getProfile,
   listProfiles,
   rememberLastProfileId,
   resolveProfileSwitch,
   updateProfile,
 } from './db';
+import type { NamingSession } from './db';
 
 describe('resolveProfileSwitch', () => {
   const profiles = [
@@ -98,6 +101,132 @@ describe('voice-first naming (enqueueProfileName)', () => {
   it('rejects a blank name without creating anything', async () => {
     const before = (await listProfiles()).length;
     await expect(enqueueProfileName('temp-4', '   ', () => 'temp-4')).resolves.toBeUndefined();
+    expect((await listProfiles()).length).toBe(before);
+  });
+});
+
+describe('voice-first naming generation gate', () => {
+  // Finding 1: a name RPC from an ended or previous session writes nothing.
+  // The generation is checked before the write is enqueued and again inside
+  // the queue (it may turn while the write waits).
+  it('writes nothing once the session already ended', async () => {
+    const before = (await listProfiles()).length;
+    const named = await enqueueProfileName('temp-g1', 'Svala', () => 'temp-g1', {
+      isCurrentSession: () => false,
+    });
+    expect(named).toBeUndefined();
+    expect((await listProfiles()).length).toBe(before);
+  });
+
+  it('drops a naming whose session ends while it is queued', async () => {
+    let current = true;
+    const before = (await listProfiles()).length;
+    const pending = enqueueProfileName('temp-g2', 'Svala', () => 'temp-g2', {
+      isCurrentSession: () => current,
+    });
+    current = false; // the room ended before the serialized write ran
+    await expect(pending).resolves.toBeUndefined();
+    expect((await listProfiles()).length).toBe(before);
+  });
+});
+
+describe('voice-first naming corrections', () => {
+  // Finding 2: a correction of a name learned earlier in this session renames
+  // that profile in place, keeping the grade and notes learned meanwhile.
+  it('renames this session’s profile in place, keeping grade and notes', async () => {
+    let active: string | null = 'temp-c1';
+    const naming: NamingSession = { createdId: null };
+    const first = await enqueueProfileName('temp-c1', 'Svala', () => active, {
+      isCurrentSession: () => true,
+      naming,
+    });
+    expect(first?.name).toBe('Svala');
+    active = first!.id;
+    await updateProfile(first!.id, { grade: 5 });
+    await enqueueNote(first!.id, { at: '2026-11-19', topic: 'Bråk' });
+    const corrected = await enqueueProfileName(first!.id, 'Tindra', () => active, {
+      isCurrentSession: () => true,
+      naming,
+    });
+    expect(corrected?.id).toBe(first!.id);
+    expect(corrected?.name).toBe('Tindra');
+    expect(corrected?.grade).toBe(5);
+    expect(corrected?.notes.map((n) => n.topic)).toContain('Bråk');
+  });
+
+  it('attaching elsewhere moves notes, keeps that grade, and drops the temp', async () => {
+    const existing = await createProfile('Vanja');
+    await updateProfile(existing.id, { grade: 3 });
+    let active: string | null = 'temp-c2';
+    const naming: NamingSession = { createdId: null };
+    const first = await enqueueProfileName('temp-c2', 'Zelda', () => active, {
+      isCurrentSession: () => true,
+      naming,
+    });
+    active = first!.id;
+    await updateProfile(first!.id, { grade: 5 });
+    await enqueueNote(first!.id, { at: '2026-11-19', topic: 'Ekvationer' });
+    const attached = await enqueueProfileName(first!.id, 'Vanja', () => active, {
+      isCurrentSession: () => true,
+      naming,
+    });
+    expect(attached?.id).toBe(existing.id);
+    expect(attached?.grade).toBe(3);
+    expect(attached?.notes.map((n) => n.topic)).toContain('Ekvationer');
+    expect(await getProfile(first!.id)).toBeUndefined();
+    expect((await listProfiles()).filter((p) => p.name === 'Zelda')).toHaveLength(0);
+  });
+
+  it('an attached profile without a grade takes the temporary one’s', async () => {
+    const existing = await createProfile('Kim');
+    let active: string | null = 'temp-c3';
+    const naming: NamingSession = { createdId: null };
+    const first = await enqueueProfileName('temp-c3', 'Juni', () => active, {
+      isCurrentSession: () => true,
+      naming,
+    });
+    active = first!.id;
+    await updateProfile(first!.id, { grade: 4 });
+    const attached = await enqueueProfileName(first!.id, 'Kim', () => active, {
+      isCurrentSession: () => true,
+      naming,
+    });
+    expect(attached?.id).toBe(existing.id);
+    expect(attached?.grade).toBe(4);
+    expect(await getProfile(first!.id)).toBeUndefined();
+  });
+});
+
+describe('notes during naming', () => {
+  // Finding 4: the note target is resolved inside the serialized queue at
+  // execution time, so a note that arrived while the naming was in flight
+  // lands on the named profile.
+  it('a note that arrives during naming lands on the named profile', async () => {
+    let active: string | null = 'temp-n1';
+    const naming: NamingSession = { createdId: null };
+    let target = 'temp-n1';
+    const nameP = enqueueProfileName('temp-n1', 'Alva', () => active, {
+      isCurrentSession: () => true,
+      naming,
+    });
+    const noteP = enqueueNote(() => target, { at: '2026-11-19', topic: 'Bråk' });
+    const named = await nameP;
+    // useSession adopts the naming once the write lands.
+    target = named!.id;
+    active = named!.id;
+    const saved = await noteP;
+    expect(saved?.id).toBe(named!.id);
+    expect(saved?.notes.map((n) => n.topic)).toContain('Bråk');
+  });
+});
+
+describe('invalid names are never stored', () => {
+  // Finding 6: digits and markup are rejected before anything is persisted.
+  it('rejects names that are not names without creating anything', async () => {
+    const before = (await listProfiles()).length;
+    for (const bad of ['Moa2', '<b>Moa</b>', 'Hej hej hej hej', 'x'.repeat(41), 'Erik!', '  ']) {
+      await expect(enqueueProfileName('temp-v1', bad, () => 'temp-v1')).resolves.toBeUndefined();
+    }
     expect((await listProfiles()).length).toBe(before);
   });
 });

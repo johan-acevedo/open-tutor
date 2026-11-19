@@ -25,6 +25,7 @@ import {
   LEARNER_RPC_SWITCH,
 } from './protocol';
 import { enqueueNote, enqueueProfileGrade, enqueueProfileName, enqueueProfileSwitch, rememberLastProfileId } from './db';
+import type { NamingSession } from './db';
 import { handleNote, handleSetGrade, handleSetName, handleSwitch } from './learnerRpc';
 import { createEndGate, routeAfterEnd } from './lessonEnd';
 import type { Profile } from './db';
@@ -234,8 +235,15 @@ export function useSession(mobile = false, band: BandId = 'primary') {
   const [prefillId, setPrefillId] = useState<string | null>(null);
   // Session generation: handlers capture the generation they were registered
   // in and never touch UI or profile state from an old one (delayed note or
-  // grade callbacks from A must not land on B).
+  // grade callbacks from A must not land on B). A name RPC from an ended or
+  // previous session writes nothing: the generation is checked before its
+  // persistence, and every end path bumps it.
   const sessionGenRef = useRef(0);
+  // Voice-naming state for this session: which profile this session's naming
+  // created, if any. Reset when a session starts; the store uses it to tell a
+  // temporary profile this session created (safe to rename or supersede)
+  // from a stored profile from an earlier visit.
+  const namingRef = useRef<NamingSession>({ createdId: null });
   // One end transition per lesson: double leave, Avsluta during goodbye, or
   // tutor switch plus menu at once all share it — exactly one end, the note
   // saved once, cleanup touching only its own room. See lessonEnd.ts.
@@ -405,6 +413,10 @@ export function useSession(mobile = false, band: BandId = 'primary') {
     // Only delivered events survive session cleanup. Overflow is counted,
     // but a lost final tail cannot be detected by sequence gaps.
     diagRef.current = null;
+    // The room is gone: no learner RPC still in flight from it may persist.
+    // Bumping here covers every end path (Avsluta, menu leave, in-call
+    // switch, unmount); start() bumps again for the new session.
+    sessionGenRef.current += 1;
     const room = roomRef.current;
     roomRef.current = null;
     preparedRoomRef.current = null;
@@ -482,8 +494,9 @@ export function useSession(mobile = false, band: BandId = 'primary') {
       setPrefillId(null);
       setProfilesOpen(false);
       // A new generation: callbacks from the previous session (delayed
-      // notes, grades) never touch this one's UI or profile.
+      // notes, grades, names) never touch this one's UI or profile.
       sessionGenRef.current += 1;
+      namingRef.current = { createdId: null };
       profileRef.current = p;
       setProfile(p);
       setItems([]);
@@ -808,8 +821,12 @@ export function useSession(mobile = false, band: BandId = 'primary') {
       let noteProfileId = p.id;
       const learnerDeps = {
         applyName: async (profileId: string, name: string) => {
+          // A name RPC from an ended or previous session writes nothing:
+          // reject before the serialized write, not after it.
+          if (!isCurrent()) return undefined;
           const updated = await enqueueProfileName(
             profileId, name, () => profileRef.current?.id ?? null,
+            { isCurrentSession: isCurrent, naming: namingRef.current },
           );
           if (updated && isCurrent()) {
             // The session's note binding follows the naming: notes saved
@@ -1167,6 +1184,9 @@ export function useSession(mobile = false, band: BandId = 'primary') {
     const room = roomRef.current;
     if (!room || phase !== 'live') return;
     if (!endGateRef.current.claim()) return;
+    // Ending invalidates the generation at once: a late learner RPC from
+    // this room is rejected before it persists, even before disconnect.
+    sessionGenRef.current += 1;
     try {
       intentionalEndRef.current = true;
       trackSessionEnd('ended_by_child');
@@ -1221,6 +1241,9 @@ export function useSession(mobile = false, band: BandId = 'primary') {
 
   const backToProfiles = useCallback(() => {
     intentionalEndRef.current = true;
+    // No lesson is running, but invalidate anyway: a learner RPC still in
+    // flight from a dying room must not persist into the profiles page.
+    sessionGenRef.current += 1;
     cleanupRoom();
     setProfilesOpen(false);
     setPhase('profiles');
