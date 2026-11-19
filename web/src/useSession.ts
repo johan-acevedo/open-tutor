@@ -239,6 +239,10 @@ export function useSession(mobile = false, band: BandId = 'primary') {
   // previous session writes nothing: the generation is checked before its
   // persistence, and every end path bumps it.
   const sessionGenRef = useRef(0);
+  // Lesson generation: bumped only when a new lesson starts. The end-of-lesson
+  // note arrives after Avsluta has already bumped sessionGenRef, and it must
+  // still reach this lesson's end card; only a newer lesson replaces it.
+  const lessonGenRef = useRef(0);
   // Voice-naming state for this session: which profile this session's naming
   // created, if any. Reset when a session starts; the store uses it to tell a
   // temporary profile this session created (safe to rename or supersede)
@@ -496,6 +500,7 @@ export function useSession(mobile = false, band: BandId = 'primary') {
       // A new generation: callbacks from the previous session (delayed
       // notes, grades, names) never touch this one's UI or profile.
       sessionGenRef.current += 1;
+      lessonGenRef.current += 1;
       namingRef.current = { createdId: null };
       profileRef.current = p;
       setProfile(p);
@@ -915,12 +920,12 @@ export function useSession(mobile = false, band: BandId = 'primary') {
       // never touches B's UI or live profile. A voice-first naming updates
       // the binding (see applyName): the session started with no stored
       // profile, and the named one owns the notes from then on.
-      const noteGen = sessionGenRef.current;
+      const noteGen = lessonGenRef.current;
       room.registerTextStreamHandler(TOPIC_NOTE, async (reader) => {
         try {
           await handleNote(await reader.readAll(), {
             getSessionProfileId: () => noteProfileId,
-            isCurrentSession: () => noteGen === sessionGenRef.current,
+            isCurrentSession: () => noteGen === lessonGenRef.current,
             getActiveId: () => profileRef.current?.id ?? null,
             onNote: (note, updated) => {
               setSessionNotes((prev) => [...prev, note]);
