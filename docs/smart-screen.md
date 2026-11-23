@@ -4,6 +4,28 @@ Lead: the thread "state of the project" (Claude, 2026-11-12). The lead keeps thi
 Workers read it before starting and report against it. Decisions here were agreed with Johan
 on 2026-11-12 unless marked open.
 
+## 2026-11-22: a figure wrote its points with a comma between pairs
+
+A production lesson on 2026-11-22 showed 2 of 5 pages with a rectangle drawn as a
+thin slanted line. Cause: the writer wrote `points="0 0,4 0,4 3,0 3"` (a bare
+comma between pairs) and the shell read `0,4` as the Swedish decimal 0.4, so it
+paired the wrong numbers. Fixed in the shell rather than in the prompt: a list is
+now read as pairs when every comma-separated chunk is exactly one `x y`, and every
+form that worked before (`, `, `;`, whitespace, parentheses, true minus, `a/b`,
+decimal commas) pairs as before. The length lint pairs the same way, so it measures
+the figure the child sees.
+
+New `shape` lint, so a broken figure is caught by the page's own checks instead of
+shipping: a polygon with fewer than three points, points that lie (nearly) on one
+line, or a figure drawn under 4 px across. Findings clear and recompute on every
+run like the length lint and are actionable, so the existing retry can repair them.
+
+Verified in headless Chromium at 355×320 and 1000×700: the comma-only rectangle
+draws at ratio 0.15 on `origin/main` and 1.33 after the fix; the collapsed cases
+were silent before and are reported now, and clear when patched; the nine example
+bodies produce the same lint as `origin/main`. Evidence and rerun commands:
+`screen/review/2026-11-22-points/`; shell rationale in `screen/NOTES.md`.
+
 ## 2026-11-19: first real call on the new build (middle band, 17 min)
 
 One production call on `0bec30e` by a test learner in åk 7, desktop, 1019 s, 35 spoken

@@ -147,7 +147,35 @@
     var out = String(s).replace(/[()]/g, ' ').replace(/−/g, '-').split(/[\s;]+|,\s+|,(?=-?\d+,)/);
     return out.filter(function (t) { return t !== ''; }).map(num).filter(function (n) { return !isNaN(n); });
   }
-  function points(s) { var a = nums(s), out = []; for (var i = 0; i + 1 < a.length; i += 2) out.push([a[i], a[i + 1]]); return out; }
+  // Coordinate pairs, in every form the model writes them: "x y" separated by
+  // whitespace, ';' or ", " (screen/REFERENCE.md), and "x y,x y,x y" with a bare
+  // comma between pairs. The last one has to be claimed whole: read by nums()
+  // alone, "0 0,4 0,4 3,0 3" splits into "0", "0,4" ... and pairs into a
+  // slanted line (production, 2026-11-22). Decimal commas keep the older
+  // reading, because then a chunk is not exactly one x y pair.
+  function pairsByComma(s) {
+    if (s == null) return null;
+    var text = String(s).replace(/[()]/g, ' ').replace(/−/g, '-');
+    if (text.indexOf(';') >= 0) return null;
+    var chunks = text.split(',').map(function (c) { return c.trim(); }).filter(function (c) { return c !== ''; });
+    if (chunks.length < 2) return null;
+    var out = [];
+    for (var i = 0; i < chunks.length; i++) {
+      var toks = chunks[i].split(/\s+/);
+      if (toks.length !== 2) return null;
+      var x = num(toks[0]), y = num(toks[1]);
+      if (isNaN(x) || isNaN(y)) return null;
+      out.push([x, y]);
+    }
+    return out;
+  }
+  function points(s) {
+    var paired = pairsByComma(s);
+    if (paired) return paired;
+    var a = nums(s), out = [];
+    for (var i = 0; i + 1 < a.length; i += 2) out.push([a[i], a[i + 1]]);
+    return out;
+  }
   function fmt(n, maxDec) {
     if (!isFinite(n)) return '';
     n = Math.round(n * 1e9) / 1e9;
@@ -1574,12 +1602,22 @@
         if (!raw.trim()) return;
         if (/[°²³%]|(?:mm|cm|dm|m)\s*\d/i.test(raw)) return; // mixed dimensions (area, angle, ...): not a length claim
         var labels = raw.split('|').map(function (s) { return s.trim(); });
-        // Strict pairing: every coordinate must be a finite number, in order.
-        // points() drops bad values silently, which would shift the pairing.
-        var toks = String(poly.getAttribute('points') || '').replace(/[()]/g, ' ').replace(/−/g, '-').split(/[\s;]+|,\s+|,(?=-?\d+,)/).filter(function (t) { return t !== ''; });
-        if (toks.length < 6 || toks.length % 2) return;
-        var coords = toks.map(num);
-        if (coords.some(function (n) { return !isFinite(n); })) return;
+        // Strict pairing, and the same one the drawing used: a claim is measured
+        // on the figure the child sees. points() drops bad values silently, which
+        // would shift the pairing, so the legacy path below refuses them instead.
+        var attr = String(poly.getAttribute('points') || '');
+        var coords = null;
+        var paired = pairsByComma(attr);
+        if (paired) {
+          coords = [];
+          paired.forEach(function (p2) { coords.push(p2[0], p2[1]); });
+        } else {
+          var toks = attr.replace(/[()]/g, ' ').replace(/−/g, '-').split(/[\s;]+|,\s+|,(?=-?\d+,)/).filter(function (t) { return t !== ''; });
+          if (toks.length % 2) return;
+          coords = toks.map(num);
+          if (coords.some(function (n) { return !isFinite(n); })) return;
+        }
+        if (coords.length < 6) return;
         var edges = [];
         for (var k = 0; k < coords.length; k += 2) {
           var ax = coords[k], ay = coords[k + 1];
@@ -1613,6 +1651,70 @@
             issue('length', pid + ' in <ot-graph' + gid + '> side ' + r.side + ' ("' + esc(r.text) + '") is drawn about ' + Math.round(Math.abs(dev) * 100) + '% ' + (dev < 0 ? 'shorter' : 'longer') + ' than the other labelled sides imply; check the label or redraw the side to match', poly);
         });
       } catch (e) { /* a length check never breaks the page */ }
+    });
+  }
+  // ---- collapsed figures ----
+  // A coordinate list that pairs into (nearly) a line, a plane figure with two
+  // points, or a figure squeezed into a few pixels shows the child a sliver or
+  // a dot and says nothing about why. The production rectangle of 2026-11-22
+  // shipped as a slanted line for exactly this reason, so each of these is
+  // reported and repaired like any other lint finding. Free and schematic
+  // figures opt out: there, a sketch may deliberately not be to scale.
+  var SLIVER = 0.03; // mean width over the longest side; a square is 1
+  var TINY_PX = 4;   // a figure smaller than this across cannot be read
+  function figurePoints(el) {
+    return el.tagName === 'OT-SEGMENT'
+      ? points((el.getAttribute('from') || '') + ', ' + (el.getAttribute('to') || ''))
+      : points(el.getAttribute('points'));
+  }
+  function lintShapes() {
+    var removedReported = 0;
+    ot.issues = ot.issues.filter(function (i, index) {
+      var remove = i.kind === 'shape';
+      if (remove && index < reported) removedReported++;
+      return !remove;
+    });
+    reported = Math.max(0, reported - removedReported);
+    $$('ot-polygon, ot-segment', page).forEach(function (el) {
+      try {
+        var tag = el.tagName === 'OT-SEGMENT' ? 'ot-segment' : 'ot-polygon';
+        var name = '<' + tag + (el.id ? ' id="' + el.id + '"' : '') + '>';
+        var graph = el.closest('ot-graph');
+        if (!graph) return; // only a graph draws these
+        if (el.closest('[later], [hidden], ot-hidden:not([data-revealed]) .ot-hidden-body')) return;
+        var pts = figurePoints(el);
+        if (pts.length < 2) return; // drawGraph already reports a missing points list
+        if (!pts.every(function (p) { return isFinite(p[0]) && isFinite(p[1]); })) return;
+        // Drawn size, from the graph's own pixel mapping once it has drawn.
+        var map = graph._px;
+        if (map) {
+          var shown = pts.map(function (p) { return map(p[0], p[1]); });
+          var xs = shown.map(function (p) { return p.x; }), ys = shown.map(function (p) { return p.y; });
+          var wide = Math.max.apply(null, xs) - Math.min.apply(null, xs);
+          var tall = Math.max.apply(null, ys) - Math.min.apply(null, ys);
+          if (Math.max(wide, tall) < TINY_PX)
+            issue('shape', name + ' is drawn only ' + Math.max(1, Math.round(Math.max(wide, tall))) + ' px across, too small to see. Check its coordinates, or use a narrower range in <ot-graph>.', el);
+        }
+        if (tag !== 'ot-polygon') return;
+        if (pts.length < 3) {
+          issue('shape', name + ' has only ' + pts.length + ' point' + (pts.length === 1 ? '' : 's') + ', so it draws as a line and not as a figure. Check the points attribute: one x y pair per corner, pairs separated by commas.', el);
+          return;
+        }
+        if (el.hasAttribute('schematic') || (graph && (graph.hasAttribute('schematic') || graph.hasAttribute('free')))) return;
+        var area = 0, longest = 0;
+        for (var i = 0; i < pts.length; i++) {
+          var a = pts[i], b = pts[(i + 1) % pts.length];
+          area += a[0] * b[1] - b[0] * a[1];
+          longest = Math.max(longest, Math.hypot(b[0] - a[0], b[1] - a[1]));
+        }
+        area = Math.abs(area) / 2;
+        if (!(longest > 0)) {
+          issue('shape', name + ' has all its points in the same place, so there is nothing to show. Check the points attribute.', el);
+          return;
+        }
+        if (area / (longest * longest) < SLIVER)
+          issue('shape', name + ' has practically no area: its ' + pts.length + ' points lie almost on one line, so it draws as a sliver. Check the points attribute: one x y pair per corner, pairs separated by commas.', el);
+      } catch (e) { /* a shape check never breaks the page */ }
     });
   }
   // Where to put a function's label: on the curve, inside the view, as far as possible
@@ -2620,6 +2722,7 @@
     }
     bad.forEach(function (b) { issue('crowded', b.r.msg || 'does not fit', b.el); });
     lintGraphs();
+    lintShapes();
     var scale = page.offsetWidth ? page.getBoundingClientRect().width / page.offsetWidth : 1;
     var readable = window.innerWidth <= 600 ? 16 : SMALL_FONT;
     var textPx = Math.floor(px * scale * 100) / 100;
@@ -2787,10 +2890,12 @@
     // Revealed map marks join the drawing and the fit, like revealed graph parts.
     var map = el.closest('ot-map');
     if (map && map.redraw) map.redraw();
-    // Newly visible figures get their length check; invisible ones stayed quiet.
+    // Newly visible figures get their length and shape checks; invisible ones
+    // stayed quiet.
     lintLengths();
     flash(shown);
     lintGraphs();
+    lintShapes();
     return true;
   };
 
