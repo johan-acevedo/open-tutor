@@ -16,6 +16,7 @@ invalid values instead of clamping them).
 from __future__ import annotations
 
 import asyncio
+import time
 
 import aiohttp
 from livekit.agents import (
@@ -39,6 +40,13 @@ from livekit.plugins.deepgram.tts_v2 import (
 # Johan's pick: https://api.deepgram.com/v2/speak?model=flux-ludvig-sv&expressivity=1
 DEFAULT_MODEL = "flux-ludvig-sv"
 DEFAULT_EXPRESSIVITY = 1
+# Deepgram closes an idle Flux WebSocket server-side; upstream's pool only
+# expires by age since connect (max_session_duration=3600) and never checks
+# whether the socket is already closed, so the first write after a long tutor
+# silence fails and the retry speaks late. Drop anything idle past this and
+# reconnect instead. Chosen with margin under the shortest silence that has
+# ever preceded such a failure (56 s, production 2026-11-22).
+WS_MAX_IDLE_SECONDS = 40.0
 MIN_EXPRESSIVITY = -2
 MAX_EXPRESSIVITY = 2
 
@@ -60,6 +68,82 @@ def parse_expressivity(raw: str | None) -> int:
     return value
 
 
+def _ws_is_closed(ws: object) -> bool:
+    """True when the server (or we) already closed this socket. Never raises."""
+    return bool(getattr(ws, "closed", False))
+
+
+class _IdleAwareConnectionPool(utils.ConnectionPool):
+    """Upstream pool that also expires by idle time and drops closed sockets.
+
+    Upstream tracks only age since connect, so a socket Deepgram dropped while
+    the tutor was silent is still handed out until it is an hour old, and the
+    first write fails. This tracks last use (put time, connect time before the
+    first put) and discards whatever has been idle past ``idle_timeout`` or is
+    already closed, reconnecting on the next checkout. Everything else --
+    locking, draining, invalidate/prewarm/aclose, acquire-time reporting -- is
+    inherited untouched, so the streaming path needs no other change.
+    """
+
+    def __init__(self, *args, idle_timeout: float = WS_MAX_IDLE_SECONDS, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._idle_timeout = idle_timeout
+        self._last_used: dict = {}
+
+    async def _connect(self, timeout: float):
+        conn = await super()._connect(timeout)
+        self._last_used[conn] = time.time()
+        return conn
+
+    async def get(self, *, timeout: float):
+        # Mirrors upstream get(), plus: skip sockets the server already
+        # closed and sockets idle longer than the server tolerates.
+        async with self._connect_lock:
+            await self._drain_to_close()
+            now = time.time()
+            while self._available:
+                conn = self._available.pop()
+                connected_at = self._connections.get(conn)
+                if connected_at is None:
+                    self._last_used.pop(conn, None)
+                    continue
+                if _ws_is_closed(conn):
+                    self.remove(conn)
+                    continue
+                if (
+                    self._max_session_duration is not None
+                    and now - connected_at > self._max_session_duration
+                ):
+                    self.remove(conn)
+                    continue
+                if now - self._last_used.get(conn, connected_at) > self._idle_timeout:
+                    self.remove(conn)
+                    continue
+                if self._mark_refreshed_on_get:
+                    self._connections[conn] = now
+                self.last_acquire_time = 0.0
+                self.last_connection_reused = True
+                return conn
+            t0 = time.perf_counter()
+            conn = await self._connect(timeout)
+            self.last_acquire_time = time.perf_counter() - t0
+            self.last_connection_reused = False
+            return conn
+
+    def put(self, conn) -> None:
+        super().put(conn)
+        if conn in self._connections:
+            self._last_used[conn] = time.time()
+
+    def remove(self, conn) -> None:
+        self._last_used.pop(conn, None)
+        super().remove(conn)
+
+    def invalidate(self) -> None:
+        self._last_used.clear()
+        super().invalidate()
+
+
 class DeepgramFluxTTS(TTSv2):
     """TTSv2 that also sends ``expressivity`` on the wire. Otherwise identical."""
 
@@ -74,6 +158,14 @@ class DeepgramFluxTTS(TTSv2):
                 f"got {expressivity!r}"
             )
         super().__init__(**kwargs)
+        # Upstream's pool is fresh (no connections yet), so replace it outright
+        # with one that also drops idle/closed sockets before handing them out.
+        self._pool = _IdleAwareConnectionPool(
+            connect_cb=self._connect_ws,
+            close_cb=self._close_ws,
+            max_session_duration=3600,
+            mark_refreshed_on_get=False,
+        )
         self._expressivity = expressivity
 
     @property

@@ -1440,3 +1440,18 @@ layout state; banner on/off moves nothing after. Caveat: the harness replays
 the layout outside a live session (no LiveKit) with Linux font metrics, and
 the painted-content numbers are derived geometrically -- direction and scale
 are representative, not device-exact. Not tested: a real lesson with children.
+
+### Stale Deepgram TTS sockets are dropped before reuse (2026-11-23)
+
+Production 2026-11-22: 15 Deepgram Flux TTS errors across 3 lessons, every one
+after the tutor had been silent for >= 56 s. Cause: Deepgram closes the idle
+WebSocket server-side, but the pooled connection is keyed only on age since
+connect (1 h) with no closed-socket check, so the first write goes to a dead
+socket (`Cannot write to closing transport`) and the framework retry makes the
+tutor speak 0.7-2.9 s late. Fix on `t3/tts-stale-socket`:
+`server/open_tutor/deepgram_tts.py` now swaps the upstream pool for a narrow
+`_IdleAwareConnectionPool` that discards sockets idle > 40 s or already closed
+and reconnects on the next checkout (no plugin fork). Proof: 3 new unit tests
+in `server/tests/test_deepgram_tts.py` (no network: idle socket redialed,
+recent socket reused, closed socket redialed) and the full server suite green
+(601 passed). Not tested: a real lesson with children.
