@@ -13,7 +13,7 @@ parentheses, true minus, `a/b` and decimal commas (`1,5 2, 3 4,5`) pair exactly
 as before. `lintLengths()` now pairs the same way, so a side label is measured
 on the figure the child sees. A new `shape` lint reports what used to ship
 silently: a polygon with fewer than three points, a figure whose points lie
-(nearly) on one line (mean width under 12% of its longest side), and a figure
+(nearly) on one line (mean width under 3% of its longest side), and a figure
 drawn under 4 px across. It clears and recomputes like the length lint, runs
 after drawing (the pixel rule needs the graph mapping), and `free`/`schematic`
 figures opt out. The nine example bodies produce byte-identical lint to

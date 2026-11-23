@@ -1660,7 +1660,7 @@
   // shipped as a slanted line for exactly this reason, so each of these is
   // reported and repaired like any other lint finding. Free and schematic
   // figures opt out: there, a sketch may deliberately not be to scale.
-  var SLIVER = 0.12; // mean width over the longest side; a square is 1
+  var SLIVER = 0.03; // mean width over the longest side; a square is 1
   var TINY_PX = 4;   // a figure smaller than this across cannot be read
   function figurePoints(el) {
     return el.tagName === 'OT-SEGMENT'

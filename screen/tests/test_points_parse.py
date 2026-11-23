@@ -110,10 +110,13 @@ def test_thin_but_real_figures_stay_quiet():
     # A flat trapezoid and a long lean parallelogram are legitimate drawings.
     assert probe.shape_verdict("0 2, 4 2, 5.5 3, 1.5 3")["kind"] is None
     assert probe.shape_verdict("4 0, 5.5 1, 5.5 3, 4 2")["kind"] is None
+    # A 10 x 1 strip and a triangle with base 10, height 2 are real figures too.
+    assert probe.shape_verdict("0 0, 10 0, 10 1, 0 1")["kind"] is None
+    assert probe.shape_verdict("0 0, 10 0, 5 2")["kind"] is None
 
 
 def test_a_nearly_flat_triangle_is_a_sliver():
-    assert probe.shape_verdict("0 0, 4 0, 4 0,3")["kind"] == "sliver"
+    assert probe.shape_verdict("0 0, 4 0, 4 0,1")["kind"] == "sliver"
 
 
 def test_points_in_one_place_have_nothing_to_show():
@@ -136,4 +139,4 @@ def test_a_segment_and_a_missing_list_are_not_area_findings():
 def test_free_and_schematic_figures_are_left_to_the_shell():
     # The opt-outs are read from the markup by the shell; the pure verdict only
     # describes the coordinates it is given.
-    assert probe.shape_verdict("0 0, 4 0, 4 0,3")["kind"] == "sliver"
+    assert probe.shape_verdict("0 0, 4 0, 4 0,1")["kind"] == "sliver"

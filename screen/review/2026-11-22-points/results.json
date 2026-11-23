@@ -220,7 +220,7 @@
    "size": "355x320",
    "box": {
     "w": 221.52777481079102,
-    "h": 16.614585876464844
+    "h": 5.538200378417969
    },
    "shape": [
     {
@@ -236,7 +236,7 @@
    "size": "1000x700",
    "box": {
     "w": 639.5833740234375,
-    "h": 47.96875
+    "h": 15.98956298828125
    },
    "shape": [
     {
@@ -284,7 +284,7 @@
    "size": "355x320",
    "box": {
     "w": 221.52777481079102,
-    "h": 16.614585876464844
+    "h": 5.538200378417969
    },
    "shape": []
   },
@@ -294,283 +294,9 @@
    "size": "1000x700",
    "box": {
     "w": 639.5833740234375,
-    "h": 47.96875
+    "h": 15.98956298828125
    },
    "shape": []
   }
- ],
- "prior_shell": {
-  "failures": [
-   "prior comma-only 355x320: drew 27.0x175.7 px (ratio 0.15), the coordinates say 4x3 (ratio 1.33); independent pairs [(0.0, 0.0), (4.0, 0.0), (4.0, 3.0), (0.0, 3.0)]",
-   "prior comma-only 1000x700: drew 58.2x378.5 px (ratio 0.15), the coordinates say 4x3 (ratio 1.33); independent pairs [(0.0, 0.0), (4.0, 0.0), (4.0, 3.0), (0.0, 3.0)]",
-   "prior polygon-two-points 355x320: collapsed figure drew 221.5x0.0 px with no shape issue",
-   "prior polygon-two-points 1000x700: collapsed figure drew 639.6x0.0 px with no shape issue",
-   "prior sliver 355x320: collapsed figure drew 221.5x16.6 px with no shape issue",
-   "prior sliver 1000x700: collapsed figure drew 639.6x48.0 px with no shape issue",
-   "prior tiny 355x320: drawn 0.3x0.3 px with no shape issue: [{'kind': 'dense', 'msg': 'text is only 13.75px on this screen (minimum 16px). Keep one teaching step and one main visual; cut text or split the page.'}]",
-   "prior tiny 1000x700: drawn 0.5x0.5 px with no shape issue: []"
-  ],
-  "cases": [
-   {
-    "case": "doc-comma-space",
-    "tag": "prior",
-    "size": "355x320",
-    "box": {
-     "w": 87.84722900390625,
-     "h": 175.6944580078125
-    },
-    "shape": []
-   },
-   {
-    "case": "doc-comma-space",
-    "tag": "prior",
-    "size": "1000x700",
-    "box": {
-     "w": 189.236083984375,
-     "h": 378.47222900390625
-    },
-    "shape": []
-   },
-   {
-    "case": "comma-only",
-    "tag": "prior",
-    "size": "355x320",
-    "box": {
-     "w": 27.0299072265625,
-     "h": 175.6944580078125
-    },
-    "shape": []
-   },
-   {
-    "case": "comma-only",
-    "tag": "prior",
-    "size": "1000x700",
-    "box": {
-     "w": 58.22650146484375,
-     "h": 378.47222900390625
-    },
-    "shape": []
-   },
-   {
-    "case": "semicolon",
-    "tag": "prior",
-    "size": "355x320",
-    "box": {
-     "w": 212.60504150390625,
-     "h": 159.45379638671875
-    },
-    "shape": []
-   },
-   {
-    "case": "semicolon",
-    "tag": "prior",
-    "size": "1000x700",
-    "box": {
-     "w": 457.98316955566406,
-     "h": 343.4873962402344
-    },
-    "shape": []
-   },
-   {
-    "case": "spaces-only",
-    "tag": "prior",
-    "size": "355x320",
-    "box": {
-     "w": 212.60504150390625,
-     "h": 159.45379638671875
-    },
-    "shape": []
-   },
-   {
-    "case": "spaces-only",
-    "tag": "prior",
-    "size": "1000x700",
-    "box": {
-     "w": 457.98316955566406,
-     "h": 343.4873962402344
-    },
-    "shape": []
-   },
-   {
-    "case": "decimal-comma",
-    "tag": "prior",
-    "size": "355x320",
-    "box": {
-     "w": 219.18316650390625,
-     "h": 156.55943298339844
-    },
-    "shape": []
-   },
-   {
-    "case": "decimal-comma",
-    "tag": "prior",
-    "size": "1000x700",
-    "box": {
-     "w": 472.15345764160156,
-     "h": 337.2525329589844
-    },
-    "shape": []
-   },
-   {
-    "case": "parens",
-    "tag": "prior",
-    "size": "355x320",
-    "box": {
-     "w": 212.60504150390625,
-     "h": 159.45379638671875
-    },
-    "shape": []
-   },
-   {
-    "case": "parens",
-    "tag": "prior",
-    "size": "1000x700",
-    "box": {
-     "w": 457.98316955566406,
-     "h": 343.4873962402344
-    },
-    "shape": []
-   },
-   {
-    "case": "true-minus",
-    "tag": "prior",
-    "size": "355x320",
-    "box": {
-     "w": 212.60504150390625,
-     "h": 159.45379638671875
-    },
-    "shape": []
-   },
-   {
-    "case": "true-minus",
-    "tag": "prior",
-    "size": "1000x700",
-    "box": {
-     "w": 457.983154296875,
-     "h": 343.4873962402344
-    },
-    "shape": []
-   },
-   {
-    "case": "mixed-decimal-pairs",
-    "tag": "prior",
-    "size": "355x320",
-    "box": {
-     "w": 204.0322723388672,
-     "h": 163.22580337524414
-    },
-    "shape": []
-   },
-   {
-    "case": "mixed-decimal-pairs",
-    "tag": "prior",
-    "size": "1000x700",
-    "box": {
-     "w": 439.51611328125,
-     "h": 351.6129150390625
-    },
-    "shape": []
-   },
-   {
-    "case": "segment-from-to",
-    "tag": "prior",
-    "size": "355x320",
-    "box": {
-     "w": 29.28240966796875,
-     "h": 175.6944580078125
-    },
-    "shape": []
-   },
-   {
-    "case": "segment-from-to",
-    "tag": "prior",
-    "size": "1000x700",
-    "box": {
-     "w": 63.07867431640625,
-     "h": 378.47222900390625
-    },
-    "shape": []
-   },
-   {
-    "case": "polygon-two-points",
-    "tag": "prior",
-    "size": "355x320",
-    "box": {
-     "w": 221.52777099609375,
-     "h": 0
-    },
-    "shape": []
-   },
-   {
-    "case": "polygon-two-points",
-    "tag": "prior",
-    "size": "1000x700",
-    "box": {
-     "w": 639.5833740234375,
-     "h": 0
-    },
-    "shape": []
-   },
-   {
-    "case": "sliver",
-    "tag": "prior",
-    "size": "355x320",
-    "box": {
-     "w": 221.52777481079102,
-     "h": 16.614585876464844
-    },
-    "shape": []
-   },
-   {
-    "case": "sliver",
-    "tag": "prior",
-    "size": "1000x700",
-    "box": {
-     "w": 639.5833740234375,
-     "h": 47.96875
-    },
-    "shape": []
-   },
-   {
-    "case": "tiny",
-    "tag": "prior",
-    "size": "355x320",
-    "box": {
-     "w": 0.25299835205078125,
-     "h": 0.2530059814453125
-    },
-    "shape": []
-   },
-   {
-    "case": "tiny",
-    "tag": "prior",
-    "size": "1000x700",
-    "box": {
-     "w": 0.5449981689453125,
-     "h": 0.54498291015625
-    },
-    "shape": []
-   },
-   {
-    "case": "schematic-sliver",
-    "tag": "prior",
-    "size": "355x320",
-    "box": {
-     "w": 221.52777481079102,
-     "h": 16.614585876464844
-    },
-    "shape": []
-   },
-   {
-    "case": "schematic-sliver",
-    "tag": "prior",
-    "size": "1000x700",
-    "box": {
-     "w": 639.5833740234375,
-     "h": 47.96875
-    },
-    "shape": []
-   }
-  ]
- }
+ ]
 }

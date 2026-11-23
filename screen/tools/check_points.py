@@ -53,7 +53,7 @@ DECIMAL_RE = re.compile(r"^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$")
 PARENS_RE = re.compile(r"[()]")
 
 # A polygon whose mean width is under this share of its longest side is a line.
-SLIVER = 0.12
+SLIVER = 0.03
 # A figure drawn smaller than this across cannot be read.
 TINY_PX = 4
 
@@ -183,12 +183,12 @@ CASES: list[dict] = [
     # mis-pairing ended up, so it must be reported even after the parse is fixed.
     {"name": "polygon-two-points", "points": "0 0, 4 0"},
     # Nearly flat triangle: a real drawing mistake, must be reported.
-    {"name": "sliver", "points": "0 0, 4 0, 4 0,3"},
+    {"name": "sliver", "points": "0 0, 4 0, 4 0,1"},
     # Figure collapsed to a few pixels by an explicit wide range.
     {"name": "tiny", "points": "0 0, 1 0, 1 1", "graph": ' x="0 1000" y="0 1000"',
      "expect": "tiny"},
     # A deliberate sketch may be a sliver: schematic opts out.
-    {"name": "schematic-sliver", "points": "0 0, 4 0, 4 0,3", "poly_attrs": " schematic",
+    {"name": "schematic-sliver", "points": "0 0, 4 0, 4 0,1", "poly_attrs": " schematic",
      "expect": "quiet"},
 ]
 

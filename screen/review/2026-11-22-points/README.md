@@ -20,7 +20,7 @@ figure that is actually on screen.
 
 **New lint (`shape`).** `lintShapes()` reports three things a figure can lose:
 a plane figure with fewer than three points, a figure whose points lie (nearly) on
-one line (mean width under 12% of its longest side), and a figure drawn under 4 px
+one line (mean width under 3% of its longest side), and a figure drawn under 4 px
 across. `free` and `schematic` figures opt out, as they do for the length lint.
 The sliver rule is scale-free; the pixel rule needs the graph's own mapping and so
 runs after drawing, from `settle()` and `ot.reveal()`, and clears its own findings
