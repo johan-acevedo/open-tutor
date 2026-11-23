@@ -6,6 +6,7 @@ batch POST URL, and replays canned vendor messages for the word transport.
 
 import asyncio
 import json
+import time
 from urllib.parse import parse_qs, urlparse
 
 import aiohttp
@@ -16,7 +17,9 @@ from open_tutor.agent import build_tts, tts_route
 from open_tutor.deepgram_tts import (
     DEFAULT_EXPRESSIVITY,
     DEFAULT_MODEL,
+    WS_MAX_IDLE_SECONDS,
     DeepgramFluxTTS,
+    _IdleAwareConnectionPool,
 )
 
 NO_RETRY = APIConnectOptions(max_retry=0, timeout=5)
@@ -82,6 +85,7 @@ class FakeSession:
 
 class FakeWS:
     close_code = None
+    closed = False
 
     def __init__(self, incoming):
         self.sent: list[dict] = []
@@ -238,6 +242,50 @@ async def test_streaming_unexpected_close_surfaces_status():
             await stream._run_ws(word_stream("hej"), FakeEmitter())
     finally:
         await stream.aclose()
+        await engine.aclose()
+
+
+async def test_pool_reuses_recent_connection():
+    session = FakeSession()
+    engine = DeepgramFluxTTS(api_key="test-key", http_session=session)
+    try:
+        assert isinstance(engine._pool, _IdleAwareConnectionPool)
+        async with engine._pool.connection(timeout=5) as ws1:
+            pass
+        async with engine._pool.connection(timeout=5) as ws2:
+            assert ws2 is ws1, "a recently used socket must be reused, not redialed"
+        assert len(session.sockets) == 1
+    finally:
+        await engine.aclose()
+
+
+async def test_pool_discards_connection_idle_past_threshold():
+    session = FakeSession()
+    engine = DeepgramFluxTTS(api_key="test-key", http_session=session)
+    try:
+        async with engine._pool.connection(timeout=5) as ws1:
+            pass
+        assert len(session.sockets) == 1
+        # Simulate Deepgram dropping the socket while the tutor was silent.
+        engine._pool._last_used[ws1] = time.time() - (WS_MAX_IDLE_SECONDS + 5)
+        async with engine._pool.connection(timeout=5) as ws2:
+            assert ws2 is not ws1, "an idle socket must be redialed, not reused"
+        assert len(session.sockets) == 2, "the stale socket must trigger a reconnect"
+    finally:
+        await engine.aclose()
+
+
+async def test_pool_discards_closed_socket():
+    session = FakeSession()
+    engine = DeepgramFluxTTS(api_key="test-key", http_session=session)
+    try:
+        async with engine._pool.connection(timeout=5) as ws1:
+            pass
+        ws1.closed = True  # server hung up between turns
+        async with engine._pool.connection(timeout=5) as ws2:
+            assert ws2 is not ws1, "a closed socket must be redialed, not reused"
+        assert len(session.sockets) == 2
+    finally:
         await engine.aclose()
 
 
