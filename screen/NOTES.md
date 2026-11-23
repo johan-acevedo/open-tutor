@@ -1,5 +1,28 @@
 # Smart Screen: choices, tried and rejected
 
+## Point lists with a comma between pairs, 2026-11-22
+
+Cause: the writer wrote `points="0 0,4 0,4 3,0 3"` (pairs split by a bare
+comma) on 2 of 5 pages in one production lesson. `nums()` split on whitespace
+and ", " only, so `0,4` read as the decimal 0.4, `points()` paired the wrong
+numbers and the rectangle drew as a thin slanted line (27.0×175.7 px at a
+355×320 pane instead of 4:3). Fix: `pairsByComma()` claims a list only when it
+has a comma, no `;`, and every comma-separated chunk is exactly one `x y` pair;
+`points()` uses it and otherwise keeps the old split, so `;`, ", ", whitespace,
+parentheses, true minus, `a/b` and decimal commas (`1,5 2, 3 4,5`) pair exactly
+as before. `lintLengths()` now pairs the same way, so a side label is measured
+on the figure the child sees. A new `shape` lint reports what used to ship
+silently: a polygon with fewer than three points, a figure whose points lie
+(nearly) on one line (mean width under 12% of its longest side), and a figure
+drawn under 4 px across. It clears and recomputes like the length lint, runs
+after drawing (the pixel rule needs the graph mapping), and `free`/`schematic`
+figures opt out. The nine example bodies produce byte-identical lint to
+`origin/main`; `tools/check_points.py` renders every accepted form at 355×320 and
+1000×700 against an independent pairing. Reproduce with
+`tools/check_points.py [--prior-ref origin/main] [--examples]`; CI pins the
+pairing and the verdict in `tests/test_points_parse.py`. Evidence:
+`review/2026-11-22-points/`. No new tags, no reference change.
+
 ## Circle and positioned text, 2026-11-13
 
 Five reference lines document the two-curve circle recipe and centred `ot-text`
