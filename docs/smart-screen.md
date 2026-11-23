@@ -235,7 +235,7 @@ served corpora and cached indexes).
 
 - Trunk: `main`. The Smart Screen branch was merged on 2026-11-13 (PR #51); branch from `main`.
 - Production: ThinkCentre (https://tutor.labtopia.dev), `main`, Smart Screen on since
-  2026-11-13 (the only mode since PR #73). Last deploy 2026-11-19 evening: `f4356d8` (#83 page answers wait, #84 steady companion), before that 2026-11-19: `0bec30e` (PRs #77–#81:
+  2026-11-13 (the only mode since PR #73). Last deploy 2026-11-23: `e338921` (#86 stale TTS sockets dropped, #87 comma-paired points and shape lint; #85 pose cache-bust went out static-only 2026-11-19), before that 2026-11-19 evening: `f4356d8` (#83 page answers wait, #84 steady companion), before that 2026-11-19: `0bec30e` (PRs #77–#81:
   bands on tutor/tutor2/tutor3, companions, voice-first start, catalogues).
   `TUTOR_ACCESS_CODE` removed from the env file: access is Sweden-only
   (`TUTOR_ALLOWED_COUNTRIES=SE`) with `TUTOR_MAX_SESSIONS_PER_HOUR=12` as the only cost cap.
