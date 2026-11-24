@@ -23,6 +23,15 @@ export const POSE_VERSION = '20261119';
 // Own cache-bust version for the landing images (scripts/export_landing_companions.py).
 export const LANDING_IMG_VERSION = '20261124b';
 
+// Cache-bust version for the spoken landing greetings
+// (web/public/audio/hello-<band>.mp3, added 2026-11-24). Bump when the clips change.
+export const HELLO_AUDIO_VERSION = '20261124';
+
+/** Versioned URL of the spoken greeting clip behind the landing speech bubble. */
+export function helloAudioUrl(band: BandId): string {
+  return `/audio/hello-${band}.mp3?v=${HELLO_AUDIO_VERSION}`;
+}
+
 function landingImages(directory: string): { hero: string; face: string } {
   return {
     hero: `${directory}/hero.webp?v=${LANDING_IMG_VERSION}`,

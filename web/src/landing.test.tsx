@@ -1,12 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { bandConfig, type BandId } from './bands';
 import type { Profile } from './db';
 import LandingPage from './components/LandingPage';
+import { MockAudio } from './components/mockAudio';
+import { resetGreetingForTests } from './components/greetingAudio';
 
 afterEach(() => {
   cleanup();
   localStorage.clear();
+  vi.unstubAllGlobals();
+  resetGreetingForTests();
 });
 
 function profile(over: Partial<Profile> = {}): Profile {
@@ -68,6 +72,20 @@ describe('top bar', () => {
     expect(screen.queryByRole('dialog', { name: 'Integritet' })).toBeNull();
     expect(document.activeElement).toBe(trigger);
   });
+  it('the ghost button stops the greeting clip when starting', async () => {
+    resetGreetingForTests();
+    MockAudio.instances = [];
+    vi.stubGlobal('Audio', MockAudio as unknown as typeof Audio);
+    const { onPick, order } = firstVisit();
+    const bubble = screen.getByRole('button', { name: 'Lyssna på Räven' });
+    fireEvent.click(bubble);
+    await waitFor(() => expect(bubble.getAttribute('aria-pressed')).toBe('true'));
+    const [ghost] = screen.getAllByRole('button', { name: 'Prata med Räven' });
+    fireEvent.click(ghost);
+    expect(MockAudio.instances[0].paused).toBe(true);
+    expect(order).toEqual(['unlock', 'pick']);
+    expect(onPick).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('hero', () => {
@@ -77,13 +95,34 @@ describe('hero', () => {
     expect(h1.textContent).toBe('Läxhjälp du kan prata med.');
   });
 
-  it('links the other bands with faces', () => {
+  it('asks to show the homework so the companion sees it too', () => {
     firstVisit();
-    const lynx = screen.getByRole('link', { name: 'Lodjuret' });
+    expect(screen.getByText('Fota uppgiften, så ser Räven den också.')).toBeDefined();
+  });
+
+  it('cross-links the other two bands as whole cards after the steps', () => {
+    firstVisit();
+    expect(screen.getByRole('heading', { level: 2, name: 'Går du i en annan årskurs?' })).toBeDefined();
+    const lynx = screen.getByRole('link', { name: 'Lodjuret Högstadiet' });
     expect(lynx.getAttribute('href')).toContain('band=middle');
-    const face = lynx.querySelector('img.ot-land-face');
+    const face = lynx.querySelector('img.ot-land-bandface');
     expect(face?.getAttribute('src')).toContain('face.webp');
-    expect(screen.getByRole('link', { name: 'Björnen' }).getAttribute('href')).toContain('band=upper');
+    const bear = screen.getByRole('link', { name: 'Björnen Gymnasiet och vuxna' });
+    expect(bear.getAttribute('href')).toContain('band=upper');
+  });
+
+  it('names the younger bands for the upper band', () => {
+    firstVisit('upper');
+    expect(screen.getByRole('heading', { level: 2, name: 'Någon yngre hemma?' })).toBeDefined();
+    expect(screen.getByRole('link', { name: 'Räven Åk 1–6' }).getAttribute('href')).toContain('band=primary');
+    expect(screen.getByRole('link', { name: 'Lodjuret Högstadiet' }).getAttribute('href')).toContain('band=middle');
+  });
+
+  it('the middle band invites both younger and older learners', () => {
+    firstVisit('middle');
+    expect(screen.getByRole('heading', { level: 2, name: 'Går du i en annan årskurs?' })).toBeDefined();
+    expect(screen.getByRole('link', { name: 'Räven Åk 1–6' }).getAttribute('href')).toContain('band=primary');
+    expect(screen.getByRole('link', { name: 'Björnen Gymnasiet och vuxna' }).getAttribute('href')).toContain('band=upper');
   });
 
   it('returning visit shares the row between CTA and not-you', () => {
