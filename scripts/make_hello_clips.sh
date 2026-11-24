@@ -7,6 +7,7 @@
 #
 #   infisical run --projectId <open-tutor project> --env prod -- scripts/make_hello_clips.sh OUT_DIR
 set -euo pipefail
+set +x  # never trace: the API key is handled below
 out=${1:?output directory}
 mkdir -p "$out"
 : "${DEEPGRAM_API_KEY:?DEEPGRAM_API_KEY is not set}"
@@ -18,9 +19,11 @@ declare -A LINES=(
 for band in primary middle upper; do
   text=${LINES[$band]}
   body=$(python3 -c 'import json,sys; print(json.dumps({"text": sys.argv[1]}))' "$text")
-  curl -sS --fail-with-body -X POST \
+  # The key goes to curl as a config file on stdin (printf is a shell builtin),
+  # so it never appears in any process's argv.
+  printf 'header = "Authorization: Token %s"\n' "$DEEPGRAM_API_KEY" | curl -sS --fail-with-body -K - -X POST \
     "https://api.deepgram.com/v2/speak?model=flux-ludvig-sv&expressivity=1&encoding=linear16&container=wav" \
-    -H "Authorization: Token ${DEEPGRAM_API_KEY}" -H 'Content-Type: application/json' \
+    -H 'Content-Type: application/json' \
     --data "$body" -o "$out/hello-$band.wav"
   ffmpeg -loglevel error -y -i "$out/hello-$band.wav" \
     -af "silenceremove=start_periods=1:start_threshold=-50dB,areverse,silenceremove=start_periods=1:start_threshold=-50dB,areverse,loudnorm=I=-18:TP=-1.5" \

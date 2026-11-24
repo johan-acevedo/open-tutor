@@ -125,22 +125,22 @@ describe('greeting bubble', () => {
 
   it('is a button that names the companion', () => {
     render(<Welcome profiles={[]} band={bandConfig('primary')} onPick={() => {}} starting={false} />);
-    const b = bubble('Lyssna på Räven');
+    const b = bubble(/Lyssna på Räven$/);
     expect(b.getAttribute('aria-pressed')).toBe('false');
     expect(b.textContent).toContain('Hej!');
   });
 
   it('names the other companions on their bands', () => {
     render(<Welcome profiles={[]} band={bandConfig('middle')} onPick={() => {}} starting={false} />);
-    expect(bubble('Lyssna på Lodjuret')).toBeDefined();
+    expect(bubble(/Lyssna på Lodjuret$/)).toBeDefined();
     cleanup();
     render(<Welcome profiles={[]} band={bandConfig('upper')} onPick={() => {}} starting={false} />);
-    expect(bubble('Lyssna på Björnen')).toBeDefined();
+    expect(bubble(/Lyssna på Björnen$/)).toBeDefined();
   });
 
   it('plays the band greeting on tap, stops on the next tap', async () => {
     render(<Welcome profiles={[]} band={bandConfig('primary')} onPick={() => {}} starting={false} />);
-    const b = bubble('Lyssna på Räven');
+    const b = bubble(/Lyssna på Räven$/);
     expect(MockAudio.instances).toHaveLength(0);
     fireEvent.click(b);
     expect(MockAudio.instances).toHaveLength(1);
@@ -157,7 +157,7 @@ describe('greeting bubble', () => {
     render(
       <Welcome profiles={[]} band={bandConfig('primary')} onPick={(p: Profile) => { order.push('pick'); pick(p); }} starting={false} onStartGesture={() => order.push('unlock')} />,
     );
-    const b = bubble('Lyssna på Räven');
+    const b = bubble(/Lyssna på Räven$/);
     fireEvent.click(b);
     await waitFor(() => expect(b.getAttribute('aria-pressed')).toBe('true'));
     fireEvent.click(screen.getByRole('button', { name: 'Prata med Räven' }));
@@ -165,5 +165,25 @@ describe('greeting bubble', () => {
     expect(b.getAttribute('aria-pressed')).toBe('false');
     expect(order).toEqual(['unlock', 'pick']);
     expect(pick).toHaveBeenCalledTimes(1);
+  });
+
+  it('its accessible name starts with the visible greeting', () => {
+    render(<Welcome profiles={[]} band={bandConfig('primary')} onPick={() => {}} starting={false} />);
+    expect(bubble('Hej! Lyssna på Räven')).toBeDefined();
+  });
+
+  it('stops the clip when the band changes or the page unmounts', async () => {
+    const { rerender, unmount } = render(
+      <Welcome profiles={[]} band={bandConfig('primary')} onPick={() => {}} starting={false} />,
+    );
+    fireEvent.click(bubble(/Lyssna på Räven$/));
+    await waitFor(() => expect(MockAudio.instances[0].paused).toBe(false));
+    rerender(<Welcome profiles={[]} band={bandConfig('middle')} onPick={() => {}} starting={false} />);
+    expect(MockAudio.instances[0].paused).toBe(true);
+    expect(bubble(/Lyssna på Lodjuret$/).getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(bubble(/Lyssna på Lodjuret$/));
+    await waitFor(() => expect(MockAudio.instances.at(-1)!.paused).toBe(false));
+    unmount();
+    expect(MockAudio.instances.at(-1)!.paused).toBe(true);
   });
 });

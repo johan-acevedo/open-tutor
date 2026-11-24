@@ -178,7 +178,7 @@ export const sv = {
   'landing.row3Upper': 'f′(2) = 7',
   'landing.op1Primary': 'dela upp',
   'landing.op2Primary': 'lägg ihop',
-  'landing.listenAria': 'Lyssna på {companion}',
+  'landing.listenAria': '{greeting} Lyssna på {companion}',
   'landing.op1Middle': '−5',
   'landing.op2Middle': '÷3',
   'landing.op1Upper': 'derivera',

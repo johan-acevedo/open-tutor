@@ -77,7 +77,7 @@ describe('top bar', () => {
     MockAudio.instances = [];
     vi.stubGlobal('Audio', MockAudio as unknown as typeof Audio);
     const { onPick, order } = firstVisit();
-    const bubble = screen.getByRole('button', { name: 'Lyssna på Räven' });
+    const bubble = screen.getByRole('button', { name: /Lyssna på Räven$/ });
     fireEvent.click(bubble);
     await waitFor(() => expect(bubble.getAttribute('aria-pressed')).toBe('true'));
     const [ghost] = screen.getAllByRole('button', { name: 'Prata med Räven' });

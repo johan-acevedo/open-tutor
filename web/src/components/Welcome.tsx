@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import type { BandConfig, BandId } from '../bands';
 import type { Profile } from '../db';
 import { t, type SvKey } from '../locales/sv';
@@ -30,11 +31,14 @@ const INTRO: Record<BandId, SvKey> = {
  *  The bubble lives inside the figure wrapper so it scales with the image. */
 function GreetingBubble({ band, label, long }: { band: BandConfig; label: string; long: boolean }) {
   const playing = useGreetingPlaying();
+  // A band change (late /api/config) or leaving the landing stops the clip,
+  // so no stale greeting keeps playing under another companion.
+  useEffect(() => () => stopGreeting(), [band.id]);
   return (
     <button
       type="button"
       className={`ot-land-bubble${playing ? ' is-playing' : ''}${long ? ' is-long' : ''}`}
-      aria-label={t('landing.listenAria', { companion: band.companion.name })}
+      aria-label={t('landing.listenAria', { greeting: label, companion: band.companion.name })}
       aria-pressed={playing}
       onClick={() => toggleGreeting(band.id)}
     >
