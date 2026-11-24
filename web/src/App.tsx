@@ -6,13 +6,12 @@ import { listProfiles, rememberLastProfileId } from './db';
 import type { Profile } from './db';
 import { useSession } from './useSession';
 import { initAnalytics, pageOpened } from './analytics';
-import Welcome from './components/Welcome';
+import LandingPage from './components/LandingPage';
 import Avatar from './components/Avatar';
 import Board from './components/Board';
 import BottomBar from './components/BottomBar';
 import PhoneStage from './components/PhoneStage';
 import TopMenu from './components/TopMenu';
-import StartMenu from './components/StartMenu';
 import EndCard from './components/EndCard';
 import HomeworkTray from './components/HomeworkTray';
 import ScreenDemo from './components/ScreenDemo';
@@ -133,32 +132,31 @@ export default function App() {
       data-band={band}
       className={`ot-root${mobile ? ' ot-phone' : ''}${phonePortrait ? ' ot-phone-portrait' : ''}${keyboard ? ' ot-keyboard' : ''}${inSession ? ' ot-in-session' : ''}`}
     >
-      <header className="ot-topbar">
-        <div className="ot-wordmark">Open Tutor</div>
-        <div className="ot-topbar-right">
-          {inSession && (
-            <button type="button" className="ot-end-btn ot-end-top" onClick={() => void session.endSession()} aria-label={t('app.endButtonAria')}>
-              {t('app.endButton')}
-            </button>
-          )}
-          {inSession && (
-            <TopMenu
-              items={session.items}
-              dragOver={session.dragOver}
-              onCamera={() => cameraRef.current?.click()}
-              onFiles={() => fileRef.current?.click()}
-              onSwitchStudent={() => void session.leaveToProfiles()}
-              switchLabel={config.copy.switchStudent}
-            />
-          )}
-          {phase === 'profiles' && (
-            <StartMenu switchLabel={config.copy.switchStudent} onSwitch={session.showFirstVisit} />
-          )}
-        </div>
-      </header>
+      {phase !== 'profiles' && (
+        <header className="ot-topbar">
+          <div className="ot-wordmark">Open Tutor</div>
+          <div className="ot-topbar-right">
+            {inSession && (
+              <button type="button" className="ot-end-btn ot-end-top" onClick={() => void session.endSession()} aria-label={t('app.endButtonAria')}>
+                {t('app.endButton')}
+              </button>
+            )}
+            {inSession && (
+              <TopMenu
+                items={session.items}
+                dragOver={session.dragOver}
+                onCamera={() => cameraRef.current?.click()}
+                onFiles={() => fileRef.current?.click()}
+                onSwitchStudent={() => void session.leaveToProfiles()}
+                switchLabel={config.copy.switchStudent}
+              />
+            )}
+          </div>
+        </header>
+      )}
 
       {phase === 'profiles' && (
-        <Welcome
+        <LandingPage
           profiles={profiles}
           band={config}
           onPick={(p) => {
@@ -171,6 +169,7 @@ export default function App() {
           starting={false}
           startOpen={session.profilesOpen}
           assumeId={session.prefillId}
+          onSwitch={session.showFirstVisit}
         />
       )}
 
