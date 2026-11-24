@@ -32,7 +32,7 @@ CSP = ("default-src 'none'; "
        "connect-src https://cdn.jsdelivr.net https://commons.wikimedia.org")
 
 # Model-facing experiment blocks that need the inlined UI SDK bundle.
-# Detection keeps the default compose byte-identical for all existing pages.
+# Detection keeps the third-party bundle out of pages that use ordinary blocks.
 SDK_TAGS = ("ot-order", "ot-match", "ot-sdk-choice", "ot-sdk-answer")
 _SDK_TAG_RE = re.compile(r"<\s*(?:" + "|".join(SDK_TAGS) + r")[\s>]")
 

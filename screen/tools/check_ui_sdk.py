@@ -91,12 +91,13 @@ def main() -> int:
             check("model script and handler stripped (native sanitizer)",
                   frame.evaluate("() => !document.querySelector('#page script, #page [onclick]')")
                   and frame.evaluate("() => !window.modelRan && document.getElementById('elak').textContent.includes('Vanlig text')"))
+            check("raw model-authored SDK tag is stripped", frame.locator("#model-widget").count() == 0)
 
             answers = lambda: page.evaluate("() => window.__ot.filter(m => m.ot === 'answer')")
 
             # --- ot-sdk-choice: keyboard select + explicit submit ----------
             group = frame.locator("ui-radio-group")
-            check("radio group keeps one tab stop", frame.evaluate(
+            check("radio group contains three options", frame.evaluate(
                 """() => { const g = document.querySelector('ui-radio-group');
                     return g && g.querySelectorAll('ui-radio').length === 3; }"""))
             check("radio roles", frame.evaluate(
@@ -137,6 +138,8 @@ def main() -> int:
             page.keyboard.press("Enter")
             live = frame.evaluate("() => document.querySelector('ot-order [role=status]').textContent")
             check("polite reorder announcement", live == "Myra är nu 2 av 3", live)
+            check("keyboard focus stays on the moved item",
+                  frame.evaluate("() => document.activeElement.getAttribute('aria-label')") == "Flytta ner: Myra")
             check("move button names follow the item", frame.evaluate(
                 "() => document.querySelector('ot-order [data-move=up]').getAttribute('aria-label')") == "Flytta upp: Katt")
             page.wait_for_function("() => window.__ot.some(m => m.ot === 'input' && m.id === 'ordning')", timeout=5000)
@@ -156,6 +159,8 @@ def main() -> int:
             check("two SDK selects, one per prompt", selects.count() == 2)
             check("select named per prompt", frame.evaluate(
                 "() => document.querySelector('ot-match ui-select').getAttribute('aria-label')") == "Välj svar för Hund")
+            check("matching group has an accessible name",
+                  frame.get_by_role("group", name="Para ihop djuret med rätt ord").count() == 1)
             # keyboard: Enter opens with focus on the first item; Enter chooses it
             frame.locator("ot-match ui-select-trigger > button").first.focus()
             page.keyboard.press("Enter")
@@ -186,8 +191,8 @@ def main() -> int:
             print(f"screenshots in {out}")
 
             # --- DOMPurify fallback leg (needs the real CDN lib, like check_sanitizer)
+            fb = browser.new_context(viewport={"width": W, "height": H})
             try:
-                fb = browser.new_context(viewport={"width": W, "height": H})
                 fb.add_init_script("delete Element.prototype.setHTML")
                 page2 = fb.new_page()
                 page2.set_content(screenkit.host_page(doc_sdk))
@@ -198,9 +203,8 @@ def main() -> int:
                       and frame2.evaluate("() => document.querySelectorAll('ot-order li').length") == 3)
                 check("fallback strips model script", frame2.evaluate(
                     "() => !document.querySelector('#page script') && !window.modelRan"))
+            finally:
                 fb.close()
-            except Exception as e:  # CDN unreachable where this runs: not a block failure
-                print(f"SKIP DOMPurify fallback leg ({type(e).__name__}: {e})")
         finally:
             browser.close()
 

@@ -120,9 +120,12 @@ async def observe(browser, document: str, destination: Path, started: float) -> 
 async def check_keyboard(viewer, frame) -> dict:
     """Follow the actual Tab order and exercise ordinary control key bindings."""
     focused = set()
+    choice_groups = set()
     trace = []
     radio_arrows = False
-    move_used = False
+    move_status = []
+    select_index = 0
+    live_regions = frame.locator('[role="status"], [aria-live="polite"]')
     for _ in range(32):
         await viewer.keyboard.press("Tab")
         active = frame.locator(":focus")
@@ -135,7 +138,10 @@ async def check_keyboard(viewer, frame) -> dict:
           const index = [...document.querySelectorAll('*')].indexOf(el);
           return {index, role: control.getAttribute('role') || control.localName,
             name: control.getAttribute('aria-label') || control.labels?.[0]?.textContent?.trim()
-              || control.textContent.trim().slice(0, 65), type: control.type || ''};
+              || control.textContent.trim().slice(0, 65), type: control.type || '',
+            choice: control.closest('ot-choice')?.id || '',
+            sdk_select: Boolean(control.closest('ui-select-trigger')),
+            disabled: control.matches(':disabled, [aria-disabled="true"]')};
         }""")
         index = key.pop("index")
         if index in focused:
@@ -143,30 +149,40 @@ async def check_keyboard(viewer, frame) -> dict:
         focused.add(index)
         trace.append(key)
         role, name = key["role"], key["name"]
-        if role == "radio":
+        if role == "radio" or key["type"] == "radio":
             await viewer.keyboard.press("ArrowRight")
             radio_arrows = (await frame.get_by_role("radio", checked=True).count()) > 0
             if not radio_arrows:
                 await viewer.keyboard.press("Space")
-        elif role == "combobox":
-            await viewer.keyboard.press("ArrowDown")
-            await viewer.keyboard.press("Enter")
+        elif key["sdk_select"] or role in ("combobox", "select"):
+            if key["sdk_select"]:
+                await viewer.keyboard.press("Enter")
+            for _ in range(select_index + (0 if key["sdk_select"] else 1)):
+                await viewer.keyboard.press("ArrowDown")
+            if key["sdk_select"] or (role == "combobox" and key["type"] != "select-one"):
+                await viewer.keyboard.press("Enter")
+            select_index += 1
         elif role in ("input", "textarea", "textbox") and key["type"] != "radio":
             await viewer.keyboard.insert_text("Test")
-        elif role == "button":
+        elif role == "button" and not key["disabled"]:
             if re.search(r"skicka|lämna|svara", name, re.I):
                 await viewer.keyboard.press("Enter")
                 break
             if re.search(r"flytta", name, re.I):
-                if not move_used:
+                if not move_status:
                     await viewer.keyboard.press("Enter")
-                    move_used = True
-            elif len(trace) == 1:
+                    move_status = [item.strip() for item in await live_regions.all_text_contents() if item.strip()]
+            elif (key["choice"] and key["choice"] not in choice_groups) or len(trace) == 1:
                 await viewer.keyboard.press("Space")
+                choice_groups.add(key["choice"])
+    try:
+        await viewer.wait_for_function("window.answerMessages.length > 0", timeout=900)
+    except BrowserError:
+        pass
     answers = await viewer.evaluate("() => new Promise(resolve => requestAnimationFrame(() => resolve(window.answerMessages)))")
-    announcements = await frame.locator('[role="status"], [aria-live="polite"]').all_text_contents()
+    announcements = await live_regions.all_text_contents()
     return {"focus": trace, "answers": answers, "radio_arrow_selects": radio_arrows,
-            "move_control_activated": move_used, "status": [item.strip() for item in announcements if item.strip()]}
+            "move_status": move_status, "status": [item.strip() for item in announcements if item.strip()]}
 
 
 def body_metrics(body: str) -> dict:
@@ -192,7 +208,7 @@ async def measure(case, arm: str, folder: Path, reference: str, session: str,
     def compose(body):
         if arm == "sdk":
             return screenkit.compose(body, band=band, ui_sdk=True)
-        return screenkit.compose(body, shell=baseline_shell, band=band)
+        return screenkit.compose(body, shell=baseline_shell, band=band, ui_sdk=False)
 
     async def model(system, user, images, look_png, on_first_text, on_text):
         nonlocal calls

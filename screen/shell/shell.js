@@ -92,7 +92,6 @@
     return out;
   })();
   function loadingText(topic) { return String(otStrings.loading).replace('{topic}', String(topic)); }
-  // A Skicka button shared by the experiment blocks: posts once per change.
   function submitButton(host, id, getValue, focusOnEmpty) {
     var btn = document.createElement('button');
     btn.type = 'button'; btn.className = 'ot-send'; btn.textContent = otStrings.send;
@@ -292,6 +291,7 @@
       });
     }
     $$('*', fragment).forEach(function (el) {
+      if (el.localName.indexOf('ui-') === 0) { el.remove(); return; }
       if (el.tagName === 'INPUT' && el.type === 'image') { el.remove(); return; }
       Array.prototype.slice.call(el.attributes).forEach(function (attribute) {
         var name = attribute.name.toLowerCase();
@@ -576,11 +576,18 @@
           if (submit) submit.arm();
           if (announce) draft(id, orderValue());
         }
-        function move(li, dir) {
+        function move(li, dir, button) {
           var sib = dir < 0 ? li.previousElementSibling : li.nextElementSibling;
           if (!sib) return;
-          if (dir < 0) list.insertBefore(li, sib); else list.insertBefore(sib, li);
+          var focused = document.activeElement === button;
+          var before = dir < 0 ? sib : sib.nextElementSibling;
+          if (typeof list.moveBefore === 'function') list.moveBefore(li, before);
+          else list.insertBefore(li, before);
           refresh(true);
+          if (focused) {
+            var next = button.disabled ? li.querySelector('button:not(:disabled)') : button;
+            if (next) next.focus();
+          }
           var rows = $$(':scope > li', list);
           live.textContent = li.querySelector('.ot-order-text').textContent + ' ' +
             otStrings.orderMoved.replace('{pos}', String(rows.indexOf(li) + 1)).replace('{total}', String(rows.length));
@@ -594,8 +601,8 @@
           up.innerHTML = '<span aria-hidden="true">\u25b2</span>';
           var down = document.createElement('button'); down.type = 'button'; down.setAttribute('data-move', 'down');
           down.innerHTML = '<span aria-hidden="true">\u25bc</span>';
-          up.addEventListener('click', function () { move(li, -1); });
-          down.addEventListener('click', function () { move(li, 1); });
+          up.addEventListener('click', function () { move(li, -1, up); });
+          down.addEventListener('click', function () { move(li, 1, down); });
           btns.appendChild(up); btns.appendChild(down);
           li.appendChild(t); li.appendChild(btns);
           list.appendChild(li);
@@ -652,6 +659,7 @@
         }
         var group = document.createElement('div');
         group.className = 'ot-match-group';
+        group.setAttribute('role', 'group');
         if (lab) group.setAttribute('aria-labelledby', id + '-label');
         else group.setAttribute('aria-label', otStrings.choiceLabel);
         this.appendChild(group);
@@ -840,7 +848,7 @@
           this.appendChild(u);
         }
         var submit = submitButton(this, id, function () { return input.value.trim(); }, input);
-        input.addEventListener('keydown', function (e) { if (e.key === 'Enter') submit.el.click(); });
+        input.addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.isComposing) submit.el.click(); });
         input.addEventListener('input', function () { submit.arm(); draft(id, input.value); });
         this._restore = function (v) { input.value = String(v == null ? '' : v); };
       }
