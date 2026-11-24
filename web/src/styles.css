@@ -520,6 +520,10 @@ a:focus-visible {
   min-width: 0;
   display: flex;
   justify-content: center;
+  /* Room for the bubble, which hangs above the figure by up to ~31% of the
+     figure's width; without it the bubble is clipped under the top bar on
+     short desktop windows (1280×800). */
+  padding-top: min(134px, calc((100svh - 170px) / 1.5 * 0.31));
 }
 
 /* One wrapper anchors the bubble and the image so the bubble keeps its
@@ -529,7 +533,8 @@ a:focus-visible {
 .ot-land-fig {
   container-type: inline-size;
   position: relative;
-  width: min(430px, 100%);
+  /* Capped by window height too, so figure plus bubble fit the first view. */
+  width: min(430px, 100%, calc((100svh - 170px) / 1.5));
   margin-left: auto;
 }
 
