@@ -6,7 +6,7 @@ Target: desktop browsers on school Chromebooks (`1366×768`) and Windows PCs (`1
 ## 1. Agreed Constraints vs. Proposed Visual Choices
 
 ### Agreed constraints (Founding Brief & PRD)
-- **Context:** Swedish children aged 9–15 doing real homework in a browser. No install, login, parent dashboards, billing, or marketing pages.
+- **Context:** Swedish children aged 9–15 doing real homework in a browser. No install, login, parent dashboards or billing. Since 2026-11-24 the start page explains itself to newcomers (`design/landing-2026-11/`).
 - **Continuity:** Local sibling profiles (`namn` + `årskurs`) and brief session notes. Fresh board each visit.
 - **Live call:** One tap starts session and mic. No push-to-talk; interruptible mid-sentence. Quiet intervals for thinking, reading, writing, or video are normal.
 - **Spatial roles:** Large original companion on arrival; moves aside so the AI-controlled whiteboard takes the main area.

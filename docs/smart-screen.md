@@ -4,6 +4,28 @@ Lead: the thread "state of the project" (Claude, 2026-11-12). The lead keeps thi
 Workers read it before starting and report against it. Decisions here were agreed with Johan
 on 2026-11-12 unless marked open.
 
+## 2026-11-24: a landing page that explains itself (A3)
+
+Johan wants to invite more people, and the voice-first start page looked experimental to a
+newcomer: the largest text was a 24px bubble, the page never said what Open Tutor is, and the
+small print read like a beta disclaimer. Selected direction A3 (record and mockups in
+`design/landing-2026-11/`), built on `feat/landing-a3`:
+
+- Hero: "Läxhjälp du kan prata med.", a band intro ("Räven är en AI för dig som går i
+  åk 1–6 … Gratis medan vi testar."), cross-links to the other two bands (host prefix swap,
+  `?band=` on other hosts), one start button. The companion stands beside it with a static
+  comic bubble "Hej!" (speaker icon, no animation before the call).
+- "Så funkar det": Visa läxan → Prata med {companion} → Lös den ihop, each with an
+  HTML/CSS picture (per-band example task) rather than an icon.
+- Footer: "Open Tutor är ett experiment …" plus the privacy note. Public copy calls the
+  project a free experiment; it does not promise open source or non-profit.
+- Returning visit keeps the flow from 2026-11-19: "Hej {name}!" and an "Inte {name}?" link on
+  the same row as the button.
+- Rejected on purpose: pill rows above the headline, fine print under the button, gradient
+  text (Johan: they read as generated design).
+- The fox greeting was only 486 px wide, so the hero gets its own higher-resolution
+  `hero.webp` per band; the in-call poses are unchanged.
+
 ## 2026-11-22: a figure wrote its points with a comma between pairs
 
 A production lesson on 2026-11-22 showed 2 of 5 pages with a rectangle drawn as a
