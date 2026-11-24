@@ -1,18 +1,36 @@
 import { useEffect, useRef, useState } from 'react';
 import { t } from '../locales/sv';
 
+export type StartPanel = 'about' | 'privacy' | null;
+
 type Props = {
   /** Switch-student entry (bands 1-2) or switch-person entry (band 3). */
   switchLabel: string;
   /** Return to the nameless first-visit page. */
   onSwitch: () => void;
+  /** Controlled open state (the landing top bar opens the menu from its nav). */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  /** Controlled panel state (the landing nav and footer open these from outside). */
+  panel?: StartPanel;
+  onPanelChange?: (panel: StartPanel) => void;
 };
 
 /** Pre-call menu: brand-adjacent hamburger with the switch entry plus short
- *  about and privacy notes. No session is running here, so there is no inbox. */export default function StartMenu({ switchLabel, onSwitch }: Props) {
-  const [open, setOpen] = useState(false);
-  const [panel, setPanel] = useState<'about' | 'privacy' | null>(null);
+ *  about and privacy notes. The landing page lifts the open and panel state
+ *  so its nav links and footer can open the same panels from outside. */export default function StartMenu({ switchLabel, onSwitch, open: openProp, onOpenChange, panel: panelProp, onPanelChange }: Props) {
+  const [openInner, setOpenInner] = useState(false);
+  const [panelInner, setPanelInner] = useState<StartPanel>(null);
+  const open = openProp ?? openInner;
+  const panel = panelProp ?? panelInner;
   const wrapRef = useRef<HTMLDivElement | null>(null);
+
+  function setOpen(next: boolean) {
+    if (openProp === undefined) setOpenInner(next);
+    onOpenChange?.(next);
+    if (panelProp === undefined) setPanelInner(null);
+    onPanelChange?.(null);
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -28,10 +46,14 @@ type Props = {
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('pointerdown', onPointer);
     };
+    // setOpen is stable enough: it only writes the props/state above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open ]);
 
   function choose(next: 'about' | 'privacy') {
-    setPanel((cur) => (cur === next ? null : next));
+    const value: StartPanel = panel === next ? null : next;
+    if (panelProp === undefined) setPanelInner(value);
+    onPanelChange?.(value);
   }
 
   return (
@@ -42,8 +64,7 @@ type Props = {
         aria-label={t('topmenu.menuLabel')}
         aria-expanded={open}
         onClick={() => {
-          setOpen((value) => !value);
-          setPanel(null);
+          setOpen(!open);
         }}
       >
         <span aria-hidden="true">☰</span>
