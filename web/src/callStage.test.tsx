@@ -49,7 +49,7 @@ describe('Call stage arrival: no empty board, companion owns the stage', () => {
     expect(img?.getAttribute('src')).toBe('/character/greeting.webp?v=20261119');
   });
 
-  it('shows no empty-board copy on desktop arrival', () => {
+  it('shows no empty-board copy on desktop arrival, but keeps the homework tray usable', () => {
     const { container } = render(<CallStage {...arrivalProps()} />);
 
     expect(screen.queryByText('Här hamnar det vi jobbar med.')).toBeNull();
@@ -77,10 +77,35 @@ describe('Call stage arrival: no empty board, companion owns the stage', () => {
 
     const hero = within(container.querySelector('.ot-stage-hero') as HTMLElement);
     expect(hero.getByRole('status', { name: 'Pratar' })).toBeTruthy();
+    // Compact: the bubble carries the empty marker …
+    const say = container.querySelector('.ot-stage-hero .ot-say');
+    expect(say?.className).toContain('ot-say-empty');
     const text = container.querySelector('.ot-stage-hero .ot-say-text');
-    // The live region stays mounted (empty) so the first words are announced.
+    // …but the live region stays mounted (empty, and never hidden from
+    // assistive tech) so the first words are announced.
     expect(text?.getAttribute('aria-live')).toBe('polite');
     expect(text?.textContent).toBe('');
+    expect(text?.className).toContain('ot-text-empty');
+    expect(text?.hasAttribute('hidden')).toBe(false);
+  });
+
+  it('marks a captioned bubble as non-empty', () => {
+    const { container } = render(<CallStage {...arrivalProps()} />);
+
+    expect(container.querySelector('.ot-stage-hero .ot-say')?.className).not.toContain('ot-say-empty');
+    expect(container.querySelector('.ot-stage-hero .ot-say-text')?.className).not.toContain('ot-text-empty');
+  });
+
+  it('opts the hidden arrival board back into visibility while it carries the tray', () => {
+    const { container, rerender } = render(<CallStage {...arrivalProps()} />);
+    expect(container.querySelector('.ot-main-arrival .ot-board')?.className).not.toContain(
+      'ot-board-has-tray',
+    );
+
+    rerender(<CallStage {...arrivalProps({ overlay: <div className="ot-homework-tray" /> })} />);
+    expect(container.querySelector('.ot-main-arrival .ot-board')?.className).toContain(
+      'ot-board-has-tray',
+    );
   });
 });
 

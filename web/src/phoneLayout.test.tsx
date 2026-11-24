@@ -68,6 +68,36 @@ describe('Phone portrait: the fox fills the screen until something is shown', ()
     expect(container.querySelector('.ot-fox-head')).toBeNull();
   });
 
+  it('keeps an empty caption compact but announced, in both phone views', () => {
+    const arrival = render(<Harness items={[]} signal={0} caption="" />);
+    const heroBubble = arrival.container.querySelector('.ot-fox-bubble-hero');
+    expect(heroBubble?.className).toContain('ot-bubble-empty');
+    const heroText = heroBubble?.querySelector('.ot-fox-text');
+    expect(heroText?.getAttribute('aria-live')).toBe('polite');
+    expect(heroText?.textContent).toBe('');
+    expect(heroText?.className).toContain('ot-text-empty');
+    arrival.unmount();
+
+    const teaching = render(
+      <Harness items={[task]} signal={1} caption="   " />,
+    );
+    // Whitespace-only counts as empty too.
+    const stripBubble = teaching.container.querySelector('.ot-fox-bubble-strip');
+    expect(stripBubble?.className).toContain('ot-bubble-empty');
+    const stripText = stripBubble?.querySelector('.ot-fox-text');
+    expect(stripText?.getAttribute('aria-live')).toBe('polite');
+    expect(stripText?.textContent).toBe('');
+    teaching.unmount();
+  });
+
+  it('marks a captioned phone bubble as non-empty', () => {
+    const { container } = render(<Harness items={[]} signal={0} caption="Hej Johan!" />);
+    expect(container.querySelector('.ot-fox-bubble-hero')?.className).not.toContain('ot-bubble-empty');
+    expect(container.querySelector('.ot-fox-bubble-hero .ot-fox-text')?.className).not.toContain(
+      'ot-text-empty',
+    );
+  });
+
   it('gives a shown item the height and the companion a real cut-out below it', () => {
     const { container } = render(
       <Harness items={[task]} signal={1} caption="Nu tar vi bort fem på båda sidor, precis som vi gjorde nyss." />,

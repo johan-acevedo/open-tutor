@@ -55,7 +55,10 @@ export default function CallStage({
 }: Props) {
   return (
     <main className={`ot-main ot-main-${mode}`}>
-      <section className="ot-board" aria-label="Whiteboard">
+      {/* The tray (a photo picked before the first item) must stay usable
+          in arrival: the board section is hidden then, so its presence opts
+          the board back into visibility (see callStage.css). */}
+      <section className={`ot-board${overlay ? ' ot-board-has-tray' : ''}`} aria-label="Whiteboard">
         <Board
           learnerName={learnerName}
           items={items}

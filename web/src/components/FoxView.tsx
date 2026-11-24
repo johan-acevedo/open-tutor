@@ -33,16 +33,19 @@ export function FoxHero({
   onShowPage,
 }: Caption & { pageTitle?: string; onShowPage?: () => void }) {
   const line = captionTail(caption, HERO_CHARS);
+  // As in Avatar: whitespace-only counts as empty, and the live region
+  // collapses with height:0 (never hidden from assistive tech).
+  const empty = line.trim() === '';
   return (
     <div className={`ot-fox-hero ot-pose-${pose}`} data-phone-view="fox">
       <div className="ot-fox-hero-head">
-        <div className="ot-fox-bubble ot-fox-bubble-hero">
+        <div className={`ot-fox-bubble ot-fox-bubble-hero${empty ? ' ot-bubble-empty' : ''}`}>
           <div className="ot-fox-state" role="status" aria-label={pill.label}>
             <PillIcon pill={pill} />
             <span>{pill.label}</span>
           </div>
           <div
-            className={`ot-fox-text${captionFading ? ' ot-caption-fading' : ''}`}
+            className={`ot-fox-text${captionFading ? ' ot-caption-fading' : ''}${empty ? ' ot-text-empty' : ''}`}
             aria-live="polite"
           >
             {line}
@@ -82,6 +85,7 @@ export function FoxHero({
 export function FoxStrip({ pose, pill, caption, captionFading, onShowFox }: Caption & { onShowFox: () => void }) {
   const { companion } = useBand();
   const line = captionTail(caption, STRIP_CHARS);
+  const empty = line.trim() === '';
   return (
     <div className={`ot-fox-strip ot-pose-${pose}`} data-phone-view="item">
       <button
@@ -94,13 +98,13 @@ export function FoxStrip({ pose, pill, caption, captionFading, onShowFox }: Capt
         <PoseImage pose={pose} decorative />
       </button>
       <div className="ot-fox-strip-body">
-        <div className="ot-fox-bubble ot-fox-bubble-strip">
+        <div className={`ot-fox-bubble ot-fox-bubble-strip${empty ? ' ot-bubble-empty' : ''}`}>
           <div className="ot-fox-state" role="status" aria-label={pill.label}>
             <PillIcon pill={pill} />
             <span>{pill.label}</span>
           </div>
           <div
-            className={`ot-fox-text${captionFading ? ' ot-caption-fading' : ''}`}
+            className={`ot-fox-text${captionFading ? ' ot-caption-fading' : ''}${empty ? ' ot-text-empty' : ''}`}
             aria-live="polite"
           >
             {line}
