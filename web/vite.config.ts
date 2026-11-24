@@ -12,6 +12,13 @@ function screenTextPlugin() {
   const examplesDir = fileURLToPath(new URL('../screen/examples/', import.meta.url));
   const bandsDir = fileURLToPath(new URL('../design/bands/', import.meta.url));
   const read = (dir: string, name: string) => readFileSync(dir + name, 'utf8');
+  const readOptional = (dir: string, name: string) => {
+    try {
+      return readFileSync(dir + name, 'utf8');
+    } catch {
+      return '';
+    }
+  }; // the experiment bundle is built on demand; pages without SDK blocks never need it
   return {
     name: 'screen-text',
     resolveId(id: string) {
@@ -28,6 +35,7 @@ function screenTextPlugin() {
           `export const frameHtml = ${JSON.stringify(read(shellDir, 'frame.html'))};\n` +
           `export const shellCss = ${JSON.stringify(read(shellDir, 'shell.css'))};\n` +
           `export const shellJs = ${JSON.stringify(read(shellDir, 'shell.js'))};\n` +
+          `export const uiSdkJs = ${JSON.stringify(readOptional(shellDir, 'ui-sdk.bundle.js'))};\n` +
           `export const mapLanData = ${JSON.stringify(read(shellDir, 'data/lan-sverige.json'))};\n`
         );
       }

@@ -50,6 +50,13 @@
     sent: 'Skickat \u2713',
     answerLabel: 'Ditt svar',
     gapLabel: 'Lucka',
+    orderLabel: 'L\u00e4gg i r\u00e4tt ordning',
+    orderUp: 'Flytta upp',
+    orderDown: 'Flytta ner',
+    orderMoved: 'är nu {pos} av {total}',
+    matchChoose: 'V\u00e4lj \u2026',
+    matchFor: 'V\u00e4lj svar f\u00f6r {prompt}',
+    choiceLabel: 'V\u00e4lj ett alternativ',
     loading: 'Laddar {topic} \u2026',
     bc: 'f.Kr.',
     ad: 'e.Kr.',
@@ -69,6 +76,14 @@
     } catch (e) { /* fall through */ }
     return {};
   }
+  var HAS_UI = {};
+  function hasUi(tag) {
+    if (!(tag in HAS_UI)) {
+      try { HAS_UI[tag] = !!window.customElements.get(tag); }
+      catch (e) { HAS_UI[tag] = false; }
+    }
+    return HAS_UI[tag];
+  }
   var otStrings = (function () {
     var out = {}, k;
     for (k in STRINGS_SV) out[k] = STRINGS_SV[k];
@@ -77,6 +92,20 @@
     return out;
   })();
   function loadingText(topic) { return String(otStrings.loading).replace('{topic}', String(topic)); }
+  // A Skicka button shared by the experiment blocks: posts once per change.
+  function submitButton(host, id, getValue, focusOnEmpty) {
+    var btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'ot-send'; btn.textContent = otStrings.send;
+    function arm() { btn.textContent = otStrings.send; btn.removeAttribute('data-sent'); }
+    btn.addEventListener('click', function () {
+      var v = getValue();
+      if (v == null || v === '') { if (focusOnEmpty && focusOnEmpty.focus) { try { focusOnEmpty.focus(); } catch (e) { /* keep focus */ } } return; }
+      btn.textContent = otStrings.sent; btn.setAttribute('data-sent', '');
+      post({ ot: 'answer', id: id, value: v });
+    });
+    host.appendChild(btn);
+    return { el: btn, arm: arm };
+  }
   var booted = false;
   var page = null;
   var MIN_FONT = 11, SMALL_FONT = 14;
@@ -249,7 +278,10 @@
       if (!window.DOMPurify || !DOMPurify.isSupported) throw new Error('HTML sanitizer unavailable');
       fragment = DOMPurify.sanitize(String(html || ''), {
         RETURN_DOM_FRAGMENT: true,
-        ADD_ATTR: ['correct', 'later'],
+        // Model-written keys for the experiment blocks (ot-order values,
+        // ot-match prompts and choices) travel as plain attributes, exactly
+        // like the long-standing `correct` and `later` markers.
+        ADD_ATTR: ['correct', 'later', 'value', 'prompt', 'choice'],
         FORBID_TAGS: UNSAFE_TAGS.map(function (tag) { return tag.toLowerCase(); }),
         FORBID_ATTR: ['style', 'is', 'srcdoc'],
         CUSTOM_ELEMENT_HANDLING: {
@@ -495,6 +527,322 @@
         if (input) { input.value = this.getAttribute('answer') || input.value; input.readOnly = true; }
         this.setAttribute('data-revealed', '');
         return this;
+      }
+    });
+
+    // ---- Experiment blocks (UI SDK variant; exact markup in screen/ui-sdk-blocks.md).
+    // The model writes plain ot-* markup with ordinary buttons and spans, never
+    // ui-* tags or JavaScript. Where the inlined UI SDK bundle is present the
+    // choice, answer and match blocks use its custom elements; otherwise they
+    // fall back to native controls with the same messages. ot-order always
+    // uses native move buttons with a polite live announcement.
+    // Nothing here grades: values travel to the tutor, which judges them.
+
+    // ---- ot-order: the child sequences items with move up/down buttons.
+    define('ot-order', class extends Base {
+      build() {
+        var id = this.id || (this.id = autoId('ordning'));
+        var items = $$(':scope > span', this).map(function (s, i) {
+          return { key: s.getAttribute('value') || String(i + 1), label: s.textContent.trim() };
+        });
+        this.textContent = '';
+        var lab = this.getAttribute('label');
+        if (lab) {
+          var h = document.createElement('p');
+          h.className = 'ot-block-label'; h.id = id + '-label'; h.innerHTML = rich(lab);
+          this.appendChild(h);
+        }
+        var list = document.createElement('ol');
+        list.className = 'ot-order-list';
+        if (lab) list.setAttribute('aria-labelledby', id + '-label');
+        else list.setAttribute('aria-label', otStrings.orderLabel);
+        this.appendChild(list);
+        var live = document.createElement('p');
+        live.className = 'ot-sr'; live.setAttribute('role', 'status');
+        this.appendChild(live);
+        function orderValue() {
+          return $$(':scope > li', list).map(function (li) { return li.getAttribute('data-value'); }).join('>');
+        }
+        var submit = null;
+        function refresh(announce) {
+          var rows = $$(':scope > li', list);
+          rows.forEach(function (li, i) {
+            var up = li.querySelector('[data-move="up"]'), down = li.querySelector('[data-move="down"]');
+            var name = li.querySelector('.ot-order-text').textContent;
+            up.disabled = i === 0; down.disabled = i === rows.length - 1;
+            up.setAttribute('aria-label', otStrings.orderUp + ': ' + name);
+            down.setAttribute('aria-label', otStrings.orderDown + ': ' + name);
+          });
+          if (submit) submit.arm();
+          if (announce) draft(id, orderValue());
+        }
+        function move(li, dir) {
+          var sib = dir < 0 ? li.previousElementSibling : li.nextElementSibling;
+          if (!sib) return;
+          if (dir < 0) list.insertBefore(li, sib); else list.insertBefore(sib, li);
+          refresh(true);
+          var rows = $$(':scope > li', list);
+          live.textContent = li.querySelector('.ot-order-text').textContent + ' ' +
+            otStrings.orderMoved.replace('{pos}', String(rows.indexOf(li) + 1)).replace('{total}', String(rows.length));
+        }
+        items.forEach(function (it) {
+          var li = document.createElement('li');
+          li.className = 'ot-order-item'; li.setAttribute('data-value', it.key);
+          var t = document.createElement('span'); t.className = 'ot-order-text'; t.textContent = it.label;
+          var btns = document.createElement('span'); btns.className = 'ot-order-btns';
+          var up = document.createElement('button'); up.type = 'button'; up.setAttribute('data-move', 'up');
+          up.innerHTML = '<span aria-hidden="true">\u25b2</span>';
+          var down = document.createElement('button'); down.type = 'button'; down.setAttribute('data-move', 'down');
+          down.innerHTML = '<span aria-hidden="true">\u25bc</span>';
+          up.addEventListener('click', function () { move(li, -1); });
+          down.addEventListener('click', function () { move(li, 1); });
+          btns.appendChild(up); btns.appendChild(down);
+          li.appendChild(t); li.appendChild(btns);
+          list.appendChild(li);
+        });
+        submit = submitButton(this, id, orderValue, list);
+        refresh(false);
+        this._restore = function (v) {
+          String(v == null ? '' : v).split('>').forEach(function (k) {
+            var rows = $$(':scope > li', list);
+            for (var i = 0; i < rows.length; i++) {
+              if (rows[i].getAttribute('data-value') === k) { list.appendChild(rows[i]); break; }
+            }
+          });
+          refresh(false);
+        };
+      }
+    });
+
+    // ---- ot-match: each prompt gets a choice; only a completed mapping is sent.
+    define('ot-match', class extends Base {
+      build() {
+        var id = this.id || (this.id = autoId('para'));
+        var prompts = [], choices = [];
+        $$(':scope > span', this).forEach(function (s, i) {
+          if (s.hasAttribute('prompt')) prompts.push({ key: s.getAttribute('prompt') || String(i + 1), label: s.textContent.trim() });
+          else choices.push({ key: s.getAttribute('choice') || s.getAttribute('value') || String(i + 1), label: s.textContent.trim() });
+        });
+        this.textContent = '';
+        var lab = this.getAttribute('label');
+        if (lab) {
+          var h = document.createElement('p');
+          h.className = 'ot-block-label'; h.id = id + '-label'; h.innerHTML = rich(lab);
+          this.appendChild(h);
+        }
+        var useUi = hasUi('ui-select');
+        var rows = [];
+        var submit = null;
+        function mapping() {
+          return rows.map(function (r) { return { prompt: r.prompt, value: r.get() }; });
+        }
+        function mappingValue() {
+          var m = mapping();
+          for (var i = 0; i < m.length; i++) if (!m[i].value) return '';
+          return m.map(function (p) { return p.prompt + '=' + p.value; }).join(';');
+        }
+        function changed() {
+          var m = mapping();
+          var partial = m.map(function (p) { return p.prompt + '=' + (p.value || ''); }).join(';');
+          draft(id, partial);
+          if (submit) {
+            submit.arm();
+            submit.el.disabled = !mappingValue();
+          }
+        }
+        var group = document.createElement('div');
+        group.className = 'ot-match-group';
+        if (lab) group.setAttribute('aria-labelledby', id + '-label');
+        else group.setAttribute('aria-label', otStrings.choiceLabel);
+        this.appendChild(group);
+        prompts.forEach(function (p) {
+          var row = document.createElement('div'); row.className = 'ot-match-row';
+          var name = document.createElement('span'); name.className = 'ot-match-prompt'; name.textContent = p.label;
+          row.appendChild(name);
+          var entry = { prompt: p.key, get: function () { return ''; }, set: function () { } };
+          var chooseLabel = otStrings.matchFor.replace('{prompt}', p.label);
+          if (useUi) {
+            var sel = document.createElement('ui-select');
+            sel.setAttribute('aria-label', chooseLabel);
+            var sLab = document.createElement('ui-select-label');
+            sLab.className = 'ot-sr'; sLab.textContent = chooseLabel;
+            sel.appendChild(sLab);
+            var trig = document.createElement('ui-select-trigger');
+            var btn = document.createElement('button'); btn.type = 'button';
+            var sVal = document.createElement('ui-select-value');
+            sVal.setAttribute('placeholder', otStrings.matchChoose);
+            btn.appendChild(sVal); trig.appendChild(btn); sel.appendChild(trig);
+            var content = document.createElement('ui-select-content');
+            var sList = document.createElement('ui-select-list');
+            choices.forEach(function (c) {
+              var it = document.createElement('ui-select-item');
+              it.setAttribute('value', c.key); it.textContent = c.label;
+              sList.appendChild(it);
+            });
+            content.appendChild(sList); sel.appendChild(content);
+            row.appendChild(sel);
+            // valuechange fires before the property commits: trust the event.
+            var current = '';
+            entry.get = function () { return current || sel.value || ''; };
+            entry.set = function (v) { current = v || ''; sel.value = v || null; };
+            sel.addEventListener('valuechange', function (e) {
+              current = (e && e.detail && e.detail.value) || '';
+              changed();
+            });
+          } else {
+            var native = document.createElement('select');
+            native.setAttribute('aria-label', chooseLabel);
+            var ph = document.createElement('option'); ph.value = ''; ph.textContent = otStrings.matchChoose;
+            native.appendChild(ph);
+            choices.forEach(function (c) {
+              var o = document.createElement('option'); o.value = c.key; o.textContent = c.label;
+              native.appendChild(o);
+            });
+            native.addEventListener('change', changed);
+            row.appendChild(native);
+            entry.get = function () { return native.value; };
+            entry.set = function (v) { native.value = v || ''; };
+          }
+          rows.push(entry);
+          group.appendChild(row);
+        });
+        submit = submitButton(this, id, mappingValue, group);
+        submit.el.disabled = true;
+        this._restore = function (v) {
+          String(v == null ? '' : v).split(';').forEach(function (pair) {
+            var kv = pair.split('=');
+            if (kv.length !== 2) return;
+            rows.forEach(function (r) { if (r.prompt === kv[0]) r.set(kv[1]); });
+          });
+          changed();
+        };
+      }
+    });
+
+    // ---- ot-sdk-choice: radio selection with an explicit Skicka.
+    define('ot-sdk-choice', class extends Base {
+      build() {
+        var id = this.id || (this.id = autoId('val'));
+        var opts = $$(':scope > button', this).map(function (b, i) {
+          return { key: b.getAttribute('value') || b.textContent.trim() || String(i + 1), label: b.textContent.trim() };
+        });
+        this.textContent = '';
+        var lab = this.getAttribute('label');
+        var get, set, focusEl = null;
+        if (hasUi('ui-radio-group')) {
+          var field = document.createElement('ui-field');
+          if (lab) {
+            var fl = document.createElement('ui-field-label');
+            fl.innerHTML = rich(lab);
+            field.appendChild(fl);
+          }
+          var grp = document.createElement('ui-radio-group');
+          if (!lab) grp.setAttribute('aria-label', otStrings.choiceLabel);
+          opts.forEach(function (o) {
+            var l = document.createElement('label');
+            var r = document.createElement('ui-radio');
+            r.setAttribute('value', o.key);
+            var ind = document.createElement('ui-radio-indicator');
+            r.appendChild(ind);
+            l.appendChild(r);
+            l.appendChild(document.createTextNode(o.label));
+            grp.appendChild(l);
+          });
+          field.appendChild(grp);
+          this.appendChild(field);
+          focusEl = (grp.api && grp.api.focus) ? { focus: function () { grp.api.focus(); } } : null;
+          // valuechange fires before the property commits: trust the event.
+          var picked = '';
+          get = function () { return picked || grp.value || ''; };
+          set = function (v) { picked = v || ''; grp.value = v || null; };
+          grp.addEventListener('valuechange', function (e) {
+            picked = (e && e.detail && e.detail.value) || '';
+            changed();
+          });
+        } else {
+          var wrap = document.createElement('div');
+          wrap.className = 'ot-sdk-choice-fallback';
+          wrap.setAttribute('role', 'radiogroup');
+          if (lab) { wrap.setAttribute('aria-label', lab); }
+          else wrap.setAttribute('aria-label', otStrings.choiceLabel);
+          var inputs = [];
+          opts.forEach(function (o, i) {
+            var l = document.createElement('label');
+            var r = document.createElement('input');
+            r.type = 'radio'; r.name = id; r.value = o.key;
+            if (i === 0) focusEl = r;
+            r.addEventListener('change', changed);
+            l.appendChild(r);
+            l.appendChild(document.createTextNode(o.label));
+            wrap.appendChild(l);
+            inputs.push(r);
+          });
+          if (lab) {
+            var p = document.createElement('p');
+            p.className = 'ot-block-label'; p.innerHTML = rich(lab);
+            this.appendChild(p);
+          }
+          this.appendChild(wrap);
+          get = function () {
+            for (var i = 0; i < inputs.length; i++) if (inputs[i].checked) return inputs[i].value;
+            return '';
+          };
+          set = function (v) {
+            inputs.forEach(function (r) { r.checked = r.value === v; });
+          };
+        }
+        var submit = submitButton(this, id, get, focusEl);
+        function changed() { draft(id, get()); submit.arm(); }
+        this._restore = function (v) { set(String(v == null ? '' : v)); submit.arm(); };
+      }
+    });
+
+    // ---- ot-sdk-answer: short text field with an explicit Skicka.
+    define('ot-sdk-answer', class extends Base {
+      build() {
+        var id = this.id || (this.id = autoId('svar'));
+        var lab = this.getAttribute('label');
+        var unit = this.getAttribute('unit');
+        var kindText = this.getAttribute('kind') === 'text';
+        var input = document.createElement('input');
+        input.className = 'ot-input' + ((kindText || this.hasAttribute('wide')) ? ' wide' : '');
+        input.id = id + '-input';
+        input.type = 'text';
+        input.autocomplete = 'off';
+        input.spellcheck = false;
+        if (!kindText) input.inputMode = 'decimal';
+        input.placeholder = this.getAttribute('placeholder') || '';
+        input.setAttribute('aria-label', lab || otStrings.answerLabel);
+        this.textContent = '';
+        if (hasUi('ui-input')) {
+          var field = document.createElement('ui-field');
+          if (lab) {
+            var fl = document.createElement('ui-field-label');
+            fl.id = id + '-label'; fl.innerHTML = rich(lab);
+            field.appendChild(fl);
+            input.setAttribute('aria-labelledby', id + '-label');
+          }
+          var ui = document.createElement('ui-input');
+          ui.appendChild(input);
+          field.appendChild(ui);
+          this.appendChild(field);
+        } else {
+          if (lab) {
+            var l = document.createElement('label');
+            l.htmlFor = input.id; l.innerHTML = rich(lab);
+            this.appendChild(l);
+          }
+          this.appendChild(input);
+        }
+        if (unit) {
+          var u = document.createElement('span');
+          u.className = 'ot-unit'; u.textContent = unit;
+          this.appendChild(u);
+        }
+        var submit = submitButton(this, id, function () { return input.value.trim(); }, input);
+        input.addEventListener('keydown', function (e) { if (e.key === 'Enter') submit.el.click(); });
+        input.addEventListener('input', function () { submit.arm(); draft(id, input.value); });
+        this._restore = function (v) { input.value = String(v == null ? '' : v); };
       }
     });
 

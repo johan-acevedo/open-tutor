@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { composePage, PAGE_CSP } from './shell';
+import { composePage, hasSdkBlocks, PAGE_CSP } from './shell';
 import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { BANDS, type BandId } from './bands';
@@ -59,5 +59,40 @@ describe('composePage', () => {
     ], { input, encoding: 'utf8', cwd: resolve(process.cwd(), '..') });
     const source = /<template id="ot-source">([\s\S]*?)<\/template>/;
     expect(composePage(input).match(source)?.[1]).toBe(python.match(source)?.[1]);
+  });
+});
+
+describe('experiment UI SDK bundle gating', () => {
+  const sdkBody = '<h1>Djur</h1><ot-sdk-choice id="v" label="Välj"><button value="a">A</button></ot-sdk-choice>';
+  const plainBody = '<h1>Enheter</h1>';
+
+  it('detects each experiment block', () => {
+    for (const tag of ['ot-order', 'ot-match', 'ot-sdk-choice', 'ot-sdk-answer']) {
+      expect(hasSdkBlocks(`<${tag} id="x"></${tag}>`)).toBe(true);
+    }
+    expect(hasSdkBlocks(plainBody)).toBe(false);
+  });
+
+  it('inlines the bundle only where SDK blocks are present', () => {
+    expect(composePage(sdkBody)).toContain('"ui-radio-group"');
+    expect(composePage(plainBody)).not.toContain('"ui-radio-group"');
+    expect(composePage(sdkBody, undefined, undefined, false)).not.toContain('"ui-radio-group"');
+    expect(composePage(plainBody, undefined, undefined, true)).toContain('"ui-radio-group"');
+  });
+
+  it('agrees with the server renderer on the bundle and the strings', () => {
+    for (const [input, flag] of [[sdkBody, 'True'], [plainBody, 'False']] as const) {
+      const python = execFileSync('python3', ['-c',
+        'import sys; sys.path.insert(0, "screen/tools"); import screenkit; sys.stdout.write(screenkit.compose(sys.stdin.read(), ui_sdk=sys.argv[1] == "True"))', flag,
+      ], { input, encoding: 'utf8', cwd: resolve(process.cwd(), '..') });
+      const browser = composePage(input, undefined, undefined, flag === 'True');
+      // Full-doc equality never held (web always appends the band theme
+      // newline); what must match is the experiment gating and the labels.
+      expect(browser.includes('"ui-radio-group"')).toBe(python.includes('"ui-radio-group"'));
+      const slot = /<script type="application\/json" id="ot-strings">([\s\S]*?)<\/script>/;
+      expect(browser.match(slot)?.[1]).toBe(python.match(slot)?.[1]);
+      expect(browser).not.toContain('{{UI_SDK_JS}}');
+      expect(python).not.toContain('{{UI_SDK_JS}}');
+    }
   });
 });

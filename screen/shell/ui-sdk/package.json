@@ -1,0 +1,17 @@
+{
+  "name": "open-tutor-ui-sdk-bundle",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Experiment-only bundle of @ui-sdk/web custom elements for the Smart Screen sandbox. No runtime CDN: the built file is inlined into the teaching frame by screenkit.compose(..., ui_sdk=True).",
+  "license": "Apache-2.0",
+  "scripts": {
+    "build": "./build.sh"
+  },
+  "dependencies": {
+    "@ui-sdk/core": "0.1.0-beta.17",
+    "@ui-sdk/web": "0.1.0-beta.17"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

@@ -1,0 +1,19 @@
+<h1>Djur och ord</h1>
+<ot-sdk-choice id="val2" label="Vilket ord betyder hund?">
+  <button value="hund">hund</button>
+  <button value="katt">katt</button>
+  <button value="dog">dog</button>
+</ot-sdk-choice>
+<ot-sdk-answer id="svar2" label="Skriv det svenska ordet" placeholder="ett ord"></ot-sdk-answer>
+<ot-order id="ordning" label="Lägg i rätt ordning, minst först">
+  <span value="myra">Myra</span>
+  <span value="katt">Katt</span>
+  <span value="hast">Häst</span>
+</ot-order>
+<ot-match id="djur" label="Para ihop djuret med rätt ord">
+  <span prompt="hund">Hund</span>
+  <span prompt="katt">Katt</span>
+  <span choice="dog">dog</span>
+  <span choice="cat">cat</span>
+</ot-match>
+<p id="elak" onclick="window.modelRan=true">Vanlig text. <script>window.modelRan = true</script></p>

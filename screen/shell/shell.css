@@ -481,3 +481,46 @@ ot-map > .ot-vis svg { overflow: hidden; }
 @keyframes ot-spin { to { transform: rotate(360deg); } }
 /* worked steps never break a formula over two lines; the page shrinks instead */
 ot-step > .ot-s { white-space: nowrap; }
+
+/* Experiment blocks (UI SDK variant): screen-only, model writes plain ot-* markup. */
+.ot-sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.ot-block-label { font-weight: 650; margin: 0 0 0.5em; }
+ot-sdk-answer, ot-sdk-choice { display: block; margin: 0.6em 0; }
+ot-sdk-answer { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5em; }
+ot-sdk-answer > label { font-weight: 650; }
+/* The SDK input keeps its native text field; it looks like ot-answer. */
+ui-input { display: inline-flex; flex: 1 1 8em; min-width: 8em; }
+ui-input > input { width: 100%; font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border-2); border-radius: 0.45em; padding: 0.35em 0.6em; }
+ui-input > input:focus { border-color: var(--cyan); outline: 2px solid var(--cyan); outline-offset: 1px; }
+ui-input > input[aria-invalid="true"] { border-color: var(--red); }
+/* The SDK radio keeps its own element; the dot shows on the checked one. */
+ui-radio-group { display: flex; flex-direction: column; gap: 0.5em; margin: 0.2em 0 0.6em; }
+ui-radio-group > label { display: flex; align-items: center; gap: 0.6em; cursor: pointer; }
+ui-radio { display: inline-flex; align-items: center; justify-content: center; width: 1.15em; height: 1.15em; flex: none; border: 2px solid var(--border-2); border-radius: 50%; background: var(--surface); }
+ui-radio[data-checked] { border-color: var(--cyan); }
+ui-radio:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+ui-radio-indicator { display: block; width: 0.55em; height: 0.55em; border-radius: 50%; background: transparent; }
+ui-radio[data-checked] ui-radio-indicator { background: var(--cyan); }
+ui-field { display: block; }
+ui-field-label { display: block; font-weight: 650; margin-bottom: 0.4em; }
+/* The SDK select: trigger like a button, popup with a surface of its own. */
+ui-select { display: inline-block; max-width: 100%; }
+ui-select-trigger > button { font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border-2); border-radius: 0.45em; padding: 0.35em 0.6em; max-width: 100%; }
+ui-select-trigger > button:focus-visible { outline: 2px solid var(--cyan); outline-offset: 1px; }
+[data-slot="select-content"] { background: var(--surface-2); border: 1px solid var(--border-2); border-radius: 0.5em; padding: 0.3em; }
+[data-slot="select-item"] { padding: 0.35em 0.6em; border-radius: 0.35em; }
+[data-slot="select-item"][data-highlighted] { background: var(--cyan-soft); }
+ot-match { display: block; margin: 0.6em 0; }
+.ot-match-group { display: flex; flex-direction: column; gap: 0.6em; }
+.ot-match-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5em 0.8em; }
+.ot-match-prompt { font-weight: 650; }
+.ot-match-row select { font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border-2); border-radius: 0.45em; padding: 0.35em 0.6em; max-width: 100%; }
+ot-order { display: block; margin: 0.6em 0; }
+.ot-order-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.45em; }
+.ot-order-item { display: flex; align-items: center; gap: 0.6em; background: var(--surface); border: 1px solid var(--border-2); border-radius: 0.55em; padding: 0.35em 0.4em 0.35em 0.8em; }
+.ot-order-text { flex: 1 1 auto; }
+.ot-order-btns { display: inline-flex; gap: 0.3em; flex: none; }
+.ot-order-btns > button { font: inherit; color: var(--text); background: var(--surface-2); border: 1px solid var(--border-2); border-radius: 0.4em; padding: 0.2em 0.55em; line-height: 1.2; }
+.ot-order-btns > button:disabled { opacity: 0.35; }
+.ot-order-btns > button:focus-visible { outline: 2px solid var(--cyan); outline-offset: 1px; }
+.ot-send:disabled { opacity: 0.45; }

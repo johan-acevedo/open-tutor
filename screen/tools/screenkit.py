@@ -31,6 +31,22 @@ CSP = ("default-src 'none'; "
        "img-src data: https:; "
        "connect-src https://cdn.jsdelivr.net https://commons.wikimedia.org")
 
+# Model-facing experiment blocks that need the inlined UI SDK bundle.
+# Detection keeps the default compose byte-identical for all existing pages.
+SDK_TAGS = ("ot-order", "ot-match", "ot-sdk-choice", "ot-sdk-answer")
+_SDK_TAG_RE = re.compile(r"<\s*(?:" + "|".join(SDK_TAGS) + r")[\s>]")
+
+
+def has_sdk_blocks(body: str) -> bool:
+    """True when the page body uses one of the experiment blocks."""
+    return bool(_SDK_TAG_RE.search(body or ""))
+
+
+def ui_sdk_bundle(shell: pathlib.Path | None = None) -> str:
+    """The inlined experiment bundle (empty when it was never built)."""
+    candidate = (pathlib.Path(shell) if shell else SHELL) / "ui-sdk.bundle.js"
+    return candidate.read_text() if candidate.is_file() else ""
+
 
 def _safe_locale(locale: str | None) -> str:
     """A language tag or "sv": the value ends up in a file name and an HTML attribute."""
@@ -51,9 +67,11 @@ def _shell_strings(shell: pathlib.Path, locale: str = "sv") -> dict:
     return json.loads(candidate.read_text(encoding="utf-8"))
 
 
-def compose(body: str, shell: pathlib.Path | None = None, *, band: str = "primary", locale: str = "sv") -> str:
+def compose(body: str, shell: pathlib.Path | None = None, *, band: str = "primary", locale: str = "sv", ui_sdk: bool | str = "auto") -> str:
     """Wrap a page body in the shell. `shell` points at another shell directory (a git ref
     exported to disk), which is how the map checks are also run on an older shell.
+    `ui_sdk=True` inlines the experiment bundle; `"auto"` (default) does so only
+    when the body uses one of the experiment blocks (see screen/ui-sdk-blocks.md).
     The frame language follows `locale`, and the shell's visible labels are
     injected as JSON (default Swedish)."""
     locale = _safe_locale(locale)
@@ -66,16 +84,28 @@ def compose(body: str, shell: pathlib.Path | None = None, *, band: str = "primar
     frame = frame.replace('<html lang="{{LANG}}"', f'<html lang="{locale}" data-band="{selected_band}"')
     frame = frame.replace('<html lang="sv"', f'<html lang="{locale}" data-band="{selected_band}"')
     frame = frame.replace("{{LANG}}", locale)
+    if ui_sdk == "auto":
+        ui_sdk = has_sdk_blocks(body)
+    if ui_sdk:
+        sdk = ui_sdk_bundle(shell)
+        if not sdk:
+            raise FileNotFoundError(
+                "UI SDK bundle missing: run screen/shell/ui-sdk/build.sh "
+                "(cd screen/shell/ui-sdk && npm install && ./build.sh)")
+    else:
+        sdk = ""
     js = (shell / "shell.js").read_text()
     # Sweden's 21 län travel with the shell, not with the page body (RPC keeps to ~15 kB).
     lan = json.loads((shell / "data" / "lan-sverige.json").read_text())
     lan_text = json.dumps(lan, ensure_ascii=False, separators=(",", ":")).replace("<", "\\u003c")
     strings_text = json.dumps(_shell_strings(shell, locale), ensure_ascii=False, separators=(",", ":")).replace("<", "\\u003c")
     # Replace BODY last so a body can never inject into the shell slots.
+    sdk_tag = ("<script>" + sdk.replace("</script", "<\\/script") + "</script>") if sdk else ""
     return (frame.replace("{{CSP}}", CSP).replace("{{CSS}}", css)
             .replace("{{LAN}}", lan_text)
             .replace("{{STRINGS}}", strings_text)
             .replace("{{JS}}", js.replace("</script", "<\\/script"))
+            .replace("{{UI_SDK_JS}}", sdk_tag)
             .replace("{{BODY}}", htmllib.escape(body, quote=False)))
 
 

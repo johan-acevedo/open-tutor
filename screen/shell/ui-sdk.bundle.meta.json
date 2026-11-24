@@ -1,0 +1,9 @@
+{
+  "package": "@ui-sdk/web + @ui-sdk/core",
+  "version": "0.1.0-beta.17",
+  "license": "Apache-2.0",
+  "file": "screen/shell/ui-sdk.bundle.js",
+  "raw_bytes": 223793,
+  "gzip_bytes": 79656,
+  "sha256": "0d953922ee54a0efe336344273203e05b1c77f4f3081d57efc0b4fe2f3c67789"
+}
