@@ -419,6 +419,12 @@
   z-index: 30;
   width: 300px;
   max-width: calc(100vw - 24px);
+  /* Landscape phones are ~320 px tall: the panel scrolls inside the space
+     under the top bar instead of running off the bottom. */
+  max-height: calc(100vh - 72px);
+  max-height: calc(100dvh - 72px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 8px;
   display: flex;
   flex-direction: column;

@@ -41,3 +41,16 @@ it('closes on Escape and returns focus to the menu button', () => {
   expect(document.activeElement).toBe(trigger);
   cleanup();
 });
+
+it('returns focus to the menu button after picking an action', () => {
+  const onCamera = vi.fn();
+  render(<TopMenu items={[]} dragOver={false} onCamera={onCamera} onFiles={() => {}} />);
+  const trigger = screen.getByRole('button', { name: 'Meny' });
+  fireEvent.click(trigger);
+  const photo = screen.getByRole('button', { name: 'Fota läxan' });
+  photo.focus();
+  fireEvent.click(photo);
+  expect(onCamera).toHaveBeenCalledTimes(1);
+  expect(document.activeElement).toBe(trigger);
+  cleanup();
+});

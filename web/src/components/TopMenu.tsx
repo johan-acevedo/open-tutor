@@ -107,7 +107,11 @@ export default function TopMenu({ items, dragOver, onCamera, onFiles, onSwitchSt
 
   // Picking an action closes the menu: the file picker / camera / start
   // screen takes over, and the menu should not still hang open behind it.
+  // Focus goes back to the trigger first: the focused row is about to
+  // unmount, and the camera/file inputs are hidden, so focus would
+  // otherwise fall to <body>.
   const pick = (action: () => void) => () => {
+    triggerRef.current?.focus();
     setOpen(false);
     action();
   };
