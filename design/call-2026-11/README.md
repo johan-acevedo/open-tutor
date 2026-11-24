@@ -14,6 +14,9 @@ that read like a chat app. A Gemini 4 Neon review (via `agy` CLI) agreed.
   moves to a right-hand column and stays large: it must be big enough to show what the AI is
   doing (its poses) and carry a speech bubble with the caption and the state.
 - **Avsluta moves into the bottom control dock** (reverses the 2026-11-11 top-bar placement).
-- **Phone: the companion stays beside the board**, as today. It does not become a strip above
-  the board (frame A4 in the mockup is rejected).
+- **Phone: the companion stays below the board**, as today, and does not become a strip above it
+  (frame A4 in the mockup is rejected). Johan's actual criticism of today's phone view: in the
+  item view the companion shrinks to a small round profile picture and its body language is lost.
+  It should stay a real cut-out (head, shoulders, hands), larger, and may overlap the bottom edge
+  of the board a little, as if stepping slightly in front of the content (a little, not much).
 - Grid only as a halo behind the companion, as on the landing page.
