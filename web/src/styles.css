@@ -280,6 +280,10 @@ a:focus-visible {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  /* The landing paints its own canvas: the app frame's full-page grid stays
+     in the call views. The faint grid survives only as the masked area
+     behind the companion (.ot-land-grid). */
+  background: var(--ot-canvas);
 }
 
 [data-band="primary"] .ot-land {
@@ -288,13 +292,22 @@ a:focus-visible {
 
 .ot-land-top {
   flex: 0 0 auto;
+  position: relative;
+  z-index: 5;
+}
+
+/* Same centred content column as the hero, the cards and the footer: the
+   logo's left edge lines up with the headline, the menu's right edge with
+   the cards. */
+.ot-land-topinner {
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 20px 104px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 20px 56px;
-  position: relative;
-  z-index: 5;
 }
 
 .ot-land-brand {
@@ -390,11 +403,16 @@ a:focus-visible {
   display: grid;
   grid-template-columns: 1.1fr 1fr;
   align-items: center;
+  align-content: center;
   gap: 24px;
-  padding: 24px 56px 48px 104px;
+  padding: 24px 104px 48px;
   max-width: 1400px;
   margin: 0 auto;
   width: 100%;
+  /* The hero takes roughly the first viewport: content vertically centred,
+     the steps start below the fold. 84 px is the top bar (44 px content +
+     2 × 20 px padding). */
+  min-height: calc(100svh - 84px);
 }
 
 .ot-land-grid {
@@ -429,10 +447,17 @@ a:focus-visible {
 
 .ot-land-title {
   font-size: clamp(44px, 5.4vw, 76px);
-  line-height: 0.98;
-  letter-spacing: -0.04em;
+  line-height: 1.06;
+  letter-spacing: -0.03em;
   margin: 0 0 28px;
   font-weight: 800;
+}
+
+/* The period's glyph carries a wide left side bearing: pull it optically
+   close in every band font instead of leaving a visible gap before it. */
+.ot-land-dot {
+  display: inline-block;
+  margin-left: -0.09em;
 }
 
 .ot-land-accent {
@@ -445,29 +470,6 @@ a:focus-visible {
   color: var(--ot-text-dim);
   margin: 0 0 14px;
   max-width: 34ch;
-}
-
-.ot-land-sub a {
-  color: var(--ot-text);
-  font-weight: 700;
-  text-decoration: underline;
-  text-decoration-color: var(--ot-border);
-  text-underline-offset: 4px;
-  white-space: nowrap;
-  /* 44 px tap area without changing the line rhythm. */
-  padding: 8px 2px;
-  margin: -8px -2px;
-}
-
-.ot-land-face {
-  display: inline-block;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  object-fit: cover;
-  vertical-align: -8px;
-  margin-right: 6px;
-  background: var(--ot-elevated);
 }
 
 .ot-land-cta-row {
@@ -516,21 +518,75 @@ a:focus-visible {
   position: relative;
   z-index: 1;
   min-width: 0;
+  display: flex;
+  justify-content: center;
+}
+
+/* One wrapper anchors the bubble and the image so the bubble keeps its
+   place over the head at every size: positions are fractions of the figure,
+   the bubble text scales with it (container query units). Per-band tweaks
+   below: the three heads sit in different places. */
+.ot-land-fig {
+  container-type: inline-size;
+  position: relative;
+  width: min(430px, 100%);
+  margin-left: auto;
 }
 
 .ot-land-heroimg {
-  width: min(430px, 100%);
-  margin-left: auto;
+  width: 100%;
+  height: auto;
   display: block;
 }
 
 .ot-land-bubble {
+  /* Fractions of the figure: the tail tip lands above the head, left of the
+     crown, pointing down-right at the cheek from clear air. */
+  --ot-bub-w: 58%;
+  --ot-bub-l: -34%;
+  --ot-bub-t: -26%;
   position: absolute;
-  left: 0;
-  top: 0;
-  width: min(260px, 58%);
+  left: var(--ot-bub-l);
+  top: var(--ot-bub-t);
+  width: var(--ot-bub-w);
   aspect-ratio: 270 / 160;
   z-index: 2;
+  background: none;
+  border: none;
+  padding: 0;
+  min-width: 0;
+  min-height: 0;
+  cursor: pointer;
+  font: inherit;
+}
+
+[data-band="middle"] .ot-land-bubble {
+  --ot-bub-w: 50%;
+  --ot-bub-l: -43%;
+  --ot-bub-t: -25%;
+}
+
+[data-band="upper"] .ot-land-bubble {
+  --ot-bub-w: 55%;
+  --ot-bub-l: -33%;
+  --ot-bub-t: -19%;
+}
+
+/* A returning visit greets by name: the bubble grows left (the tail tip
+   stays put) and the text steps down so "Hej {name}!" fits the shape. */
+.ot-land-bubble.is-long {
+  --ot-bub-w: 70%;
+  --ot-bub-l: -45.6%;
+}
+
+[data-band="middle"] .ot-land-bubble.is-long {
+  --ot-bub-w: 62%;
+  --ot-bub-l: -54.6%;
+}
+
+[data-band="upper"] .ot-land-bubble.is-long {
+  --ot-bub-w: 67%;
+  --ot-bub-l: -44.6%;
 }
 
 .ot-land-bubble-shape {
@@ -554,8 +610,39 @@ a:focus-visible {
   color: #12151b;
   font-weight: 800;
   letter-spacing: -0.02em;
-  font-size: clamp(24px, 2.8vw, 40px);
-  padding: 0 12px;
+  font-size: 40px;
+  font-size: 9.5cqw;
+  padding: 0 8px;
+}
+
+.ot-land-bubble.is-long .ot-land-bubble-in {
+  font-size: 6.2cqw;
+  gap: 6px;
+  padding: 0 6px;
+}
+
+/* While the greeting plays, the speaker waves breathe gently. Static
+   otherwise; never any motion under prefers-reduced-motion. */
+@media (prefers-reduced-motion: no-preference) {
+  .ot-land-bubble.is-playing .ot-land-spk path:not(:first-child) {
+    animation: ot-land-wave 1.2s ease-in-out infinite;
+  }
+  .ot-land-bubble.is-playing .ot-land-spk path:nth-child(3) {
+    animation-delay: 0.15s;
+  }
+  .ot-land-bubble.is-playing .ot-land-spk path:nth-child(4) {
+    animation-delay: 0.3s;
+  }
+}
+
+@keyframes ot-land-wave {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 .ot-land-bubble-in svg {
@@ -572,7 +659,8 @@ a:focus-visible {
 }
 
 .ot-land-how {
-  padding: 24px 104px 80px;
+  /* 48 px hero bottom + 72 px here keeps ≥120 px of air before the steps. */
+  padding: 72px 104px 80px;
   max-width: 1400px;
   margin: 0 auto;
   width: 100%;
@@ -690,7 +778,7 @@ a:focus-visible {
 }
 
 .ot-land-eq {
-  border: 1px solid var(--ot-border);
+  border: 1px solid color-mix(in srgb, var(--ot-border) 40%, var(--ot-text-dim));
   border-radius: 10px;
   padding: 7px 0;
   width: 190px;
@@ -709,6 +797,76 @@ a:focus-visible {
   color: var(--ot-violet);
   font-weight: 800;
   font-size: 14px;
+}
+
+.ot-land-bands {
+  padding: 0 104px 72px;
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.ot-land-bandstitle {
+  font-size: clamp(22px, 2vw, 28px);
+  letter-spacing: -0.02em;
+  margin: 0 0 16px;
+  font-weight: 800;
+}
+
+.ot-land-bandcards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  max-width: 760px;
+}
+
+.ot-land-bandcard {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--ot-elevated);
+  border: 1px solid var(--ot-border);
+  border-radius: var(--ot-radius, 24px);
+  padding: 12px 18px 12px 12px;
+  text-decoration: none;
+  color: var(--ot-text);
+  min-width: 0;
+}
+
+.ot-land-bandface {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex: 0 0 auto;
+  background: var(--ot-paper);
+}
+
+.ot-land-bandtxt {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ot-land-bandtxt strong {
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.ot-land-bandtxt span {
+  color: var(--ot-text-dim);
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.ot-land-bandarrow {
+  margin-left: auto;
+  color: var(--ot-cyan);
+  font-size: 20px;
+  font-weight: 800;
+  flex: 0 0 auto;
 }
 
 .ot-land-foot {
@@ -745,13 +903,14 @@ a:focus-visible {
 }
 
 @media (max-width: 1100px) {
-  .ot-land-top {
+  .ot-land-topinner {
     padding: 16px 32px;
   }
   .ot-land-hero {
     padding: 16px 32px 40px;
   }
   .ot-land-how,
+  .ot-land-bands,
   .ot-land-foot {
     padding-left: 32px;
     padding-right: 32px;
@@ -763,10 +922,16 @@ a:focus-visible {
   .ot-land-ghost {
     display: none;
   }
+  .ot-land-topinner {
+    padding: 6px 24px;
+  }
   .ot-land-hero {
     grid-template-columns: 1fr;
-    gap: 8px;
-    padding: 8px 24px 32px;
+    gap: 6px;
+    padding: 4px 24px 32px;
+    /* Same full-viewport hero idea as desktop, minus the shorter bar. */
+    min-height: calc(100svh - 56px);
+    align-content: start;
   }
   .ot-land-stage {
     order: -1;
@@ -774,24 +939,54 @@ a:focus-visible {
     width: 100%;
     margin: 0 auto;
   }
+  /* The figure is capped by viewport height so the start button row stays
+     above the fold on short phones; the bubble scales along (cqw). */
+  .ot-land-stage {
+    /* Room above the figure for the bubble, which hangs over its top. */
+    padding-top: 54px;
+  }
+  .ot-land-fig {
+    width: min(300px, 72%, 26svh);
+  }
   .ot-land-heroimg {
-    width: min(300px, 78%);
     margin: 0 0 0 auto;
   }
   .ot-land-bubble {
-    width: 190px;
+    --ot-bub-w: 68%;
+  }
+  /* The wider phone bubble moves the tip: re-anchor it to the same clear
+     air above the head the desktop tip sits in. */
+  [data-band="primary"] .ot-land-bubble {
+    --ot-bub-l: -44%;
+    --ot-bub-t: -30.5%;
+  }
+  /* The narrower lynx head leaves less room: a slightly wider bubble keeps
+     the returning name legible while the tip holds its clear-air anchor. */
+  [data-band="middle"] .ot-land-bubble {
+    --ot-bub-w: 62%;
+    --ot-bub-l: -54.6%;
+    --ot-bub-t: -31.5%;
+  }
+  .ot-land-bubble.is-long .ot-land-bubble-in {
+    font-size: 5.5cqw;
+    padding: 0 4px;
   }
   .ot-land-title {
-    margin-bottom: 16px;
+    font-size: clamp(34px, 11vw, 44px);
+    margin-bottom: 10px;
+  }
+  .ot-land-sub {
+    font-size: 16px;
+    margin-bottom: 10px;
   }
   .ot-land-cta-row {
-    margin-top: 22px;
+    margin-top: 14px;
   }
   .ot-land-cta-row .ot-land-cta {
     flex: 1 1 0%;
     min-width: 0;
     justify-content: center;
-    padding: 18px 12px;
+    padding: 16px 12px;
     font-size: 18px;
   }
   .ot-land-notyou {
@@ -801,7 +996,14 @@ a:focus-visible {
     grid-template-columns: 1fr;
   }
   .ot-land-how {
-    padding: 8px 24px 56px;
+    /* 32 px hero bottom + 32 px here keeps ≥64 px of air before the steps. */
+    padding: 32px 24px 56px;
+  }
+  .ot-land-bandcards {
+    grid-template-columns: 1fr;
+  }
+  .ot-land-bands {
+    padding: 0 24px 56px;
   }
   .ot-land-foot {
     padding: 24px 24px 32px;
