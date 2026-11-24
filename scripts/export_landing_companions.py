@@ -37,6 +37,12 @@ PRIMARY_SOURCE = ROOT / "design" / "character" / "hires" / "greeting-candidate-1
 PRIMARY_ASPECT = 486 / 571
 PRIMARY_WIDTH = 1000
 
+# Transparent margin trim for the waist-up middle/upper figures: crop to the
+# opaque bounding box plus TRIM_PAD px, so the figure fills the exported
+# frame (same visual weight as the fox at a smaller CSS box). Deterministic:
+# Pillow's getbbox on the alpha channel is a pure function of the input.
+TRIM_PAD = 6
+
 HERO_SOURCES = {
     "primary": PRIMARY_SOURCE,
     "middle": ROOT / "design" / "bands" / "middle" / "poses" / "greeting.png",
@@ -50,10 +56,12 @@ HERO_DIRS = {
 }
 
 # Square head crops in each hero source's own pixels (left, top, right, bottom).
+# Tight head fills: ears and the full face visible, almost no shoulders, so
+# the face fills the round card avatar. Chosen by looking at the artwork.
 FACE_CROPS = {
     "primary": (72, 0, 952, 880),
-    "middle": (195, 10, 635, 450),
-    "upper": (215, 55, 600, 440),
+    "middle": (250, 60, 590, 400),
+    "upper": (252, 78, 592, 418),
 }
 
 FACE_SIZE = 96
@@ -74,6 +82,15 @@ def export_hero(band: str) -> None:
         canvas.paste(image, ((canvas.width - image.width) // 2, 0))
         height = round(PRIMARY_WIDTH * canvas.height / canvas.width)
         image = canvas.resize((PRIMARY_WIDTH, height), Image.LANCZOS)
+    else:
+        bbox = image.getchannel("A").getbbox()
+        if bbox is None:
+            raise ValueError(f"Band {band!r} hero source is fully transparent: {src}")
+        left = max(0, bbox[0] - TRIM_PAD)
+        top = max(0, bbox[1] - TRIM_PAD)
+        right = min(image.width, bbox[2] + TRIM_PAD)
+        bottom = min(image.height, bbox[3] + TRIM_PAD)
+        image = image.crop((left, top, right, bottom))
     dest.parent.mkdir(parents=True, exist_ok=True)
     image.save(dest, "WEBP", quality=85, method=6)
     print(f"Band {band}: {src.relative_to(ROOT)} -> {dest.relative_to(ROOT)} ({image.size[0]}x{image.size[1]}).")
