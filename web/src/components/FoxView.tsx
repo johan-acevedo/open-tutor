@@ -35,7 +35,7 @@ export function FoxHero({
   const line = captionTail(caption, HERO_CHARS);
   // As in Avatar: whitespace-only counts as empty, and the live region
   // collapses with height:0 (never hidden from assistive tech).
-  const empty = line.trim() === '';
+  const empty = line.trim() === '' || captionFading;
   return (
     <div className={`ot-fox-hero ot-pose-${pose}`} data-phone-view="fox">
       <div className="ot-fox-hero-head">
@@ -85,7 +85,7 @@ export function FoxHero({
 export function FoxStrip({ pose, pill, caption, captionFading, onShowFox }: Caption & { onShowFox: () => void }) {
   const { companion } = useBand();
   const line = captionTail(caption, STRIP_CHARS);
-  const empty = line.trim() === '';
+  const empty = line.trim() === '' || captionFading;
   return (
     <div className={`ot-fox-strip ot-pose-${pose}`} data-phone-view="item">
       <button

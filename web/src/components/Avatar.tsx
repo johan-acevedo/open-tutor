@@ -91,7 +91,9 @@ export default function Avatar({ pose, pill, caption, captionFading, decorative 
   // is belt and braces). The live region stays mounted either way so the
   // first caption is announced; it collapses with height:0 (never hidden
   // from assistive tech) so it never leaves the accessibility tree.
-  const empty = caption.trim() === '';
+  // A faded caption counts as empty: the bubble shrinks back to the state line
+  // (the text stays mounted, height 0, so the live region is kept).
+  const empty = caption.trim() === '' || captionFading;
   return (
     <>
       {/* One comic speech bubble by the head (landing language: light paper

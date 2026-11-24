@@ -96,6 +96,15 @@ describe('Call stage arrival: no empty board, companion owns the stage', () => {
     expect(container.querySelector('.ot-stage-hero .ot-say-text')?.className).not.toContain('ot-text-empty');
   });
 
+  it('shrinks back to the state line once the caption has faded', () => {
+    const { container } = render(<CallStage {...arrivalProps({ captionFading: true })} />);
+
+    expect(container.querySelector('.ot-stage-hero .ot-say')?.className).toContain('ot-say-empty');
+    const text = container.querySelector('.ot-stage-hero .ot-say-text');
+    expect(text?.className).toContain('ot-text-empty');
+    expect(text?.textContent).not.toBe('');
+  });
+
   it('opts the hidden arrival board back into visibility while it carries the tray', () => {
     const { container, rerender } = render(<CallStage {...arrivalProps()} />);
     expect(container.querySelector('.ot-main-arrival .ot-board')?.className).not.toContain(
