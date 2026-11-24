@@ -134,22 +134,22 @@ export default function App() {
     >
       {phase !== 'profiles' && (
         <header className="ot-topbar">
-          <div className="ot-wordmark">Open Tutor</div>
-          <div className="ot-topbar-right">
+          <div className="ot-topbar-inner">
+            <div className="ot-land-brand">
+              <span className="ot-land-mark" aria-hidden="true" />
+              <span>Open Tutor</span>
+            </div>
             {inSession && (
-              <button type="button" className="ot-end-btn ot-end-top" onClick={() => void session.endSession()} aria-label={t('app.endButtonAria')}>
-                {t('app.endButton')}
-              </button>
-            )}
-            {inSession && (
-              <TopMenu
-                items={session.items}
-                dragOver={session.dragOver}
-                onCamera={() => cameraRef.current?.click()}
-                onFiles={() => fileRef.current?.click()}
-                onSwitchStudent={() => void session.leaveToProfiles()}
-                switchLabel={config.copy.switchStudent}
-              />
+              <div className="ot-topbar-right">
+                <TopMenu
+                  items={session.items}
+                  dragOver={session.dragOver}
+                  onCamera={() => cameraRef.current?.click()}
+                  onFiles={() => fileRef.current?.click()}
+                  onSwitchStudent={() => void session.leaveToProfiles()}
+                  switchLabel={config.copy.switchStudent}
+                />
+              </div>
             )}
           </div>
         </header>
@@ -293,9 +293,11 @@ export default function App() {
           mobile={mobile}
           micBlocked={session.micBlocked}
           sending={session.sending || phase === 'ending'}
+          ending={phase === 'ending'}
           onSendText={(t) => void session.sendChat(t)}
           onToggleMic={() => void session.toggleMic()}
           onAttach={() => (mobile ? session.setHomeworkDraft({ kind: 'picker' }) : fileRef.current?.click())}
+          onEnd={() => void session.endSession()}
         />
       )}
 

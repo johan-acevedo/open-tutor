@@ -122,10 +122,12 @@ export default function ScreenDemo() {
           micEnabled
           micBlocked={false}
           sending={false}
+          ending={false}
           mobile
           onSendText={() => {}}
           onToggleMic={() => {}}
           onAttach={() => {}}
+          onEnd={() => {}}
         />
       </div>
     );
