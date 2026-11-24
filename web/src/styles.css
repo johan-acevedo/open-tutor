@@ -272,74 +272,542 @@ a:focus-visible {
   padding-right: 4px;
 }
 
-/* ---------- Voice-first start ---------- */
+/* ---------- Landing page (start view) ---------- */
 
-.ot-start {
+.ot-land {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+[data-band="primary"] .ot-land {
+  font-family: "Plus Jakarta Sans", var(--ot-font);
+}
+
+.ot-land-top {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 56px;
+  position: relative;
+  z-index: 5;
+}
+
+.ot-land-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 800;
+  font-size: 21px;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+
+.ot-land-mark {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: linear-gradient(135deg, var(--ot-cyan), var(--ot-violet));
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+
+.ot-land-mark::after {
+  content: '';
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--ot-canvas);
+  box-shadow: 0 0 0 3px #ffffffcc inset;
+}
+
+.ot-land-links {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  margin: 0 auto;
+}
+
+.ot-land-links a,
+.ot-land-links button {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--ot-text-dim);
+  font-size: 15px;
+  font-weight: 500;
+  font-family: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.ot-land-links a:hover,
+.ot-land-links button:hover {
+  color: var(--ot-text);
+}
+
+.ot-land-topright {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ot-land-ghost {
+  border: 1px solid var(--ot-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ot-text);
+  padding: 10px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ot-land-ghost:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.ot-land-scroll {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 20px;
-  padding: 24px;
-  text-align: center;
+  overscroll-behavior: contain;
 }
 
-.ot-start-companion img {
-  width: min(300px, 56vw);
-  border-radius: 24px;
-  display: block;
-}
-
-.ot-start-bubble {
+.ot-land-hero {
   position: relative;
-  background: var(--ot-elevated);
-  border: 1px solid var(--ot-border);
-  border-radius: 18px;
-  padding: 14px 22px;
-  font-size: 24px;
-  font-weight: 600;
-  margin: 0;
-  max-width: 26ch;
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  align-items: center;
+  gap: 24px;
+  padding: 24px 56px 48px 104px;
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
 }
 
-.ot-start-bubble::before {
-  content: '';
+.ot-land-grid {
   position: absolute;
-  top: -9px;
-  left: 50%;
-  width: 16px;
-  height: 16px;
-  transform: translateX(-50%) rotate(45deg);
-  background: var(--ot-elevated);
-  border-left: 1px solid var(--ot-border);
-  border-top: 1px solid var(--ot-border);
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(var(--ot-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--ot-grid) 1px, transparent 1px);
+  background-size: 24px 24px;
+  mask-image: radial-gradient(ellipse 60% 70% at 72% 50%, #000 0%, transparent 75%);
+  -webkit-mask-image: radial-gradient(ellipse 60% 70% at 72% 50%, #000 0%, transparent 75%);
 }
 
-.ot-start-note {
-  margin: 0;
+.ot-land-glow {
+  position: absolute;
+  right: 4%;
+  top: 0;
+  width: min(640px, 60%);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(circle, var(--ot-cyan-fill) 0%, transparent 70%);
+  opacity: 0.8;
+}
+
+.ot-land-copy {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+}
+
+.ot-land-title {
+  font-size: clamp(44px, 5.4vw, 76px);
+  line-height: 0.98;
+  letter-spacing: -0.04em;
+  margin: 0 0 28px;
+  font-weight: 800;
+}
+
+.ot-land-accent {
+  color: var(--ot-cyan);
+}
+
+.ot-land-sub {
+  font-size: clamp(17px, 1.5vw, 21px);
+  line-height: 1.55;
   color: var(--ot-text-dim);
-  font-size: 15px;
-  max-width: 52ch;
-  line-height: 1.5;
+  margin: 0 0 14px;
+  max-width: 34ch;
 }
 
-.ot-start-btn {
+.ot-land-sub a {
+  color: var(--ot-text);
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-color: var(--ot-border);
+  text-underline-offset: 4px;
+  white-space: nowrap;
+  /* 44 px tap area without changing the line rhythm. */
+  padding: 8px 2px;
+  margin: -8px -2px;
+}
+
+.ot-land-face {
+  display: inline-block;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  object-fit: cover;
+  vertical-align: -8px;
+  margin-right: 6px;
+  background: var(--ot-elevated);
+}
+
+.ot-land-cta-row {
+  display: flex;
+  align-items: center;
+  gap: 8px 20px;
+  flex-wrap: wrap;
+  margin-top: 26px;
+}
+
+.ot-land-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
   background: var(--ot-cyan);
-  color: #062a31;
+  color: #14171d;
   border: none;
   border-radius: 999px;
-  font-size: 20px;
-  font-weight: 700;
-  padding: 14px 64px;
+  font-weight: 800;
+  font-size: clamp(19px, 1.6vw, 22px);
+  font-family: inherit;
+  padding: 20px 38px 20px 30px;
+  box-shadow: 0 14px 44px #00000055;
   cursor: pointer;
 }
 
-.ot-start-btn:disabled {
-  opacity: 0.45;
+.ot-land-cta svg {
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+}
+
+.ot-land-cta:disabled {
+  opacity: 0.55;
   cursor: default;
+}
+
+.ot-land-notyou {
+  font-size: 17px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.ot-land-stage {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+}
+
+.ot-land-heroimg {
+  width: min(430px, 100%);
+  margin-left: auto;
+  display: block;
+}
+
+.ot-land-bubble {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: min(260px, 58%);
+  aspect-ratio: 270 / 160;
+  z-index: 2;
+}
+
+.ot-land-bubble-shape {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.ot-land-bubble-in {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 65%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: #12151b;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  font-size: clamp(24px, 2.8vw, 40px);
+  padding: 0 12px;
+}
+
+.ot-land-bubble-in svg {
+  width: 1.15em;
+  height: 1.15em;
+  flex: 0 0 auto;
+}
+
+.ot-land-bubble-in span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.ot-land-how {
+  padding: 24px 104px 80px;
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+  scroll-margin-top: 12px;
+}
+
+.ot-land-howtitle {
+  font-size: clamp(30px, 3vw, 40px);
+  letter-spacing: -0.03em;
+  margin: 0 0 32px;
+  font-weight: 800;
+}
+
+.ot-land-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+}
+
+.ot-land-card {
+  background: var(--ot-elevated);
+  border: 1px solid var(--ot-border);
+  border-radius: var(--ot-radius, 24px);
+  overflow: hidden;
+  min-width: 0;
+}
+
+.ot-land-pic {
+  height: 220px;
+  position: relative;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.ot-land-num {
+  position: absolute;
+  left: 22px;
+  top: 12px;
+  font-size: 64px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  color: var(--ot-cyan);
+}
+
+.ot-land-cardtxt {
+  padding: 8px 26px 28px;
+}
+
+.ot-land-cardtxt h3 {
+  font-size: clamp(24px, 2vw, 30px);
+  letter-spacing: -0.025em;
+  margin: 0 0 8px;
+  font-weight: 800;
+}
+
+.ot-land-cardtxt p {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.5;
+  color: var(--ot-text-dim);
+}
+
+.ot-land-paper {
+  width: 190px;
+  padding: 28px 12px;
+  background: var(--ot-paper);
+  color: var(--ot-paper-ink);
+  border-radius: 10px;
+  transform: rotate(-5deg);
+  box-shadow: 0 18px 36px #00000088;
+  font-family: Caveat, cursive;
+  font-size: 38px;
+  font-weight: 600;
+  line-height: 1.1;
+  text-align: center;
+}
+
+.ot-land-talk {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  height: 100%;
+  padding-bottom: 12px;
+  padding-left: 56px;
+}
+
+.ot-land-talk img {
+  height: 184px;
+  object-fit: contain;
+  display: block;
+}
+
+.ot-land-wave {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 100%;
+  padding-bottom: 20px;
+}
+
+.ot-land-wave i {
+  width: 9px;
+  border-radius: 5px;
+  background: linear-gradient(var(--ot-cyan), var(--ot-violet));
+  display: block;
+}
+
+.ot-land-mini {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+
+.ot-land-eq {
+  border: 1px solid var(--ot-border);
+  border-radius: 10px;
+  padding: 7px 0;
+  width: 190px;
+  text-align: center;
+  font-size: 21px;
+  font-weight: 700;
+}
+
+.ot-land-eq-on {
+  background: var(--ot-cyan);
+  border-color: var(--ot-cyan);
+  color: #14171d;
+}
+
+.ot-land-op {
+  color: var(--ot-violet);
+  font-weight: 800;
+  font-size: 14px;
+}
+
+.ot-land-foot {
+  border-top: 1px solid var(--ot-border);
+  padding: 28px 104px 40px;
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px 32px;
+  flex-wrap: wrap;
+  color: var(--ot-text-dim);
+  font-size: 17px;
+  line-height: 1.6;
+}
+
+.ot-land-foot p {
+  margin: 0;
+  max-width: 64ch;
+}
+
+.ot-land-foot button {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--ot-text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  min-height: 44px;
+}
+
+@media (max-width: 1100px) {
+  .ot-land-top {
+    padding: 16px 32px;
+  }
+  .ot-land-hero {
+    padding: 16px 32px 40px;
+  }
+  .ot-land-how,
+  .ot-land-foot {
+    padding-left: 32px;
+    padding-right: 32px;
+  }
+}
+
+@media (max-width: 899px) {
+  .ot-land-links,
+  .ot-land-ghost {
+    display: none;
+  }
+  .ot-land-hero {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    padding: 8px 24px 32px;
+  }
+  .ot-land-stage {
+    order: -1;
+    max-width: 420px;
+    width: 100%;
+    margin: 0 auto;
+  }
+  .ot-land-heroimg {
+    width: min(300px, 78%);
+    margin: 0 0 0 auto;
+  }
+  .ot-land-bubble {
+    width: 190px;
+  }
+  .ot-land-title {
+    margin-bottom: 16px;
+  }
+  .ot-land-cta-row {
+    margin-top: 22px;
+  }
+  .ot-land-cta {
+    flex: 1 1 0%;
+    min-width: 0;
+    justify-content: center;
+    padding: 18px 12px;
+    font-size: 18px;
+  }
+  .ot-land-notyou {
+    flex: 0 0 auto;
+  }
+  .ot-land-cards {
+    grid-template-columns: 1fr;
+  }
+  .ot-land-how {
+    padding: 8px 24px 56px;
+  }
+  .ot-land-foot {
+    padding: 24px 24px 32px;
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
 
 .ot-link-btn {
