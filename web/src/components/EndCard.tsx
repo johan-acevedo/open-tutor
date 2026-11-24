@@ -31,7 +31,7 @@ export default function EndCard({ learnerName, notes, onBack }: Props) {
           )}
         </div>
       )}
-      <button type="button" className="ot-start-btn" onClick={onBack}>
+      <button type="button" className="ot-land-cta" onClick={onBack}>
         {t('end.back')}
       </button>
     </div>

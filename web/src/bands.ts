@@ -20,6 +20,16 @@ export type BandId = 'primary' | 'middle' | 'upper';
 // hours, so without a new URL the old poses linger after a deploy.
 export const POSE_VERSION = '20261119';
 
+// Own cache-bust version for the landing images (scripts/export_landing_companions.py).
+export const LANDING_IMG_VERSION = '20261124b';
+
+function landingImages(directory: string): { hero: string; face: string } {
+  return {
+    hero: `${directory}/hero.webp?v=${LANDING_IMG_VERSION}`,
+    face: `${directory}/face.webp?v=${LANDING_IMG_VERSION}`,
+  };
+}
+
 function poseImages(directory: string): Record<Pose, string> {
   const url = (pose: Pose) => `${directory}/${pose}.webp?v=${POSE_VERSION}`;
   return {
@@ -41,6 +51,10 @@ export type BandConfig = {
     asset: 'fox' | 'lynx' | 'bear';
     name: string;
     poses: Record<Pose, string>;
+    /** Full figure beside the landing headline (scripts/export_landing_companions.py). */
+    hero: string;
+    /** 96x96 head crop for the round face by band cross-link names. */
+    face: string;
   };
   theme: {
     stylesheet: string;
@@ -69,7 +83,7 @@ export const BANDS: Record<BandId, BandConfig> = {
   primary: {
     id: 'primary',
     hosts: ['tutor.'],
-    companion: { asset: 'fox', name: sv['band.primary.companionName'], poses: poseImages('/character') },
+    companion: { asset: 'fox', name: sv['band.primary.companionName'], poses: poseImages('/character'), ...landingImages('/character') },
     theme: { stylesheet: '' },
     copy: {
       welcomeBubble: sv['band.primary.welcomeBubble'],
@@ -83,7 +97,7 @@ export const BANDS: Record<BandId, BandConfig> = {
   middle: {
     id: 'middle',
     hosts: ['tutor2.'],
-    companion: { asset: 'lynx', name: sv['band.middle.companionName'], poses: poseImages('/character/middle') },
+    companion: { asset: 'lynx', name: sv['band.middle.companionName'], poses: poseImages('/character/middle'), ...landingImages('/character/middle') },
     theme: { stylesheet: middleTheme },
     copy: {
       welcomeBubble: sv['band.middle.welcomeBubble'],
@@ -97,7 +111,7 @@ export const BANDS: Record<BandId, BandConfig> = {
   upper: {
     id: 'upper',
     hosts: ['tutor3.'],
-    companion: { asset: 'bear', name: sv['band.upper.companionName'], poses: poseImages('/character/upper') },
+    companion: { asset: 'bear', name: sv['band.upper.companionName'], poses: poseImages('/character/upper'), ...landingImages('/character/upper') },
     theme: { stylesheet: upperTheme },
     copy: {
       welcomeBubble: sv['band.upper.welcomeBubble'],

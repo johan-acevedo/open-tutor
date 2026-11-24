@@ -42,7 +42,7 @@ describe('Swedish catalogue guard', () => {
   });
 
   it('interpolates {name} placeholders', () => {
-    expect(t('band.primary.returningBubble', { name: 'Noa' })).toBe('Hej Noa! Ska vi köra?');
+    expect(t('band.primary.returningBubble', { name: 'Noa' })).toBe('Hej Noa!');
     expect(t('shell.loading', { topic: 'historia' })).toBe('Laddar historia …');
   });
 });

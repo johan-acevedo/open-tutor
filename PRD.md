@@ -104,9 +104,11 @@ switches mid-session or on later visits; unknown hosts default to band 1
 
 ## 4. Out of scope for the first release
 
-Accounts, cross-device sync, parent dashboards or parent instructions, billing, resource ratings or approval, child editing of the board, curriculum integrations, screen or camera watching, English and Spanish teaching, and polished onboarding or marketing pages.
+Accounts, cross-device sync, parent dashboards or parent instructions, billing, resource ratings or approval, child editing of the board, curriculum integrations, screen or camera watching, and English and Spanish teaching.
 
 In scope since 2026-11-18 (contrary to earlier drafts): adults as learners, and one companion per age band.
+
+In scope since 2026-11-24: a start page that explains to a newcomer what Open Tutor is (one headline, the band intro, how it works, the experiment and privacy note) while the learner still starts with one tap. See `design/landing-2026-11/README.md`.
 
 ## 5. Open decisions
 

@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root { --fox: url(/home/johan/code/open-tutor/web/public/character/greeting.webp); }
+  body { margin: 0; }
+  .label { font: 600 14px/1.3 system-ui, sans-serif; margin: 18px 0 6px; }
+  .label span { font-weight: 400; opacity: .7; }
+  .frame { width: 1280px; height: 800px; zoom: 0.5625; border-radius: 18px; overflow: hidden; position: relative;
+           font-family: "Plus Jakarta Sans", system-ui, sans-serif; box-shadow: 0 0 0 2px #ffffff22; }
+  .phones { display: flex; gap: 14px; }
+  .phone { width: 390px; height: 800px; zoom: 0.585; border-radius: 40px; overflow: hidden; position: relative;
+           font-family: "Plus Jakarta Sans", system-ui, sans-serif; box-shadow: 0 0 0 3px #ffffff33; }
+  img.fox { display: block; }
+
+  /* ---------- shared dark tokens ---------- */
+  .dark { background: #14171d; color: #f3f5f8; }
+  .nav { display: flex; align-items: center; justify-content: space-between; padding: 22px 48px; position: relative; z-index: 2; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 21px; letter-spacing: -.02em; }
+  .mark { width: 30px; height: 30px; border-radius: 9px; background: linear-gradient(135deg, #22d3ee, #a78bfa); display: grid; place-items: center; }
+  .mark i { width: 12px; height: 12px; border-radius: 50%; background: #14171d; display: block; box-shadow: 0 0 0 3px #ffffffcc inset; }
+  .links { display: flex; gap: 30px; font-size: 15px; font-weight: 500; opacity: .8; }
+  .ghost { border: 1px solid #ffffff33; border-radius: 999px; padding: 9px 18px; font-size: 14px; font-weight: 600; }
+  .cta { display: inline-flex; align-items: center; gap: 12px; background: #22d3ee; color: #052a31; border-radius: 999px;
+         font-weight: 700; font-size: 20px; padding: 18px 34px; box-shadow: 0 10px 40px #22d3ee40; }
+  .mic { width: 22px; height: 22px; }
+  .chips { display: flex; gap: 10px; flex-wrap: wrap; }
+  .chip { font-size: 14px; font-weight: 600; padding: 7px 13px; border-radius: 999px; background: #ffffff0f; border: 1px solid #ffffff1a; }
+  .chip b { color: #34d399; margin-right: 6px; }
+
+  /* ---------- A: promise + fox, split ---------- */
+  .A .glow { position: absolute; right: 120px; top: 120px; width: 620px; height: 620px; border-radius: 50%;
+             background: radial-gradient(circle, #a78bfa40 0%, #22d3ee22 40%, transparent 70%); }
+  .A .grid { position: absolute; inset: 0; background-image: linear-gradient(#ffffff06 1px, transparent 1px), linear-gradient(90deg, #ffffff06 1px, transparent 1px);
+             background-size: 24px 24px; mask-image: radial-gradient(ellipse at 70% 50%, #000 0%, transparent 70%); }
+  .A .hero { position: relative; display: grid; grid-template-columns: 1.05fr 1fr; align-items: center; padding: 40px 96px 0; gap: 24px; height: 560px; }
+  .A h1 { font-size: 64px; line-height: 1.02; letter-spacing: -.035em; margin: 18px 0 20px; font-weight: 800; }
+  .A h1 em { font-style: normal; background: linear-gradient(90deg, #22d3ee, #a78bfa); -webkit-background-clip: text; color: transparent; }
+  .A p.sub { font-size: 20px; line-height: 1.5; color: #b7bfcd; margin: 0 0 32px; max-width: 30ch; }
+  .A .fine { font-size: 14px; color: #9ba3b4; margin-top: 16px; }
+  .A .foxwrap { position: relative; justify-self: center; }
+  .A .foxwrap img { width: 440px; }
+  .A .bubble { position: absolute; left: -40px; top: 40px; background: #f6f4ee; color: #181b22; font-weight: 700; font-size: 20px;
+               padding: 12px 18px; border-radius: 16px 16px 4px 16px; box-shadow: 0 10px 30px #0006; }
+  .A .steps { position: absolute; left: 96px; right: 96px; bottom: 36px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .A .step { background: #1c2029; border: 1px solid #2e3543; border-radius: 16px; padding: 18px 20px; display: flex; gap: 14px; align-items: flex-start; }
+  .A .step .n { width: 30px; height: 30px; border-radius: 50%; background: #22d3ee1f; color: #22d3ee; font-weight: 800; display: grid; place-items: center; flex: none; }
+  .A .step h4 { margin: 2px 0 4px; font-size: 16px; }
+  .A .step p { margin: 0; font-size: 14px; color: #9ba3b4; line-height: 1.45; }
+
+  /* ---------- B: centered stage, aurora ---------- */
+  .B { background: #101219; }
+  .B .aurora { position: absolute; inset: 0;
+    background:
+      radial-gradient(60% 45% at 50% 108%, #a78bfa 0%, transparent 70%),
+      radial-gradient(40% 40% at 15% 100%, #22d3ee 0%, transparent 70%),
+      radial-gradient(40% 40% at 85% 100%, #f472b6aa 0%, transparent 70%);
+    opacity: .55; filter: blur(10px); }
+  .B .center { position: relative; text-align: center; padding-top: 40px; }
+  .B h1 { font-size: 60px; letter-spacing: -.035em; line-height: 1.02; margin: 0 0 14px; font-weight: 800; }
+  .B p.sub { font-size: 20px; color: #b7bfcd; margin: 0 auto; max-width: 40ch; line-height: 1.45; }
+  .B .stage { position: relative; width: 640px; margin: 18px auto 0; }
+  .B .stage img { width: 300px; margin: 0 auto -6px; position: relative; z-index: 1; }
+  .B .card { position: relative; z-index: 2; background: #f6f4ee; color: #181b22; border-radius: 26px; padding: 22px 22px 22px 30px;
+             display: flex; align-items: center; justify-content: space-between; box-shadow: 0 30px 80px #0009; text-align: left; }
+  .B .card .q { font-size: 24px; font-weight: 800; letter-spacing: -.02em; }
+  .B .card .s { font-size: 14px; color: #5b6170; margin-top: 4px; }
+  .B .card .cta { font-size: 19px; padding: 16px 28px; box-shadow: none; background: #181b22; color: #fff; }
+  .B .card .cta .dot { width: 10px; height: 10px; border-radius: 50%; background: #34d399; box-shadow: 0 0 0 4px #34d39933; }
+  .B .chips { justify-content: center; margin-top: 22px; }
+
+  /* ---------- C: light, warm, board preview ---------- */
+  .C { background: #f6f4ee; color: #181b22; }
+  .C .wash { position: absolute; inset: 0; background:
+      radial-gradient(45% 55% at 78% 45%, #c4b5fd88 0%, transparent 70%),
+      radial-gradient(35% 45% at 95% 90%, #67e8f988 0%, transparent 70%); }
+  .C .nav .links { opacity: .7; }
+  .C .ghost { border-color: #181b2233; }
+  .C .solid { background: #181b22; color: #fff; border-radius: 999px; padding: 10px 18px; font-size: 14px; font-weight: 700; }
+  .C .hero { position: relative; display: grid; grid-template-columns: 1fr 1fr; align-items: center; padding: 30px 96px; gap: 24px; height: 640px; }
+  .C h1 { font-size: 62px; line-height: 1.03; letter-spacing: -.035em; margin: 16px 0 18px; font-weight: 800; }
+  .C p.sub { font-size: 20px; line-height: 1.5; color: #4b5160; margin: 0 0 30px; max-width: 31ch; }
+  .C .cta { background: #181b22; color: #fff; box-shadow: 0 12px 30px #181b2240; }
+  .C .fine { font-size: 14px; color: #6b7180; margin-top: 16px; }
+  .C .chip { background: #ffffffaa; border-color: #181b221a; }
+  .C .chip b { color: #059669; }
+  .C .shot { position: relative; justify-self: end; width: 520px; height: 400px; background: #181b22; border-radius: 22px;
+             box-shadow: 0 40px 80px #181b2240; padding: 22px; color: #f3f5f8; }
+  .C .shot .t { font-weight: 800; font-size: 20px; margin-bottom: 14px; }
+  .C .eq { border: 1px solid #2e3543; border-radius: 12px; padding: 10px; text-align: center; font-size: 28px; font-weight: 700; width: 280px; }
+  .C .eq.on { background: #0891b2; border-color: #22d3ee; }
+  .C .op { color: #a78bfa; font-weight: 800; font-size: 16px; width: 280px; text-align: center; margin: 6px 0; }
+  .C .shot img { position: absolute; right: -40px; bottom: -10px; width: 250px; }
+  .C .shot .say { position: absolute; right: 24px; top: 70px; background: #222731; border: 1px solid #22d3ee; border-radius: 12px; padding: 8px 12px; font-size: 14px; max-width: 190px; }
+  .C .shot .say b { color: #22d3ee; display: block; font-size: 12px; }
+
+  /* ---------- phones ---------- */
+  .phone .nav { padding: 18px 20px; }
+  .phone .brand { font-size: 18px; }
+  .phone .mark { width: 26px; height: 26px; }
+  .phone .menu { width: 36px; height: 36px; border-radius: 10px; border: 1px solid #ffffff2a; display: grid; place-items: center; font-size: 18px; }
+  .phone h1 { font-size: 38px !important; margin: 8px 0 10px !important; }
+  .phone p.sub { font-size: 16px !important; margin-bottom: 18px !important; }
+  .phone .cta { font-size: 18px; padding: 16px 0; width: 100%; justify-content: center; }
+  .pA .body { padding: 0 22px; position: relative; }
+  .pA .foxrow { position: relative; height: 270px; }
+  .pA .foxrow img { width: 240px; position: absolute; left: 50%; transform: translateX(-50%); top: 0; }
+  .pA .foxrow .bubble { position: absolute; left: 6px; top: 24px; background: #f6f4ee; color: #181b22; font-weight: 700; padding: 8px 12px; border-radius: 12px 12px 4px 12px; font-size: 15px; }
+  .pA .glow { position: absolute; left: -60px; top: 40px; width: 500px; height: 340px; background: radial-gradient(circle, #a78bfa40, transparent 65%); }
+  .pB .center { padding-top: 6px !important; }
+  .pB .stage { width: auto !important; margin: 10px 18px 0 !important; }
+  .pB .stage img { width: 210px !important; }
+  .pB .card { flex-direction: column; align-items: stretch !important; gap: 14px; padding: 20px !important; }
+  .pB .card .cta { width: auto; }
+  .pB .card .q { font-size: 21px !important; }
+  .pB h1 { padding: 0 18px; }
+  .pB .chips { padding: 0 16px; }
+  .pC .body { padding: 0 22px; position: relative; }
+  .pC .menu { border-color: #181b2233 !important; }
+  .phone .chips { margin-top: 14px; }
+  .phone .chip { font-size: 12px; padding: 6px 10px; }
+</style>
+</head>
+<body>
+
+<div class="label">A · Löfte + räv <span>— mörk, delad hero, tre steg ovanför vecket</span></div>
+<div class="frame dark A">
+  <div class="grid"></div><div class="glow"></div>
+  <div class="nav">
+    <div class="brand"><div class="mark"><i></i></div>Open Tutor</div>
+    <div class="links"><span>Så funkar det</span><span>För föräldrar</span><span>Integritet</span></div>
+    <div class="ghost">Prata med Räven</div>
+  </div>
+  <div class="hero">
+    <div>
+      <div class="chips"><span class="chip">Gratis</span><span class="chip">På svenska</span><span class="chip">Åk 1–6</span></div>
+      <h1>Läxhjälp du kan <em>prata</em> med.</h1>
+      <p class="sub">Räven lyssnar, ritar på tavlan och frågar tills du förstår. Du gör läxan – Räven hjälper dig dit.</p>
+      <span class="cta"><svg class="mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>Prata med Räven</span>
+      <div class="fine">Inget konto. Mikrofonen startar först när du trycker.</div>
+    </div>
+    <div class="foxwrap"><div class="bubble">Hej! Ska vi prata?</div><img class="fox" src="/home/johan/code/open-tutor/web/public/character/greeting.webp"></div>
+  </div>
+  <div class="steps">
+    <div class="step"><div class="n">1</div><div><h4>Tryck och säg hej</h4><p>Räven frågar vad du heter och vad du jobbar med.</p></div></div>
+    <div class="step"><div class="n">2</div><div><h4>Visa läxan</h4><p>Fota uppgiften, välj en PDF eller klistra in texten.</p></div></div>
+    <div class="step"><div class="n">3</div><div><h4>Lös den tillsammans</h4><p>Steg för steg på tavlan, i din takt.</p></div></div>
+  </div>
+</div>
+
+<div class="label">B · Scen i mitten <span>— närmast Lovable: stor rubrik, ett kort som är handlingen, färgdis nedtill</span></div>
+<div class="frame B dark">
+  <div class="aurora"></div>
+  <div class="nav">
+    <div class="brand"><div class="mark"><i></i></div>Open Tutor</div>
+    <div class="links"><span>Så funkar det</span><span>För föräldrar</span><span>Integritet</span></div>
+    <div class="ghost">☰</div>
+  </div>
+  <div class="center">
+    <h1>Gör läxan med en kompis som kan.</h1>
+    <p class="sub">En AI-tutor du pratar med på svenska. Den ritar, förklarar och ställer frågor – svaret kommer du på själv.</p>
+    <div class="stage">
+      <img class="fox" src="/home/johan/code/open-tutor/web/public/character/greeting.webp">
+      <div class="card">
+        <div><div class="q">Hej! Ska vi prata?</div><div class="s">Mikrofonen startar när du trycker. Inget konto.</div></div>
+        <span class="cta"><span class="dot"></span>Prata med Räven</span>
+      </div>
+    </div>
+    <div class="chips"><span class="chip"><b>✓</b>Gratis</span><span class="chip"><b>✓</b>Åk 1–6</span><span class="chip"><b>✓</b>Sparas bara i din webbläsare</span></div>
+  </div>
+</div>
+
+<div class="label">C · Ljus och varm <span>— startsidan på papper, appen förblir mörk; visar tavlan direkt</span></div>
+<div class="frame C">
+  <div class="wash"></div>
+  <div class="nav">
+    <div class="brand"><div class="mark"><i></i></div>Open Tutor</div>
+    <div class="links"><span>Så funkar det</span><span>För föräldrar</span><span>Integritet</span></div>
+    <div class="solid">Prata med Räven</div>
+  </div>
+  <div class="hero">
+    <div>
+      <div class="chips"><span class="chip"><b>●</b>Gratis för åk 1–6</span></div>
+      <h1>Fastnat på läxan? Prata med Räven.</h1>
+      <p class="sub">Visa uppgiften, säg vad du tänker. Räven ritar på tavlan och hjälper dig ett steg i taget.</p>
+      <span class="cta"><svg class="mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>Starta samtalet</span>
+      <div class="fine">Inget konto · Mikrofonen startar när du trycker · Sparas bara här</div>
+    </div>
+    <div class="shot">
+      <div class="t">Ekvationer · ett steg i taget</div>
+      <div class="eq">3x + 5 = 20</div><div class="op">−5 på båda sidor</div>
+      <div class="eq on">3x = 15</div><div class="op">÷3</div>
+      <div class="eq">x = ?</div>
+      <div class="say"><b>Förklarar</b>Vad blir x om 3x är 15?</div>
+      <img class="fox" src="/home/johan/code/open-tutor/web/public/character/greeting.webp">
+    </div>
+  </div>
+</div>
+
+<div class="label">Telefon <span>— A · B · C</span></div>
+<div class="phones">
+  <div class="phone dark pA">
+    <div class="glow"></div>
+    <div class="nav"><div class="brand"><div class="mark"><i></i></div>Open Tutor</div><div class="menu">☰</div></div>
+    <div class="body">
+      <div class="foxrow"><img class="fox" src="/home/johan/code/open-tutor/web/public/character/greeting.webp"><div class="bubble">Hej! Ska vi prata?</div></div>
+      <div class="chips" style="margin:0 0 4px"><span class="chip">Gratis</span><span class="chip">På svenska</span><span class="chip">Åk 1–6</span></div>
+      <h1 class="A-h" style="font-weight:800;letter-spacing:-.035em;line-height:1.03">Läxhjälp du kan <span style="background:linear-gradient(90deg,#22d3ee,#a78bfa);-webkit-background-clip:text;color:transparent">prata</span> med.</h1>
+      <p class="sub" style="color:#b7bfcd;line-height:1.45">Räven lyssnar, ritar på tavlan och frågar tills du förstår.</p>
+      <span class="cta">Prata med Räven</span>
+      <div style="font-size:13px;color:#9ba3b4;text-align:center;margin-top:12px">Inget konto. Mikrofonen startar när du trycker.</div>
+    </div>
+  </div>
+  <div class="phone B dark pB">
+    <div class="aurora"></div>
+    <div class="nav"><div class="brand"><div class="mark"><i></i></div>Open Tutor</div><div class="menu">☰</div></div>
+    <div class="center">
+      <h1>Gör läxan med en kompis som kan.</h1>
+      <p class="sub" style="padding:0 18px">En AI-tutor du pratar med på svenska.</p>
+      <div class="stage">
+        <img class="fox" src="/home/johan/code/open-tutor/web/public/character/greeting.webp">
+        <div class="card"><div><div class="q">Hej! Ska vi prata?</div><div class="s">Mikrofonen startar när du trycker.</div></div><span class="cta" style="justify-content:center"><span class="dot"></span>Prata med Räven</span></div>
+      </div>
+      <div class="chips"><span class="chip"><b>✓</b>Gratis</span><span class="chip"><b>✓</b>Åk 1–6</span><span class="chip"><b>✓</b>Inget konto</span></div>
+    </div>
+  </div>
+  <div class="phone C pC">
+    <div class="wash"></div>
+    <div class="nav"><div class="brand"><div class="mark"><i></i></div>Open Tutor</div><div class="menu">☰</div></div>
+    <div class="body">
+      <div class="chips" style="margin:0"><span class="chip"><b>●</b>Gratis för åk 1–6</span></div>
+      <h1 style="font-weight:800;letter-spacing:-.035em;line-height:1.03">Fastnat på läxan? Prata med Räven.</h1>
+      <p class="sub" style="color:#4b5160;line-height:1.45">Visa uppgiften, säg vad du tänker. Räven hjälper dig ett steg i taget.</p>
+      <span class="cta">Starta samtalet</span>
+      <div class="shot" style="position:relative;margin-top:22px;width:auto;height:250px;background:#181b22;border-radius:18px;padding:16px;color:#f3f5f8;overflow:hidden">
+        <div class="eq" style="width:180px;font-size:20px">3x + 5 = 20</div><div class="op" style="width:180px">−5</div>
+        <div class="eq on" style="width:180px;font-size:20px">3x = 15</div>
+        <img class="fox" src="/home/johan/code/open-tutor/web/public/character/greeting.webp" style="position:absolute;right:-30px;bottom:-10px;width:170px">
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

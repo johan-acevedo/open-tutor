@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Caveat:wght@600&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; }
+  .label { font: 600 14px/1.3 system-ui, sans-serif; margin: 18px 0 6px; }
+  .label span { font-weight: 400; opacity: .7; }
+  .frame { width: 1280px; zoom: 0.5625; border-radius: 18px; overflow: hidden; position: relative;
+           font-family: "Plus Jakarta Sans", system-ui, sans-serif; box-shadow: 0 0 0 2px #ffffff22;
+           background: #14171d; color: #f3f5f8; }
+  .fold { position: absolute; left: 0; right: 0; top: 800px; border-top: 2px dashed #f59e0b88; z-index: 5; }
+  .fold span { position: absolute; right: 12px; top: -26px; color: #f59e0b; font: 600 15px system-ui; }
+
+  .nav { display: flex; align-items: center; justify-content: space-between; padding: 22px 56px; position: relative; z-index: 2; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 21px; letter-spacing: -.02em; }
+  .mark { width: 30px; height: 30px; border-radius: 9px; background: linear-gradient(135deg, #22d3ee, #a78bfa); display: grid; place-items: center; }
+  .mark i { width: 12px; height: 12px; border-radius: 50%; background: #14171d; display: block; box-shadow: 0 0 0 3px #ffffffcc inset; }
+  .links { display: flex; gap: 32px; font-size: 15px; font-weight: 500; color: #c3cad6; }
+  .ghost { border: 1px solid #ffffff33; border-radius: 999px; padding: 10px 18px; font-size: 14px; font-weight: 600; }
+
+  .hero { position: relative; height: 724px; display: grid; grid-template-columns: 1.1fr 1fr; align-items: center; padding: 0 56px 30px 104px; }
+  .grid { position: absolute; inset: 0; background-image: linear-gradient(#ffffff07 1px, transparent 1px), linear-gradient(90deg, #ffffff07 1px, transparent 1px);
+          background-size: 24px 24px; mask-image: radial-gradient(ellipse 60% 70% at 72% 50%, #000 0%, transparent 75%); }
+  .glow { position: absolute; right: 80px; top: 60px; width: 640px; height: 640px; border-radius: 50%;
+          background: radial-gradient(circle, #a78bfa38 0%, #22d3ee1c 42%, transparent 70%); }
+  .copy { position: relative; margin-top: 40px; }
+  h1 { font-size: 76px; line-height: .98; letter-spacing: -.04em; margin: 0 0 28px; font-weight: 800; }
+  h1 span { color: #22d3ee; }
+  .sub { font-size: 21px; line-height: 1.55; color: #b7bfcd; margin: 0 0 14px; max-width: 33ch; }
+  .sub.bands { margin-bottom: 40px; }
+  .sub a { color: #f3f5f8; font-weight: 700; text-decoration: underline; text-decoration-color: #ffffff40; text-underline-offset: 4px; white-space: nowrap; }
+  .face { display: inline-block; width: 30px; height: 30px; border-radius: 50%; overflow: hidden; vertical-align: -8px; margin-right: 6px;
+          background: #2a303c; position: relative; }
+  .face img { position: absolute; display: block; }
+  .face.lynx img { width: 300%; left: -102%; top: -12%; }
+  .face.bear img { width: 260%; left: -80%; top: -4%; }
+  .cta { display: inline-flex; align-items: center; gap: 14px; background: #22d3ee; color: #052a31; border-radius: 999px;
+         font-weight: 800; font-size: 22px; padding: 22px 40px 22px 32px; box-shadow: 0 14px 44px #22d3ee3a; }
+  .cta svg { width: 26px; height: 26px; }
+  .foxwrap { position: relative; justify-self: center; margin-top: 70px; }
+  .foxwrap img { width: 460px; display: block; }
+
+  /* comic speech bubble: one outlined shape incl. a big tail, speaker icon + Hej! */
+  .bubble { position: absolute; }
+  .bubble svg.shape { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+  .bubble .in { position: absolute; left: 0; right: 0; top: 0; display: flex; align-items: center; justify-content: center; gap: 12px;
+                color: #12151b; font-weight: 800; letter-spacing: -.02em; }
+  .hero .bubble { width: 270px; height: 160px; left: -130px; top: -112px; }
+  .hero .bubble .in { height: 104px; font-size: 46px; }
+  .spk { flex: none; }
+
+  .how { position: relative; padding: 40px 104px 90px; }
+  .how h2 { font-size: 40px; letter-spacing: -.03em; margin: 0 0 32px; font-weight: 800; }
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+  .card { background: #1b1f28; border: 1px solid #2a303c; border-radius: 24px; overflow: hidden; }
+  .pic { height: 220px; position: relative; display: grid; place-items: center; background: radial-gradient(circle at 50% 60%, #ffffff0a, transparent 70%); }
+  .pic .num { position: absolute; left: 22px; top: 12px; font-size: 64px; font-weight: 800; letter-spacing: -.04em; color: #22d3ee; opacity: .9; line-height: 1; }
+  .card .txt { padding: 8px 26px 28px; }
+  .card h3 { font-size: 30px; letter-spacing: -.025em; margin: 0 0 8px; font-weight: 800; }
+  .card p { margin: 0; font-size: 17px; line-height: 1.5; color: #9ba3b4; }
+  .paper { width: 190px; height: 150px; background: #f6f4ee; border-radius: 10px; transform: rotate(-5deg); box-shadow: 0 18px 36px #0008;
+           color: #181b22; font-family: Caveat, cursive; font-size: 40px; display: grid; place-items: center; position: relative; margin-left: 40px; }
+  .paper::after { content: ''; position: absolute; left: 22px; right: 30px; bottom: 34px; height: 3px; background: #9ba3b4; border-radius: 2px; }
+  .talk { display: flex; align-items: flex-end; gap: 6px; height: 100%; padding-left: 70px; }
+  .talk img { width: 168px; display: block; align-self: flex-end; }
+  .wave { display: flex; align-items: center; gap: 7px; height: 100%; padding-bottom: 20px; }
+  .wave i { width: 9px; border-radius: 5px; background: linear-gradient(#22d3ee, #a78bfa); display: block; }
+  .mini { display: flex; flex-direction: column; align-items: center; gap: 4px; margin-left: 40px; }
+  .mini .eq { border: 1px solid #2e3543; border-radius: 10px; padding: 7px 0; width: 190px; text-align: center; font-size: 22px; font-weight: 700; }
+  .mini .eq.on { background: #0891b2; border-color: #22d3ee; }
+  .mini .op { color: #a78bfa; font-weight: 800; font-size: 14px; }
+
+  .foot { border-top: 1px solid #232833; padding: 30px 104px 40px; display: flex; justify-content: space-between; align-items: baseline; color: #9ba3b4; font-size: 17px; line-height: 1.6; }
+  .foot p { margin: 0; max-width: 64ch; }
+  .foot a { color: #f3f5f8; text-decoration: none; font-weight: 600; }
+
+  .phone { width: 390px; height: 900px; zoom: 0.62; border-radius: 40px; overflow: hidden; position: relative;
+           font-family: "Plus Jakarta Sans", system-ui, sans-serif; box-shadow: 0 0 0 3px #ffffff33; background: #14171d; color: #f3f5f8; }
+  .phone .nav { padding: 18px 22px; }
+  .phone .menu { width: 38px; height: 38px; border-radius: 10px; border: 1px solid #ffffff2a; display: grid; place-items: center; }
+  .phone .stage { position: relative; height: 320px; }
+  .phone .stage img { position: absolute; width: 270px; left: 50%; transform: translateX(-38%); top: 26px; }
+  .phone .stage .glow { right: -120px; top: -40px; width: 520px; height: 420px; }
+  .phone .bubble { width: 190px; height: 114px; left: 14px; top: 6px; }
+  .phone .bubble .in { height: 74px; font-size: 32px; gap: 8px; }
+  .phone .body { padding: 0 24px; }
+  .phone h1 { font-size: 44px; margin-bottom: 16px; }
+  .phone .sub { font-size: 17px; }
+  .phone .sub.bands { margin-bottom: 26px; }
+  .phone .cta { width: 100%; justify-content: center; font-size: 20px; padding: 20px 0; }
+  .phone .face { width: 26px; height: 26px; vertical-align: -7px; }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <!-- bubble body 4..266 x 4..100 with a big tail down-right -->
+    <path id="bub" d="M46 4 H224 A42 42 0 0 1 266 46 V58 A42 42 0 0 1 224 100 H196 L262 156 L150 100 H46 A42 42 0 0 1 4 58 V46 A42 42 0 0 1 46 4 Z"/>
+    <symbol id="speaker" viewBox="0 0 48 48">
+      <path d="M6 18 H14 L25 9 V39 L14 30 H6 Z" fill="#12151b" stroke="#12151b" stroke-width="3" stroke-linejoin="round"/>
+      <path d="M31 17 a10 10 0 0 1 0 14" fill="none" stroke="#06b6d4" stroke-width="4.5" stroke-linecap="round"/>
+      <path d="M36 11 a18 18 0 0 1 0 26" fill="none" stroke="#06b6d4" stroke-width="4.5" stroke-linecap="round"/>
+      <path d="M41 6 a26 26 0 0 1 0 36" fill="none" stroke="#06b6d4" stroke-width="4.5" stroke-linecap="round" opacity=".55"/>
+    </symbol>
+  </defs>
+</svg>
+
+<div class="label">A3 · desktop <span>— streckad linje = vecket vid 1280×800</span></div>
+<div class="frame">
+  <div class="fold"><span>vecket</span></div>
+  <div class="nav">
+    <div class="brand"><div class="mark"><i></i></div>Open Tutor</div>
+    <div class="links"><span>Så funkar det</span><span>Om Open Tutor</span><span>Integritet</span></div>
+    <div class="ghost">Prata med Räven</div>
+  </div>
+  <div class="hero">
+    <div class="grid"></div><div class="glow"></div>
+    <div class="copy">
+      <h1>Läxhjälp du kan <span>prata</span> med.</h1>
+      <p class="sub">Räven är en AI för dig som går i åk 1–6. Den lyssnar, förklarar och ritar på tavlan medan du själv löser uppgiften. Gratis medan vi testar.</p>
+      <p class="sub bands">Går du på högstadiet? Prata med <a><span class="face lynx"><img src="/home/johan/code/open-tutor/web/public/character/middle/greeting.webp"></span>Lodjuret</a>. Gymnasiet eller vuxen? Prata med <a><span class="face bear"><img src="/home/johan/code/open-tutor/web/public/character/upper/greeting.webp"></span>Björnen</a>.</p>
+      <span class="cta"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>Prata med Räven</span>
+    </div>
+    <div class="foxwrap">
+      <img src="/home/johan/code/open-tutor/web/public/character/greeting.webp">
+      <div class="bubble">
+        <svg class="shape" viewBox="0 0 270 160"><use href="#bub" fill="#f6f4ee" stroke="#0b0d12" stroke-width="5" stroke-linejoin="round"/></svg>
+        <div class="in"><svg class="spk" width="50" height="50"><use href="#speaker"/></svg>Hej!</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="how">
+    <h2>Så funkar det</h2>
+    <div class="cards">
+      <div class="card">
+        <div class="pic"><span class="num">1</span><div class="paper">3x + 5 = 20</div></div>
+        <div class="txt"><h3>Visa läxan</h3><p>Fota uppgiften eller klistra in texten.</p></div>
+      </div>
+      <div class="card">
+        <div class="pic" style="place-items:stretch"><span class="num">2</span>
+          <div class="talk"><img src="/home/johan/code/open-tutor/web/public/character/speaking.webp">
+            <div class="wave"><i style="height:22px"></i><i style="height:48px"></i><i style="height:72px"></i><i style="height:40px"></i><i style="height:60px"></i><i style="height:28px"></i><i style="height:50px"></i><i style="height:18px"></i></div></div>
+        </div>
+        <div class="txt"><h3>Prata med Räven</h3><p>Säg vad du tänker. Räven lyssnar och frågar.</p></div>
+      </div>
+      <div class="card">
+        <div class="pic"><span class="num">3</span><div class="mini"><div class="eq">3x + 5 = 20</div><div class="op">−5</div><div class="eq on">3x = 15</div><div class="op">÷3</div><div class="eq">x = 5</div></div></div>
+        <div class="txt"><h3>Lös den ihop</h3><p>Steg för steg på tavlan, i din takt.</p></div>
+      </div>
+    </div>
+  </div>
+  <div class="foot">
+    <p>Open Tutor är ett experiment. Du behöver inget konto, och det du gör sparas bara i din webbläsare.</p>
+    <a>Läs om integritet →</a>
+  </div>
+</div>
+
+<div class="label">A3 · telefon</div>
+<div class="phone">
+  <div class="nav"><div class="brand"><div class="mark"><i></i></div>Open Tutor</div><div class="menu">☰</div></div>
+  <div class="stage"><div class="glow"></div>
+    <img src="/home/johan/code/open-tutor/web/public/character/greeting.webp">
+    <div class="bubble">
+      <svg class="shape" viewBox="0 0 270 160"><use href="#bub" fill="#f6f4ee" stroke="#0b0d12" stroke-width="6" stroke-linejoin="round"/></svg>
+      <div class="in"><svg class="spk" width="36" height="36"><use href="#speaker"/></svg>Hej!</div>
+    </div>
+  </div>
+  <div class="body">
+    <h1>Läxhjälp du kan <span>prata</span> med.</h1>
+    <p class="sub">Räven är en AI för dig som går i åk 1–6. Den lyssnar, förklarar och ritar på tavlan medan du själv löser uppgiften. Gratis medan vi testar.</p>
+    <p class="sub bands">Går du på högstadiet? Prata med <a><span class="face lynx"><img src="/home/johan/code/open-tutor/web/public/character/middle/greeting.webp"></span>Lodjuret</a>. Gymnasiet eller vuxen? Prata med <a><span class="face bear"><img src="/home/johan/code/open-tutor/web/public/character/upper/greeting.webp"></span>Björnen</a>.</p>
+    <span class="cta"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>Prata med Räven</span>
+  </div>
+</div>
+
+</body>
+</html>
