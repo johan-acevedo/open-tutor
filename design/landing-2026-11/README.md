@@ -39,3 +39,20 @@ dead space, no statement of what the product is, and a disclaimer-like note unde
 
 The mockups load fonts from Google Fonts and images by absolute local path; they are design
 records, not served pages.
+
+## Iterations A4–A5 (Johan, 2026-11-24, evening)
+
+- A Gemini 4 Neon review (via `agy` CLI) of the live A3 page found the start button below the
+  fold on common phones, the bubble's tail in the fox's eye, a header off the content grid and
+  tight headline tracking. All fixed in A4.
+- Johan: the page felt cramped next to the mockup. A4 shows the grid only behind the companion,
+  lets the hero fill the first view and leaves wide space before "Så funkar det".
+- Copy: "Gratis än så länge" (free for now, not "while we test"); step 1 shows one simple
+  example ("Fota uppgiften, så ser {companion} den också.") rather than every way to share work.
+- The bubble plays a short greeting in the call voice when tapped (`web/public/audio/`,
+  `scripts/make_hello_clips.sh`).
+- Cross-links left the hero for cards after the steps. A5: the audience ("Högstadiet") is the
+  big label and the companion is secondary; zoomed-in faces; big tap targets.
+- A5: lynx and bear must carry the same visual weight as the fox; step 2 uses a talking bubble
+  with dots instead of voice bars; step 3 drops the operation labels (primary:
+  30 + 40 = 70 → 6 + 7 = 13 → 70 + 13 = 83).
