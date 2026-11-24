@@ -1,0 +1,53 @@
+{
+  "1": {
+    "raw_size": [
+      948,
+      1659
+    ],
+    "crop_box": [
+      0,
+      69,
+      945,
+      1430
+    ],
+    "final_size": [
+      1024,
+      1475
+    ],
+    "raw_sha256": "01817798d24c55bc8ffbd07ded5698d2be4a5ed79dcf2a3545a5c0063b1cb6c9"
+  },
+  "2": {
+    "raw_size": [
+      948,
+      1659
+    ],
+    "crop_box": [
+      0,
+      92,
+      945,
+      1460
+    ],
+    "final_size": [
+      1024,
+      1482
+    ],
+    "raw_sha256": "20c350cdd397e4a60a5722fbfb67afb2addc8cf40cfbdd77ec9c959de1bab58e"
+  },
+  "3": {
+    "raw_size": [
+      948,
+      1659
+    ],
+    "crop_box": [
+      0,
+      48,
+      947,
+      1460
+    ],
+    "final_size": [
+      1024,
+      1527
+    ],
+    "raw_sha256": "5ba8507dd44cc791b488d82329035cf77fccaf41b3b7ee2a7a1b5c54e3aaf290"
+  }
+}

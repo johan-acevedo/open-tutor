@@ -21,7 +21,7 @@ export type BandId = 'primary' | 'middle' | 'upper';
 export const POSE_VERSION = '20261119';
 
 // Own cache-bust version for the landing images (scripts/export_landing_companions.py).
-export const LANDING_IMG_VERSION = '20261124';
+export const LANDING_IMG_VERSION = '20261124b';
 
 function landingImages(directory: string): { hero: string; face: string } {
   return {
