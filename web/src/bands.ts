@@ -21,7 +21,7 @@ export type BandId = 'primary' | 'middle' | 'upper';
 export const POSE_VERSION = '20261119';
 
 // Own cache-bust version for the landing images (scripts/export_landing_companions.py).
-export const LANDING_IMG_VERSION = '20261124b';
+export const LANDING_IMG_VERSION = '20261125';
 
 // Cache-bust version for the spoken landing greetings
 // (web/public/audio/hello-<band>.mp3, added 2026-11-24). Bump when the clips change.

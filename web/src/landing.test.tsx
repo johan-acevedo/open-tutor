@@ -100,29 +100,37 @@ describe('hero', () => {
     expect(screen.getByText('Fota uppgiften, så ser Räven den också.')).toBeDefined();
   });
 
+  it('step 2 shows a static three-dot speech bubble, step 3 no operation labels', () => {
+    firstVisit();
+    expect(document.querySelectorAll('.ot-land-chat i')).toHaveLength(3);
+    expect(document.querySelector('.ot-land-wave')).toBeNull();
+    expect(screen.queryByText('dela upp')).toBeNull();
+    expect(screen.queryByText('lägg ihop')).toBeNull();
+  });
+
   it('cross-links the other two bands as whole cards after the steps', () => {
     firstVisit();
     expect(screen.getByRole('heading', { level: 2, name: 'Går du i en annan årskurs?' })).toBeDefined();
-    const lynx = screen.getByRole('link', { name: 'Lodjuret Högstadiet' });
+    const lynx = screen.getByRole('link', { name: 'Högstadiet med Lodjuret' });
     expect(lynx.getAttribute('href')).toContain('band=middle');
     const face = lynx.querySelector('img.ot-land-bandface');
     expect(face?.getAttribute('src')).toContain('face.webp');
-    const bear = screen.getByRole('link', { name: 'Björnen Gymnasiet och vuxna' });
+    const bear = screen.getByRole('link', { name: 'Gymnasiet och vuxna med Björnen' });
     expect(bear.getAttribute('href')).toContain('band=upper');
   });
 
   it('names the younger bands for the upper band', () => {
     firstVisit('upper');
     expect(screen.getByRole('heading', { level: 2, name: 'Någon yngre hemma?' })).toBeDefined();
-    expect(screen.getByRole('link', { name: 'Räven Åk 1–6' }).getAttribute('href')).toContain('band=primary');
-    expect(screen.getByRole('link', { name: 'Lodjuret Högstadiet' }).getAttribute('href')).toContain('band=middle');
+    expect(screen.getByRole('link', { name: 'Åk 1–6 med Räven' }).getAttribute('href')).toContain('band=primary');
+    expect(screen.getByRole('link', { name: 'Högstadiet med Lodjuret' }).getAttribute('href')).toContain('band=middle');
   });
 
   it('the middle band invites both younger and older learners', () => {
     firstVisit('middle');
     expect(screen.getByRole('heading', { level: 2, name: 'Går du i en annan årskurs?' })).toBeDefined();
-    expect(screen.getByRole('link', { name: 'Räven Åk 1–6' }).getAttribute('href')).toContain('band=primary');
-    expect(screen.getByRole('link', { name: 'Björnen Gymnasiet och vuxna' }).getAttribute('href')).toContain('band=upper');
+    expect(screen.getByRole('link', { name: 'Åk 1–6 med Räven' }).getAttribute('href')).toContain('band=primary');
+    expect(screen.getByRole('link', { name: 'Gymnasiet och vuxna med Björnen' }).getAttribute('href')).toContain('band=upper');
   });
 
   it('returning visit shares the row between CTA and not-you', () => {
@@ -150,7 +158,7 @@ describe('hero', () => {
 });
 
 describe.each([
-  ['primary', 'Prata med Räven', '36 + 47 = ?', '36 + 47', '70 + 13', '= 83'],
+  ['primary', 'Prata med Räven', '36 + 47 = ?', '30 + 40 = 70', '6 + 7 = 13', '70 + 13 = 83'],
   ['middle', 'Prata med Lodjuret', '3x + 5 = 20', '3x + 5 = 20', '3x = 15', 'x = 5'],
   ['upper', 'Prata med Björnen', 'f(x) = x² + 3x', 'f(x) = x² + 3x', 'f′(x) = 2x + 3', 'f′(2) = 7'],
 ] as Array<[BandId, string, string, string, string, string]>)(

@@ -538,6 +538,19 @@ a:focus-visible {
   margin-left: auto;
 }
 
+/* The lynx and bear heroes are waist-up figures with smaller heads, so they
+   get a larger box than the fox: at any viewport their rendered figure is at
+   least as tall as the fox's and their heads clearly larger. The trimmed
+   exports keep the head fractions, so the bubble anchors below still land
+   above the head with the tail tip in clear air. */
+[data-band="middle"] .ot-land-fig {
+  width: min(560px, 100%, calc((100svh - 170px) / 1.35));
+}
+
+[data-band="upper"] .ot-land-fig {
+  width: min(560px, 100%, calc((100svh - 170px) / 1.32));
+}
+
 .ot-land-heroimg {
   width: 100%;
   height: auto;
@@ -568,7 +581,7 @@ a:focus-visible {
 [data-band="middle"] .ot-land-bubble {
   --ot-bub-w: 50%;
   --ot-bub-l: -43%;
-  --ot-bub-t: -25%;
+  --ot-bub-t: -22%;
 }
 
 [data-band="upper"] .ot-land-bubble {
@@ -760,18 +773,40 @@ a:focus-visible {
   display: block;
 }
 
-.ot-land-wave {
+/* Step 2: the companion talks. A small static speech bubble in the same
+   comic language as the hero bubble (light fill, dark outline, tail toward
+   the companion's mouth) with three dots in the band accent colour. */
+.ot-land-chat {
+  position: relative;
+  align-self: center;
+  background: var(--ot-paper);
+  border: 2px solid #0b0d12;
+  border-radius: 16px;
+  padding: 12px 14px;
   display: flex;
   align-items: center;
-  gap: 7px;
-  height: 100%;
-  padding-bottom: 20px;
+  gap: 8px;
 }
 
-.ot-land-wave i {
-  width: 9px;
-  border-radius: 5px;
-  background: linear-gradient(var(--ot-cyan), var(--ot-violet));
+.ot-land-chat::after {
+  content: '';
+  position: absolute;
+  left: -8px;
+  top: 40%;
+  width: 12px;
+  height: 12px;
+  margin-top: -6px;
+  background: var(--ot-paper);
+  border-left: 2px solid #0b0d12;
+  border-bottom: 2px solid #0b0d12;
+  transform: rotate(45deg);
+}
+
+.ot-land-chat i {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--ot-cyan);
   display: block;
 }
 
@@ -798,12 +833,6 @@ a:focus-visible {
   color: #14171d;
 }
 
-.ot-land-op {
-  color: var(--ot-violet);
-  font-weight: 800;
-  font-size: 14px;
-}
-
 .ot-land-bands {
   padding: 0 104px 72px;
   max-width: 1400px;
@@ -828,19 +857,20 @@ a:focus-visible {
 .ot-land-bandcard {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 18px;
   background: var(--ot-elevated);
   border: 1px solid var(--ot-border);
   border-radius: var(--ot-radius, 24px);
-  padding: 12px 18px 12px 12px;
+  padding: 12px 22px 12px 14px;
   text-decoration: none;
   color: var(--ot-text);
   min-width: 0;
+  min-height: 96px;
 }
 
 .ot-land-bandface {
-  width: 56px;
-  height: 56px;
+  width: 72px;
+  height: 72px;
   border-radius: 50%;
   object-fit: cover;
   flex: 0 0 auto;
@@ -855,9 +885,10 @@ a:focus-visible {
 }
 
 .ot-land-bandtxt strong {
-  font-size: 18px;
+  font-size: 24px;
   font-weight: 800;
   line-height: 1.2;
+  letter-spacing: -0.02em;
 }
 
 .ot-land-bandtxt span {
@@ -945,13 +976,28 @@ a:focus-visible {
     margin: 0 auto;
   }
   /* The figure is capped by viewport height so the start button row stays
-     above the fold on short phones; the bubble scales along (cqw). */
+     above the fold on short phones; the bubble scales along (cqw). The top
+     padding scales with the figure width so the whole bubble stays below
+     the top bar at every phone size. */
   .ot-land-stage {
     /* Room above the figure for the bubble, which hangs over its top. */
-    padding-top: 54px;
+    --ot-fig-w: min(300px, 72%, 26svh);
+    padding-top: calc(var(--ot-fig-w) * 0.38 + 10px);
   }
-  .ot-land-fig {
-    width: min(300px, 72%, 26svh);
+  /* Same specificity as the desktop per-band widths above, later in the
+     file so the phone box wins on phones. */
+  .ot-land-fig,
+  [data-band="middle"] .ot-land-fig,
+  [data-band="upper"] .ot-land-fig {
+    width: var(--ot-fig-w);
+  }
+  /* Same visual weight as the fox on phones too: a larger box for the
+     waist-up figures. The padding above scales along via --ot-fig-w. */
+  [data-band="middle"] .ot-land-stage,
+  [data-band="upper"] .ot-land-stage {
+    --ot-fig-w: min(330px, 80%, 28svh);
+    /* Smaller overhang than the fox bubble: less top air is needed. */
+    padding-top: calc(var(--ot-fig-w) * 0.34 + 8px);
   }
   .ot-land-heroimg {
     margin: 0 0 0 auto;
@@ -970,7 +1016,11 @@ a:focus-visible {
   [data-band="middle"] .ot-land-bubble {
     --ot-bub-w: 62%;
     --ot-bub-l: -54.6%;
-    --ot-bub-t: -31.5%;
+    --ot-bub-t: -25%;
+  }
+  .ot-land-bandface {
+    width: 64px;
+    height: 64px;
   }
   .ot-land-bubble.is-long .ot-land-bubble-in {
     font-size: 5.5cqw;
@@ -982,10 +1032,10 @@ a:focus-visible {
   }
   .ot-land-sub {
     font-size: 16px;
-    margin-bottom: 10px;
+    margin-bottom: 8px;
   }
   .ot-land-cta-row {
-    margin-top: 14px;
+    margin-top: 12px;
   }
   .ot-land-cta-row .ot-land-cta {
     flex: 1 1 0%;

@@ -52,7 +52,9 @@ function GreetingBubble({ band, label, long }: { band: BandConfig; label: string
         />
       </svg>
       <span className="ot-land-bubble-in" aria-hidden="true">
-        <svg className="ot-land-spk" viewBox="0 0 48 48">
+        {/* The outer wave reaches past x=48, so the viewBox leaves room:
+            without it the wave's right edge is cut off. */}
+        <svg className="ot-land-spk" viewBox="0 0 52 48">
           <path d="M6 18 H14 L25 9 V39 L14 30 H6 Z" fill="#12151b" stroke="#12151b" strokeWidth="3" strokeLinejoin="round" />
           <path d="M31 17 a10 10 0 0 1 0 14" fill="none" stroke="var(--ot-cyan)" strokeWidth="4.5" strokeLinecap="round" />
           <path d="M36 11 a18 18 0 0 1 0 26" fill="none" stroke="var(--ot-cyan)" strokeWidth="4.5" strokeLinecap="round" />
