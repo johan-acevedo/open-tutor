@@ -319,42 +319,46 @@
   overflow: hidden;
 }
 
-/* ---------- Teaching companion: large, bottom-aligned, bubble by the head ---------- */
+/* ---------- Teaching companion: large, standing firm, bubble by the head ---------- */
 
-/* The column packs to the bottom (figure stands above the dock): any free
-   space collects above the bubble, never between the bubble and the head.
-   The companion box shrink-wraps the figure (width-driven), so the bubble
-   sits just above the head with its tail in clear air — and being in flow,
-   neither can overlap the other. */
-.ot-root:not(.ot-phone) .ot-avatar-col {
-  justify-content: flex-end;
+/* Two rows: the figure owns the bottom row (sized by the column width and a
+   viewport cap, never by the caption), the bubble sits at the bottom of the
+   free row above it and grows upward. A caption gaining or losing lines
+   therefore never moves the companion (it used to: a flex column let the
+   bubble push the figure down, up to ~260 px with a long caption). If a
+   caption ever outgrows the free row, the bubble clips its oldest lines
+   instead of pushing anything (.ot-say-text below keeps the newest words). */
+.ot-root:not(.ot-phone) .ot-main .ot-avatar-col {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .ot-root:not(.ot-phone) .ot-avatar-col .ot-say {
-  margin: 0 auto 6px;
+  grid-row: 1;
+  align-self: end;
+  justify-self: center;
+  margin: 0 0 6px;
   max-width: 100%;
-  flex: 0 0 auto;
+  max-height: calc(100% - 6px);
 }
 
 .ot-root:not(.ot-phone) .ot-avatar-col .ot-companion {
+  grid-row: 2;
   position: relative;
   z-index: 1;
-  flex: 0 1 auto;
   min-height: 0;
-  max-height: 100%;
+  max-height: none; /* beats the old 72 % teaching cap in mobile.css */
   width: 100%;
   display: flex;
   justify-content: center;
+  align-items: flex-end;
 }
 
 /* The companion stays big enough to show what it is doing (poses): the
    figure is driven by the column width instead of shrinking to a strip.
-   The vh cap keeps bubble + figure inside short stages (1366x768): it only
-   binds there, and object-fit keeps the shrunken figure intact. */
-.ot-root:not(.ot-phone) .ot-main-teaching .ot-companion {
-  max-height: none;
-}
-
+   The vh cap keeps bubble room above the figure on short stages (1366x768);
+   object-fit keeps the capped figure intact. */
 .ot-root:not(.ot-phone) .ot-avatar-col .ot-companion .ot-avatar-img {
   width: 100%;
   height: auto;
@@ -362,6 +366,35 @@
   object-fit: contain;
   object-position: center bottom;
   flex: none;
+}
+
+/* The arrival bubble gets the same ceiling: the room the figure leaves
+   above it (companion height is min(64%, 100% - 190px) of this box, plus
+   the bottom padding and the bubble margin). */
+.ot-root:not(.ot-phone) .ot-stage-hero .ot-say {
+  max-height: calc(max(36%, 190px) - 18px);
+}
+
+/* A bubble at its ceiling keeps the newest words: the text is a bottom-
+   aligned flex column that clips at the top (overflow at the start edge is
+   cut, not scrolled). Normal captions (captionTail caps them at ~140
+   characters) never reach the ceiling on desktop. */
+.ot-root:not(.ot-phone) .ot-say {
+  display: flex;
+  flex-direction: column;
+}
+
+.ot-root:not(.ot-phone) .ot-say-state {
+  flex: none;
+}
+
+.ot-root:not(.ot-phone) .ot-say-text:not(.ot-text-empty) {
+  flex: 0 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  overflow: hidden;
 }
 
 /* ---------- Phone portrait: same structure, call visuals ---------- */
