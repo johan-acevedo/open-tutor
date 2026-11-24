@@ -1,0 +1,90 @@
+{
+  "cases": {
+    "clock": {
+      "control": {
+        "score": "6/6",
+        "observation": "The clock fills the pane and the three phrases are easy to scan. Choosing an option sends it immediately.",
+        "accessibility": "Three named buttons report their pressed state. The clock has no accessible description of its hands.",
+        "alt": "A large analogue clock above three time phrases."
+      },
+      "sdk": {
+        "score": "6/6",
+        "observation": "The options are easy to scan. A radio selection can be changed before Skicka.",
+        "accessibility": "The question names the radio group and arrow keys change the checked option. The clock still has no accessible description of its hands.",
+        "alt": "An analogue clock with three radio options and a send button."
+      }
+    },
+    "water": {
+      "control": {
+        "score": "5/6",
+        "observation": "Short explanations cue each stage. The fixed list makes the learner type out the sequence.",
+        "accessibility": "The list, text field, and send button have usable semantics. There are no move controls.",
+        "alt": "Four mixed water-cycle stages with short descriptions and a text answer field."
+      },
+      "sdk": {
+        "score": "6/6",
+        "observation": "The stage descriptions are still present. Moving each card is easier than transcribing four labels.",
+        "accessibility": "The list and move controls have names. A live region gives the item's new position and keyboard focus stays with the moved row.",
+        "alt": "Four water-cycle stage cards with up and down buttons."
+      }
+    },
+    "english": {
+      "control": {
+        "score": "3/6",
+        "observation": "The learner has to translate their choices into a typed code. The example in the answer label gives away the first pair. The shell flags the text as slightly dense.",
+        "accessibility": "The lists are exposed as paragraphs. The answer field and send button have names.",
+        "alt": "Numbered English phrases above lettered meanings, followed by a text field."
+      },
+      "sdk": {
+        "score": "6/6",
+        "observation": "Each English phrase has its own picker. The learner works directly with the meanings and the page gives away no pair.",
+        "accessibility": "The pickers have distinct names and the keyboard can submit a complete map. The English phrases lack a language tag.",
+        "alt": "Three English café phrases with one meaning picker per phrase."
+      }
+    },
+    "history": {
+      "control": {
+        "score": "5/6",
+        "observation": "The events are mixed, the direction is clear, and the learner needs to type names or invent shorthand in a single field.",
+        "accessibility": "The list, text field, and send button have usable semantics. There are no move controls.",
+        "alt": "Four mixed events in Swedish parliamentary history and an answer field."
+      },
+      "sdk": {
+        "score": "6/6",
+        "observation": "The learner can move long event names directly. The instructions repeat, and the starting order is one swap from the answer.",
+        "accessibility": "The list exposes each event and its move controls. A move updates the live position and keeps focus on the item.",
+        "alt": "Four Swedish parliamentary events with up and down buttons."
+      }
+    },
+    "algebra": {
+      "control": {
+        "score": "6/6",
+        "observation": "The scale and short hint support the question, and the answer field leaves the operation to the learner.",
+        "accessibility": "The answer field and send button have names. The equation heading and scale are unnamed in the accessibility tree.",
+        "alt": "An equation placed on two pans of a scale, followed by a short answer field."
+      },
+      "sdk": {
+        "score": "5/6",
+        "observation": "The scale and answer field fit. The hint says minus, which gives away the operation, and the question names only the left side of the scale.",
+        "accessibility": "The response field is named. The equation heading and scale still lack accessible text.",
+        "alt": "An equation scale and a text field with the placeholder t.ex. minus."
+      }
+    },
+    "physics": {
+      "control": {
+        "score": "5/6",
+        "observation": "The hint distinguishes quantity from unit and gives a word bank. Each gap submits when focus leaves it, with little indication of when an answer is sent.",
+        "accessibility": "All three text fields share the generic accessible name Lucka.",
+        "alt": "Three fill-in-the-blank electrical quantities and a word bank of units."
+      },
+      "sdk": {
+        "score": "6/6",
+        "observation": "The short distinction between quantity and unit sets up the exercise. Each quantity has a picker and Skicka sends one complete answer.",
+        "accessibility": "Three differently named pickers replace the three identical gap labels.",
+        "alt": "Three electrical quantities, each with a unit picker."
+      }
+    }
+  },
+  "summary": "Four of six exercises were clearer with the new blocks. Ordering and matching benefited most. Keep testing the blocks before adopting the SDK dependency.",
+  "bundle": "The prototype inlines a 223,793-byte UI SDK bundle into experiment frames (79,656 bytes gzip). The web app entry chunk grew by 245,670 raw bytes and 84,020 gzip bytes."
+}

@@ -1,0 +1,372 @@
+[clock / control / accessibility]
+- main:
+  - heading "Kvart i eller över?" [level=1]
+  - img
+  - text: 1 2 3 4 5 6 7 8 9 10 11 12 5 10 15 20 25 30 35 40 45 50 55 0
+  - heading "Vad säger vi om tiden?" [level=2]
+  - button "kvart över sju"
+  - button "kvart i åtta"
+  - button "halv åtta"
+
+[clock / control / accessibility-after]
+- main:
+  - heading "Kvart i eller över?" [level=1]
+  - img
+  - text: 1 2 3 4 5 6 7 8 9 10 11 12 5 10 15 20 25 30 35 40 45 50 55 0
+  - heading "Vad säger vi om tiden?" [level=2]
+  - button "kvart över sju" [pressed]
+  - button "kvart i åtta"
+  - button "halv åtta"
+
+[clock / sdk / accessibility]
+- main:
+  - heading "Vad är klockan?" [level=1]
+  - img
+  - text: 1 2 3 4 5 6 7 8 9 10 11 12 5 10 15 20 25 30 35 40 45 50 55 0 Vad säger man om tiden på klockan?
+  - radiogroup "Vad säger man om tiden på klockan?":
+    - radio "kvart över sju"
+    - text: kvart över sju
+    - radio "kvart i åtta"
+    - text: kvart i åtta
+    - radio "halv åtta"
+    - text: halv åtta
+  - button "Skicka"
+
+[clock / sdk / accessibility-after]
+- main:
+  - heading "Vad är klockan?" [level=1]
+  - img
+  - text: 1 2 3 4 5 6 7 8 9 10 11 12 5 10 15 20 25 30 35 40 45 50 55 0 Vad säger man om tiden på klockan?
+  - radiogroup "Vad säger man om tiden på klockan?":
+    - radio "kvart över sju"
+    - text: kvart över sju
+    - radio "kvart i åtta" [checked]
+    - text: kvart i åtta
+    - radio "halv åtta"
+    - text: halv åtta
+  - button "Skickat ✓"
+
+[water / control / accessibility]
+- main:
+  - heading "Vattnets väg" [level=1]
+  - paragraph: Börja vid vattenytan. Vilken ordning kommer stegen i?
+  - list:
+    - listitem: Nederbörd — droppar faller som regn.
+    - listitem: Avdunstning — vattnet blir ånga.
+    - listitem: Avrinning — vattnet rinner tillbaka.
+    - listitem: Kondensation — ångan blir moln.
+  - text: Min ordning
+  - textbox "Min ordning":
+    - /placeholder: ""
+  - button "Skicka"
+
+[water / control / accessibility-after]
+- main:
+  - heading "Vattnets väg" [level=1]
+  - paragraph: Börja vid vattenytan. Vilken ordning kommer stegen i?
+  - list:
+    - listitem: Nederbörd — droppar faller som regn.
+    - listitem: Avdunstning — vattnet blir ånga.
+    - listitem: Avrinning — vattnet rinner tillbaka.
+    - listitem: Kondensation — ångan blir moln.
+  - text: Min ordning
+  - textbox "Min ordning":
+    - /placeholder: ""
+    - text: Test
+  - button "Skickat ✓"
+
+[water / sdk / accessibility]
+- main:
+  - heading "Vattnets resa" [level=1]
+  - paragraph: Börja vid vattenytan. Vad händer på vägen tills vattnet är tillbaka där?
+  - paragraph: Lägg stegen i rätt ordning, från vattenytan och tillbaka
+  - list "Lägg stegen i rätt ordning, från vattenytan och tillbaka":
+    - listitem:
+      - text: Nederbörd – regn eller snö faller ner
+      - 'button "Flytta upp: Nederbörd – regn eller snö faller ner" [disabled]'
+      - 'button "Flytta ner: Nederbörd – regn eller snö faller ner"'
+    - listitem:
+      - text: Avdunstning – solen värmer vattnet till ånga
+      - 'button "Flytta upp: Avdunstning – solen värmer vattnet till ånga"'
+      - 'button "Flytta ner: Avdunstning – solen värmer vattnet till ånga"'
+    - listitem:
+      - text: Avrinning – vattnet rinner tillbaka till havet
+      - 'button "Flytta upp: Avrinning – vattnet rinner tillbaka till havet"'
+      - 'button "Flytta ner: Avrinning – vattnet rinner tillbaka till havet"'
+    - listitem:
+      - text: Kondensation – ångan kyls och blir moln
+      - 'button "Flytta upp: Kondensation – ångan kyls och blir moln"'
+      - 'button "Flytta ner: Kondensation – ångan kyls och blir moln" [disabled]'
+  - status
+  - button "Skicka"
+
+[water / sdk / accessibility-after]
+- main:
+  - heading "Vattnets resa" [level=1]
+  - paragraph: Börja vid vattenytan. Vad händer på vägen tills vattnet är tillbaka där?
+  - paragraph: Lägg stegen i rätt ordning, från vattenytan och tillbaka
+  - list "Lägg stegen i rätt ordning, från vattenytan och tillbaka":
+    - listitem:
+      - text: Avdunstning – solen värmer vattnet till ånga
+      - 'button "Flytta upp: Avdunstning – solen värmer vattnet till ånga" [disabled]'
+      - 'button "Flytta ner: Avdunstning – solen värmer vattnet till ånga"'
+    - listitem:
+      - text: Nederbörd – regn eller snö faller ner
+      - 'button "Flytta upp: Nederbörd – regn eller snö faller ner"'
+      - 'button "Flytta ner: Nederbörd – regn eller snö faller ner"'
+    - listitem:
+      - text: Avrinning – vattnet rinner tillbaka till havet
+      - 'button "Flytta upp: Avrinning – vattnet rinner tillbaka till havet"'
+      - 'button "Flytta ner: Avrinning – vattnet rinner tillbaka till havet"'
+    - listitem:
+      - text: Kondensation – ångan kyls och blir moln
+      - 'button "Flytta upp: Kondensation – ångan kyls och blir moln"'
+      - 'button "Flytta ner: Kondensation – ångan kyls och blir moln" [disabled]'
+  - status: Nederbörd – regn eller snö faller ner är nu 2 av 4
+  - button "Skickat ✓"
+
+[english / control / accessibility]
+- main:
+  - heading "At the café" [level=1]
+  - heading "1 · 2 · 3" [level=2]
+  - paragraph: 1. Can I have the menu?
+  - paragraph: 2. I'd like some water.
+  - paragraph: 3. How much is it?
+  - heading "Betyder" [level=2]
+  - paragraph: A. Hur mycket kostar det?
+  - paragraph: B. Kan jag få menyn?
+  - paragraph: C. Jag skulle vilja ha lite vatten.
+  - text: Mina par, t.ex. 1–B
+  - textbox "Mina par, t.ex. 1–B":
+    - /placeholder: ""
+  - button "Skicka"
+
+[english / control / accessibility-after]
+- main:
+  - heading "At the café" [level=1]
+  - heading "1 · 2 · 3" [level=2]
+  - paragraph: 1. Can I have the menu?
+  - paragraph: 2. I'd like some water.
+  - paragraph: 3. How much is it?
+  - heading "Betyder" [level=2]
+  - paragraph: A. Hur mycket kostar det?
+  - paragraph: B. Kan jag få menyn?
+  - paragraph: C. Jag skulle vilja ha lite vatten.
+  - text: Mina par, t.ex. 1–B
+  - textbox "Mina par, t.ex. 1–B":
+    - /placeholder: ""
+    - text: Test
+  - button "Skickat ✓"
+
+[english / sdk / accessibility]
+- main:
+  - heading "På kaféet" [level=1]
+  - paragraph: Para ihop frasen med rätt betydelse
+  - group "Para ihop frasen med rätt betydelse":
+    - text: Can I have the menu? Välj svar för Can I have the menu?
+    - combobox "Välj svar för Can I have the menu?": Välj …
+    - text: I'd like some water. Välj svar för I'd like some water.
+    - combobox "Välj svar för I'd like some water.": Välj …
+    - text: How much is it? Välj svar för How much is it?
+    - combobox "Välj svar för How much is it?": Välj …
+  - button "Skicka" [disabled]
+
+[english / sdk / accessibility-after]
+- main:
+  - heading "På kaféet" [level=1]
+  - paragraph: Para ihop frasen med rätt betydelse
+  - group "Para ihop frasen med rätt betydelse":
+    - text: Can I have the menu? Välj svar för Can I have the menu?
+    - combobox "Välj svar för Can I have the menu?": Hur mycket kostar det?
+    - text: I'd like some water. Välj svar för I'd like some water.
+    - combobox "Välj svar för I'd like some water.": Kan jag få menyn?
+    - text: How much is it? Välj svar för How much is it?
+    - combobox "Välj svar för How much is it?": Jag skulle vilja ha lite vatten.
+  - button "Skickat ✓"
+
+[history / control / accessibility]
+- main:
+  - heading "Vem fick bestämma?" [level=1]
+  - paragraph: Ordna från äldst till nyast. Vilken kom först?
+  - list:
+    - listitem: Rösträttsåldern blir 18 år
+    - listitem: Ståndsriksdagen ersätts med tvåkammarriksdag
+    - listitem: Enkammarriksdagen införs
+    - listitem: Första riksdagsvalet där kvinnor får rösta
+  - text: Min ordning, äldst först
+  - textbox "Min ordning, äldst först":
+    - /placeholder: ""
+  - button "Skicka"
+
+[history / control / accessibility-after]
+- main:
+  - heading "Vem fick bestämma?" [level=1]
+  - paragraph: Ordna från äldst till nyast. Vilken kom först?
+  - list:
+    - listitem: Rösträttsåldern blir 18 år
+    - listitem: Ståndsriksdagen ersätts med tvåkammarriksdag
+    - listitem: Enkammarriksdagen införs
+    - listitem: Första riksdagsvalet där kvinnor får rösta
+  - text: Min ordning, äldst först
+  - textbox "Min ordning, äldst först":
+    - /placeholder: ""
+    - text: Test
+  - button "Skickat ✓"
+
+[history / sdk / accessibility]
+- main:
+  - heading "Vem får bestämma?" [level=1]
+  - paragraph: Lägg händelserna i rätt ordning, äldst först.
+  - paragraph: Lägg händelserna i rätt ordning, äldst först
+  - list "Lägg händelserna i rätt ordning, äldst först":
+    - listitem:
+      - text: Ståndsriksdagen ersätts med en tvåkammarriksdag
+      - 'button "Flytta upp: Ståndsriksdagen ersätts med en tvåkammarriksdag" [disabled]'
+      - 'button "Flytta ner: Ståndsriksdagen ersätts med en tvåkammarriksdag"'
+    - listitem:
+      - text: Första riksdagsvalet där kvinnor får rösta
+      - 'button "Flytta upp: Första riksdagsvalet där kvinnor får rösta"'
+      - 'button "Flytta ner: Första riksdagsvalet där kvinnor får rösta"'
+    - listitem:
+      - text: Rösträttsåldern blir 18 år
+      - 'button "Flytta upp: Rösträttsåldern blir 18 år"'
+      - 'button "Flytta ner: Rösträttsåldern blir 18 år"'
+    - listitem:
+      - text: Enkammarriksdagen införs
+      - 'button "Flytta upp: Enkammarriksdagen införs"'
+      - 'button "Flytta ner: Enkammarriksdagen införs" [disabled]'
+  - status
+  - button "Skicka"
+
+[history / sdk / accessibility-after]
+- main:
+  - heading "Vem får bestämma?" [level=1]
+  - paragraph: Lägg händelserna i rätt ordning, äldst först.
+  - paragraph: Lägg händelserna i rätt ordning, äldst först
+  - list "Lägg händelserna i rätt ordning, äldst först":
+    - listitem:
+      - text: Första riksdagsvalet där kvinnor får rösta
+      - 'button "Flytta upp: Första riksdagsvalet där kvinnor får rösta" [disabled]'
+      - 'button "Flytta ner: Första riksdagsvalet där kvinnor får rösta"'
+    - listitem:
+      - text: Ståndsriksdagen ersätts med en tvåkammarriksdag
+      - 'button "Flytta upp: Ståndsriksdagen ersätts med en tvåkammarriksdag"'
+      - 'button "Flytta ner: Ståndsriksdagen ersätts med en tvåkammarriksdag"'
+    - listitem:
+      - text: Rösträttsåldern blir 18 år
+      - 'button "Flytta upp: Rösträttsåldern blir 18 år"'
+      - 'button "Flytta ner: Rösträttsåldern blir 18 år"'
+    - listitem:
+      - text: Enkammarriksdagen införs
+      - 'button "Flytta upp: Enkammarriksdagen införs"'
+      - 'button "Flytta ner: Enkammarriksdagen införs" [disabled]'
+  - status: Ståndsriksdagen ersätts med en tvåkammarriksdag är nu 2 av 4
+  - button "Skickat ✓"
+
+[algebra / control / accessibility]
+- main:
+  - heading "Vågen väger lika" [level=1]
+  - heading [level=2]
+  - img
+  - paragraph: Samma sak på båda sidor.
+  - paragraph: Vilken räkning tar bort +5?
+  - text: Jag tar bort +5 med
+  - textbox "Jag tar bort +5 med":
+    - /placeholder: ""
+  - button "Skicka"
+
+[algebra / control / accessibility-after]
+- main:
+  - heading "Vågen väger lika" [level=1]
+  - heading [level=2]
+  - img
+  - paragraph: Samma sak på båda sidor.
+  - paragraph: Vilken räkning tar bort +5?
+  - text: Jag tar bort +5 med
+  - textbox "Jag tar bort +5 med":
+    - /placeholder: ""
+    - text: Test
+  - button "Skickat ✓"
+
+[algebra / sdk / accessibility]
+- main:
+  - heading "Vågen väger lika" [level=1]
+  - heading [level=2]
+  - img
+  - paragraph: Vilken räkning tar bort +5 från vänster sida?
+  - text: Skriv ditt förslag
+  - textbox "Skriv ditt förslag":
+    - /placeholder: t.ex. minus …
+  - button "Skicka"
+
+[algebra / sdk / accessibility-after]
+- main:
+  - heading "Vågen väger lika" [level=1]
+  - heading [level=2]
+  - img
+  - paragraph: Vilken räkning tar bort +5 från vänster sida?
+  - text: Skriv ditt förslag
+  - textbox "Skriv ditt förslag":
+    - /placeholder: t.ex. minus …
+    - text: Test
+  - button "Skickat ✓"
+
+[physics / control / accessibility]
+- main:
+  - heading "Ström, spänning, resistans" [level=1]
+  - paragraph: Storhet är vad vi mäter. Enhet är hur vi mäter det.
+  - heading "Para ihop rätt par" [level=2]
+  - paragraph:
+    - text: Ström mäts i
+    - textbox "Lucka"
+  - paragraph:
+    - text: Spänning mäts i
+    - textbox "Lucka"
+  - paragraph:
+    - text: Resistans mäts i
+    - textbox "Lucka"
+  - paragraph: "Ord att välja bland: ohm · ampere · volt"
+
+[physics / control / accessibility-after]
+- main:
+  - heading "Ström, spänning, resistans" [level=1]
+  - paragraph: Storhet är vad vi mäter. Enhet är hur vi mäter det.
+  - heading "Para ihop rätt par" [level=2]
+  - paragraph:
+    - text: Ström mäts i
+    - textbox "Lucka": Test
+  - paragraph:
+    - text: Spänning mäts i
+    - textbox "Lucka": Test
+  - paragraph:
+    - text: Resistans mäts i
+    - textbox "Lucka": Test
+  - paragraph: "Ord att välja bland: ohm · ampere · volt"
+
+[physics / sdk / accessibility]
+- main:
+  - heading "Storhet och enhet" [level=1]
+  - paragraph: Storhet är det du mäter. Enhet är det du mäter i.
+  - paragraph: Para ihop varje storhet med rätt enhet
+  - group "Para ihop varje storhet med rätt enhet":
+    - text: Elektrisk ström Välj svar för Elektrisk ström
+    - combobox "Välj svar för Elektrisk ström": Välj …
+    - text: Spänning Välj svar för Spänning
+    - combobox "Välj svar för Spänning": Välj …
+    - text: Resistans Välj svar för Resistans
+    - combobox "Välj svar för Resistans": Välj …
+  - button "Skicka" [disabled]
+
+[physics / sdk / accessibility-after]
+- main:
+  - heading "Storhet och enhet" [level=1]
+  - paragraph: Storhet är det du mäter. Enhet är det du mäter i.
+  - paragraph: Para ihop varje storhet med rätt enhet
+  - group "Para ihop varje storhet med rätt enhet":
+    - text: Elektrisk ström Välj svar för Elektrisk ström
+    - combobox "Välj svar för Elektrisk ström": volt
+    - text: Spänning Välj svar för Spänning
+    - combobox "Välj svar för Spänning": ohm
+    - text: Resistans Välj svar för Resistans
+    - combobox "Välj svar för Resistans": ampere
+  - button "Skickat ✓"

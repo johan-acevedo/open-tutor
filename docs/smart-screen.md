@@ -4,6 +4,19 @@ Lead: the thread "state of the project" (Claude, 2026-11-12). The lead keeps thi
 Workers read it before starting and report against it. Decisions here were agreed with Johan
 on 2026-11-12 unless marked open.
 
+## 2026-11-24: interactive exercise blocks experiment
+
+Six fictional requests ran through the current Screen and through an experiment catalogue
+with ordering, matching, radio choice, and short answers. Direct ordering and matching
+made four pages clearer. The clock tied, and the equation placeholder gave away the
+operation. The model wrote about the same number of bytes. Timing differences across the
+two batches remain inconclusive.
+
+The UI SDK beta bundle adds 79,656 bytes gzip to frames that use it. The exercise bodies
+also worked with the native controls in a local replay. Keep the new tags in the
+experiment branch and test ordering and matching in a dev lesson before choosing a
+dependency. [Experiment report and screenshots](experiments/2026-11-ui-sdk-screen.md)
+
 ## 2026-11-24: a landing page that explains itself (A3)
 
 Johan wants to invite more people, and the voice-first start page looked experimental to a

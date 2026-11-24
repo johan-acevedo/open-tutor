@@ -1,0 +1,810 @@
+{
+  "settings": {
+    "SCREEN_MODEL": "muse-spark-1.3-contributor",
+    "SCREEN_API": "responses",
+    "SCREEN_REASONING": "minimal",
+    "SCREEN_LOOK": "0",
+    "SCREEN_LINT_RETRY": "0",
+    "SCREEN_FALLBACK": "",
+    "SCREEN_THINKING": "",
+    "SCREEN_IMAGES": "commons"
+  },
+  "rows": [
+    {
+      "case": "clock",
+      "title": "Klockan",
+      "grade": 3,
+      "band": "primary",
+      "type": "choice",
+      "arm": "control",
+      "body_bytes": 303,
+      "body_lines": 12,
+      "sdk_tags": [],
+      "script_tags": 0,
+      "delivered": true,
+      "first_text_s": 2.044,
+      "model_s": 3.066,
+      "render_s": 0.493,
+      "server_done_s": 3.563,
+      "first_visible_s": 3.821,
+      "complete_s": 4.055,
+      "font_px": 17.5,
+      "page_overflow": false,
+      "text_chars": 141,
+      "issues": [],
+      "live_regions": [],
+      "keyboard": {
+        "focus": [
+          {
+            "role": "button",
+            "name": "kvart över sju",
+            "type": "button"
+          },
+          {
+            "role": "button",
+            "name": "kvart i åtta",
+            "type": "button"
+          },
+          {
+            "role": "button",
+            "name": "halv åtta",
+            "type": "button"
+          }
+        ],
+        "answers": [
+          {
+            "ot": "answer",
+            "id": "val",
+            "value": "kvart över sju",
+            "index": 0
+          }
+        ],
+        "radio_arrow_selects": false,
+        "move_control_activated": false
+      }
+    },
+    {
+      "case": "english",
+      "title": "Engelska fraser",
+      "grade": 6,
+      "band": "primary",
+      "type": "match",
+      "arm": "control",
+      "body_bytes": 576,
+      "body_lines": 16,
+      "sdk_tags": [],
+      "script_tags": 0,
+      "delivered": true,
+      "first_text_s": 2.894,
+      "model_s": 4.248,
+      "render_s": 0.45,
+      "server_done_s": 4.702,
+      "first_visible_s": 5.002,
+      "complete_s": 5.235,
+      "font_px": 15.75,
+      "page_overflow": false,
+      "text_chars": 214,
+      "issues": [
+        {
+          "kind": "dense",
+          "msg": "text is only 15.75px on this screen (minimum 16px). Keep one teaching step and one main visual; cut text or split the page."
+        }
+      ],
+      "keyboard": {
+        "focus": [
+          {
+            "role": "input",
+            "name": "Mina par, t.ex. 1–B",
+            "type": "text"
+          },
+          {
+            "role": "button",
+            "name": "Skicka",
+            "type": "button"
+          }
+        ],
+        "answers": [
+          {
+            "ot": "answer",
+            "id": "svar",
+            "value": "Test"
+          }
+        ],
+        "radio_arrow_selects": false,
+        "move_control_activated": false,
+        "status": []
+      }
+    },
+    {
+      "case": "algebra",
+      "title": "Ekvationen",
+      "grade": 9,
+      "band": "middle",
+      "type": "answer",
+      "arm": "control",
+      "body_bytes": 366,
+      "body_lines": 12,
+      "sdk_tags": [],
+      "script_tags": 0,
+      "delivered": true,
+      "first_text_s": 2.968,
+      "model_s": 4.031,
+      "render_s": 0.389,
+      "server_done_s": 4.424,
+      "first_visible_s": 4.713,
+      "complete_s": 4.947,
+      "font_px": 17.5,
+      "page_overflow": false,
+      "text_chars": 115,
+      "issues": [],
+      "keyboard": {
+        "focus": [
+          {
+            "role": "input",
+            "name": "Jag tar bort +5 med",
+            "type": "text"
+          },
+          {
+            "role": "button",
+            "name": "Skicka",
+            "type": "button"
+          }
+        ],
+        "answers": [
+          {
+            "ot": "answer",
+            "id": "svar",
+            "value": "Test"
+          }
+        ],
+        "radio_arrow_selects": false,
+        "move_control_activated": false,
+        "status": []
+      }
+    },
+    {
+      "case": "water",
+      "title": "Vattnets kretslopp",
+      "grade": 5,
+      "band": "primary",
+      "type": "order",
+      "arm": "control",
+      "body_bytes": 440,
+      "body_lines": 11,
+      "sdk_tags": [],
+      "script_tags": 0,
+      "delivered": true,
+      "first_text_s": 3.053,
+      "model_s": 4.27,
+      "render_s": 0.327,
+      "server_done_s": 4.6,
+      "first_visible_s": 4.855,
+      "complete_s": 5.089,
+      "font_px": 17.5,
+      "page_overflow": false,
+      "text_chars": 226,
+      "issues": [],
+      "keyboard": {
+        "focus": [
+          {
+            "role": "input",
+            "name": "Min ordning",
+            "type": "text",
+            "choice": "",
+            "disabled": false
+          },
+          {
+            "role": "button",
+            "name": "Skicka",
+            "type": "button",
+            "choice": "",
+            "disabled": false
+          }
+        ],
+        "answers": [
+          {
+            "ot": "answer",
+            "id": "svar",
+            "value": "Test"
+          }
+        ],
+        "radio_arrow_selects": false,
+        "move_status": [],
+        "status": []
+      }
+    },
+    {
+      "case": "history",
+      "title": "Svensk demokrati",
+      "grade": 8,
+      "band": "middle",
+      "type": "order",
+      "arm": "control",
+      "body_bytes": 457,
+      "body_lines": 13,
+      "sdk_tags": [],
+      "script_tags": 0,
+      "delivered": true,
+      "first_text_s": 1.277,
+      "model_s": 1.709,
+      "render_s": 0.339,
+      "server_done_s": 2.049,
+      "first_visible_s": 2.302,
+      "complete_s": 2.535,
+      "font_px": 17.5,
+      "page_overflow": false,
+      "text_chars": 239,
+      "issues": [],
+      "keyboard": {
+        "focus": [
+          {
+            "role": "input",
+            "name": "Min ordning, äldst först",
+            "type": "text",
+            "choice": "",
+            "disabled": false
+          },
+          {
+            "role": "button",
+            "name": "Skicka",
+            "type": "button",
+            "choice": "",
+            "disabled": false
+          }
+        ],
+        "answers": [
+          {
+            "ot": "answer",
+            "id": "svar",
+            "value": "Test"
+          }
+        ],
+        "radio_arrow_selects": false,
+        "move_status": [],
+        "status": []
+      }
+    },
+    {
+      "case": "physics",
+      "title": "Storhet och enhet",
+      "grade": 11,
+      "band": "upper",
+      "type": "match",
+      "arm": "control",
+      "body_bytes": 516,
+      "body_lines": 11,
+      "sdk_tags": [],
+      "script_tags": 0,
+      "delivered": true,
+      "first_text_s": 1.817,
+      "model_s": 2.362,
+      "render_s": 0.359,
+      "server_done_s": 2.723,
+      "first_visible_s": 2.979,
+      "complete_s": 3.212,
+      "font_px": 17.5,
+      "page_overflow": false,
+      "text_chars": 193,
+      "issues": [],
+      "keyboard": {
+        "focus": [
+          {
+            "role": "input",
+            "name": "Lucka",
+            "type": "text",
+            "choice": "",
+            "disabled": false
+          },
+          {
+            "role": "input",
+            "name": "Lucka",
+            "type": "text",
+            "choice": "",
+            "disabled": false
+          },
+          {
+            "role": "input",
+            "name": "Lucka",
+            "type": "text",
+            "choice": "",
+            "disabled": false
+          }
+        ],
+        "answers": [
+          {
+            "ot": "answer",
+            "id": "g1",
+            "value": "Test"
+          },
+          {
+            "ot": "answer",
+            "id": "g2",
+            "value": "Test"
+          }
+        ],
+        "radio_arrow_selects": false,
+        "move_status": [],
+        "status": []
+      }
+    },
+    {
+      "case": "clock",
+      "title": "Klockan",
+      "grade": 3,
+      "band": "primary",
+      "type": "choice",
+      "arm": "sdk",
+      "body_bytes": 350,
+      "body_lines": 9,
+      "sdk_tags": [
+        "ot-sdk-choice"
+      ],
+      "script_tags": 0,
+      "delivered": true,
+      "first_text_s": 6.422,
+      "model_s": 7.492,
+      "render_s": 0.435,
+      "server_done_s": 7.929,
+      "first_visible_s": 8.3,
+      "complete_s": 8.534,
+      "font_px": 17.5,
+      "page_overflow": false,
+      "text_chars": 156,
+      "issues": [],
+      "keyboard": {
+        "focus": [
+          {
+            "role": "radio",
+            "name": "kvart över sju",
+            "type": "",
+            "choice": "",
+            "sdk_select": false,
+            "disabled": false
+          },
+          {
+            "role": "button",
+            "name": "Skicka",
+            "type": "button",
+            "choice": "",
+            "sdk_select": false,
+            "disabled": false
+          }
+        ],
+        "answers": [
+          {
+            "ot": "answer",
+            "id": "val",
+            "value": "kvart i åtta"
+          }
+        ],
+        "radio_arrow_selects": true,
+        "move_status": [],
+        "status": []
+      }
+    },
+    {
+      "case": "water",
+      "title": "Vattnets kretslopp",
+      "grade": 5,
+      "band": "primary",
+      "type": "order",
+      "arm": "sdk",
+      "body_bytes": 539,
+      "body_lines": 8,
+      "sdk_tags": [
+        "ot-order"
+      ],
+      "script_tags": 0,
+      "delivered": true,
+      "first_text_s": 1.266,
+      "model_s": 1.733,
+      "render_s": 0.438,
+      "server_done_s": 2.172,
+      "first_visible_s": 2.524,
+      "complete_s": 2.757,
+      "font_px": 17.5,
+      "page_overflow": false,
+      "text_chars": 340,
+      "issues": [],
+      "keyboard": {
+        "focus": [
+          {
+            "role": "button",
+            "name": "Flytta ner: Nederbörd – regn eller snö faller ner",
+            "type": "button",
+            "choice": "",
+            "sdk_select": false,
+            "disabled": false
+          },
+          {
+            "role": "button",
+            "name": "Flytta upp: Avrinning – vattnet rinner tillbaka till havet",
+            "type": "button",
+            "choice": "",
+            "sdk_select": false,
+            "disabled": false
+          },
+          {
+            "role": "button",
+            "name": "Flytta ner: Avrinning – vattnet rinner tillbaka till havet",
+            "type": "button",
+            "choice": "",
+            "sdk_select": false,
+            "disabled": false
+          },
+          {
+            "role": "button",
+            "name": "Flytta upp: Kondensation – ångan kyls och blir moln",
+            "type": "button",
+            "choice": "",
+            "sdk_select": false,
+            "disabled": false
+          },
+          {
+            "role": "button",
+            "name": "Skicka",
+            "type": "button",
+            "choice": "",
+            "sdk_select": false,
+            "disabled": false
+          }
+        ],
+        "answers": [
+          {
+            "ot": "answer",
+            "id": "ordning",
+            "value": "avdunstning>nederbord>avrinning>kondensation"
+          }
+        ],
+        "radio_arrow_selects": false,
+        "move_status": [
+          "Nederbörd – regn eller snö faller ner är nu 2 av 4"
+        ],
+        "status": [
+          "Nederbörd – regn eller snö faller ner är nu 2 av 4"
+        ]
+      }
+    },
+    {
+      "case": "english",
+      "title": "Engelska fraser",
+      "grade": 6,
+      "band": "primary",
+      "type": "match",
+      "arm": "sdk",
+      "body_bytes": 425,
+      "body_lines": 11,
+      "sdk_tags": [
+        "ot-match"
+      ],
+      "script_tags": 0,
+      "delivered": true,
+      "first_text_s": 1.009,
+      "model_s": 1.374,
+      "render_s": 0.445,
+      "server_done_s": 1.82,
+      "first_visible_s": 2.192,
+      "complete_s": 2.425,
+      "font_px": 17.5,
+      "page_overflow": false,
+      "text_chars": 233,
+      "issues": [],
+      "keyboard": {
+        "focus": [
+          {
+            "role": "combobox",
+            "name": "Välj …",
+            "type": "button",
+            "choice": "",
+            "sdk_select": true,
+            "disabled": false
+          },
+          {
+            "role": "combobox",
+            "name": "Välj …",
+            "type": "button",
+            "choice": "",
+            "sdk_select": true,
+            "disabled": false
+          },
+          {
+            "role": "combobox",
+            "name": "Välj …",
+            "type": "button",
+            "choice": "",
+            "sdk_select": true,
+            "disabled": false
+          },
+          {
+            "role": "button",
+            "name": "Skicka",
+            "type": "button",
+            "choice": "",
+            "sdk_select": false,
+            "disabled": false
+          }
+        ],
+        "answers": [
+          {
+            "ot": "answer",
+            "id": "kafe",
+            "value": "menu=kostar;water=menyn;much=vatten"
+          }
+        ],
+        "radio_arrow_selects": false,
+        "move_status": [],
+        "status": []
+      }
+    },
+    {
+      "case": "history",
+      "title": "Svensk demokrati",
+      "grade": 8,
+      "band": "middle",
+      "type": "order",
+      "arm": "sdk",
+      "body_bytes": 500,
+      "body_lines": 10,
+      "sdk_tags": [
+        "ot-order"
+      ],
+      "script_tags": 0,
+      "delivered": true,
+      "first_text_s": 1.035,
+      "model_s": 1.429,
+      "render_s": 0.462,
+      "server_done_s": 1.892,
+      "first_visible_s": 2.229,
+      "complete_s": 2.462,
+      "font_px": 17.5,
+      "page_overflow": false,
+      "text_chars": 278,
+      "issues": [],
+      "keyboard": {
+        "focus": [
+          {
+            "role": "button",
+            "name": "Flytta ner: Ståndsriksdagen ersätts med en tvåkammarriksdag",
+            "type": "button",
+            "choice": "",
+            "sdk_select": false,
+            "disabled": false
+          },
+          {
+            "role": "button",
+            "name": "Flytta upp: Rösträttsåldern blir 18 år",
+            "type": "button",
+            "choice": "",
+            "sdk_select": false,
+            "disabled": false
+          },
+          {
+            "role": "button",
+            "name": "Flytta ner: Rösträttsåldern blir 18 år",
+            "type": "button",
+            "choice": "",
+            "sdk_select": false,
+            "disabled": false
+          },
+          {
+            "role": "button",
+            "name": "Flytta upp: Enkammarriksdagen införs",
+            "type": "button",
+            "choice": "",
+            "sdk_select": false,
+            "disabled": false
+          },
+          {
+            "role": "button",
+            "name": "Skicka",
+            "type": "button",
+            "choice": "",
+            "sdk_select": false,
+            "disabled": false
+          }
+        ],
+        "answers": [
+          {
+            "ot": "answer",
+            "id": "ordning",
+            "value": "kvinnor>tvakammarriksdag>arton>enkammarriksdag"
+          }
+        ],
+        "radio_arrow_selects": false,
+        "move_status": [
+          "Ståndsriksdagen ersätts med en tvåkammarriksdag är nu 2 av 4"
+        ],
+        "status": [
+          "Ståndsriksdagen ersätts med en tvåkammarriksdag är nu 2 av 4"
+        ]
+      }
+    },
+    {
+      "case": "algebra",
+      "title": "Ekvationen",
+      "grade": 9,
+      "band": "middle",
+      "type": "answer",
+      "arm": "sdk",
+      "body_bytes": 363,
+      "body_lines": 9,
+      "sdk_tags": [
+        "ot-sdk-answer"
+      ],
+      "script_tags": 0,
+      "delivered": true,
+      "first_text_s": 1.132,
+      "model_s": 1.654,
+      "render_s": 0.767,
+      "server_done_s": 2.422,
+      "first_visible_s": 2.824,
+      "complete_s": 3.058,
+      "font_px": 17.5,
+      "page_overflow": false,
+      "text_chars": 106,
+      "issues": [],
+      "keyboard": {
+        "focus": [
+          {
+            "role": "input",
+            "name": "Skriv ditt förslag",
+            "type": "text",
+            "choice": "",
+            "sdk_select": false,
+            "disabled": false
+          },
+          {
+            "role": "button",
+            "name": "Skicka",
+            "type": "button",
+            "choice": "",
+            "sdk_select": false,
+            "disabled": false
+          }
+        ],
+        "answers": [
+          {
+            "ot": "answer",
+            "id": "forslag",
+            "value": "Test"
+          }
+        ],
+        "radio_arrow_selects": false,
+        "move_status": [],
+        "status": []
+      }
+    },
+    {
+      "case": "physics",
+      "title": "Storhet och enhet",
+      "grade": 11,
+      "band": "upper",
+      "type": "match",
+      "arm": "sdk",
+      "body_bytes": 460,
+      "body_lines": 14,
+      "sdk_tags": [
+        "ot-match"
+      ],
+      "script_tags": 0,
+      "delivered": true,
+      "first_text_s": 1.123,
+      "model_s": 1.368,
+      "render_s": 0.459,
+      "server_done_s": 1.828,
+      "first_visible_s": 2.218,
+      "complete_s": 2.452,
+      "font_px": 17.5,
+      "page_overflow": false,
+      "text_chars": 249,
+      "issues": [],
+      "keyboard": {
+        "focus": [
+          {
+            "role": "combobox",
+            "name": "Välj …",
+            "type": "button",
+            "choice": "",
+            "sdk_select": true,
+            "disabled": false
+          },
+          {
+            "role": "combobox",
+            "name": "Välj …",
+            "type": "button",
+            "choice": "",
+            "sdk_select": true,
+            "disabled": false
+          },
+          {
+            "role": "combobox",
+            "name": "Välj …",
+            "type": "button",
+            "choice": "",
+            "sdk_select": true,
+            "disabled": false
+          },
+          {
+            "role": "button",
+            "name": "Skicka",
+            "type": "button",
+            "choice": "",
+            "sdk_select": false,
+            "disabled": false
+          }
+        ],
+        "answers": [
+          {
+            "ot": "answer",
+            "id": "par",
+            "value": "strom=volt;spanning=ohm;resistans=ampere"
+          }
+        ],
+        "radio_arrow_selects": false,
+        "move_status": [],
+        "status": []
+      }
+    }
+  ],
+  "control_gap_recheck": [
+    {
+      "ot": "answer",
+      "id": "g1",
+      "value": "ampere"
+    },
+    {
+      "ot": "answer",
+      "id": "g2",
+      "value": "volt"
+    },
+    {
+      "ot": "answer",
+      "id": "g3",
+      "value": "ohm"
+    }
+  ],
+  "native_replay": {
+    "clock": [
+      {
+        "ot": "answer",
+        "id": "val",
+        "value": "kvart i åtta"
+      }
+    ],
+    "water": [
+      {
+        "ot": "answer",
+        "id": "ordning",
+        "value": "avdunstning>nederbord>avrinning>kondensation"
+      }
+    ],
+    "english": [
+      {
+        "ot": "answer",
+        "id": "kafe",
+        "value": "menu=kostar;water=menyn;much=vatten"
+      }
+    ],
+    "history": [
+      {
+        "ot": "answer",
+        "id": "ordning",
+        "value": "kvinnor>tvakammarriksdag>arton>enkammarriksdag"
+      }
+    ],
+    "algebra": [
+      {
+        "ot": "answer",
+        "id": "forslag",
+        "value": "Test"
+      }
+    ],
+    "physics": [
+      {
+        "ot": "answer",
+        "id": "par",
+        "value": "strom=volt;spanning=ohm;resistans=ampere"
+      }
+    ]
+  }
+}
