@@ -59,8 +59,14 @@ describe('top bar', () => {
 
   it('the footer privacy button opens the privacy panel', () => {
     firstVisit();
-    fireEvent.click(screen.getByRole('button', { name: /Läs om integritet/ }));
-    expect(screen.getByLabelText('Integritet')).toBeDefined();
+    const trigger = screen.getByRole('button', { name: /Läs om integritet/ });
+    trigger.focus();
+    fireEvent.click(trigger);
+    const dialog = screen.getByRole('dialog', { name: 'Integritet' });
+    expect(document.activeElement).toBe(dialog);
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: 'Integritet' })).toBeNull();
+    expect(document.activeElement).toBe(trigger);
   });
 });
 
@@ -107,7 +113,7 @@ describe('hero', () => {
 describe.each([
   ['primary', 'Prata med Räven', '36 + 47 = ?', '36 + 47', '70 + 13', '= 83'],
   ['middle', 'Prata med Lodjuret', '3x + 5 = 20', '3x + 5 = 20', '3x = 15', 'x = 5'],
-  ['upper', 'Prata med Björnen', 'f(x) = x² + 3', 'f(x) = x² + 3', 'f′(x) = 2x + 3', 'f′(2) = 7'],
+  ['upper', 'Prata med Björnen', 'f(x) = x² + 3x', 'f(x) = x² + 3x', 'f′(x) = 2x + 3', 'f′(2) = 7'],
 ] as Array<[BandId, string, string, string, string, string]>)(
   'band %s',
   (band, cta, paper, row1, row2, row3) => {

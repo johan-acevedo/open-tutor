@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import '@fontsource/plus-jakarta-sans/400.css';
 import '@fontsource/plus-jakarta-sans/500.css';
 import '@fontsource/plus-jakarta-sans/600.css';
@@ -112,9 +112,19 @@ export default function LandingPage({ profiles, band, onPick, starting, onStartG
   const [panel, setPanel] = useState<StartPanel>(null);
   const start = useStartAction({ profiles, band, onPick, starting, onStartGesture, startOpen, assumeId });
 
+  const returnFocus = useRef<HTMLElement | null>(null);
+
   function openPanel(next: 'about' | 'privacy') {
+    // Remember the nav or footer trigger so closing the menu returns there.
+    returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setPanel(next);
     setMenuOpen(true);
+  }
+
+  function changeMenuOpen(next: boolean) {
+    setMenuOpen(next);
+    if (!next && returnFocus.current?.isConnected) returnFocus.current.focus();
+    if (!next) returnFocus.current = null;
   }
 
   return (
@@ -141,7 +151,7 @@ export default function LandingPage({ profiles, band, onPick, starting, onStartG
             switchLabel={band.copy.switchStudent}
             onSwitch={onSwitch}
             open={menuOpen}
-            onOpenChange={setMenuOpen}
+            onOpenChange={changeMenuOpen}
             panel={panel}
             onPanelChange={setPanel}
           />

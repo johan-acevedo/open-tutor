@@ -24,6 +24,13 @@ type Props = {
   const open = openProp ?? openInner;
   const panel = panelProp ?? panelInner;
   const wrapRef = useRef<HTMLDivElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+
+  // A panel opened from outside (landing nav or footer) takes focus, so the
+  // next Tab stays in the menu instead of falling back to <body>.
+  useEffect(() => {
+    if (open && panel) panelRef.current?.focus();
+  }, [open, panel]);
 
   function setOpen(next: boolean) {
     if (openProp === undefined) setOpenInner(next);
@@ -91,7 +98,7 @@ type Props = {
             {t('startmenu.about')}
           </button>
           {panel === 'about' && (
-            <div className="ot-menu-about" role="dialog" aria-label={t('startmenu.about')}>
+            <div className="ot-menu-about" role="dialog" aria-label={t('startmenu.about')} ref={panelRef} tabIndex={-1}>
               <p>
                 {t('startmenu.aboutText')}
               </p>
@@ -106,7 +113,7 @@ type Props = {
             {t('startmenu.privacy')}
           </button>
           {panel === 'privacy' && (
-            <div className="ot-menu-about" role="dialog" aria-label={t('startmenu.privacy')}>
+            <div className="ot-menu-about" role="dialog" aria-label={t('startmenu.privacy')} ref={panelRef} tabIndex={-1}>
               <p>
                 {t('startmenu.privacyText')}
               </p>

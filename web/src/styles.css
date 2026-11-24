@@ -787,7 +787,7 @@ a:focus-visible {
   .ot-land-cta-row {
     margin-top: 22px;
   }
-  .ot-land-cta {
+  .ot-land-cta-row .ot-land-cta {
     flex: 1 1 0%;
     min-width: 0;
     justify-content: center;
