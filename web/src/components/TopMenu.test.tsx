@@ -21,3 +21,36 @@ it('hides the switch when no handler is given', () => {
   expect(screen.queryByRole('button', { name: 'Byt elev' })).toBeNull();
   cleanup();
 });
+
+it('says that switching student ends the call', () => {
+  render(<TopMenu items={[]} dragOver={false} onCamera={() => {}} onFiles={() => {}} onSwitchStudent={() => {}} switchLabel="Byt elev" />);
+  fireEvent.click(screen.getByRole('button', { name: 'Meny' }));
+  const sw = screen.getByRole('button', { name: 'Byt elev' });
+  const hint = document.getElementById(sw.getAttribute('aria-describedby') ?? '');
+  expect(hint?.textContent).toBe('Avslutar samtalet');
+  cleanup();
+});
+
+it('closes on Escape and returns focus to the menu button', () => {
+  render(<TopMenu items={[]} dragOver={false} onCamera={() => {}} onFiles={() => {}} />);
+  const trigger = screen.getByRole('button', { name: 'Meny' });
+  fireEvent.click(trigger);
+  expect(screen.getByRole('button', { name: 'Fota läxan' })).toBeTruthy();
+  fireEvent.keyDown(window, { key: 'Escape' });
+  expect(screen.queryByRole('button', { name: 'Fota läxan' })).toBeNull();
+  expect(document.activeElement).toBe(trigger);
+  cleanup();
+});
+
+it('returns focus to the menu button after picking an action', () => {
+  const onCamera = vi.fn();
+  render(<TopMenu items={[]} dragOver={false} onCamera={onCamera} onFiles={() => {}} />);
+  const trigger = screen.getByRole('button', { name: 'Meny' });
+  fireEvent.click(trigger);
+  const photo = screen.getByRole('button', { name: 'Fota läxan' });
+  photo.focus();
+  fireEvent.click(photo);
+  expect(onCamera).toHaveBeenCalledTimes(1);
+  expect(document.activeElement).toBe(trigger);
+  cleanup();
+});

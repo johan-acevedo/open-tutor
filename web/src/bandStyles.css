@@ -4,7 +4,7 @@
 
 .ot-root:is([data-band="middle"], [data-band="upper"]) :is(
   .ot-text-field, .ot-chat-input, .ot-bottom-bar,
-  .ot-homework-card, .ot-page-frame, .ot-menu-panel, .ot-endcard-notes,
+  .ot-homework-card, .ot-page-frame, .ot-menu-panel, .ot-callmenu-panel, .ot-endcard-notes,
   .ot-board-book, .ot-homework-tray, .ot-drop-zone
 ) {
   border-radius: var(--ot-radius);

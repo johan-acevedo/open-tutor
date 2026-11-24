@@ -29,8 +29,8 @@ describe('Board greeting lives in the empty state', () => {
     expect(screen.getByRole('heading', { name: 'Hej Leo!' })).toBeTruthy();
     expect(screen.getByText('Här hamnar det vi jobbar med.')).toBeTruthy();
     // No permanent surface: no greeting header or inbox strip outside the empty state.
-    expect(screen.queryByText('Inkorg · tom')).toBeNull();
-    expect(screen.queryByText('släpp fil här')).toBeNull();
+    expect(screen.queryByText('Ingen läxa skickad än')).toBeNull();
+    expect(screen.queryByText('Du kan också dra in en bild eller pdf i fönstret.')).toBeNull();
 
     rerender(
       <Board
@@ -66,20 +66,20 @@ describe('Header menu inbox', () => {
 
   it('opens from the hamburger and shows a live empty inbox', () => {
     render(<TopMenu items={[]} {...menuProps} />);
-    expect(screen.queryByText('Inkorg · tom')).toBeNull();
+    expect(screen.queryByText('Ingen läxa skickad än')).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Meny' }));
-    expect(screen.getByText('Inkorg · tom')).toBeTruthy();
-    expect(screen.getByText('släpp fil här')).toBeTruthy();
+    expect(screen.getByText('Ingen läxa skickad än')).toBeTruthy();
+    expect(screen.getByText('Du kan också dra in en bild eller pdf i fönstret.')).toBeTruthy();
   });
 
   it('reflects real homework state in the menu', () => {
     const { rerender } = render(<TopMenu items={[]} {...menuProps} />);
     fireEvent.click(screen.getByRole('button', { name: 'Meny' }));
-    expect(screen.getByText('Inkorg · tom')).toBeTruthy();
+    expect(screen.getByText('Ingen läxa skickad än')).toBeTruthy();
 
     rerender(<TopMenu items={[homeworkOne, homeworkTwo]} {...menuProps} />);
-    expect(screen.getByText('Inkorg · 2 uppgifter')).toBeTruthy();
+    expect(screen.getByText('2 läxor skickade')).toBeTruthy();
   });
 
   it('wires the add buttons to the real handlers', () => {
@@ -90,6 +90,9 @@ describe('Header menu inbox', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Fota läxan' }));
     expect(onCamera).toHaveBeenCalledTimes(1);
+    // Picking an action closes the menu; reopen it for the next one.
+    expect(screen.queryByRole('button', { name: 'Välj bild' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Meny' }));
     fireEvent.click(screen.getByRole('button', { name: 'Välj bild' }));
     expect(onFiles).toHaveBeenCalledTimes(1);
   });
@@ -98,7 +101,7 @@ describe('Header menu inbox', () => {
     render(<TopMenu items={[]} {...menuProps} />);
     fireEvent.click(screen.getByRole('button', { name: 'Meny' }));
     fireEvent.click(screen.getByRole('button', { name: 'Om Open Tutor' }));
-    expect(screen.getByText('by Johan Acevedo')).toBeTruthy();
+    expect(screen.getByText('Gjord av Johan Acevedo.')).toBeTruthy();
   });
 });
 

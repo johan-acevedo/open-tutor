@@ -48,10 +48,13 @@ describe('Phone portrait: the fox fills the screen until something is shown', ()
     const { container } = render(<Harness items={[]} signal={0} caption="Hej Johan! Vad jobbar du med idag?" />);
 
     expect(view(container)).toBe('fox');
-    // The caption is a bubble by the fox's head and stays a live region.
+    // The caption is a comic bubble by the fox's head: the state as a small
+    // line on top, the latest words under it. The text keeps a live region.
     const bubble = container.querySelector('.ot-fox-bubble-hero');
-    expect(bubble?.getAttribute('aria-live')).toBe('polite');
-    expect(bubble?.textContent).toBe('Hej Johan! Vad jobbar du med idag?');
+    expect(bubble?.querySelector('.ot-fox-state')?.getAttribute('role')).toBe('status');
+    const text = bubble?.querySelector('.ot-fox-text');
+    expect(text?.getAttribute('aria-live')).toBe('polite');
+    expect(text?.textContent).toBe('Hej Johan! Vad jobbar du med idag?');
     expect(container.querySelector('.ot-fox-hero img.ot-avatar-img')?.getAttribute('src')).toBe(
       '/character/speaking.webp?v=20261119',
     );
@@ -65,7 +68,37 @@ describe('Phone portrait: the fox fills the screen until something is shown', ()
     expect(container.querySelector('.ot-fox-head')).toBeNull();
   });
 
-  it('gives a shown item the height and moves the fox into the strip', () => {
+  it('keeps an empty caption compact but announced, in both phone views', () => {
+    const arrival = render(<Harness items={[]} signal={0} caption="" />);
+    const heroBubble = arrival.container.querySelector('.ot-fox-bubble-hero');
+    expect(heroBubble?.className).toContain('ot-bubble-empty');
+    const heroText = heroBubble?.querySelector('.ot-fox-text');
+    expect(heroText?.getAttribute('aria-live')).toBe('polite');
+    expect(heroText?.textContent).toBe('');
+    expect(heroText?.className).toContain('ot-text-empty');
+    arrival.unmount();
+
+    const teaching = render(
+      <Harness items={[task]} signal={1} caption="   " />,
+    );
+    // Whitespace-only counts as empty too.
+    const stripBubble = teaching.container.querySelector('.ot-fox-bubble-strip');
+    expect(stripBubble?.className).toContain('ot-bubble-empty');
+    const stripText = stripBubble?.querySelector('.ot-fox-text');
+    expect(stripText?.getAttribute('aria-live')).toBe('polite');
+    expect(stripText?.textContent).toBe('');
+    teaching.unmount();
+  });
+
+  it('marks a captioned phone bubble as non-empty', () => {
+    const { container } = render(<Harness items={[]} signal={0} caption="Hej Johan!" />);
+    expect(container.querySelector('.ot-fox-bubble-hero')?.className).not.toContain('ot-bubble-empty');
+    expect(container.querySelector('.ot-fox-bubble-hero .ot-fox-text')?.className).not.toContain(
+      'ot-text-empty',
+    );
+  });
+
+  it('gives a shown item the height and the companion a real cut-out below it', () => {
     const { container } = render(
       <Harness items={[task]} signal={1} caption="Nu tar vi bort fem på båda sidor, precis som vi gjorde nyss." />,
     );
@@ -75,12 +108,19 @@ describe('Phone portrait: the fox fills the screen until something is shown', ()
     expect(screen.getByText('Ekvationer')).toBeTruthy();
     // The board is visible, not hidden behind the fox.
     expect(container.querySelector('.ot-board')?.getAttribute('aria-hidden')).toBeNull();
-    // Round fox head on the left, latest line in a bubble to its right.
-    const head = screen.getByRole('button', { name: 'Visa Räven' });
-    expect(head.className).toContain('ot-fox-head-cyan');
+    // A real cut-out of the current pose (head, shoulders, hands — no circle
+    // crop), tapping it goes back to the fox.
+    const cutout = screen.getByRole('button', { name: 'Visa Räven' });
+    expect(cutout.className).toContain('ot-fox-cutout');
+    const figure = container.querySelector('.ot-fox-cutout .ot-avatar-img');
+    expect(figure?.getAttribute('src')).toBe('/character/speaking.webp?v=20261119');
+    // The board keeps its scroll surface: the overlap is paint only, so the
+    // measured size stays the size the page gets.
+    expect(container.querySelector('.ot-board .ot-board-scroll')).toBeTruthy();
     const bubble = container.querySelector('.ot-fox-bubble-strip');
-    expect(bubble?.getAttribute('aria-live')).toBe('polite');
-    expect(bubble?.textContent).toContain('Nu tar vi bort fem på båda sidor');
+    const text = bubble?.querySelector('.ot-fox-text');
+    expect(text?.getAttribute('aria-live')).toBe('polite');
+    expect(text?.textContent).toContain('Nu tar vi bort fem på båda sidor');
     // The state is still available to screen readers without a visible pill.
     expect(screen.getByRole('status', { name: 'Pratar' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Visa sidan' })).toBeNull();
@@ -95,11 +135,13 @@ describe('Phone portrait: the fox fills the screen until something is shown', ()
     expect(container.querySelector('.ot-board')?.getAttribute('aria-hidden')).toBe('true');
     // Hidden, not removed: the child's page and its answers survive.
     expect(container.querySelector('[data-board-id="t1"]')).toBeTruthy();
-    expect(container.querySelector('.ot-fox-bubble-hero')?.textContent).toBe('Skriv svaret i rutan.');
+    expect(container.querySelector('.ot-fox-bubble-hero .ot-fox-text')?.textContent).toBe('Skriv svaret i rutan.');
 
     fireEvent.click(screen.getByRole('button', { name: 'Visa sidan' }));
 
     expect(view(container)).toBe('item');
+    // Back under the item the companion is a cut-out again, not a circle.
+    expect(screen.getByRole('button', { name: 'Visa Räven' }).className).toContain('ot-fox-cutout');
     expect(container.querySelector('.ot-board')?.getAttribute('aria-hidden')).toBeNull();
   });
 

@@ -58,16 +58,16 @@ export const sv = {
   // Top menu (in-call)
   'topmenu.menuLabel': 'Meny',
   'topmenu.inboxLabel': 'Inkorg för läxor',
-  'topmenu.inboxEmpty': 'Inkorg · tom',
-  'topmenu.inboxOne': 'Inkorg · {count} uppgift',
-  'topmenu.inboxMany': 'Inkorg · {count} uppgifter',
-  'topmenu.dropHint': 'släpp fil här',
+  'topmenu.inboxEmpty': 'Ingen läxa skickad än',
+  'topmenu.inboxOne': '{count} läxa skickad',
+  'topmenu.inboxMany': '{count} läxor skickade',
+  'topmenu.dropHint': 'Du kan också dra in en bild eller pdf i fönstret.',
   'topmenu.photo': 'Fota läxan',
   'topmenu.chooseImage': 'Välj bild',
   'topmenu.switchFallback': 'Byt elev',
+  'topmenu.switchHint': 'Avslutar samtalet',
   'topmenu.aboutTitle': 'Om Open Tutor',
-  'topmenu.aboutBy': 'by Johan Acevedo',
-  'topmenu.close': 'Stäng',
+  'topmenu.aboutBy': 'Gjord av Johan Acevedo.',
 
   // Start menu (pre-call)
   'startmenu.about': 'Om Open Tutor',

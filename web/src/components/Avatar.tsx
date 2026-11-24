@@ -86,29 +86,38 @@ export function PillIcon({ pill }: { pill: Pill }) {
 }
 
 export default function Avatar({ pose, pill, caption, captionFading, decorative }: Props) {
-  const toneClass = pill ? `ot-pill-${pill.tone}` : '';
-
+  // Whitespace-only counts as empty too: :empty would miss it, and the
+  // bubble must still go compact (the caption pipeline already trims, this
+  // is belt and braces). The live region stays mounted either way so the
+  // first caption is announced; it collapses with height:0 (never hidden
+  // from assistive tech) so it never leaves the accessibility tree.
+  // A faded caption counts as empty: the bubble shrinks back to the state line
+  // (the text stays mounted, height 0, so the live region is kept).
+  const empty = caption.trim() === '' || captionFading;
   return (
     <>
-      <div className={`ot-companion ot-pose-${pose}`}>
-        <PoseImage pose={pose} decorative={decorative} />
-      </div>
-      <div className="ot-voice-bubble">
-        {!decorative && (
-          <div className="ot-pill-row">
-            {pill && (
-              <div className={`ot-pill ${toneClass}`} role="status" aria-label={pill.label}>
-                <PillIcon pill={pill} />
-                <span>{pill.label}</span>
-              </div>
-            )}
-          </div>
-        )}
-        {!decorative && (
-          <div className={`ot-caption${captionFading ? ' ot-caption-fading' : ''}`} aria-live="polite">
+      {/* One comic speech bubble by the head (landing language: light paper
+          fill, dark outline, tail toward the head, never covering the face):
+          the state as a small line on top, the live caption under it. With
+          no caption the bubble shows only the state, compact. */}
+      {!decorative && (
+        <div className={`ot-say${empty ? ' ot-say-empty' : ''}`}>
+          {pill && (
+            <div className="ot-say-state" role="status" aria-label={pill.label}>
+              <PillIcon pill={pill} />
+              <span>{pill.label}</span>
+            </div>
+          )}
+          <div
+            className={`ot-say-text${captionFading ? ' ot-caption-fading' : ''}${empty ? ' ot-text-empty' : ''}`}
+            aria-live="polite"
+          >
             {caption}
           </div>
-        )}
+        </div>
+      )}
+      <div className={`ot-companion ot-pose-${pose}`}>
+        <PoseImage pose={pose} decorative={decorative} />
       </div>
     </>
   );

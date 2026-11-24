@@ -12,6 +12,7 @@ try { document.documentElement.lang = htmlLang; } catch { /* ignore */ }
 import './styles.css';
 import './mobile.css';
 import './bandStyles.css';
+import './callChrome.css';
 
 const poses: Pose[] = ['greeting', 'listening', 'speaking', 'thinking', 'working', 'waiting', 'pointing'];
 const item = {
@@ -34,7 +35,7 @@ function Review() {
   return (
     <BandProvider band={band}>
       <div className={`ot-root${mobile ? ' ot-phone' : ''}`} data-band={band}>
-        <header className="ot-topbar"><strong>{BANDS[band].companion.name}</strong><span>Design review</span></header>
+        <header className="ot-topbar"><div className="ot-topbar-inner"><strong>{BANDS[band].companion.name}</strong><span>Design review</span></div></header>
         <nav className="ot-review-controls" aria-label="Pose">
           {poses.map(p => <button key={p} type="button" aria-pressed={pose === p} onClick={() => setPose(p)}>{p}</button>)}
         </nav>
@@ -47,7 +48,7 @@ function Review() {
             <Avatar pose={pose} pill={pill} caption={speaking ? sv['review.exampleCaption'] : ''} captionFading={false} />
           </aside>
         </main>
-        <BottomBar mobile={mobile} micEnabled micBlocked={false} sending={false} onSendText={() => {}} onToggleMic={() => {}} onAttach={() => {}} />
+        <BottomBar mobile={mobile} micEnabled micBlocked={false} sending={false} ending={false} onSendText={() => {}} onToggleMic={() => {}} onAttach={() => {}} onEnd={() => {}} />
       </div>
     </BandProvider>
   );

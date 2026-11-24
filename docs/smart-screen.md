@@ -4,6 +4,41 @@ Lead: the thread "state of the project" (Claude, 2026-11-12). The lead keeps thi
 Workers read it before starting and report against it. Decisions here were agreed with Johan
 on 2026-11-12 unless marked open.
 
+## 2026-11-24: the call view follows the landing page (concept A)
+
+After the landing page, the call view looked unfinished: chrome pinned to the edges, a large
+empty board at call start, a 48 px top bar with 44 px buttons, a full-page grid and a chat-like
+1600 px text field (Johan; a Gemini 4 Neon review agreed). Decisions and mockups:
+`design/call-2026-11/`. Built on `feat/call-a`:
+
+- **Arrival**: no empty board on desktop; the companion stands large and centred over the
+  landing page's halo. The board is laid out at its teaching size but hidden
+  (`visibility:hidden`), so `readBoardSize()` reports the size the first page will get
+  (checked equal at 720–1440 px widths and on phone portrait).
+- **Teaching**: the board slides in on the left (~2/3); the companion moves to a right column
+  and stays large, its speech bubble (state line + caption) just above the head.
+- **Speech bubble** replaces the status pill and caption box; a faded or empty caption shrinks
+  it to the state line, and the live region stays in the accessibility tree.
+- **Chrome**: landing-style top bar (logo, quiet menu); a floating centred dock with attach,
+  text, mic and Avsluta (moved down from the top bar, reversing 2026-11-11).
+- **Phone**: the companion stays below the board but as a pose cut-out (~190 px) instead of a
+  round profile picture, overlapping the board's bottom edge a little (paint only, the measured
+  board size is unchanged). Landscape keeps two columns.
+- **Companion stands firm** (Johan, after the first dev test): in the teaching column each new
+  caption line pushed the figure down (up to ~260 px). The column is now a two-row grid: the
+  figure owns the bottom row, the bubble grows upward above it and clips its oldest lines at
+  its ceiling. Measured: figure position constant across 0–289-character captions at
+  1024–1440 px widths. A faded caption no longer keeps the empty bubble full width.
+- **Menu** (Johan: "rätt basic"): "☰ Meny" pill trigger (icon only on phones); a panel of
+  list rows: homework status as a drop target (dashed, cyan while a file is dragged over the
+  window; the drag hint is hidden on touch), Fota läxan, Välj bild, then below a rule "Byt
+  elev — Avslutar samtalet" (it ends the call, so it is set apart and warms red on hover),
+  and Om Open Tutor as an inline disclosure. Picking an action closes the menu; Escape
+  returns focus to the trigger.
+- Verified with real calls on the dev instance (desktop 1440×900 and phone 390×844, fake mic,
+  a typed request for a clock): board in 24–27 s, Avsluta in the dock ends the call. A real
+  child session and a screen reader were not tested.
+
 ## 2026-11-24: a landing page that explains itself (A3)
 
 Johan wants to invite more people, and the voice-first start page looked experimental to a

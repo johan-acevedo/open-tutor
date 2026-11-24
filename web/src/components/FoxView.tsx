@@ -18,9 +18,11 @@ type Caption = {
 };
 
 /**
- * The big fox on a phone: it fills the screen and what it says sits in a light
- * bubble by its head, with the state pill (and "Visa sidan" when there is a
- * page behind it) in a row under the bubble.
+ * The big fox on a phone: it fills the screen and what it says sits in a
+ * comic bubble by its head (landing language: light paper, dark outline,
+ * tail toward the figure). The state lives inside the bubble as a small line
+ * on top — no separate floating pill; the "Visa sidan" action below it is a
+ * solid button so the two cannot be confused.
  */
 export function FoxHero({
   pose,
@@ -31,20 +33,25 @@ export function FoxHero({
   onShowPage,
 }: Caption & { pageTitle?: string; onShowPage?: () => void }) {
   const line = captionTail(caption, HERO_CHARS);
+  // As in Avatar: whitespace-only counts as empty, and the live region
+  // collapses with height:0 (never hidden from assistive tech).
+  const empty = line.trim() === '' || captionFading;
   return (
     <div className={`ot-fox-hero ot-pose-${pose}`} data-phone-view="fox">
       <div className="ot-fox-hero-head">
-        <div
-          className={`ot-fox-bubble ot-fox-bubble-hero${captionFading ? ' ot-caption-fading' : ''}`}
-          aria-live="polite"
-        >
-          {line}
-        </div>
-        <div className="ot-fox-hero-controls">
-          <div className={`ot-pill ot-pill-${pill.tone}`} role="status" aria-label={pill.label}>
+        <div className={`ot-fox-bubble ot-fox-bubble-hero${empty ? ' ot-bubble-empty' : ''}`}>
+          <div className="ot-fox-state" role="status" aria-label={pill.label}>
             <PillIcon pill={pill} />
             <span>{pill.label}</span>
           </div>
+          <div
+            className={`ot-fox-text${captionFading ? ' ot-caption-fading' : ''}${empty ? ' ot-text-empty' : ''}`}
+            aria-live="polite"
+          >
+            {line}
+          </div>
+        </div>
+        <div className="ot-fox-hero-controls">
           {onShowPage && (
             <button
               type="button"
@@ -65,18 +72,25 @@ export function FoxHero({
 }
 
 /**
- * The fox strip under a shown item: a round head cropped from the current pose
- * (its ring carries the state) and the latest line in a bubble beside it.
- * Tapping the head goes back to the big fox.
+ * The companion under a shown item: a real cut-out of the current pose
+ * (head, shoulders and hands, no circle crop), large enough to show body
+ * language, stepping slightly in front of the board's bottom edge. The
+ * latest line sits in a comic bubble beside it, the state as a small line on
+ * top. Tapping the figure goes back to the big fox.
+ *
+ * The overlap is paint only (the figure overflows its row): the board keeps
+ * its grid size, so the size the server hears (readBoardSize) is still the
+ * size the page actually gets.
  */
 export function FoxStrip({ pose, pill, caption, captionFading, onShowFox }: Caption & { onShowFox: () => void }) {
   const { companion } = useBand();
   const line = captionTail(caption, STRIP_CHARS);
+  const empty = line.trim() === '' || captionFading;
   return (
     <div className={`ot-fox-strip ot-pose-${pose}`} data-phone-view="item">
       <button
         type="button"
-        className={`ot-fox-head ot-fox-head-${pill.tone}${pill.animateBars ? ' ot-fox-head-speaking' : ''}`}
+        className="ot-fox-cutout"
         onClick={onShowFox}
         aria-label={t('fox.showCompanion', { name: companion.name })}
         title={t('fox.showCompanion', { name: companion.name })}
@@ -84,19 +98,17 @@ export function FoxStrip({ pose, pill, caption, captionFading, onShowFox }: Capt
         <PoseImage pose={pose} decorative />
       </button>
       <div className="ot-fox-strip-body">
-        {/* The ring shows the state; this keeps it available to screen readers. */}
-        <span className="ot-sr-only" role="status" aria-label={pill.label}>
-          {pill.label}
-        </span>
-        <div
-          className={`ot-fox-bubble ot-fox-bubble-strip${captionFading ? ' ot-caption-fading' : ''}`}
-          aria-live="polite"
-        >
-          {line || (
-            <span className="ot-fox-bubble-state" aria-hidden="true">
-              {pill.label}
-            </span>
-          )}
+        <div className={`ot-fox-bubble ot-fox-bubble-strip${empty ? ' ot-bubble-empty' : ''}`}>
+          <div className="ot-fox-state" role="status" aria-label={pill.label}>
+            <PillIcon pill={pill} />
+            <span>{pill.label}</span>
+          </div>
+          <div
+            className={`ot-fox-text${captionFading ? ' ot-caption-fading' : ''}${empty ? ' ot-text-empty' : ''}`}
+            aria-live="polite"
+          >
+            {line}
+          </div>
         </div>
       </div>
     </div>
