@@ -5,12 +5,14 @@ import '@fontsource/plus-jakarta-sans/600.css';
 import '@fontsource/plus-jakarta-sans/700.css';
 import '@fontsource/plus-jakarta-sans/800.css';
 import '@fontsource/caveat/600.css';
-import type { BandConfig, BandId } from '../bands';
+import { BANDS, BAND_IDS, type BandConfig, type BandId } from '../bands';
+import { bandUrl } from '../bandLinks';
 import type { Profile } from '../db';
 import { t, type SvKey } from '../locales/sv';
 import Welcome from './Welcome';
 import StartMenu, { type StartPanel } from './StartMenu';
 import { useStartAction } from './useStartAction';
+import { stopGreeting } from './greetingAudio';
 
 type Props = {
   profiles: Profile[];
@@ -38,20 +40,44 @@ const ROWS: Record<BandId, [SvKey, SvKey, SvKey]> = {
   upper: ['landing.row1Upper', 'landing.row2Upper', 'landing.row3Upper'],
 };
 
-const OPS: Record<BandId, [SvKey, SvKey]> = {
-  primary: ['landing.op1Primary', 'landing.op2Primary'],
-  middle: ['landing.op1Middle', 'landing.op2Middle'],
-  upper: ['landing.op1Upper', 'landing.op2Upper'],
+
+const BAND_TITLES: Record<BandId, SvKey> = {
+  primary: 'landing.bandsTitlePrimary',
+  middle: 'landing.bandsTitleMiddle',
+  upper: 'landing.bandsTitleUpper',
 };
 
-// Static voice bars beside the speaking pose: the call has not started, so
-// nothing here may move.
-const BARS = [22, 48, 72, 40, 60, 28, 50, 18];
+const AUDIENCES: Record<BandId, SvKey> = {
+  primary: 'landing.audiencePrimary',
+  middle: 'landing.audienceMiddle',
+  upper: 'landing.audienceUpper',
+};
+
+/** Cross-links to the other two bands: small cards in the step-card language,
+ *  the whole card one link. Sits between the steps and the footer. */
+function Bands({ band }: { band: BandConfig }) {
+  return (
+    <section className="ot-land-bands">
+      <h2 className="ot-land-bandstitle">{t(BAND_TITLES[band.id])}</h2>
+      <div className="ot-land-bandcards">
+        {BAND_IDS.filter((id) => id !== band.id).map((id) => (
+          <a key={id} className="ot-land-bandcard" href={bandUrl(id, window.location.href)} aria-label={`${t(AUDIENCES[id])} ${t('landing.withCompanion', { companion: BANDS[id].companion.name })}`}>
+            <img className="ot-land-bandface" src={BANDS[id].companion.face} alt="" aria-hidden="true" />
+            <span className="ot-land-bandtxt">
+              <strong>{t(AUDIENCES[id])}</strong>
+              <span>{t('landing.withCompanion', { companion: BANDS[id].companion.name })}</span>
+            </span>
+            <span className="ot-land-bandarrow" aria-hidden="true">→</span>
+          </a>
+        ))}
+      </div>
+    </section>
+  );
+}
 
 /** The three "how it works" cards: paper task, talking companion, mini board. */
 function Steps({ band }: { band: BandConfig }) {
   const rows = ROWS[band.id];
-  const ops = OPS[band.id];
   return (
     <section className="ot-land-how" id="sa-funkar-det">
       <h2 className="ot-land-howtitle">{t('landing.howTitle')}</h2>
@@ -63,7 +89,7 @@ function Steps({ band }: { band: BandConfig }) {
           </div>
           <div className="ot-land-cardtxt">
             <h3>{t('landing.step1Title')}</h3>
-            <p>{t('landing.step1Text')}</p>
+            <p>{t('landing.step1Text', { companion: band.companion.name })}</p>
           </div>
         </article>
         <article className="ot-land-card">
@@ -71,10 +97,8 @@ function Steps({ band }: { band: BandConfig }) {
             <span className="ot-land-num" aria-hidden="true">2</span>
             <div className="ot-land-talk">
               <img src={band.companion.poses.speaking} alt="" aria-hidden="true" />
-              <div className="ot-land-wave" aria-hidden="true">
-                {BARS.map((h, i) => (
-                  <i key={i} style={{ height: h }} />
-                ))}
+              <div className="ot-land-chat" aria-hidden="true">
+                <i /><i /><i />
               </div>
             </div>
           </div>
@@ -88,9 +112,7 @@ function Steps({ band }: { band: BandConfig }) {
             <span className="ot-land-num" aria-hidden="true">3</span>
             <div className="ot-land-mini">
               <div className="ot-land-eq">{t(rows[0])}</div>
-              <div className="ot-land-op" aria-hidden="true">{t(ops[0])}</div>
               <div className="ot-land-eq ot-land-eq-on">{t(rows[1])}</div>
-              <div className="ot-land-op" aria-hidden="true">{t(ops[1])}</div>
               <div className="ot-land-eq">{t(rows[2])}</div>
             </div>
           </div>
@@ -127,9 +149,17 @@ export default function LandingPage({ profiles, band, onPick, starting, onStartG
     if (!next) returnFocus.current = null;
   }
 
+  // Starting the call stops the greeting clip first; the start flow itself
+  // (audio unlock, then profile pick) is untouched.
+  function begin() {
+    stopGreeting();
+    start.begin();
+  }
+
   return (
     <div className="ot-land">
       <header className="ot-land-top">
+        <div className="ot-land-topinner">
         <div className="ot-land-brand">
           <span className="ot-land-mark" aria-hidden="true" />
           <span>Open Tutor</span>
@@ -144,7 +174,7 @@ export default function LandingPage({ profiles, band, onPick, starting, onStartG
           </button>
         </nav>
         <div className="ot-land-topright">
-          <button type="button" className="ot-land-ghost" disabled={starting} onClick={start.begin}>
+          <button type="button" className="ot-land-ghost" disabled={starting} onClick={begin}>
             {start.ctaLabel}
           </button>
           <StartMenu
@@ -155,6 +185,7 @@ export default function LandingPage({ profiles, band, onPick, starting, onStartG
             panel={panel}
             onPanelChange={setPanel}
           />
+        </div>
         </div>
       </header>
       <div className="ot-land-scroll">
@@ -169,6 +200,7 @@ export default function LandingPage({ profiles, band, onPick, starting, onStartG
           action={start}
         />
         <Steps band={band} />
+        <Bands band={band} />
         <footer className="ot-land-foot">
           <p>{t('landing.footerText')}</p>
           <button type="button" onClick={() => openPanel('privacy')}>

@@ -172,8 +172,8 @@
   height: 44px;
   flex-basis: 44px;
 }
-.ot-phone .ot-land-top {
-  padding: 6px 8px 6px 12px;
+.ot-phone .ot-land-topinner {
+  padding: 6px 24px;
 }
 .ot-phone .ot-land-scroll {
   padding-bottom: env(safe-area-inset-bottom, 0px);
