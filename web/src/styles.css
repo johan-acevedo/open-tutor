@@ -634,7 +634,7 @@ a:focus-visible {
 }
 
 .ot-land-bubble.is-long .ot-land-bubble-in {
-  font-size: 6.2cqw;
+  font-size: max(15px, 6.2cqw);
   gap: 6px;
   padding: 0 6px;
 }
@@ -850,8 +850,7 @@ a:focus-visible {
 .ot-land-bandcards {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-  max-width: 760px;
+  gap: 24px;
 }
 
 .ot-land-bandcard {
@@ -1023,7 +1022,8 @@ a:focus-visible {
     height: 64px;
   }
   .ot-land-bubble.is-long .ot-land-bubble-in {
-    font-size: 5.5cqw;
+    /* cqw alone drops to ~10 px on small phones; keep the name readable. */
+    font-size: max(14px, 5.5cqw);
     padding: 0 4px;
   }
   .ot-land-title {
