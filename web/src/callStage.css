@@ -314,6 +314,11 @@
 .ot-fox-text.ot-text-empty {
   height: 0;
   min-height: 0;
+  /* A faded caption keeps its words in the live region; width 0 stops
+     them from still sizing the (max-content) bubble, which otherwise
+     stayed full width around a lone state line. */
+  width: 0;
+  min-width: 0;
   margin: 0;
   padding: 0;
   overflow: hidden;

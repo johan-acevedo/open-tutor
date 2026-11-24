@@ -366,3 +366,237 @@
   max-width: calc(100% - 24px);
   overflow-wrap: anywhere;
 }
+
+/* ---------- In-call menu (TopMenu), 2026-11-24 ---------- */
+
+/* The trigger says what it is: icon + "Meny" in a quiet outlined pill on
+   wide screens, icon only on phones. Same ghost behaviour as before. */
+.ot-topbar .ot-callmenu-btn {
+  width: auto;
+  height: 40px;
+  min-height: 40px;
+  padding: 0 16px 0 12px;
+  gap: 8px;
+  border: 1px solid var(--ot-border);
+  border-radius: 999px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ot-text);
+}
+
+.ot-topbar .ot-callmenu-btn .ot-callmenu-icon {
+  color: var(--ot-text-dim);
+}
+
+.ot-topbar .ot-callmenu-btn:hover .ot-callmenu-icon,
+.ot-topbar .ot-callmenu-btn[aria-expanded="true"] .ot-callmenu-icon {
+  color: var(--ot-text);
+}
+
+.ot-phone .ot-topbar .ot-callmenu-btn,
+.ot-phone .ot-topbar .ot-callmenu-btn[aria-expanded] {
+  width: 40px;
+  min-width: 40px;
+  padding: 0;
+  border-color: transparent;
+}
+
+.ot-phone .ot-callmenu-btn-label {
+  display: none;
+}
+
+.ot-callmenu-icon {
+  flex: none;
+  display: block;
+}
+
+/* The panel: one surface with list rows, the homework status on top as a
+   drop target, the call-ending action set apart below a rule. */
+.ot-callmenu-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 10px);
+  z-index: 30;
+  width: 300px;
+  max-width: calc(100vw - 24px);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--ot-elevated);
+  border: 1px solid var(--ot-border);
+  border-radius: 20px;
+  box-shadow: 0 24px 48px -16px #000000b3, 0 2px 6px #00000040;
+  transform-origin: top right;
+  animation: ot-callmenu-in 0.16s ease-out;
+}
+
+@keyframes ot-callmenu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+}
+
+.ot-callmenu-drop {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 0 0 6px;
+  padding: 14px;
+  border: 1.5px dashed color-mix(in srgb, var(--ot-text-dim) 45%, transparent);
+  border-radius: 14px;
+  color: var(--ot-text);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.ot-callmenu-drop .ot-callmenu-icon {
+  color: var(--ot-cyan);
+  margin-top: 1px;
+}
+
+.ot-callmenu-drop.dragover {
+  border-color: var(--ot-cyan);
+  border-style: solid;
+  background: var(--ot-cyan-fill);
+}
+
+.ot-callmenu-drop-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.ot-callmenu-drop-text strong {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.ot-callmenu-drop-hint {
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--ot-text-dim);
+}
+
+/* Touch screens cannot drag a file in: the status stays, the hint goes. */
+@media (hover: none) {
+  .ot-callmenu-drop-hint {
+    display: none;
+  }
+  .ot-callmenu-drop {
+    align-items: center;
+    border-style: solid;
+    border-color: var(--ot-border);
+    background: color-mix(in srgb, var(--ot-text) 4%, transparent);
+  }
+}
+
+.ot-callmenu-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 48px;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--ot-text);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ot-callmenu-item .ot-callmenu-icon {
+  color: var(--ot-text-dim);
+}
+
+.ot-callmenu-item:hover,
+.ot-callmenu-item:focus-visible {
+  background: color-mix(in srgb, var(--ot-text) 7%, transparent);
+}
+
+.ot-callmenu-item:hover .ot-callmenu-icon,
+.ot-callmenu-item:focus-visible .ot-callmenu-icon {
+  color: var(--ot-text);
+}
+
+.ot-callmenu-item:focus-visible {
+  outline: 2px solid var(--ot-cyan);
+  outline-offset: -2px;
+}
+
+.ot-callmenu-label {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.ot-callmenu-label small {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ot-text-dim);
+}
+
+/* Switching student ends the call: the hover warms toward the dock's
+   Avsluta red so it never reads like the harmless rows above. */
+.ot-callmenu-leave:hover,
+.ot-callmenu-leave:focus-visible {
+  background: color-mix(in srgb, var(--ot-red) 16%, transparent);
+}
+
+.ot-callmenu-leave:hover .ot-callmenu-icon,
+.ot-callmenu-leave:focus-visible .ot-callmenu-icon {
+  color: color-mix(in srgb, var(--ot-red) 70%, var(--ot-text));
+}
+
+.ot-callmenu-sep {
+  height: 1px;
+  margin: 6px 10px;
+  background: var(--ot-border);
+}
+
+.ot-callmenu-about-row {
+  color: var(--ot-text-dim);
+  font-weight: 500;
+}
+
+.ot-callmenu-about-row .ot-callmenu-icon:last-child {
+  width: 16px;
+  height: 16px;
+  transition: transform 0.15s ease;
+}
+
+.ot-callmenu-about-row.open .ot-callmenu-icon:last-child {
+  transform: rotate(90deg);
+}
+
+.ot-callmenu-about {
+  padding: 0 12px 10px 44px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ot-text-dim);
+}
+
+.ot-callmenu-about p {
+  margin: 0;
+}
+
+.ot-callmenu-about .ot-callmenu-by {
+  margin-top: 6px;
+  color: var(--ot-text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ot-callmenu-panel {
+    animation: none;
+  }
+  .ot-callmenu-about-row .ot-callmenu-icon:last-child {
+    transition: none;
+  }
+}

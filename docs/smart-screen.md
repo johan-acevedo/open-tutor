@@ -24,6 +24,17 @@ empty board at call start, a 48 px top bar with 44 px buttons, a full-page grid 
 - **Phone**: the companion stays below the board but as a pose cut-out (~190 px) instead of a
   round profile picture, overlapping the board's bottom edge a little (paint only, the measured
   board size is unchanged). Landscape keeps two columns.
+- **Companion stands firm** (Johan, after the first dev test): in the teaching column each new
+  caption line pushed the figure down (up to ~260 px). The column is now a two-row grid: the
+  figure owns the bottom row, the bubble grows upward above it and clips its oldest lines at
+  its ceiling. Measured: figure position constant across 0–289-character captions at
+  1024–1440 px widths. A faded caption no longer keeps the empty bubble full width.
+- **Menu** (Johan: "rätt basic"): "☰ Meny" pill trigger (icon only on phones); a panel of
+  list rows: homework status as a drop target (dashed, cyan while a file is dragged over the
+  window; the drag hint is hidden on touch), Fota läxan, Välj bild, then below a rule "Byt
+  elev — Avslutar samtalet" (it ends the call, so it is set apart and warms red on hover),
+  and Om Open Tutor as an inline disclosure. Picking an action closes the menu; Escape
+  returns focus to the trigger.
 - Verified with real calls on the dev instance (desktop 1440×900 and phone 390×844, fake mic,
   a typed request for a clock): board in 24–27 s, Avsluta in the dock ends the call. A real
   child session and a screen reader were not tested.
