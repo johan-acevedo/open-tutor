@@ -1,0 +1,532 @@
+/* Call stage (concept A, 2026-11-24): the companion carries the call, the board
+   slides in only when there is something to show. The landing page
+   (LandingPage + .ot-land-halo/.ot-land-grid/.ot-land-chat) is the quality bar:
+   plain canvas, halo only behind the companion, comic-bubble language.
+   This file owns the stage; the top bar and the bottom dock belong to the
+   chrome worker (styles.css / mobile.css keep those). */
+
+:root {
+  --ot-call-max: 1440px;
+  --ot-call-pad: 104px;
+  --ot-paper-line: #0b0d12;
+  --ot-ink-on-paper: #12151b;
+  --ot-state-on-paper: #0e7490;
+  --ot-bars-on-paper: #0891b2;
+}
+
+/* ---------- Plain canvas in the call ---------- */
+
+/* The app frame paints a full-page grid; in the call the canvas is plain like
+   the landing page. The grid survives only as the masked area behind the
+   companion (.ot-stage-halo / .ot-companion-halo). The landing keeps its own
+   canvas (.ot-land covers the root there). */
+.ot-root.ot-in-session {
+  background-image: none;
+}
+
+/* ---------- Desktop / tablet stage grid (phone portrait excluded) ---------- */
+
+.ot-root:not(.ot-phone) .ot-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(320px, 32%, 460px);
+  align-items: stretch;
+  gap: 32px;
+  width: 100%;
+  max-width: var(--ot-call-max);
+  margin: 0 auto;
+  padding: 12px var(--ot-call-pad) 16px;
+}
+
+/* Narrower windows (half a Chromebook screen, 720-1024 px): the board keeps
+   >= 60 % of the width, the companion column narrows but stays visible. */
+@media (max-width: 1100px) {
+  :root {
+    --ot-call-pad: 24px;
+  }
+  .ot-root:not(.ot-phone) .ot-main {
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 34%);
+    gap: 20px;
+    padding-top: 8px;
+    padding-bottom: 12px;
+  }
+}
+
+.ot-root:not(.ot-phone) .ot-main .ot-board {
+  grid-column: 1;
+  grid-row: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+.ot-root:not(.ot-phone) .ot-main .ot-avatar-col {
+  grid-column: 2;
+  grid-row: 1;
+  min-height: 0;
+  min-width: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  overflow: visible;
+  gap: 0;
+}
+
+/* ---------- Arrival: the board keeps its teaching size, only unseen ---------- */
+
+/* The board section stays in flow at its teaching geometry in arrival: the
+   track sizes are identical in both modes, so the pixel size the server is
+   told (readBoardSize measures .ot-board-scroll) is the size the board will
+   have once it slides in. Never display:none / hidden attribute here. */
+.ot-root:not(.ot-phone) .ot-main-arrival .ot-board {
+  visibility: hidden;
+  opacity: 0;
+  transform: translateX(-32px);
+}
+
+.ot-root:not(.ot-phone) .ot-main-teaching .ot-board {
+  visibility: visible;
+  opacity: 1;
+  transform: none;
+}
+
+.ot-root:not(.ot-phone) .ot-main .ot-board {
+  transition: opacity 0.4s ease, transform 0.4s ease, visibility 0.4s;
+}
+
+.ot-root:not(.ot-phone) .ot-main-arrival .ot-avatar-col {
+  visibility: hidden;
+  opacity: 0;
+  transform: translateX(32px);
+}
+
+.ot-root:not(.ot-phone) .ot-main-teaching .ot-avatar-col {
+  visibility: visible;
+  opacity: 1;
+  transform: none;
+}
+
+.ot-root:not(.ot-phone) .ot-main .ot-avatar-col {
+  transition: opacity 0.4s ease, transform 0.4s ease, visibility 0.4s;
+}
+
+/* ---------- Arrival hero: the companion, large and centred ---------- */
+
+.ot-stage-hero {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  position: relative;
+  z-index: 2;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  transition: opacity 0.4s ease, visibility 0.4s;
+}
+
+.ot-main-arrival .ot-stage-hero {
+  visibility: visible;
+  opacity: 1;
+}
+
+.ot-main-teaching .ot-stage-hero {
+  visibility: hidden;
+  opacity: 0;
+}
+
+.ot-stage-hero-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 0;
+  width: 100%;
+}
+
+.ot-stage-hero .ot-say {
+  margin-bottom: 12px;
+  max-width: min(440px, 80%);
+}
+
+.ot-stage-hero .ot-companion {
+  height: 54%;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  flex: none;
+}
+
+.ot-stage-hero .ot-companion .ot-avatar-img {
+  height: 100%;
+  width: auto;
+  max-width: 100%;
+  object-fit: contain;
+  object-position: center center;
+  flex: none;
+}
+
+/* ---------- Halo: radial glow + masked grid, behind the companion ---------- */
+
+.ot-stage-halo,
+.ot-companion-halo {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  translate: -50% -50%;
+  pointer-events: none;
+  border-radius: 50%;
+  background: radial-gradient(circle, #a78bfa30 0%, #22d3ee18 42%, transparent 70%);
+}
+
+.ot-stage-halo::before,
+.ot-companion-halo::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background-image:
+    linear-gradient(var(--ot-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--ot-grid) 1px, transparent 1px);
+  background-size: 24px 24px;
+  mask-image: radial-gradient(circle, #000 0%, transparent 68%);
+  -webkit-mask-image: radial-gradient(circle, #000 0%, transparent 68%);
+}
+
+.ot-stage-halo {
+  width: min(620px, 72%);
+  aspect-ratio: 1;
+  z-index: 0;
+}
+
+.ot-stage-hero-inner {
+  position: relative;
+  z-index: 1;
+}
+
+.ot-companion-halo {
+  width: 150%;
+  aspect-ratio: 1;
+  top: 58%;
+  z-index: 0;
+}
+
+/* ---------- Comic speech bubble: state + caption, by the head ---------- */
+
+.ot-root:not(.ot-phone) .ot-say {
+  position: relative;
+  z-index: 2;
+  width: max-content;
+  max-width: min(100%, 420px);
+  background: var(--ot-paper);
+  color: var(--ot-paper-ink);
+  border: 3px solid var(--ot-paper-line);
+  border-radius: 20px;
+  padding: 10px 18px 12px;
+  text-align: left;
+}
+
+/* Tail toward the head: a square showing only its right + bottom borders,
+   tucked under the bubble (same trick as .ot-land-chat::after). */
+.ot-root:not(.ot-phone) .ot-say::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -11px;
+  width: 18px;
+  height: 18px;
+  transform: translateX(-50%) rotate(45deg);
+  background: var(--ot-paper);
+  border-right: 3px solid var(--ot-paper-line);
+  border-bottom: 3px solid var(--ot-paper-line);
+}
+
+.ot-say-state {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--ot-state-on-paper);
+  margin-bottom: 2px;
+  white-space: nowrap;
+}
+
+.ot-say-state .ot-bars span {
+  background: var(--ot-bars-on-paper);
+}
+
+.ot-say-text {
+  font-size: 19px;
+  line-height: 1.4;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  transition: opacity 0.6s ease;
+}
+
+/* No caption: the bubble shows only the state, compact — but the live region
+   stays mounted so the first words are announced when speech starts. */
+.ot-say-text:empty {
+  display: none;
+}
+
+.ot-say:has(> .ot-say-text:empty) {
+  padding: 6px 14px;
+}
+
+/* ---------- Teaching companion: stays large, bubble on top ---------- */
+
+.ot-root:not(.ot-phone) .ot-avatar-col .ot-say {
+  margin: 4px auto 0;
+  flex: 0 0 auto;
+}
+
+.ot-root:not(.ot-phone) .ot-avatar-col .ot-companion {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+/* The companion stays big enough to show what it is doing (poses): the
+   figure fills the column height instead of shrinking to a strip. */
+.ot-root:not(.ot-phone) .ot-main-teaching .ot-companion {
+  max-height: none;
+}
+
+.ot-root:not(.ot-phone) .ot-avatar-col .ot-companion .ot-avatar-img {
+  width: 100%;
+  height: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  object-position: center bottom;
+  flex: none;
+}
+
+/* ---------- Phone portrait: same structure, call visuals ---------- */
+
+/* Plain canvas; the halo lives behind the fox figure (pseudos, no markup). */
+.ot-root.ot-phone .ot-fox-hero .ot-fox-hero-figure {
+  position: relative;
+}
+
+.ot-root.ot-phone .ot-fox-hero .ot-fox-hero-figure::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  translate: -50% -50%;
+  width: min(130%, 480px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(circle, #a78bfa30 0%, #22d3ee18 42%, transparent 70%);
+}
+
+.ot-root.ot-phone .ot-fox-hero .ot-fox-hero-figure::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  translate: -50% -50%;
+  width: min(130%, 480px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  pointer-events: none;
+  background-image:
+    linear-gradient(var(--ot-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--ot-grid) 1px, transparent 1px);
+  background-size: 24px 24px;
+  mask-image: radial-gradient(circle, #000 0%, transparent 68%);
+  -webkit-mask-image: radial-gradient(circle, #000 0%, transparent 68%);
+}
+
+.ot-root.ot-phone .ot-fox-hero .ot-fox-hero-figure .ot-avatar-img,
+.ot-root.ot-phone .ot-fox-hero .ot-fox-hero-figure .ot-avatar-fallback {
+  position: relative;
+  z-index: 1;
+}
+
+/* The caption bubble goes comic: light paper, dark outline, tail toward the
+   companion — instead of the plain white box. The state lives inside the
+   bubble (no separate floating pill); fixed heights stay so the figure below
+   never moves when the state or the text changes. */
+.ot-root.ot-phone .ot-fox-bubble {
+  background: var(--ot-paper);
+  color: var(--ot-paper-ink);
+  border: 2px solid var(--ot-paper-line);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  overflow: hidden;
+}
+
+.ot-root.ot-phone .ot-fox-bubble-hero {
+  position: relative;
+}
+
+.ot-root.ot-phone .ot-fox-bubble-hero::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -8px;
+  width: 14px;
+  height: 14px;
+  transform: translateX(-50%) rotate(45deg);
+  background: var(--ot-paper);
+  border-right: 2px solid var(--ot-paper-line);
+  border-bottom: 2px solid var(--ot-paper-line);
+}
+
+/* The item view gives the companion room: a taller strip row, the figure a
+   real cut-out (head, shoulders, hands — the full pose image, no circle
+   crop) stepping slightly in front of the board's bottom edge. The overlap
+   is paint only: the figure overflows its own row upward, so the board keeps
+   its grid size and readBoardSize still measures what the page gets. */
+.ot-root.ot-phone.ot-phone-portrait .ot-main {
+  --ot-fox-strip-h: 132px;
+}
+
+.ot-root.ot-phone.ot-phone-portrait .ot-main .ot-avatar-col {
+  overflow: visible;
+  position: relative;
+  z-index: 2;
+}
+
+.ot-root.ot-phone .ot-fox-strip {
+  align-items: flex-end;
+  overflow: visible;
+}
+
+.ot-fox-cutout {
+  flex: 0 0 auto;
+  align-self: flex-end;
+  height: 164px;
+  margin-top: -32px;
+  margin-left: -4px;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+  cursor: pointer;
+  min-height: 0;
+  min-width: 0;
+}
+
+.ot-fox-cutout .ot-avatar-img {
+  height: 100%;
+  width: auto;
+  max-width: 38vw;
+  object-fit: contain;
+  object-position: center bottom;
+  display: block;
+}
+
+.ot-root.ot-phone .ot-fox-strip-body {
+  align-self: flex-end;
+  margin-bottom: 8px;
+}
+
+.ot-root.ot-phone .ot-fox-bubble-strip {
+  position: relative;
+  height: auto;
+  max-height: 100%;
+  padding: 8px 12px;
+}
+
+.ot-root.ot-phone .ot-fox-bubble-strip::after {
+  content: '';
+  position: absolute;
+  left: -7px;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  transform: translateY(-50%) rotate(45deg);
+  background: var(--ot-paper);
+  border-left: 2px solid var(--ot-paper-line);
+  border-bottom: 2px solid var(--ot-paper-line);
+}
+
+.ot-fox-state {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ot-state-on-paper);
+  flex: 0 0 auto;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.ot-fox-state .ot-bars span {
+  background: var(--ot-bars-on-paper);
+}
+
+.ot-fox-text {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow-wrap: anywhere;
+}
+
+.ot-root.ot-phone .ot-fox-bubble-hero .ot-fox-text {
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+
+.ot-root.ot-phone .ot-fox-bubble-strip .ot-fox-text {
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+/* An empty caption keeps its reserved height (transparent) so the figure
+   never moves; the state line still shows. The live region stays mounted. */
+.ot-root.ot-phone .ot-fox-text:empty {
+  display: none;
+}
+
+/* The page action is a real button: solid fill, clearly different from the
+   small status line inside the bubble. */
+.ot-root.ot-phone .ot-show-page {
+  background: var(--ot-cyan);
+  border: none;
+  color: #062a31;
+  font-weight: 700;
+}
+
+/* Phone keyboard open: no overlap, the cut-out fits its row. */
+.ot-root.ot-phone.ot-phone-portrait.ot-keyboard .ot-main {
+  --ot-fox-strip-h: 108px;
+}
+
+.ot-root.ot-phone.ot-phone-portrait.ot-keyboard .ot-fox-cutout {
+  height: 108px;
+  margin-top: 0;
+}
+
+/* ---------- Reduced motion ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .ot-root:not(.ot-phone) .ot-main .ot-board,
+  .ot-root:not(.ot-phone) .ot-main .ot-avatar-col,
+  .ot-stage-hero,
+  .ot-say-text {
+    transition: none;
+  }
+  .ot-root:not(.ot-phone) .ot-main-arrival .ot-board,
+  .ot-root:not(.ot-phone) .ot-main-arrival .ot-avatar-col {
+    transform: none;
+  }
+}

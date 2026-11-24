@@ -7,8 +7,7 @@ import type { Profile } from './db';
 import { useSession } from './useSession';
 import { initAnalytics, pageOpened } from './analytics';
 import LandingPage from './components/LandingPage';
-import Avatar from './components/Avatar';
-import Board from './components/Board';
+import CallStage from './components/CallStage';
 import BottomBar from './components/BottomBar';
 import PhoneStage from './components/PhoneStage';
 import TopMenu from './components/TopMenu';
@@ -202,30 +201,23 @@ export default function App() {
       )}
 
       {(phase === 'live' || phase === 'ending') && profile && !phonePortrait && (
-        <main className={`ot-main ot-main-${mode}`}>
-          <section className="ot-board" aria-label="Whiteboard">
-            <Board
-              learnerName={profile.name}
-              items={session.items}
-              focused={session.focused}
-              onItemMounted={session.onItemMounted}
-              onItemFailed={session.onItemFailed}
-              onResourceClosed={(id) => void session.resourceClosed(id)}
-              activeItemId={session.activeItemId}
-              registerPageFrame={session.registerPageFrame}
-              onPageAnswer={session.sendPageAnswer}
-            />
-            {homeworkTray}
-          </section>
-          <aside className="ot-avatar-col" aria-label="Tutor">
-            <Avatar
-              pose={avatar.pose}
-              pill={avatar.pill}
-              caption={session.caption}
-              captionFading={session.captionFading}
-            />
-          </aside>
-        </main>
+        <CallStage
+          learnerName={profile.name}
+          items={session.items}
+          focused={session.focused}
+          mode={mode}
+          pose={avatar.pose}
+          pill={avatar.pill}
+          caption={session.caption}
+          captionFading={session.captionFading}
+          activeItemId={session.activeItemId}
+          onItemMounted={session.onItemMounted}
+          onResourceClosed={(id) => void session.resourceClosed(id)}
+          onItemFailed={session.onItemFailed}
+          registerPageFrame={session.registerPageFrame}
+          onPageAnswer={session.sendPageAnswer}
+          overlay={homeworkTray}
+        />
       )}
 
       {phase === 'ended' && profile && (
