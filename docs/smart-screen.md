@@ -23,11 +23,22 @@ Two changes from one privacy-minded brief, built on `feat/privacy-idle-timeout`:
   injectable clock, unit-tested). Learner speech (final or interim transcript),
   typed chat, homework uploads, page answers and mic-button presses reset the clock;
   tutor speech alone never does, and the check waits until the tutor is quiet instead
-  of cutting a sentence off. On timeout the worker says one short fixed Swedish line,
-  saves the session note as usual, tells the page the reason on a `tutor-event` stream,
+  of cutting a sentence off. On timeout the worker tells the page the reason on a `tutor-event` stream, says a short
+  goodbye, saves the session note,
   and takes the normal ending path with outcome `idle_timeout`. The page lands on the
   normal end card with "Samtalet avslutades eftersom det var tyst en stund." and the
   existing restart — never the reconnect banner.
+- **After the Codex review (gpt-6.2-sol):** PostHog's SDK restored the old
+  `…:learner:<name>` id from its own persisted state, so returning browsers still sent
+  names. The SDK now uses a fresh persistence namespace (`talarum_ph_v2`) and the old
+  `ph_*_posthog` entries are deleted on load. Device ids must have the minted shape
+  (UUID or the `id-` fallback) on page, web service and worker, so a custom client cannot
+  smuggle a name in through `device_id`. The idle check also defers while the learner is
+  speaking; the end reason is sent before the goodbye (seconds before the room delete);
+  the model is asked to save this session's note and say goodbye (bounded 30 s, fixed line
+  and default note as fallback); losing lifecycle waiters are cancelled.
+- **Open for Johan:** person profiles PostHog already holds may carry `learner_name`
+  and name-bearing ids from before this change; those must be deleted in PostHog itself.
 - Not tested live: no real voice call was run (paid providers). Proven by the full
   server and web suites plus typecheck and build; the idle path end-to-end (worker
   line → page end card) awaits a dev-instance call.

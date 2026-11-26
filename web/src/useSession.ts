@@ -988,6 +988,9 @@ export function useSession(mobile = false, band: BandId = 'primary') {
             type?: unknown;
             reason?: unknown;
           };
+          // The read is async: a stream from an older room must not write
+          // its reason into a newer session.
+          if (myGen !== sessionGenRef.current || roomRef.current !== room) return;
           if (event?.type === 'ended' && typeof event.reason === 'string') {
             endReasonRef.current = event.reason;
             setEndReason(event.reason);

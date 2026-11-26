@@ -112,7 +112,7 @@ def make_ctx(learner):
     room = FakeRoom()
     participant = FakeParticipant(
         "learner-1",
-        json.dumps({"learner": learner, "board": {"w": 1920, "h": 1080}, "device_id": "dev-1"}),
+        json.dumps({"learner": learner, "board": {"w": 1920, "h": 1080}, "device_id": "0b9e2c4a-1f3d-4e5a-9b7c-2d4e6f8a1c3e"}),
     )
 
     async def connect():

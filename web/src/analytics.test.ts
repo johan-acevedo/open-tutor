@@ -12,7 +12,9 @@ vi.mock('posthog-js', () => ({ default: posthogMock }));
 
 import {
   analyticsEnabled,
+  dropLegacyPosthogState,
   getDeviceId,
+  isValidDeviceId,
   homeworkShared,
   identifyLearner,
   initAnalytics,
@@ -88,6 +90,7 @@ describe('analytics', () => {
         disable_session_recording: true,
         person_profiles: 'identified_only',
         persistence: 'localStorage',
+        persistence_name: 'talarum_ph_v2',
         before_send: expect.any(Function),
       }),
     );
@@ -382,5 +385,31 @@ describe('pre-init queue ordering', () => {
       'turn_sent',
       'homework_shared',
     ]);
+  });
+});
+
+
+describe('no name survives from older builds', () => {
+  it('drops the PostHog state older builds persisted (it held learner ids)', () => {
+    localStorage.clear();
+    localStorage.setItem('ph_phc_abc_posthog', JSON.stringify({ distinct_id: 'device:x:learner:alva' }));
+    localStorage.setItem('open-tutor-device-id', '0b9e2c4a-1f3d-4e5a-9b7c-2d4e6f8a1c3e');
+    dropLegacyPosthogState(localStorage);
+    expect(localStorage.getItem('ph_phc_abc_posthog')).toBeNull();
+    expect(localStorage.getItem('open-tutor-device-id')).not.toBeNull();
+  });
+
+  it('accepts only device ids of the minted shape', () => {
+    expect(isValidDeviceId('0b9e2c4a-1f3d-4e5a-9b7c-2d4e6f8a1c3e')).toBe(true);
+    expect(isValidDeviceId('id-1764150000000-123456789')).toBe(true);
+    for (const bad of ['alva', 'Alva Svensson', 'dev-1', '']) expect(isValidDeviceId(bad)).toBe(false);
+  });
+
+  it('replaces a stored device id that is not of the minted shape', () => {
+    resetAnalytics();
+    localStorage.setItem('open-tutor-device-id', 'Alva');
+    const id = getDeviceId();
+    expect(id).not.toBe('Alva');
+    expect(isValidDeviceId(id)).toBe(true);
   });
 });

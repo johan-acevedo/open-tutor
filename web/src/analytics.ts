@@ -27,12 +27,22 @@ function mintDeviceId(): string {
     : `id-${Date.now()}-${Math.floor(Math.random() * 1e9)}`;
 }
 
+/** Shape of a device id we mint (randomUUID or the id- fallback). MUST
+ *  match analytics.DEVICE_ID_RE (Python). Anything else stored under the key
+ *  (hand-edited, from an old build) is replaced, so the id can never carry
+ *  free text such as a name. */
+const DEVICE_ID_RE = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|id-\d{1,16}-\d{1,10})$/;
+
+export function isValidDeviceId(id: string): boolean {
+  return DEVICE_ID_RE.test(id);
+}
+
 /** Random per-browser id. Mirrors nothing server-side; the worker links it. */
 export function getDeviceId(): string {
   if (cachedDeviceId) return cachedDeviceId;
   try {
     const stored = localStorage.getItem(DEVICE_KEY);
-    if (stored) {
+    if (stored && isValidDeviceId(stored)) {
       cachedDeviceId = stored;
       return stored;
     }
@@ -151,6 +161,21 @@ type PendingEntry =
 let pendingQueue: PendingEntry[] = [];
 const MAX_PENDING = 32;
 
+/** PostHog's own storage namespace. Builds before 2026-11-26 identified
+ *  browsers as device:<uuid>:learner:<name>, and the SDK restores that id
+ *  from its persisted state on every visit. A fresh namespace starts clean;
+ *  the old entries (default name ph_<key>_posthog) are removed. */
+const POSTHOG_PERSISTENCE = 'talarum_ph_v2';
+
+export function dropLegacyPosthogState(storage: Storage): void {
+  const stale: string[] = [];
+  for (let i = 0; i < storage.length; i += 1) {
+    const key = storage.key(i);
+    if (key && key.startsWith('ph_') && key.endsWith('_posthog')) stale.push(key);
+  }
+  for (const key of stale) storage.removeItem(key);
+}
+
 async function loadClient(): Promise<PostHogClient | null> {
   let config: { posthog: { key: string; host: string } | null };
   try {
@@ -163,7 +188,13 @@ async function loadClient(): Promise<PostHogClient | null> {
   if (!config?.posthog?.key) return null;
   try {
     const { default: posthog } = await import('posthog-js');
+    try {
+      dropLegacyPosthogState(localStorage);
+    } catch {
+      /* storage blocked: nothing persisted to restore either */
+    }
     posthog.init(config.posthog.key, {
+      persistence_name: POSTHOG_PERSISTENCE,
       api_host: config.posthog.host,
       autocapture: false,
       // We emit page_opened ourselves (exactly once); the SDK must not add

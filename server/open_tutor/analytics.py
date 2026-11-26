@@ -29,6 +29,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import statistics
+import re
 import threading
 from typing import Any
 
@@ -111,6 +112,18 @@ def sanitize_outcome(outcome: Any) -> tuple[str, str | None]:
     return "unknown", None
 
 
+# Shape of a device id the page mints (crypto.randomUUID or its id- fallback).
+# MUST match DEVICE_ID_RE in web/src/analytics.ts. Anything else (a custom
+# client, a hand-edited value) is not trusted: it could carry a name.
+DEVICE_ID_RE = re.compile(
+    r"^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|id-\d{1,16}-\d{1,10})$")
+
+
+def valid_device_id(device_id: Any) -> str | None:
+    device = str(device_id or "").strip()
+    return device if DEVICE_ID_RE.match(device) else None
+
+
 def stable_distinct_id(device_id: Any, room: str = "unknown-room") -> str:
     """The id both the page and the worker derive for one browser.
 
@@ -118,7 +131,7 @@ def stable_distinct_id(device_id: Any, room: str = "unknown-room") -> str:
     analytics entirely. Falls back to the room name when the page sent no
     device id (older page, forged request): still countable per session,
     just not linkable. MUST match web/src/analytics.ts stableLearnerId."""
-    device = str(device_id or "").strip()
+    device = valid_device_id(device_id)
     if not device:
         return str(room or "unknown-room")
     return f"device:{device}"

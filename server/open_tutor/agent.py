@@ -1362,8 +1362,11 @@ async def entrypoint(ctx: JobContext) -> None:
             return
         while True:
             await asyncio.sleep(min(IDLE_POLL_S, idle.timeout_s))
+            # Either side mid-speech defers the check: a learner who just
+            # started talking is not idle even before the transcript lands.
             try:
-                speaking = session.agent_state == "speaking"
+                speaking = (session.agent_state == "speaking"
+                            or session.user_state == "speaking")
             except Exception:
                 speaking = False
             if idle.expired(speaking=speaking):
@@ -1557,7 +1560,13 @@ async def _run_until_done(
         waits.append(asyncio.create_task(provider_failed.wait()))
     if idle_done is not None:
         waits.append(asyncio.create_task(idle_done.wait()))
-    await asyncio.wait(waits, return_when=asyncio.FIRST_COMPLETED)
+    try:
+        await asyncio.wait(waits, return_when=asyncio.FIRST_COMPLETED)
+    finally:
+        # The losing waiters would stay pending past teardown.
+        for waiter in waits:
+            if not waiter.done():
+                waiter.cancel()
     if provider_failed is not None and provider_failed.is_set() and not left.is_set():
         # The provider refused the turn and will not retry it. Say why without the LLM
         # and end; the 2026-11-06 note in safe_interrupt is the same lesson: a dead
@@ -1590,21 +1599,33 @@ async def _run_until_done(
         # usual, and the page told why before the room goes away so it shows
         # the normal end card with the idle message, not an error banner.
         outcome = "idle_timeout"
-        await tutor.set_mode("ending")
-        safe_interrupt(session, "ending")
-        debug.record("prompt", {"kind": "idle_goodbye"})
-        await say_idle_goodbye(session, prompt.learner_locale(tutor.learner))
-        if tutor.notes_saved == 0:
-            await tutor.send_note(get_locale(prompt.learner_locale(tutor.learner)).DEFAULT_NOTE_TOPIC)
+        # Tell the page first: the goodbye and the note take seconds, so the
+        # reason is there long before the room delete disconnects it.
         try:
             await ctx.room.local_participant.send_text(
                 json.dumps({"type": "ended", "reason": "idle_timeout"}),
                 topic="tutor-event")
-            # The delete below disconnects the browser at once: give the
-            # reason message a moment to arrive first.
-            await asyncio.sleep(0.5)
         except Exception as error:
             log.warning("could not send the idle end reason: %s", error)
+        await tutor.set_mode("ending")
+        safe_interrupt(session, "ending")
+        locale = prompt.learner_locale(tutor.learner)
+        notes_before = tutor.notes_saved
+        # Like Avsluta: the model saves this session's note and says a short
+        # goodbye, bounded in time. If it cannot, the fixed line is spoken.
+        said = False
+        try:
+            debug.record("prompt", {"kind": "idle_goodbye"})
+            handle = prompt_event(session, prompt.IDLE_END_INSTRUCTION)
+            await asyncio.wait_for(handle.wait_for_playout(), timeout=30)
+            said = True
+        except Exception as error:
+            log.warning("idle goodbye via the model failed: %s", error)
+            debug.record("goodbye", {"ok": False, "error": f"{type(error).__name__}"})
+        if not said:
+            await say_idle_goodbye(session, locale)
+        if tutor.notes_saved == notes_before:
+            await tutor.send_note(get_locale(locale).DEFAULT_NOTE_TOPIC)
     elif left.is_set():
         outcome = "child_left"
         debug.record("child_left", {})
