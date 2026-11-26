@@ -14,7 +14,10 @@ export type StartActionInput = {
   startOpen?: boolean;
   /** After an in-call switch: assume this student instead of the last one. */
   assumeId?: string | null;
-};
+  /** On a band route with no learner of that band: never fall back to a
+   *  remembered learner from another band; show the nameless view. */
+  ignoreLastId?: boolean;
+}
 
 export type StartAction = {
   /** Nameless first-visit view (no usable remembered learner). */
@@ -36,11 +39,11 @@ export type StartAction = {
  *  pick, so the order is identical wherever the call starts). Later visits
  *  assume the same student; the not-you link returns to the nameless
  *  first-visit view. */
-export function useStartAction({ profiles, band, onPick, starting, onStartGesture, startOpen, assumeId }: StartActionInput): StartAction {
-  const lastId = getLastProfileId();
+export function useStartAction({ profiles, band, onPick, starting, onStartGesture, startOpen, assumeId, ignoreLastId }: StartActionInput): StartAction {
+  const lastId = ignoreLastId ? null : getLastProfileId();
   const assumed =
     (assumeId ? profiles.find((p) => p.id === assumeId) : undefined) ??
-    profiles.find((p) => p.id === lastId && p.name.trim() !== '') ??
+    (lastId ? profiles.find((p) => p.id === lastId && p.name.trim() !== '') : undefined) ??
     null;
   const [showFirst, setShowFirst] = useState(false);
   const firstVisit = startOpen || showFirst || !assumed || assumed.name.trim() === '';

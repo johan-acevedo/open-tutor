@@ -17,7 +17,11 @@ type Props = {
   assumeId?: string | null;
   /** Shared start decision (the top bar ghost button fires the same begin). */
   action?: StartAction;
-};
+  /** "Inte {name}?": open the household picker instead of the nameless view. */
+  onNotYou?: () => void;
+  /** On a band route: never assume a learner remembered from another band. */
+  ignoreLastId?: boolean;
+}
 
 const INTRO: Record<BandId, SvKey> = {
   primary: 'landing.introPrimary',
@@ -71,8 +75,8 @@ function GreetingBubble({ band, label, long }: { band: BandConfig; label: string
  *  visits assume the same student with an inline not-you link on the same row
  *  as the button. The tutor asks for the name by voice after starting. Copy
  *  lives in web/src/locales/sv.ts. */
-export default function Welcome({ profiles, band, onPick, starting, onStartGesture, startOpen, assumeId, action }: Props) {
-  const fallback = useStartAction({ profiles, band, onPick, starting, onStartGesture, startOpen, assumeId });
+export default function Welcome({ profiles, band, onPick, starting, onStartGesture, startOpen, assumeId, action, onNotYou, ignoreLastId }: Props) {
+  const fallback = useStartAction({ profiles, band, onPick, starting, onStartGesture, startOpen, assumeId, ignoreLastId });
   const start = action ?? fallback;
 
   // Starting the call stops the greeting clip first; the start flow itself
@@ -105,7 +109,7 @@ export default function Welcome({ profiles, band, onPick, starting, onStartGestu
             {start.ctaLabel}
           </button>
           {!start.firstVisit && (
-            <button type="button" className="ot-link-btn ot-land-notyou" onClick={start.showFirstVisit}>
+            <button type="button" className="ot-link-btn ot-land-notyou" onClick={onNotYou ?? start.showFirstVisit}>
               {start.notYou}
             </button>
           )}

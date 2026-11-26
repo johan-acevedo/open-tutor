@@ -117,6 +117,9 @@ type Props = {
               <p>
                 {t('startmenu.privacyText')}
               </p>
+              <p>
+                <a href="/integritet">{t('startmenu.privacyLink')} <span aria-hidden="true">→</span></a>
+              </p>
             </div>
           )}
         </div>

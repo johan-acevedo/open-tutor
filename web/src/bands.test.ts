@@ -65,3 +65,35 @@ describe('band configs', () => {
     expect(bandConfig('upper').registerHint).toMatch(/gymnasiet or adult/i);
   });
 });
+
+describe('bandFromPath', () => {
+  it('reads the single-domain path routes', async () => {
+    const { bandFromPath, bandPath } = await import('./bands');
+    expect(bandFromPath('/ak1-6')).toBe('primary');
+    expect(bandFromPath('/hogstadiet')).toBe('middle');
+    expect(bandFromPath('/gymnasiet')).toBe('upper');
+    expect(bandFromPath('/')).toBeNull();
+    expect(bandFromPath('/integritet')).toBeNull();
+    expect(bandFromPath('/unknown')).toBeNull();
+    expect(bandPath('primary')).toBe('/ak1-6');
+    expect(bandPath('middle')).toBe('/hogstadiet');
+    expect(bandPath('upper')).toBe('/gymnasiet');
+  });
+
+  it('normalizes companion aliases to the same band', async () => {
+    const { bandFromPath } = await import('./bands');
+    expect(bandFromPath('/raven')).toBe('primary');
+    expect(bandFromPath('/lodjuret')).toBe('middle');
+    expect(bandFromPath('/bjornen')).toBe('upper');
+    expect(bandFromPath('/vuxen')).toBe('upper');
+    expect(bandFromPath('/hogstadiet/')).toBe('middle');
+  });
+
+  it('gives the path precedence over the host, and ?band= over the path', async () => {
+    const { currentBand } = await import('./bands');
+    expect(currentBand('tutor.example.se', '', '/hogstadiet')).toBe('middle');
+    expect(currentBand('tutor2.example.se', '', '/gymnasiet')).toBe('upper');
+    expect(currentBand('tutor.example.se', '?band=upper', '/hogstadiet')).toBe('upper');
+    expect(currentBand('localhost', '', '/')).toBe('primary');
+  });
+});

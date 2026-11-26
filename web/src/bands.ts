@@ -161,10 +161,48 @@ export function bandFromSearch(search: string): BandId | null {
   }
 }
 
-/** Band for this page load only: ?band= wins, otherwise the host. Deliberately
- *  not persisted — a testing override must not leak into later visits. */
-export function currentBand(hostname: string, search: string): BandId {
-  return bandFromSearch(search) ?? bandFromHostname(hostname);
+/** Path routes for the single-domain flow on talarum.se. Canonical paths
+ *  plus aliases (normalized with history.replaceState by the caller). */
+export const BAND_PATHS: Record<BandId, string> = {
+  primary: '/ak1-6',
+  middle: '/hogstadiet',
+  upper: '/gymnasiet',
+};
+
+const PATH_ALIASES: Record<string, BandId> = {
+  '/ak1-6': 'primary',
+  '/hogstadiet': 'middle',
+  '/hogstadiet/': 'middle',
+  '/gymnasiet': 'upper',
+  '/gymnasiet/': 'upper',
+  '/raven': 'primary',
+  '/lodjuret': 'middle',
+  '/bjornen': 'upper',
+  '/bj\u00f6rnen': 'upper',
+  '/vuxen': 'upper',
+};
+
+/** Band from the request path alone. Unknown paths (/, /integritet, …)
+ *  name no band. */
+export function bandFromPath(pathname: string): BandId | null {
+  try {
+    const p = (pathname || '/').split('?')[0].split('#')[0].toLowerCase();
+    const norm = p.length > 1 && p.endsWith('/') && !PATH_ALIASES[p] ? p.slice(0, -1) : p;
+    return PATH_ALIASES[norm] ?? (norm === '/ak1-6/' ? 'primary' : null);
+  } catch {
+    return null;
+  }
+}
+
+export function bandPath(band: BandId): string {
+  return BAND_PATHS[band];
+}
+
+/** Band for this page load only: ?band= wins, then the path, then the host,
+ *  then the server-advertised default. Deliberately not persisted — a testing
+ *  override must not leak into later visits. */
+export function currentBand(hostname: string, search: string, pathname = '/'): BandId {
+  return bandFromSearch(search) ?? bandFromPath(pathname) ?? bandFromHostname(hostname);
 }
 
 /** Server-advertised default band (TUTOR_BAND, via /api/config): only for

@@ -1,12 +1,16 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { layoutMode, mapAvatarState } from './avatarState';
-import { bandConfig, currentBand, type BandId } from './bands';
+import { BAND_PATHS, bandConfig, bandFromPath, currentBand, type BandId } from './bands';
 import { BandProvider } from './BandContext';
-import { listProfiles, rememberLastProfileId } from './db';
+import { getLastProfileId, getLastProfileIdForBand, listProfiles, newProfileId, rememberLastProfileId } from './db';
 import type { Profile } from './db';
 import { useSession } from './useSession';
 import { initAnalytics, pageOpened } from './analytics';
-import LandingPage from './components/LandingPage';
+import Brand from './components/Brand';
+import LandingPage, { HowSteps, LandingFooter } from './components/LandingPage';
+import HomeChooser from './components/HomeChooser';
+import HouseholdPicker from './components/HouseholdPicker';
+import PrivacyPage from './components/PrivacyPage';
 import CallStage from './components/CallStage';
 import BottomBar from './components/BottomBar';
 import PhoneStage from './components/PhoneStage';
@@ -17,6 +21,30 @@ import ScreenDemo from './components/ScreenDemo';
 import { useViewport } from './useViewport';
 import { usePhoneStage } from './phoneStage';
 import { htmlLang, t } from './locales/sv';
+
+function pathOf(): string {
+  try {
+    return (window.location.pathname || '/').toLowerCase();
+  } catch {
+    return '/';
+  }
+}
+
+/** A tutor.* host names its band explicitly; any other host leaves the band
+ *  to the path, ?band= or server default. */
+function explicitHostBand(hostname: string): BandId | null {
+  const host = (hostname || '').toLowerCase();
+  if (host.startsWith('tutor2.')) return 'middle';
+  if (host.startsWith('tutor3.')) return 'upper';
+  if (host.startsWith('tutor.')) return 'primary';
+  return null;
+}
+
+function canonicalPathFor(path: string): string | null {
+  const band = bandFromPath(path);
+  if (!band) return null;
+  return BAND_PATHS[band];
+}
 
 export default function App() {
   // The page language follows the active locale (Swedish for now).
@@ -41,21 +69,64 @@ export default function App() {
     }
   })();
   const { mobile, portrait, keyboard } = useViewport();
-  // Age band for this page load: ?band= wins, else the remembered choice,
-  // else the host (tutor2.* = middle school, tutor3.* = upper secondary + adults). A TUTOR_BAND set on
-  // the server (/api/config) applies only when the page names no band.
+  // Single-domain flow (precedence: ?band= > path > host prefix >
+  // server TUTOR_BAND > default). The band stays fixed during a call:
+  // switching happens only on the start pages, in place, without reload.
   const [band, setBand] = useState<BandId>(() => {
     try {
-      return currentBand(window.location.hostname, window.location.search);
+      return currentBand(window.location.hostname, window.location.search, window.location.pathname);
     } catch {
       return 'primary';
     }
   });
+  const [route, setRoute] = useState<string>(() => pathOf());
+  // Household picker overlay (siblings on one device) and a forced chooser
+  // ("+ Någon ny" goes to the 3-card page even with remembered learners).
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [forceChooser, setForceChooser] = useState(false);
+
+  const navigate = useCallback((path: string) => {
+    try {
+      window.history.pushState(null, '', path);
+    } catch {
+      /* ignore */
+    }
+    setRoute(path.toLowerCase());
+    setPickerOpen(false);
+  }, []);
+
+  // Alias paths (/raven, /lodjuret, /bjornen, /vuxen) normalize to the
+  // canonical band path without a reload or a history entry.
+  useEffect(() => {
+    const canon = canonicalPathFor(route);
+    if (canon && route !== canon) {
+      try {
+        window.history.replaceState(null, '', canon);
+      } catch {
+        /* ignore */
+      }
+      setRoute(canon);
+    }
+  }, [route]);
+
+  useEffect(() => {
+    const onPop = () => {
+      setRoute(pathOf());
+      setPickerOpen(false);
+      setForceChooser(false);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     let hasOverride = false;
     try {
-      hasOverride = new URLSearchParams(window.location.search).has('band');
+      hasOverride =
+        new URLSearchParams(window.location.search).has('band') ||
+        bandFromPath(window.location.pathname) !== null ||
+        explicitHostBand(window.location.hostname) !== null;
     } catch {
       hasOverride = true;
     }
@@ -92,6 +163,30 @@ export default function App() {
     }
   }, [phase]);
 
+  // Menu "Byt elev" ends the call, then the household picker takes over from
+  // the nameless start the session flow would otherwise show.
+  useEffect(() => {
+    if (phase === 'profiles' && session.profilesOpen && !pickerOpen) {
+      session.clearProfilesOpen();
+      setForceChooser(false);
+      setPickerOpen(true);
+    }
+    // session.profilesOpen / clearProfilesOpen are stable enough.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, session.profilesOpen]);
+
+  // On / with a remembered learner, open that learner's band view (theme +
+  // companion follow them). Only on the start pages, never during a call.
+  useEffect(() => {
+    if (phase !== 'profiles' || pickerOpen || forceChooser) return;
+    if (bandFromPath(route) !== null) return;
+    if (route !== '/') return;
+    const lastId = getLastProfileId();
+    if (!lastId) return;
+    const learner = profiles.find((p) => p.id === lastId && p.name.trim() !== '');
+    if (learner?.band && learner.band !== band) setBand(learner.band);
+  }, [phase, pickerOpen, forceChooser, profiles, route, band]);
+
   const inSession = phase === 'live' || phase === 'ending' || phase === 'connecting';
   const showBottomBar = phase === 'live' || phase === 'ending';
   const mode = layoutMode(session.items.length);
@@ -106,6 +201,50 @@ export default function App() {
 
   function focusChatInput() {
     document.querySelector<HTMLInputElement>('.ot-chat-input')?.focus();
+  }
+
+  /** Start a call, stamping the band on a stored profile and remembering it
+   *  overall and per band. A nameless start is remembered once the tutor
+   *  learns the name by voice (see useSession applyName). */
+  function beginCall(p: Profile, callBand: BandId) {
+    if (p.name.trim() !== '') rememberLastProfileId(p.id, callBand);
+    setForceChooser(false);
+    setPickerOpen(false);
+    void session.start(p, callBand);
+  }
+
+  /** One-tap start from a chooser card: switch band in place, then start
+   *  exactly like the hero button (audio unlock first). */
+  function beginInBand(target: BandId) {
+    if (phase !== 'profiles') return;
+    session.prepareStart();
+    if (target !== band) setBand(target);
+    beginCall({ id: newProfileId(), name: '', grade: null, band: target, notes: [], createdAt: Date.now() }, target);
+  }
+
+  /** Household picker choice: switch band/theme in place, show their start. */
+  function pickHousehold(p: Profile) {
+    const target = p.band ?? band;
+    if (target !== band) setBand(target);
+    rememberLastProfileId(p.id, p.band);
+    setPickerOpen(false);
+    setForceChooser(false);
+    session.clearProfilesOpen();
+  }
+
+  function openPicker() {
+    session.showFirstVisit();
+    session.clearProfilesOpen();
+    setForceChooser(false);
+    setPickerOpen(true);
+  }
+
+  function pickerNew() {
+    setPickerOpen(false);
+    session.clearProfilesOpen();
+    // "+ Någon ny" always lands on the 3-card chooser, nameless.
+    if (route !== '/') navigate('/');
+    setForceChooser(true);
   }
 
   const homeworkTray = session.homeworkDraft ? (
@@ -125,6 +264,43 @@ export default function App() {
     />
   ) : null;
 
+  const isPrivacy = route === '/integritet';
+  const routeBand = bandFromPath(route);
+  // /integritet is its own page; everywhere else the profiles phase shows the
+  // start pages below. On a band route the remembered learner of that band is
+  // assumed (Hej {name}!); on / the overall last learner is assumed.
+  let assumeId: string | null | undefined = session.prefillId;
+  if (!assumeId && phase === 'profiles' && !isPrivacy) {
+    if (routeBand) {
+      assumeId = getLastProfileIdForBand(routeBand) ?? undefined;
+      if (!assumeId) {
+        const overall = (() => {
+          try {
+            return getLastProfileId();
+          } catch {
+            return null;
+          }
+        })();
+        const match = overall ? profiles.find((p) => p.id === overall && p.name.trim() !== '' && (p.band ?? 'primary') === routeBand) : undefined;
+        assumeId = match?.id;
+      }
+    }
+  }
+  function getLastProfileIdSafe(): string | null {
+    try {
+      return getLastProfileId();
+    } catch {
+      return null;
+    }
+  }
+
+  const showChooser =
+    phase === 'profiles' &&
+    !isPrivacy &&
+    !pickerOpen &&
+    !routeBand &&
+    (route === '/' ? (forceChooser || !profiles.some((p) => p.id === getLastProfileIdSafe() && p.name.trim() !== '')) : true);
+
   return (
     <BandProvider band={band}>
     <div
@@ -134,10 +310,7 @@ export default function App() {
       {phase !== 'profiles' && (
         <header className="ot-topbar">
           <div className="ot-topbar-inner">
-            <div className="ot-land-brand">
-              <span className="ot-land-mark" aria-hidden="true" />
-              <span>Open Tutor</span>
-            </div>
+            <Brand />
             {inSession && (
               <div className="ot-topbar-right">
                 <TopMenu
@@ -154,21 +327,61 @@ export default function App() {
         </header>
       )}
 
-      {phase === 'profiles' && (
+      {phase === 'profiles' && isPrivacy && (
+        <PrivacyPage onBack={() => navigate('/')} />
+      )}
+
+      {phase === 'profiles' && !isPrivacy && pickerOpen && (
+        <div className="ot-land">
+          <header className="ot-land-top">
+            <div className="ot-land-topinner">
+              <Brand />
+            </div>
+          </header>
+          <div className="ot-land-scroll">
+            <HouseholdPicker
+              profiles={profiles}
+              band={routeBand ?? band}
+              onPick={pickHousehold}
+              onNew={pickerNew}
+              onBack={() => {
+                setPickerOpen(false);
+                session.clearProfilesOpen();
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {phase === 'profiles' && !isPrivacy && !pickerOpen && showChooser && (
+        <div className="ot-land">
+          <header className="ot-land-top">
+            <div className="ot-land-topinner">
+              <Brand />
+            </div>
+          </header>
+          <div className="ot-land-scroll">
+            <div className="ot-land-hero ot-land-hero-choose">
+              <HomeChooser onBegin={beginInBand} starting={false} />
+            </div>
+            <HowSteps band={bandConfig('primary')} />
+            <LandingFooter />
+          </div>
+        </div>
+      )}
+
+      {phase === 'profiles' && !isPrivacy && !pickerOpen && !showChooser && (
         <LandingPage
           profiles={profiles}
           band={config}
-          onPick={(p) => {
-            // A nameless start has no stored profile yet: the tutor's
-            // set_learner_name tool remembers it once the name is known.
-            if (p.name.trim() !== '') rememberLastProfileId(p.id);
-            void session.start(p);
-          }}
+          onPick={(p) => beginCall(p, routeBand ?? band)}
           onStartGesture={session.prepareStart}
           starting={false}
           startOpen={session.profilesOpen}
-          assumeId={session.prefillId}
-          onSwitch={session.showFirstVisit}
+          assumeId={assumeId}
+          onSwitch={openPicker}
+          onNotYou={openPicker}
+          ignoreLastId={routeBand !== null}
         />
       )}
 
@@ -224,7 +437,12 @@ export default function App() {
         <EndCard
           learnerName={profile.name}
           notes={session.sessionNotes.length > 0 ? session.sessionNotes : profile.notes.slice(-3)}
-          onBack={session.backToProfiles}
+          onBack={() => {
+            const target = profile.band ? BAND_PATHS[profile.band] : '/';
+            session.backToProfiles();
+            if (target !== route) navigate(target);
+          }}
+          band={profile.band ?? band}
           endReason={session.endReason}
         />
       )}

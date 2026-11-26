@@ -100,7 +100,7 @@ describe('Header menu inbox', () => {
   it('opens the about note from the menu', () => {
     render(<TopMenu items={[]} {...menuProps} />);
     fireEvent.click(screen.getByRole('button', { name: 'Meny' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Om Open Tutor' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Om Talarum' }));
     expect(screen.getByText('Gjord av Johan Acevedo.')).toBeTruthy();
   });
 });
@@ -155,5 +155,15 @@ describe('Mobile board continuity', () => {
     expect(container.querySelector('iframe')).toBe(player);
     fireEvent.click(screen.getByRole('button', { name: /Framåt/ }));
     expect(container.querySelector('iframe')).toBe(player);
+  });
+});
+
+describe('Header menu privacy', () => {
+  it('links the in-call about note to /integritet', () => {
+    render(<TopMenu items={[]} dragOver={false} onCamera={noop} onFiles={noop} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Meny' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Om Talarum' }));
+    const link = screen.getByRole('link', { name: /Läs om integritet/ });
+    expect(link.getAttribute('href')).toBe('/integritet');
   });
 });

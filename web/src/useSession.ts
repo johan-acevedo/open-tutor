@@ -25,7 +25,7 @@ import {
   LEARNER_RPC_SET_NAME,
   LEARNER_RPC_SWITCH,
 } from './protocol';
-import { enqueueNote, enqueueProfileGrade, enqueueProfileName, enqueueProfileSwitch, rememberLastProfileId } from './db';
+import { enqueueNote, enqueueProfileGrade, enqueueProfileName, enqueueProfileSwitch, rememberLastProfileId, updateProfile } from './db';
 import type { NamingSession } from './db';
 import { handleNote, handleSetGrade, handleSetName, handleSwitch } from './learnerRpc';
 import { createEndGate, routeAfterDisconnect, routeAfterEnd } from './lessonEnd';
@@ -498,8 +498,16 @@ export function useSession(mobile = false, band: BandId = 'primary') {
     });
   }, [cleanupRoom]);
 
+  const clearProfilesOpen = useCallback(() => {
+    setProfilesOpen(false);
+  }, []);
+
   const start = useCallback(
-    async (p: Profile) => {
+    async (p: Profile, bandOverride?: BandId) => {
+      // A chooser card starts the call in its own band: the UI theme and
+      // the session request must agree in the same tick, before React
+      // re-renders, so the override is applied directly.
+      if (bandOverride) bandRef.current = bandOverride;
       if (!preparedRoomRef.current) prepareStart();
       const room = roomRef.current;
       if (!room) return;
@@ -516,6 +524,21 @@ export function useSession(mobile = false, band: BandId = 'primary') {
       namingRef.current = { createdId: null };
       profileRef.current = p;
       setProfile(p);
+      // Stamp the call's band on a stored profile so the household picker
+      // can show which companion each remembered learner belongs to. Old
+      // profiles without a band stay valid; the stamp just fills it in.
+      if (p.name.trim() !== '' && p.band !== bandRef.current) {
+        const callBand = bandRef.current;
+        const stampId = p.id;
+        void updateProfile(stampId, { band: callBand })
+          .then((stamped) => {
+            if (stamped && profileRef.current?.id === stamped.id) {
+              profileRef.current = stamped;
+              setProfile(stamped);
+            }
+          })
+          .catch(() => undefined);
+      }
       setItems([]);
       setActiveItemId(null);
       setHomeworkDraft(null);
@@ -873,11 +896,18 @@ export function useSession(mobile = false, band: BandId = 'primary') {
           if (updated && isCurrent()) {
             // The session's note binding follows the naming: notes saved
             // before the name was known would otherwise land nowhere.
-            noteProfileId = updated.id;
-            profileRef.current = updated;
-            setProfile(updated);
-            rememberLastProfileId(updated.id);
-            identifyLearner(updated.grade);
+            // Stamp the call's band so the household picker can show which
+            // companion each remembered learner belongs to.
+            let stamped = updated;
+            const callBand = bandRef.current;
+            if (updated.band !== callBand) {
+              stamped = (await updateProfile(updated.id, { band: callBand })) ?? updated;
+            }
+            noteProfileId = stamped.id;
+            profileRef.current = stamped;
+            setProfile(stamped);
+            rememberLastProfileId(stamped.id, callBand);
+            identifyLearner(stamped.grade);
           }
           return isCurrent() ? updated : undefined;
         },
@@ -1590,6 +1620,7 @@ export function useSession(mobile = false, band: BandId = 'primary') {
     leaveToProfiles,
     showFirstVisit,
     profilesOpen,
+    clearProfilesOpen,
     prefillId,
     endReason,
     addFiles,

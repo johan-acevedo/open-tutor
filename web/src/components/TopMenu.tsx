@@ -193,6 +193,9 @@ export default function TopMenu({ items, dragOver, onCamera, onFiles, onSwitchSt
             <div className="ot-callmenu-about">
               <p>{t('startmenu.aboutText')}</p>
               <p className="ot-callmenu-by">{t('topmenu.aboutBy')}</p>
+              <p>
+                <a href="/integritet" target="_blank" rel="noreferrer">{t('topmenu.privacyLink')} <span aria-hidden="true">→</span></a>
+              </p>
             </div>
           )}
         </div>

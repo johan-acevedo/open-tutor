@@ -3,6 +3,7 @@
 
 import type { Note } from './protocol';
 import { cleanLearnerName, isValidLearnerName } from './learnerName';
+import type { BandId } from './bands';
 
 export type Profile = {
   id: string;
@@ -11,6 +12,9 @@ export type Profile = {
    *  naturally in the first call via the set_learner_grade tool; adults
    *  (band 3 adults) are never asked for one. */
   grade: number | null;
+  /** Age band the learner last started a call in. Set when a call starts;
+   *  older profiles predate it and stay valid without one. */
+  band?: BandId;
   notes: Note[];
   createdAt: number;
 };
@@ -132,20 +136,21 @@ export async function saveProfile(profile: Profile): Promise<void> {
   }
 }
 
-export async function createProfile(name: string, grade: number | null = null): Promise<Profile> {
+export async function createProfile(name: string, grade: number | null = null, band?: BandId): Promise<Profile> {
   const profile: Profile = {
     id: newProfileId(),
     name: name.trim(),
     grade,
     notes: [],
     createdAt: Date.now(),
+    ...(band ? { band } : {}),
   };
   await saveProfile(profile);
   return profile;
 }
 
-/** Patch a profile (grade learned mid-call, name fix). Returns the updated profile. */
-export async function updateProfile(profileId: string, patch: { grade?: number | null; name?: string }): Promise<Profile | undefined> {
+/** Patch a profile (grade learned mid-call, name fix, band on start). Returns the updated profile. */
+export async function updateProfile(profileId: string, patch: { grade?: number | null; name?: string; band?: BandId }): Promise<Profile | undefined> {
   let profile: Profile | undefined;
   if (idbBroken) {
     profile = memoryFallback.get(profileId);
@@ -162,6 +167,7 @@ export async function updateProfile(profileId: string, patch: { grade?: number |
     ...profile,
     ...(patch.grade !== undefined ? { grade: patch.grade } : {}),
     ...(patch.name !== undefined ? { name: patch.name.trim() || profile.name } : {}),
+    ...(patch.band !== undefined ? { band: patch.band } : {}),
   };
   await saveProfile(updated);
   return updated;
@@ -284,6 +290,8 @@ export function resolveProfileSwitch(profiles: Profile[], name: string): Profile
 
 const LAST_KEY = 'open-tutor-last-profile';
 
+const lastKeyForBand = (band: BandId): string => `${LAST_KEY}:${band}`;
+
 /** The student the last visit assumed; the next visit starts with them. */
 export function getLastProfileId(): string | null {
   try {
@@ -293,9 +301,19 @@ export function getLastProfileId(): string | null {
   }
 }
 
-export function rememberLastProfileId(id: string): void {
+/** The student last assumed in one band (siblings on one device). */
+export function getLastProfileIdForBand(band: BandId): string | null {
+  try {
+    return localStorage.getItem(lastKeyForBand(band));
+  } catch {
+    return null;
+  }
+}
+
+export function rememberLastProfileId(id: string, band?: BandId): void {
   try {
     localStorage.setItem(LAST_KEY, id);
+    if (band) localStorage.setItem(lastKeyForBand(band), id);
   } catch {
     /* storage blocked: next visit just asks the name again */
   }

@@ -230,3 +230,30 @@ describe('invalid names are never stored', () => {
     expect((await listProfiles()).length).toBe(before);
   });
 });
+
+describe('band on profiles', () => {
+  it('stores the band a learner started in; old profiles stay valid without one', async () => {
+    const { createProfile, updateProfile } = await import('./db');
+    const plain = await createProfile('NoBand');
+    expect(plain.band).toBeUndefined();
+    const stamped = await updateProfile(plain.id, { band: 'middle' });
+    expect(stamped?.band).toBe('middle');
+    const primary = await createProfile('BandKid', null, 'primary');
+    expect(primary.band).toBe('primary');
+  });
+
+  it('remembers the last learner overall and per band', async () => {
+    const { createProfile, getLastProfileId, getLastProfileIdForBand, rememberLastProfileId } = await import('./db');
+    localStorage.clear();
+    const a = await createProfile('Alva', null, 'primary');
+    const b = await createProfile('Max', null, 'middle');
+    rememberLastProfileId(a.id, 'primary');
+    expect(getLastProfileId()).toBe(a.id);
+    expect(getLastProfileIdForBand('primary')).toBe(a.id);
+    expect(getLastProfileIdForBand('middle')).toBeNull();
+    rememberLastProfileId(b.id, b.band);
+    expect(getLastProfileId()).toBe(b.id);
+    expect(getLastProfileIdForBand('middle')).toBe(b.id);
+    expect(getLastProfileIdForBand('primary')).toBe(a.id);
+  });
+});
