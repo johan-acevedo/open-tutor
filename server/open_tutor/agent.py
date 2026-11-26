@@ -39,6 +39,7 @@ from . import noise, prompt
 from .locales import get_locale
 from .analytics import SessionTracker, get_analytics, sanitize_outcome, stable_distinct_id
 from .analytics import warm_up as warm_up_analytics
+from .idle import IDLE_POLL_S, IdleWatch, idle_timeout_s
 from .board import Ids, Note, PageItem, ResourceItem, youtube_embed
 from .config import AGENT_NAME, DEFAULT_TTS_MODEL, DEFAULT_TTS_VOICE, env_float
 from .debug_log import DebugLog, clear_active, record_active, set_active
@@ -918,6 +919,24 @@ TYPED_BEFORE_GREETING_NAMELESS = (
 )
 
 
+async def say_idle_goodbye(session: AgentSession, locale: str = "sv") -> None:
+    """Speak the idle line through TTS only; never let this path raise.
+
+    Said after a long learner silence before the call ends itself (idle.py).
+    Like the provider apology, the LLM is not involved."""
+    record_active("idle_goodbye", {})
+    try:
+        await wait_until_free(session)
+        line = get_locale(locale).IDLE_GOODBYE
+        handle = session.say(line, allow_interruptions=True)
+        await asyncio.wait_for(handle.wait_for_playout(), timeout=20)
+        debug_note = {"interrupted": handle.interrupted}
+    except Exception as error:  # closing session, TTS down, or interrupted
+        log.warning("could not say the idle goodbye: %s", error)
+        debug_note = {"ok": False, "error": f"{type(error).__name__}"}
+    record_active("idle_goodbye_done", debug_note)
+
+
 async def say_provider_failed(session: AgentSession, locale: str = "sv") -> None:
     """Speak the apology through TTS only; never let this path raise."""
     record_active("provider_failed", {"apology": True})
@@ -1030,6 +1049,13 @@ async def entrypoint(ctx: JobContext) -> None:
     # while we wait for the participant is still counted.
     tracker = SessionTracker()
     typed.attach_typed_listener(tracker.record_typed_turn)
+    # The idle-silence clock (idle.py): generous, only a forgotten open tab
+    # trips it. Created here so every handler below can close over it.
+    idle = IdleWatch(idle_timeout_s())
+    idle_ended = asyncio.Event()
+    # A typed message is learner activity, like speech: attach next to the
+    # counter above (TypedChat supports several listeners).
+    typed.attach_typed_listener(idle.note_activity)
     ctx.room.register_text_stream_handler(TOPIC_CHAT, typed.on_stream)
     child = await ctx.wait_for_participant()
     typed.expect(child.identity)
@@ -1079,7 +1105,9 @@ async def entrypoint(ctx: JobContext) -> None:
     # time, but these are entrypoint locals, so a later assignment would be
     # an UnboundLocalError in every session, analytics on or off.
     analytics = get_analytics()
-    distinct_id = stable_distinct_id(device_id, learner.get("name"), ctx.room.name)
+    # The learner's name is never part of the id: children's names stay out
+    # of analytics entirely (see analytics.stable_distinct_id).
+    distinct_id = stable_distinct_id(device_id, ctx.room.name)
 
     voice = build_tts()
     log.info("tutor TTS route %s", tts_route(voice))
@@ -1149,6 +1177,9 @@ async def entrypoint(ctx: JobContext) -> None:
     ):
         session.on(sdk_event, debug.record_sdk)
         session.on(sdk_event, tracker.record_sdk)
+    # Any transcript, final or interim, is the learner speaking: restart the
+    # idle-silence clock. Tutor speech alone never touches it (see idle.py).
+    session.on("user_input_transcribed", lambda _event: idle.note_activity())
     # "close" has its own debug subscription in _run_until_done (session_closed)
     # and "function_tools_executed" its own handler above: both record to the
     # tracker here so the ended-event counts match the debug summary.
@@ -1234,6 +1265,7 @@ async def entrypoint(ctx: JobContext) -> None:
         settle = asyncio.create_task(respond_to_homework())
 
     async def on_homework_image(reader: rtc.ByteStreamReader, identity: str) -> None:
+        idle.note_activity()
         info = reader.info
         data = bytearray()
         async for chunk in reader:
@@ -1254,6 +1286,7 @@ async def entrypoint(ctx: JobContext) -> None:
         schedule_reply()
 
     async def on_homework_text(reader: rtc.TextStreamReader, identity: str) -> None:
+        idle.note_activity()
         text = (await reader.read_all())[:12000]
         attrs = dict(reader.info.attributes or {})
         description = f"pasted text (board id {attrs.get('itemId', '?')})"
@@ -1280,6 +1313,11 @@ async def entrypoint(ctx: JobContext) -> None:
             debug.record("diag", parsed)
             return
         debug.record("browser_event", {"type": str(event.get("type", "?"))[:40]})
+        # Learner activity for the idle-silence clock: a mic-button press, a
+        # page answer, or closing a resource. (board-size reports layout
+        # resizes on its own and diag is diagnostics: neither is activity.)
+        if event.get("type") in ("mic", "page-answer", "resource-closed"):
+            idle.note_activity()
         if event.get("type") == "mic":
             # The child (or a parent) pressed the microphone button.
             debug.record("mic", {"on": bool(event.get("on")), "why": str(event.get("why", ""))[:20]})
@@ -1311,6 +1349,31 @@ async def entrypoint(ctx: JobContext) -> None:
 
     outcome = "unknown"
     warm_up_task: asyncio.Task | None = None
+    idle_task: asyncio.Task | None = None
+
+    async def watch_idle() -> None:
+        """End the call after long learner silence (idle.py).
+
+        Polls, never fires while the tutor is mid-speech (the check simply
+        waits for a quiet moment), and does nothing when disabled. Wakes
+        _run_until_done through idle_ended, which then takes the normal
+        ending path with the idle_timeout outcome."""
+        if not idle.enabled:
+            return
+        while True:
+            await asyncio.sleep(min(IDLE_POLL_S, idle.timeout_s))
+            # Either side mid-speech defers the check: a learner who just
+            # started talking is not idle even before the transcript lands.
+            try:
+                speaking = (session.agent_state == "speaking"
+                            or session.user_state == "speaking")
+            except Exception:
+                speaking = False
+            if idle.expired(speaking=speaking):
+                record_active("idle_timeout", {
+                    "silent_s": round(idle.seconds_since_activity(), 1)})
+                idle_ended.set()
+                return
 
     def opening(_instruction: str) -> None:
         """The session is ready and nothing was typed before it: greet in fixed text.
@@ -1345,6 +1408,9 @@ async def entrypoint(ctx: JobContext) -> None:
         debug.record("worker_session_started", {
             "cloud_recording": os.environ.get("TUTOR_CLOUD_RECORDING") == "1",
             "noise_cancellation": noise_mode})
+        # The silence clock starts with the session: greeting and setup count
+        # as quiet only until the learner first speaks, types or shares.
+        idle_task = asyncio.create_task(watch_idle(), name="tutor-idle-watch")
         analytics.capture(distinct_id, "tutor_session_started", {
             "room": ctx.room.name,
             "grade": learner.get("grade"),
@@ -1369,12 +1435,15 @@ async def entrypoint(ctx: JobContext) -> None:
             greet_instruction=typed_greeting.format(line=greeting),
         )
 
-        outcome = await _run_until_done(ctx, session, tutor, debug, ending, provider_failed)
+        outcome = await _run_until_done(ctx, session, tutor, debug, ending, provider_failed,
+                                        idle_done=idle_ended)
     except Exception as error:
         outcome = f"error: {type(error).__name__}: {error}"[:300]
         log.exception("session failed")
         raise
     finally:
+        if idle_task is not None and not idle_task.done():
+            idle_task.cancel()
         if fillers is not None:
             await fillers.aclose()
         if warm_up_task is not None and not warm_up_task.done():
@@ -1470,6 +1539,7 @@ async def greet(
 async def _run_until_done(
     ctx: JobContext, session: AgentSession, tutor: Tutor, debug: DebugLog,
     ending: asyncio.Event, provider_failed: asyncio.Event | None = None,
+    idle_done: asyncio.Event | None = None,
 ) -> str:
 
     left = asyncio.Event()
@@ -1488,7 +1558,15 @@ async def _run_until_done(
              asyncio.create_task(closed.wait())]
     if provider_failed is not None:
         waits.append(asyncio.create_task(provider_failed.wait()))
-    await asyncio.wait(waits, return_when=asyncio.FIRST_COMPLETED)
+    if idle_done is not None:
+        waits.append(asyncio.create_task(idle_done.wait()))
+    try:
+        await asyncio.wait(waits, return_when=asyncio.FIRST_COMPLETED)
+    finally:
+        # The losing waiters would stay pending past teardown.
+        for waiter in waits:
+            if not waiter.done():
+                waiter.cancel()
     if provider_failed is not None and provider_failed.is_set() and not left.is_set():
         # The provider refused the turn and will not retry it. Say why without the LLM
         # and end; the 2026-11-06 note in safe_interrupt is the same lesson: a dead
@@ -1515,6 +1593,51 @@ async def _run_until_done(
             debug.record("goodbye", {"ok": False, "error": "session already closed"})
         if tutor.notes_saved == 0:
             await tutor.send_note(get_locale(prompt.learner_locale(tutor.learner)).DEFAULT_NOTE_TOPIC)
+    elif idle_done is not None and idle_done.is_set() and not left.is_set():
+        # Long learner silence (idle.py): end through the same clean path —
+        # one short fixed line instead of the LLM goodbye, the note saved as
+        # usual, and the page told why before the room goes away so it shows
+        # the normal end card with the idle message, not an error banner.
+        outcome = "idle_timeout"
+        # Tell the page first: the goodbye and the note take seconds, so the
+        # reason is there long before the room delete disconnects it.
+        try:
+            await ctx.room.local_participant.send_text(
+                json.dumps({"type": "ended", "reason": "idle_timeout"}),
+                topic="tutor-event")
+        except Exception as error:
+            log.warning("could not send the idle end reason: %s", error)
+        await tutor.set_mode("ending")
+        safe_interrupt(session, "ending")
+        locale = prompt.learner_locale(tutor.learner)
+        notes_before = tutor.notes_saved
+        # Like Avsluta: the model saves this session's note and says a short
+        # goodbye, bounded in time. If it cannot, the fixed line is spoken.
+        said = False
+        handle = None
+        try:
+            debug.record("prompt", {"kind": "idle_goodbye"})
+            handle = prompt_event(session, prompt.IDLE_END_INSTRUCTION)
+            await asyncio.wait_for(handle.wait_for_playout(), timeout=30)
+            # wait_for_playout also returns for a failed or interrupted
+            # generation: only a played reply with an assistant message counts.
+            said = (not handle.interrupted and handle.exception() is None
+                    and any(getattr(item, "role", None) == "assistant"
+                            for item in handle.chat_items))
+        except Exception as error:
+            log.warning("idle goodbye via the model failed: %s", error)
+            debug.record("goodbye", {"ok": False, "error": f"{type(error).__name__}"})
+        if not said:
+            # Stop a slow model reply first so it cannot talk over the fixed
+            # line or save a note while the fallback runs.
+            if handle is not None and not handle.done():
+                try:
+                    handle.interrupt(force=True)
+                except Exception as error:
+                    log.warning("could not stop the idle goodbye reply: %s", error)
+            await say_idle_goodbye(session, locale)
+        if tutor.notes_saved == notes_before:
+            await tutor.send_note(get_locale(locale).DEFAULT_NOTE_TOPIC)
     elif left.is_set():
         outcome = "child_left"
         debug.record("child_left", {})

@@ -225,6 +225,7 @@ export default function App() {
           learnerName={profile.name}
           notes={session.sessionNotes.length > 0 ? session.sessionNotes : profile.notes.slice(-3)}
           onBack={session.backToProfiles}
+          endReason={session.endReason}
         />
       )}
 

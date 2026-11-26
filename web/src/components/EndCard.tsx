@@ -5,13 +5,15 @@ type Props = {
   learnerName: string;
   notes: Note[];
   onBack: () => void;
+  endReason?: string | null;
 };
 
-export default function EndCard({ learnerName, notes, onBack }: Props) {
+export default function EndCard({ learnerName, notes, onBack, endReason }: Props) {
   const last = notes.length > 0 ? notes[notes.length - 1] : null;
   return (
     <div className="ot-endcard">
       <h1>{learnerName.trim() !== '' ? t('end.greetingNamed', { name: learnerName }) : t('end.greetingAnon')}</h1>
+      {endReason === 'idle_timeout' && <p className="ot-endcard-idle">{t('end.idle')}</p>}
       {(last?.topic || last?.next) && (
         <div className="ot-endcard-notes">
           {last?.topic && (

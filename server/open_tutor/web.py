@@ -21,7 +21,7 @@ from livekit import api
 from pydantic import BaseModel, Field
 
 from .config import AGENT_NAME
-from .analytics import posthog_settings
+from .analytics import posthog_settings, valid_device_id
 from .reviewed_images import find_reviewed_image, media_type_for, sessions_base_dir
 
 WEB_DIST = Path(os.environ.get("TUTOR_WEB_DIST", Path(__file__).resolve().parents[2] / "web" / "dist"))
@@ -152,8 +152,11 @@ def create_app(environ: dict[str, str] | None = None) -> FastAPI:
         identity = "learner-" + secrets.token_hex(4)
         meta: dict[str, Any] = {"learner": body.learner.model_dump(exclude_none=True),
                                 "board": body.board.model_dump()}
-        if body.device_id:
-            meta["device_id"] = body.device_id
+        # Only an id of the shape the page mints passes on: free text (a
+        # name from a custom client) never reaches the worker or analytics.
+        device_id = valid_device_id(body.device_id)
+        if device_id:
+            meta["device_id"] = device_id
         metadata = json.dumps(meta, ensure_ascii=False)
         token = (
             api.AccessToken(env["LIVEKIT_API_KEY"], env["LIVEKIT_API_SECRET"])

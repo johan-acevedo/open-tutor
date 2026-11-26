@@ -20,6 +20,7 @@ import {
   TOPIC_NOTE,
   TOPIC_SESSION_EVENT,
   TOPIC_TRANSCRIPTION,
+  TOPIC_TUTOR_EVENT,
   LEARNER_RPC_SET_GRADE,
   LEARNER_RPC_SET_NAME,
   LEARNER_RPC_SWITCH,
@@ -27,7 +28,7 @@ import {
 import { enqueueNote, enqueueProfileGrade, enqueueProfileName, enqueueProfileSwitch, rememberLastProfileId } from './db';
 import type { NamingSession } from './db';
 import { handleNote, handleSetGrade, handleSetName, handleSwitch } from './learnerRpc';
-import { createEndGate, routeAfterEnd } from './lessonEnd';
+import { createEndGate, routeAfterDisconnect, routeAfterEnd } from './lessonEnd';
 import { localeId, t } from './locales/sv';
 import type { Profile } from './db';
 import {
@@ -234,6 +235,11 @@ export function useSession(mobile = false, band: BandId = 'primary') {
   // only when B's session actually starts.
   const pendingPrefillRef = useRef<Profile | null>(null);
   const [prefillId, setPrefillId] = useState<string | null>(null);
+  // Why the worker ended the call (TOPIC_TUTOR_EVENT, before the room was
+  // deleted): today only 'idle_timeout' after a long learner silence. The
+  // ref steers the disconnect handler; the state renders the end card line.
+  const endReasonRef = useRef<string | null>(null);
+  const [endReason, setEndReason] = useState<string | null>(null);
   // Session generation: handlers capture the generation they were registered
   // in and never touch UI or profile state from an old one (delayed note or
   // grade callbacks from A must not land on B). A name RPC from an ended or
@@ -456,6 +462,11 @@ export function useSession(mobile = false, band: BandId = 'primary') {
     } catch {
       /* ignore */
     }
+    try {
+      room.unregisterTextStreamHandler(TOPIC_TUTOR_EVENT);
+    } catch {
+      /* ignore */
+    }
     room.removeAllListeners();
     void room.disconnect().catch(() => undefined);
   }, []);
@@ -525,6 +536,8 @@ export function useSession(mobile = false, band: BandId = 'primary') {
       setPhase('connecting');
       sessionStartAtRef.current = 0;
       sessionEndTrackedRef.current = false;
+      endReasonRef.current = null;
+      setEndReason(null);
       sessionStartRequested();
       agentGateRef.current.reset();
       // Fresh per-session diagnostics: seq/dropped restart so journals never mix rooms.
@@ -566,9 +579,9 @@ export function useSession(mobile = false, band: BandId = 'primary') {
           throw new Error(`session ${res.status}`);
         }
         session = (await res.json()) as SessionResponse;
-        // A nameless start has no identity yet: it is identified when the
-        // tutor's set_learner_name tool attaches the name (see applyName).
-        if (p.name.trim() !== '') identifyLearner(p.name, p.grade);
+        // Attribute the session to this browser's anonymous device id. The
+        // name (if any) stays local: identify carries the grade only.
+        identifyLearner(p.grade);
       } catch {
         sessionFailed(failStatus);
         showToast(t('toast.startFailed'));
@@ -647,10 +660,33 @@ export function useSession(mobile = false, band: BandId = 'primary') {
           setPhase('profiles');
           return;
         }
-        if (intentionalEndRef.current) return;
-        trackSessionEnd('disconnected');
-        setConnBanner('disconnected');
-        diag.note('connection', { kind: 'disconnected', reason: String(reason ?? '') });
+        const route = routeAfterDisconnect({
+          prefillId: null,
+          goProfiles: goProfilesAfterEndRef.current,
+          intentional: intentionalEndRef.current,
+          endReason: endReasonRef.current,
+        });
+        // Our own end path already handled the landing: stand down.
+        if (route.kind === 'ignore') return;
+        if (route.kind === 'banner') {
+          trackSessionEnd('disconnected');
+          setConnBanner('disconnected');
+          diag.note('connection', { kind: 'disconnected', reason: String(reason ?? '') });
+          return;
+        }
+        // The worker ended the call itself (idle timeout): the lesson ended
+        // properly, so land like a local end — the end card, not the banner.
+        goProfilesAfterEndRef.current = false;
+        trackSessionEnd('idle_timeout');
+        diag.note('connection', { kind: 'disconnected-idle', reason: String(reason ?? '') });
+        cleanupRoom();
+        if (route.kind === 'open') {
+          setProfilesOpen(true);
+          setProfile(null);
+          setPhase('profiles');
+        } else {
+          setPhase('ended');
+        }
       });
       // Local microphone reality vs the wanted state (micWantedRef): the SDK
       // reacquires ended tracks on its own, so this only observes and logs.
@@ -841,7 +877,7 @@ export function useSession(mobile = false, band: BandId = 'primary') {
             profileRef.current = updated;
             setProfile(updated);
             rememberLastProfileId(updated.id);
-            identifyLearner(updated.name, updated.grade);
+            identifyLearner(updated.grade);
           }
           return isCurrent() ? updated : undefined;
         },
@@ -937,6 +973,28 @@ export function useSession(mobile = false, band: BandId = 'primary') {
             },
             saveNote: (profileId, note) => enqueueNote(profileId, note),
           });
+        } catch {
+          /* ignore */
+        }
+      });
+
+      // The worker ends idle calls itself: { type: 'ended', reason } arrives
+      // on this stream just before the room is deleted. Remember it so the
+      // disconnect below lands on the end card with the reason, not the
+      // reconnect banner.
+      room.registerTextStreamHandler(TOPIC_TUTOR_EVENT, async (reader) => {
+        try {
+          const event = JSON.parse(await reader.readAll()) as {
+            type?: unknown;
+            reason?: unknown;
+          };
+          // The read is async: a stream from an older room must not write
+          // its reason into a newer session.
+          if (myGen !== sessionGenRef.current || roomRef.current !== room) return;
+          if (event?.type === 'ended' && typeof event.reason === 'string') {
+            endReasonRef.current = event.reason;
+            setEndReason(event.reason);
+          }
         } catch {
           /* ignore */
         }
@@ -1533,6 +1591,7 @@ export function useSession(mobile = false, band: BandId = 'primary') {
     showFirstVisit,
     profilesOpen,
     prefillId,
+    endReason,
     addFiles,
     addText,
     onItemMounted: resolveMounted,

@@ -4,6 +4,45 @@ Lead: the thread "state of the project" (Claude, 2026-11-12). The lead keeps thi
 Workers read it before starting and report against it. Decisions here were agreed with Johan
 on 2026-11-12 unless marked open.
 
+## 2026-11-26: no learner names in PostHog; 20-minute idle timeout
+
+Two changes from one privacy-minded brief, built on `feat/privacy-idle-timeout`:
+
+- **Names out of PostHog.** Both the page (`web/src/analytics.ts`) and the worker
+  (`server/open_tutor/analytics.py`) derived the distinct id as
+  `device:<uuid>:learner:<name>` and the page sent `learner_name` as a person
+  property. Now the id is just `device:<uuid>` (the anonymous browser id from
+  `open-tutor-device-id`, so returning-device retention still works) and identify
+  carries only the grade. Grade stays: teaching to the right school year needs it,
+  and it cannot identify a child. Unit tests on both sides assert no name appears
+  in the id or the properties. The `set_learner_name` tool is unchanged: the name
+  still lives in local browser profiles, it just never leaves for analytics.
+- **Idle-silence timeout.** `TUTOR_IDLE_TIMEOUT_S` (default 1200, 20 minutes; 0 or
+  negative disables) ends a call nobody is using — a forgotten open tab, not a
+  thinking child. The policy is a small pure class (`server/open_tutor/idle.py`,
+  injectable clock, unit-tested). Learner speech (final or interim transcript),
+  typed chat, homework uploads, page answers and mic-button presses reset the clock;
+  tutor speech alone never does, and the check waits until the tutor is quiet instead
+  of cutting a sentence off. On timeout the worker tells the page the reason on a `tutor-event` stream, says a short
+  goodbye, saves the session note,
+  and takes the normal ending path with outcome `idle_timeout`. The page lands on the
+  normal end card with "Samtalet avslutades eftersom det var tyst en stund." and the
+  existing restart — never the reconnect banner.
+- **After the Codex review (gpt-6.2-sol):** PostHog's SDK restored the old
+  `…:learner:<name>` id from its own persisted state, so returning browsers still sent
+  names. The SDK now uses a fresh persistence namespace (`talarum_ph_v2`) and the old
+  `ph_*_posthog` entries are deleted on load. Device ids must have the minted shape
+  (UUID or the `id-` fallback) on page, web service and worker, so a custom client cannot
+  smuggle a name in through `device_id`. The idle check also defers while the learner is
+  speaking; the end reason is sent before the goodbye (seconds before the room delete);
+  the model is asked to save this session's note and say goodbye (bounded 30 s, fixed line
+  and default note as fallback); losing lifecycle waiters are cancelled.
+- **Open for Johan:** person profiles PostHog already holds may carry `learner_name`
+  and name-bearing ids from before this change; those must be deleted in PostHog itself.
+- Not tested live: no real voice call was run (paid providers). Proven by the full
+  server and web suites plus typecheck and build; the idle path end-to-end (worker
+  line → page end card) awaits a dev-instance call.
+
 ## 2026-11-24: the call view follows the landing page (concept A)
 
 After the landing page, the call view looked unfinished: chrome pinned to the edges, a large

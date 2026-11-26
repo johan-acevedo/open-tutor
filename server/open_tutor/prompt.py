@@ -295,6 +295,13 @@ BAND_REGISTER_HINT = {
 }
 
 
+IDLE_END_INSTRUCTION = (
+    "The learner has been silent for a long time, so the call ends now (probably a forgotten tab). "
+    "First call save_note for this session. Then say one short, calm goodbye sentence in the language "
+    "you have been speaking (Swedish by default), for example that they are welcome back any time. "
+    "Do not ask any question."
+)
+
 END_INSTRUCTION = (
     "The child pressed Avsluta. First call save_note for this session. Then say goodbye in one or two "
     "short sentences in the language you have been speaking (Swedish by default) that sum up what "

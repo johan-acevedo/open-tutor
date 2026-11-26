@@ -12,7 +12,9 @@ vi.mock('posthog-js', () => ({ default: posthogMock }));
 
 import {
   analyticsEnabled,
+  dropLegacyPosthogState,
   getDeviceId,
+  isValidDeviceId,
   homeworkShared,
   identifyLearner,
   initAnalytics,
@@ -54,7 +56,7 @@ describe('analytics', () => {
     pageOpened();
     micPermission(true);
     sessionStartRequested();
-    identifyLearner('Leo', 8);
+    identifyLearner(8);
     sessionStarted('tutor-x');
     sessionFailed(500);
     sessionEnded('ended_by_child', 60);
@@ -88,6 +90,7 @@ describe('analytics', () => {
         disable_session_recording: true,
         person_profiles: 'identified_only',
         persistence: 'localStorage',
+        persistence_name: 'talarum_ph_v2',
         before_send: expect.any(Function),
       }),
     );
@@ -147,23 +150,32 @@ describe('analytics', () => {
     expect(JSON.stringify(calls)).not.toContain('data:image');
   });
 
-  it('identifies the learner with the stable device+name id and person properties', async () => {
+  it('identifies the session with the anonymous device id and grade only', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(configResponse(POSTHOG_KEY)));
     await initAnalytics();
     const device = getDeviceId();
     expect(device).toBeTruthy();
     expect(getDeviceId()).toBe(device); // stable in this browser
-    identifyLearner('Leo', 8);
-    expect(posthogMock.identify).toHaveBeenCalledWith(`device:${device}:learner:leo`, {
-      learner_name: 'Leo',
+    identifyLearner(8);
+    expect(posthogMock.identify).toHaveBeenCalledWith(`device:${device}`, {
       grade: 8,
     });
   });
 
-  it('derives the same stable id as the worker: case and spacing collapse', () => {
-    expect(stableLearnerId('dev-1', 'Leo')).toBe('device:dev-1:learner:leo');
-    expect(stableLearnerId('dev-1', '  LEO  ')).toBe('device:dev-1:learner:leo');
-    expect(stableLearnerId('dev-1', 'Anna  Maria')).toBe('device:dev-1:learner:anna maria');
+  it('never sends a learner name in the distinct id or identify properties', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(configResponse(POSTHOG_KEY)));
+    await initAnalytics();
+    const device = getDeviceId();
+    // identifyLearner takes no name at all: a name cannot leak through it.
+    identifyLearner(8);
+    const payload = JSON.stringify(posthogMock.identify.mock.calls);
+    expect(payload).not.toContain('learner_name');
+    expect(payload).not.toContain('learner:');
+    expect(payload).toContain(`device:${device}`);
+  });
+
+  it('derives the same stable id as the worker: the anonymous device id', () => {
+    expect(stableLearnerId('dev-1')).toBe('device:dev-1');
   });
 
   it('scrubs kod from URL-like properties via the before_send hook', async () => {
@@ -240,7 +252,7 @@ describe('analytics', () => {
     pageOpened();
     pageOpened();
     sessionStartRequested();
-    identifyLearner('Leo', 8);
+    identifyLearner(8);
     expect(posthogMock.capture).not.toHaveBeenCalled();
     resolveConfig(undefined);
     await ready;
@@ -250,8 +262,7 @@ describe('analytics', () => {
     expect(events).toContain('session_start_requested');
     expect(posthogMock.identify).toHaveBeenCalledTimes(1);
     const device = getDeviceId();
-    expect(posthogMock.identify).toHaveBeenCalledWith(`device:${device}:learner:leo`, {
-      learner_name: 'Leo',
+    expect(posthogMock.identify).toHaveBeenCalledWith(`device:${device}`, {
       grade: 8,
     });
   });
@@ -264,7 +275,7 @@ describe('analytics', () => {
     vi.stubGlobal('fetch', vi.fn().mockReturnValue(gate.then(() => configResponse(null))));
     const ready = initAnalytics();
     pageOpened();
-    identifyLearner('Leo', 8);
+    identifyLearner(8);
     resolveConfig(undefined);
     await ready;
     expect(analyticsEnabled()).toBe(false);
@@ -311,7 +322,7 @@ describe('kod scrubbing against the real posthog-js SDK', () => {
         },
       });
       const device = getDeviceId();
-      ph.identify(stableLearnerId(device, 'Leo'));
+      ph.identify(stableLearnerId(device));
       ph.capture('turn_sent', { modality: 'typed' });
 
       expect(seen.length).toBeGreaterThan(0);
@@ -355,26 +366,50 @@ describe('pre-init queue ordering', () => {
       vi.fn().mockReturnValue(gate.then(() => configResponse(POSTHOG_KEY))),
     );
     const ready = initAnalytics();
-    identifyLearner('Anna', 3);
+    identifyLearner(3);
     turnSent();
-    identifyLearner('Bella', 4);
+    identifyLearner(4);
     homeworkShared('image');
     resolveConfig(undefined);
     await ready;
     expect(analyticsEnabled()).toBe(true);
     const device = getDeviceId();
     expect(posthogMock.identify).toHaveBeenCalledTimes(2);
-    expect(posthogMock.identify).toHaveBeenNthCalledWith(1, `device:${device}:learner:anna`, {
-      learner_name: 'Anna',
+    expect(posthogMock.identify).toHaveBeenNthCalledWith(1, `device:${device}`, {
       grade: 3,
     });
-    expect(posthogMock.identify).toHaveBeenNthCalledWith(2, `device:${device}:learner:bella`, {
-      learner_name: 'Bella',
+    expect(posthogMock.identify).toHaveBeenNthCalledWith(2, `device:${device}`, {
       grade: 4,
     });
     expect(posthogMock.capture.mock.calls.map(([event]) => event)).toEqual([
       'turn_sent',
       'homework_shared',
     ]);
+  });
+});
+
+
+describe('no name survives from older builds', () => {
+  it('drops the PostHog state older builds persisted (it held learner ids)', () => {
+    localStorage.clear();
+    localStorage.setItem('ph_phc_abc_posthog', JSON.stringify({ distinct_id: 'device:x:learner:alva' }));
+    localStorage.setItem('open-tutor-device-id', '0b9e2c4a-1f3d-4e5a-9b7c-2d4e6f8a1c3e');
+    dropLegacyPosthogState(localStorage);
+    expect(localStorage.getItem('ph_phc_abc_posthog')).toBeNull();
+    expect(localStorage.getItem('open-tutor-device-id')).not.toBeNull();
+  });
+
+  it('accepts only device ids of the minted shape', () => {
+    expect(isValidDeviceId('0b9e2c4a-1f3d-4e5a-9b7c-2d4e6f8a1c3e')).toBe(true);
+    expect(isValidDeviceId('id-1764150000000-123456789')).toBe(true);
+    for (const bad of ['alva', 'Alva Svensson', 'dev-1', '']) expect(isValidDeviceId(bad)).toBe(false);
+  });
+
+  it('replaces a stored device id that is not of the minted shape', () => {
+    resetAnalytics();
+    localStorage.setItem('open-tutor-device-id', 'Alva');
+    const id = getDeviceId();
+    expect(id).not.toBe('Alva');
+    expect(isValidDeviceId(id)).toBe(true);
   });
 });

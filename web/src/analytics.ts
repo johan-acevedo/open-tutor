@@ -27,12 +27,22 @@ function mintDeviceId(): string {
     : `id-${Date.now()}-${Math.floor(Math.random() * 1e9)}`;
 }
 
+/** Shape of a device id we mint (randomUUID or the id- fallback). MUST
+ *  match analytics.DEVICE_ID_RE (Python). Anything else stored under the key
+ *  (hand-edited, from an old build) is replaced, so the id can never carry
+ *  free text such as a name. */
+const DEVICE_ID_RE = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|id-[0-9]{1,16}-[0-9]{1,10})$/;
+
+export function isValidDeviceId(id: string): boolean {
+  return DEVICE_ID_RE.test(id);
+}
+
 /** Random per-browser id. Mirrors nothing server-side; the worker links it. */
 export function getDeviceId(): string {
   if (cachedDeviceId) return cachedDeviceId;
   try {
     const stored = localStorage.getItem(DEVICE_KEY);
-    if (stored) {
+    if (stored && isValidDeviceId(stored)) {
       cachedDeviceId = stored;
       return stored;
     }
@@ -53,14 +63,11 @@ export function getDeviceId(): string {
   }
 }
 
-/** One learner on one device. MUST match analytics.stable_distinct_id (Python):
- *  lowercase, trimmed, single-spaced name. */
-export function stableLearnerId(deviceId: string, name: string): string {
-  const device = (deviceId || '').trim();
-  if (!device) return '';
-  const normalized = (name || '').trim().toLowerCase().split(/\s+/).join(' ');
-  if (!normalized) return `device:${device}`;
-  return `device:${device}:learner:${normalized}`;
+/** One learner on one device: the anonymous browser id. MUST match
+ *  analytics.stable_distinct_id (Python): no name ever leaves the browser.
+ *  The learner's name stays in local profiles only, never in analytics. */
+export function stableLearnerId(deviceId: string): string {
+  return `device:${(deviceId || '').trim()}`;
 }
 
 /** Drop the ?kod= access-code parameter from a URL string, keeping the rest
@@ -149,10 +156,25 @@ let pageOpenedSent = false;
  *  B's events. A separate latest-wins slot would replay every pre-init
  *  event under the latest identity. */
 type PendingEntry =
-  | { kind: 'identify'; name: string; grade: number | null }
+  | { kind: 'identify'; grade: number | null }
   | { kind: 'event'; event: string; properties?: Record<string, string | number | boolean | null> };
 let pendingQueue: PendingEntry[] = [];
 const MAX_PENDING = 32;
+
+/** PostHog's own storage namespace. Builds before 2026-11-26 identified
+ *  browsers as device:<uuid>:learner:<name>, and the SDK restores that id
+ *  from its persisted state on every visit. A fresh namespace starts clean;
+ *  the old entries (default name ph_<key>_posthog) are removed. */
+const POSTHOG_PERSISTENCE = 'talarum_ph_v2';
+
+export function dropLegacyPosthogState(storage: Storage): void {
+  const stale: string[] = [];
+  for (let i = 0; i < storage.length; i += 1) {
+    const key = storage.key(i);
+    if (key && key.startsWith('ph_') && key.endsWith('_posthog')) stale.push(key);
+  }
+  for (const key of stale) storage.removeItem(key);
+}
 
 async function loadClient(): Promise<PostHogClient | null> {
   let config: { posthog: { key: string; host: string } | null };
@@ -166,7 +188,13 @@ async function loadClient(): Promise<PostHogClient | null> {
   if (!config?.posthog?.key) return null;
   try {
     const { default: posthog } = await import('posthog-js');
+    try {
+      dropLegacyPosthogState(localStorage);
+    } catch {
+      /* storage blocked: nothing persisted to restore either */
+    }
     posthog.init(config.posthog.key, {
+      persistence_name: POSTHOG_PERSISTENCE,
       api_host: config.posthog.host,
       autocapture: false,
       // We emit page_opened ourselves (exactly once); the SDK must not add
@@ -196,7 +224,7 @@ export function initAnalytics(): Promise<void> {
         const queued = pendingQueue;
         pendingQueue = [];
         for (const entry of queued) {
-          if (entry.kind === 'identify') doIdentify(entry.name, entry.grade);
+          if (entry.kind === 'identify') doIdentify(entry.grade);
           else track(entry.event, entry.properties);
         }
       } else {
@@ -251,11 +279,12 @@ export function sessionStartRequested(): void {
   track('session_start_requested');
 }
 
-function doIdentify(name: string, grade: number | null): void {
+function doIdentify(grade: number | null): void {
   if (!client) return;
   try {
-    client.identify(stableLearnerId(getDeviceId(), name), {
-      learner_name: name,
+    // The name never leaves the browser: the id is the anonymous device id
+    // and the only person property is the grade (teaching to the right year).
+    client.identify(stableLearnerId(getDeviceId()), {
       grade,
     });
   } catch {
@@ -263,9 +292,11 @@ function doIdentify(name: string, grade: number | null): void {
   }
 }
 
-export function identifyLearner(name: string, grade: number | null): void {
+/** Attribute the session to this browser's anonymous device id. The name
+ *  is not taken and never sent: it stays in local profiles only. */
+export function identifyLearner(grade: number | null): void {
   if (client) {
-    doIdentify(name, grade);
+    doIdentify(grade);
     return;
   }
   // The SDK may still be loading while the session starts: queue the
@@ -273,7 +304,7 @@ export function identifyLearner(name: string, grade: number | null): void {
   // to the identity that was current when it fired. When analytics is off
   // the queue is dropped.
   if (!initSettled && pendingQueue.length < MAX_PENDING) {
-    pendingQueue.push({ kind: 'identify', name, grade });
+    pendingQueue.push({ kind: 'identify', grade });
   }
 }
 
