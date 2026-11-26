@@ -1614,15 +1614,27 @@ async def _run_until_done(
         # Like Avsluta: the model saves this session's note and says a short
         # goodbye, bounded in time. If it cannot, the fixed line is spoken.
         said = False
+        handle = None
         try:
             debug.record("prompt", {"kind": "idle_goodbye"})
             handle = prompt_event(session, prompt.IDLE_END_INSTRUCTION)
             await asyncio.wait_for(handle.wait_for_playout(), timeout=30)
-            said = True
+            # wait_for_playout also returns for a failed or interrupted
+            # generation: only a played reply with an assistant message counts.
+            said = (not handle.interrupted and handle.exception() is None
+                    and any(getattr(item, "role", None) == "assistant"
+                            for item in handle.chat_items))
         except Exception as error:
             log.warning("idle goodbye via the model failed: %s", error)
             debug.record("goodbye", {"ok": False, "error": f"{type(error).__name__}"})
         if not said:
+            # Stop a slow model reply first so it cannot talk over the fixed
+            # line or save a note while the fallback runs.
+            if handle is not None and not handle.done():
+                try:
+                    handle.interrupt(force=True)
+                except Exception as error:
+                    log.warning("could not stop the idle goodbye reply: %s", error)
             await say_idle_goodbye(session, locale)
         if tutor.notes_saved == notes_before:
             await tutor.send_note(get_locale(locale).DEFAULT_NOTE_TOPIC)

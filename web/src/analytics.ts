@@ -31,7 +31,7 @@ function mintDeviceId(): string {
  *  match analytics.DEVICE_ID_RE (Python). Anything else stored under the key
  *  (hand-edited, from an old build) is replaced, so the id can never carry
  *  free text such as a name. */
-const DEVICE_ID_RE = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|id-\d{1,16}-\d{1,10})$/;
+const DEVICE_ID_RE = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|id-[0-9]{1,16}-[0-9]{1,10})$/;
 
 export function isValidDeviceId(id: string): boolean {
   return DEVICE_ID_RE.test(id);

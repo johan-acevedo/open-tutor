@@ -609,7 +609,7 @@ def test_device_id_must_have_the_minted_shape():
     from open_tutor.analytics import valid_device_id
     assert valid_device_id("0b9e2c4a-1f3d-4e5a-9b7c-2d4e6f8a1c3e") == "0b9e2c4a-1f3d-4e5a-9b7c-2d4e6f8a1c3e"
     assert valid_device_id("id-1764150000000-123456789") == "id-1764150000000-123456789"
-    for bad in ("alva", "Alva Svensson", "dev-1", "0b9e2c4a-1f3d-4e5a-9b7c-2d4e6f8a1c3e:learner:alva", "", None, "x" * 100):
+    for bad in ("alva", "Alva Svensson", "dev-1", "id-١٢٣-٤٥٦", "0b9e2c4a-1f3d-4e5a-9b7c-2d4e6f8a1c3e:learner:alva", "", None, "x" * 100):
         assert valid_device_id(bad) is None
         assert stable_distinct_id(bad, "tutor-x") == "tutor-x"
 

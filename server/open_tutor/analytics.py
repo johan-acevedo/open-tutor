@@ -116,12 +116,12 @@ def sanitize_outcome(outcome: Any) -> tuple[str, str | None]:
 # MUST match DEVICE_ID_RE in web/src/analytics.ts. Anything else (a custom
 # client, a hand-edited value) is not trusted: it could carry a name.
 DEVICE_ID_RE = re.compile(
-    r"^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|id-\d{1,16}-\d{1,10})$")
+    r"^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|id-[0-9]{1,16}-[0-9]{1,10})$")
 
 
 def valid_device_id(device_id: Any) -> str | None:
     device = str(device_id or "").strip()
-    return device if DEVICE_ID_RE.match(device) else None
+    return device if DEVICE_ID_RE.fullmatch(device) else None
 
 
 def stable_distinct_id(device_id: Any, room: str = "unknown-room") -> str:
