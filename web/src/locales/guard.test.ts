@@ -45,4 +45,17 @@ describe('Swedish catalogue guard', () => {
     expect(t('band.primary.returningBubble', { name: 'Noa' })).toBe('Hej Noa!');
     expect(t('shell.loading', { topic: 'historia' })).toBe('Laddar historia …');
   });
+
+  it('has renamed Open Tutor to Talarum in user-visible copy', () => {
+    const text = readFileSync(join(SRC, 'locales', 'sv.ts'), 'utf8');
+    expect(text).not.toContain('Open Tutor');
+    expect(text).toContain('Talarum');
+  });
+
+  it('never promises open source, non-profit or forever-free', () => {
+    const text = readFileSync(join(SRC, 'locales', 'sv.ts'), 'utf8').toLowerCase();
+    for (const banned of ['open source', '\u00f6ppen k\u00e4llkod', 'ideell', 'alltid gratis']) {
+      expect(text).not.toContain(banned);
+    }
+  });
 });

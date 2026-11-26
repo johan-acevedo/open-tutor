@@ -5,10 +5,11 @@ import '@fontsource/plus-jakarta-sans/600.css';
 import '@fontsource/plus-jakarta-sans/700.css';
 import '@fontsource/plus-jakarta-sans/800.css';
 import '@fontsource/caveat/600.css';
-import { BANDS, BAND_IDS, type BandConfig, type BandId } from '../bands';
+import { BANDS, BAND_IDS, explicitHostBand, type BandConfig, type BandId } from '../bands';
 import { bandUrl } from '../bandLinks';
 import type { Profile } from '../db';
 import { t, type SvKey } from '../locales/sv';
+import Brand from './Brand';
 import Welcome from './Welcome';
 import StartMenu, { type StartPanel } from './StartMenu';
 import { useStartAction } from './useStartAction';
@@ -26,7 +27,15 @@ type Props = {
   assumeId?: string | null;
   /** Menu switch entry: return to the nameless first-visit view. */
   onSwitch: () => void;
-};
+  /** "Inte {name}?": open the household picker instead of the nameless view. */
+  onNotYou?: () => void;
+  /** On a band route: never assume a learner remembered from another band. */
+  ignoreLastId?: boolean;
+  /** Cross-band link: navigate in place instead of reloading. Only used on
+   *  talarum-style hosts (no tutor.* prefix); on band hosts the links keep
+   *  their href and the browser does the host swap. */
+  onBandLink?: (band: BandId) => void;
+}
 
 const PAPER: Record<BandId, SvKey> = {
   primary: 'landing.paperPrimary',
@@ -55,13 +64,31 @@ const AUDIENCES: Record<BandId, SvKey> = {
 
 /** Cross-links to the other two bands: small cards in the step-card language,
  *  the whole card one link. Sits between the steps and the footer. */
-function Bands({ band }: { band: BandConfig }) {
+function Bands({ band, onNavigate }: { band: BandConfig; onNavigate?: (target: BandId) => void }) {
   return (
     <section className="ot-land-bands">
       <h2 className="ot-land-bandstitle">{t(BAND_TITLES[band.id])}</h2>
       <div className="ot-land-bandcards">
         {BAND_IDS.filter((id) => id !== band.id).map((id) => (
-          <a key={id} className="ot-land-bandcard" href={bandUrl(id, window.location.href)} aria-label={`${t(AUDIENCES[id])} ${t('landing.withCompanion', { companion: BANDS[id].companion.name })}`}>
+          <a
+            key={id}
+            className="ot-land-bandcard"
+            href={bandUrl(id, window.location.href)}
+            aria-label={`${t(AUDIENCES[id])} ${t('landing.withCompanion', { companion: BANDS[id].companion.name })}`}
+            onClick={(event) => {
+              if (!onNavigate) return;
+              if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+              // A tutor.* host swap still needs a full load; anywhere else
+              // the band route is same-origin, so navigate in place.
+              try {
+                if (explicitHostBand(window.location.hostname) !== null) return;
+              } catch {
+                return;
+              }
+              event.preventDefault();
+              onNavigate(id);
+            }}
+          >
             <img className="ot-land-bandface" src={BANDS[id].companion.face} alt="" aria-hidden="true" />
             <span className="ot-land-bandtxt">
               <strong>{t(AUDIENCES[id])}</strong>
@@ -76,7 +103,7 @@ function Bands({ band }: { band: BandConfig }) {
 }
 
 /** The three "how it works" cards: paper task, talking companion, mini board. */
-function Steps({ band }: { band: BandConfig }) {
+export function HowSteps({ band }: { band: BandConfig }) {
   const rows = ROWS[band.id];
   return (
     <section className="ot-land-how" id="sa-funkar-det">
@@ -126,13 +153,24 @@ function Steps({ band }: { band: BandConfig }) {
   );
 }
 
+/** Landing footer: one calm line plus a real link to /integritet. */
+export function LandingFooter() {
+  return (
+    <footer className="ot-land-foot">
+      <p>{t('landing.footerText')}</p>
+      <a href="/integritet">{t('landing.footerPrivacy')} <span aria-hidden="true">→</span></a>
+    </footer>
+  );
+}
+
 /** The start (landing) page: top bar, hero, how-it-works, footer. The menu
- *  open and panel state lives here so the nav links and the footer open the
- *  same about/privacy panels as the hamburger menu. */
-export default function LandingPage({ profiles, band, onPick, starting, onStartGesture, startOpen, assumeId, onSwitch }: Props) {
+ *  open and panel state lives here so the nav links open the same
+ *  about/privacy panels as the hamburger menu; the footer links to
+ *  /integritet. */
+export default function LandingPage({ profiles, band, onPick, starting, onStartGesture, startOpen, assumeId, onSwitch, onNotYou, ignoreLastId, onBandLink }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [panel, setPanel] = useState<StartPanel>(null);
-  const start = useStartAction({ profiles, band, onPick, starting, onStartGesture, startOpen, assumeId });
+  const start = useStartAction({ profiles, band, onPick, starting, onStartGesture, startOpen, assumeId, ignoreLastId });
 
   const returnFocus = useRef<HTMLElement | null>(null);
 
@@ -160,10 +198,7 @@ export default function LandingPage({ profiles, band, onPick, starting, onStartG
     <div className="ot-land">
       <header className="ot-land-top">
         <div className="ot-land-topinner">
-        <div className="ot-land-brand">
-          <span className="ot-land-mark" aria-hidden="true" />
-          <span>Open Tutor</span>
-        </div>
+        <Brand />
         <nav className="ot-land-links" aria-label={t('landing.navLabel')}>
           <a href="#sa-funkar-det">{t('landing.howTitle')}</a>
           <button type="button" onClick={() => openPanel('about')}>
@@ -198,15 +233,12 @@ export default function LandingPage({ profiles, band, onPick, starting, onStartG
           startOpen={startOpen}
           assumeId={assumeId}
           action={start}
+          onNotYou={onNotYou}
+          ignoreLastId={ignoreLastId}
         />
-        <Steps band={band} />
-        <Bands band={band} />
-        <footer className="ot-land-foot">
-          <p>{t('landing.footerText')}</p>
-          <button type="button" onClick={() => openPanel('privacy')}>
-            {t('landing.footerPrivacy')} <span aria-hidden="true">→</span>
-          </button>
-        </footer>
+        <HowSteps band={band} />
+        <Bands band={band} onNavigate={onBandLink} />
+        <LandingFooter />
       </div>
     </div>
   );

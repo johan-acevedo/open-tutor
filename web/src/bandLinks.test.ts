@@ -18,16 +18,19 @@ describe('bandUrl', () => {
     );
   });
 
-  it('keeps the origin and sets ?band= on other hosts', () => {
-    expect(bandUrl('middle', 'http://localhost:5173/')).toBe('http://localhost:5173/?band=middle');
-    expect(bandUrl('upper', 'http://dell5500.tail2e1c4e.ts.net:5173/stig?a=b#del')).toBe(
-      'http://dell5500.tail2e1c4e.ts.net:5173/stig?a=b&band=upper#del',
-    );
+  it('uses the single-domain path routes on talarum.se and other hosts', () => {
+    expect(bandUrl('middle', 'https://talarum.se/')).toBe('https://talarum.se/hogstadiet');
+    expect(bandUrl('upper', 'https://talarum.se/ak1-6')).toBe('https://talarum.se/gymnasiet');
+    expect(bandUrl('primary', 'https://talarum.se/hogstadiet')).toBe('https://talarum.se/ak1-6');
   });
 
-  it('replaces an existing ?band= instead of doubling it', () => {
+  it('uses the path routes on dev hosts and drops ?band=', () => {
+    expect(bandUrl('middle', 'http://localhost:5173/')).toBe('http://localhost:5173/hogstadiet');
+    expect(bandUrl('upper', 'http://dell5500.tail2e1c4e.ts.net:5173/stig?a=b#del')).toBe(
+      'http://dell5500.tail2e1c4e.ts.net:5173/gymnasiet?a=b#del',
+    );
     expect(bandUrl('primary', 'http://localhost:5173/?band=middle')).toBe(
-      'http://localhost:5173/?band=primary',
+      'http://localhost:5173/ak1-6',
     );
   });
 });

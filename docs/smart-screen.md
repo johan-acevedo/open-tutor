@@ -4,7 +4,7 @@ Lead: the thread "state of the project" (Claude, 2026-11-12). The lead keeps thi
 Workers read it before starting and report against it. Decisions here were agreed with Johan
 on 2026-11-12 unless marked open.
 
-## 2026-11-26: no learner names in PostHog; 20-minute idle timeout
+## 2026-11-26: Talarum, one domain, /integritet (launch)
 
 Two changes from one privacy-minded brief, built on `feat/privacy-idle-timeout`:
 
@@ -42,6 +42,72 @@ Two changes from one privacy-minded brief, built on `feat/privacy-idle-timeout`:
 - Not tested live: no real voice call was run (paid providers). Proven by the full
   server and web suites plus typecheck and build; the idle path end-to-end (worker
   line → page end card) awaits a dev-instance call.
+- **After the second Codex review (launch flow fixes):** a picked legacy profile
+  (no band) is remembered under the current band, so the greeting and the session
+  request are theirs, not the previously remembered learner's; a pending switch
+  prefill suppresses the chooser and any explicit navigation clears it; Back during
+  connecting/live/ending no longer moves the theme; cross-band links land on exactly
+  the href's path+query; the menu privacy line says the profile travels with the next
+  call; picker Back focuses the start control. Proven by new App-level tests plus a
+  headless pass over the built app with /api/session intercepted (never a real call).
+
+## 2026-11-26: no learner names in PostHog; 20-minute idle timeout
+
+The service is renamed **Talarum** (talarum.se) and the three band hosts collapse onto one
+domain. Built on `feat/talarum-launch`:
+
+- **Rename, owner's copy rules.** User-visible "Open Tutor" is now Talarum everywhere: the page
+  (`<title>`, meta, OG/Twitter with `https://talarum.se/`), the API title and geoblock message,
+  and the tutor prompt (the service is Talarum; the companions stay Räven/Lodjuret/Björnen).
+  Internal identifiers are unchanged on purpose (`open-tutor` package, IndexedDB, localStorage
+  keys): renaming storage keys would lose existing learners' profiles. Public copy calls it a
+  free experiment ("Gratis än så länge"), never open source / non-profit / forever-free;
+  contact is hej@talarum.se. Brand: the flame icon plus a lowercase wordmark, light on all three
+  dark band canvases.
+- **Routes.** `?band=` > path > host prefix > `TUTOR_BAND` > default. `/` is a 3-card chooser
+  (Räven · Åk 1–6, Lodjuret · Högstadiet, Björnen · Gymnasiet och vuxna,
+  audience big, one-tap start per card, face tap plays the hello clip) on a first visit and the
+  remembered learner's band view on return. `/ak1-6`, `/hogstadiet`, `/gymnasiet` render today's
+  focused landing per band; aliases (`/raven`, `/lodjuret`, `/bjornen`, `/vuxen`) normalize with
+  `history.replaceState`. Off tutor hosts the cross-band links use paths; the `tutor.` prefix swap
+  stays for the old hosts. The band stays fixed during a call; cards and the picker switch theme
+  plus companion in place (BandProvider/data-band, no reload).
+- **Siblings.** `Profile` gains `band` (set when a call starts; old profiles stay valid without one);
+  last learner tracked overall and per band. "Inte {name}?" and in-call "Byt elev" open a household
+  picker ("Alva · Räven", "+ Någon ny" to the chooser); picking switches band in place
+  and shows their 1-tap start. No prompt change: the tutor never suggests switching bands mid-call.
+- **Share card.** Below "Tillbaka till start": "Tipsa andra föräldrar" (primary/middle) or
+  "Tipsa någon" (upper), system share sheet where available else clipboard copy ("Kopierat ✓").
+  No UTM, no ids, no tracking.
+- **/integritet.** Real SPA route (the catch-all already serves index.html; covered by a server
+  test), linked from the top menu, start menu and landing footer. Names exactly the production
+  path: LiveKit (calls), Soniox (speech-to-text), Deepgram (voice), language models via OpenCode
+  Go and Command Code (incl. the plain sentence that Muse Spark Contributor from Meta may use
+  conversation text to improve future models), Exa (links), Wikimedia Commons or Parallel
+  (images), Cloudflare (site), PostHog EU (counts only, no names). The short start-menu privacy
+  text stays generic and links to the page.
+- **Old hosts** map with Cloudflare 301s, no migration code (see `deploy/README.md`):
+  `tutor.labtopia.dev/*` → `https://talarum.se/ak1-6`, `tutor2.labtopia.dev/*` →
+  `https://talarum.se/hogstadiet`, `tutor3.labtopia.dev/*` → `https://talarum.se/gymnasiet`.
+  Profiles are per origin in IndexedDB, so returning learners start fresh once.
+- **Not tested live:** no real voice calls (cost). Verified with `npm test/typecheck/build`,
+  `uv run pytest -q`, and headless Chromium screenshots at 1440×900 and 390×844 of `/`,
+  `/hogstadiet`, `/gymnasiet`, `/integritet`, the picker and the end card (see PR); zero console
+  errors. A real child session and a screen reader were not tested.
+- **Review fixes (Codex gpt-6.2-sol, same PR).** The picked profile and its band now
+  drive the route, greeting and start request as one state (picker choice and the
+  post-call switch prefill both navigate to the learner's band path); one band per
+  navigation (`?band=` > path > host > `TUTOR_BAND` only when nothing else names a
+  band), alias normalization keeps query+fragment, popstate re-resolves the band,
+  cross-band links navigate in place on talarum-style hosts, a late `/api/config`
+  is ignored once the user has chosen or a call is underway, and the call band is
+  captured once at start for the session request and profile writes. The naming
+  write stamps the band and binds the note target inside the serialized queue, with
+  the generation rechecked before UI/last-learner updates. Share uses a dedicated
+  style (`AbortError` never touches the clipboard); the mobile hide rule is scoped
+  to the header; the chooser header carries a quiet Integritet link and the footer
+  no longer claims everything stays in the browser. Card starts stop the greeting
+  clip; the picker takes and returns focus.
 
 ## 2026-11-24: the call view follows the landing page (concept A)
 

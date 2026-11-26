@@ -7,7 +7,21 @@ The web service and the voice worker run as **user** services (no root). Browser
 3. `deploy/install.sh` builds the page, installs `open-tutor-web` and `open-tutor-agent`, and checks `/api/health`. User services keep running after logout only with lingering enabled (`loginctl show-user $USER -p Linger`).
 4. Route an HTTPS hostname to the web service (Johan's instance: a Cloudflare tunnel on the Mini, see the home-lab ops handbook). Microphones only work on HTTPS pages.
 
-Share the page as `https://<host>`. `TUTOR_MAX_SESSIONS_PER_HOUR` caps new sessions for the whole instance.
+Share the page as `https://talarum.se`. `TUTOR_MAX_SESSIONS_PER_HOUR` caps new sessions for the whole instance.
+
+## Old band hosts (Cloudflare 301s, no migration code)
+
+The `tutor.` / `tutor2.` / `tutor3.` hosts stay out of the app: the page keeps
+supporting the host prefix only so old links do not break, but every band now
+lives on one domain. Add three Cloudflare Bulk Redirects (301) on the old zone:
+
+- `tutor.labtopia.dev/*` → `https://talarum.se/ak1-6`
+- `tutor2.labtopia.dev/*` → `https://talarum.se/hogstadiet`
+- `tutor3.labtopia.dev/*` → `https://talarum.se/gymnasiet`
+
+Learner profiles live in IndexedDB, which is per origin: a returning learner
+coming through a redirect starts fresh once (their old browser data stays under
+the old origin). Nothing in the code migrates it; that is accepted.
 
 Reach the web service only through the Cloudflare tunnel (step 4): a client that can reach the origin directly can forge the `CF-IPCountry` header the Sweden check trusts, so the check only holds behind the tunnel. Bind a private address (`TUTOR_BIND`, e.g. a tailnet address) and let the tunnel be the only public path.
 

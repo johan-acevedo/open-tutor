@@ -36,9 +36,9 @@ function firstVisit(band: BandId = 'primary') {
 describe('top bar', () => {
   it('shows the brand, nav links and ghost CTA on desktop', () => {
     firstVisit();
-    expect(screen.getByText('Open Tutor')).toBeDefined();
+    expect(screen.getByText('talarum')).toBeDefined();
     expect(screen.getByRole('link', { name: 'Så funkar det' }).getAttribute('href')).toBe('#sa-funkar-det');
-    expect(screen.getByRole('button', { name: 'Om Open Tutor' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Om Talarum' })).toBeDefined();
     expect(screen.getByRole('button', { name: 'Integritet' })).toBeDefined();
     expect(screen.getAllByRole('button', { name: 'Prata med Räven' })).toHaveLength(2);
   });
@@ -55,22 +55,46 @@ describe('top bar', () => {
   it('the nav opens the about and privacy panels from outside the menu', () => {
     firstVisit();
     const nav = screen.getByRole('navigation', { name: 'Navigering' });
-    fireEvent.click(within(nav).getByRole('button', { name: 'Om Open Tutor' }));
-    expect(screen.getByLabelText('Om Open Tutor')).toBeDefined();
+    fireEvent.click(within(nav).getByRole('button', { name: 'Om Talarum' }));
+    expect(screen.getByLabelText('Om Talarum')).toBeDefined();
     fireEvent.click(within(nav).getByRole('button', { name: 'Integritet' }));
     expect(screen.getByLabelText('Integritet')).toBeDefined();
   });
 
-  it('the footer privacy button opens the privacy panel', () => {
+  it('the footer links to the /integritet page', () => {
     firstVisit();
-    const trigger = screen.getByRole('button', { name: /Läs om integritet/ });
-    trigger.focus();
-    fireEvent.click(trigger);
-    const dialog = screen.getByRole('dialog', { name: 'Integritet' });
-    expect(document.activeElement).toBe(dialog);
-    fireEvent.keyDown(window, { key: 'Escape' });
-    expect(screen.queryByRole('dialog', { name: 'Integritet' })).toBeNull();
-    expect(document.activeElement).toBe(trigger);
+    const link = screen.getByRole('link', { name: /Läs om integritet/ });
+    expect(link.getAttribute('href')).toBe('/integritet');
+  });
+
+  it('the footer says profiles stay local and calls go to providers', () => {
+    firstVisit();
+    const footer = document.querySelector('.ot-land-foot');
+    expect(footer?.textContent).toContain('webbläsaren');
+    expect(footer?.textContent).toContain('Integritet');
+    // The old line claimed everything stays in the browser; conversation
+    // content goes to the providers named on /integritet.
+    expect(footer?.textContent).not.toContain('sparas bara i din webbläsare');
+  });
+
+  it('cross-band links navigate in place when the host picks no band', () => {
+    const onBandLink = vi.fn();
+    render(
+      <LandingPage
+        profiles={[]}
+        band={bandConfig('primary')}
+        onPick={() => {}}
+        starting={false}
+        onSwitch={() => {}}
+        onBandLink={onBandLink}
+      />,
+    );
+    const lynx = screen.getByRole('link', { name: 'Högstadiet med Lodjuret' });
+    // The href stays a real link (right-click, copy, no-JS), but a plain
+    // left click on a talarum-style host navigates without reloading.
+    expect(lynx.getAttribute('href')).toContain('/hogstadiet');
+    fireEvent.click(lynx);
+    expect(onBandLink).toHaveBeenCalledWith('middle');
   });
   it('the ghost button stops the greeting clip when starting', async () => {
     resetGreetingForTests();
@@ -112,25 +136,25 @@ describe('hero', () => {
     firstVisit();
     expect(screen.getByRole('heading', { level: 2, name: 'Går du i en annan årskurs?' })).toBeDefined();
     const lynx = screen.getByRole('link', { name: 'Högstadiet med Lodjuret' });
-    expect(lynx.getAttribute('href')).toContain('band=middle');
+    expect(lynx.getAttribute('href')).toContain('/hogstadiet');
     const face = lynx.querySelector('img.ot-land-bandface');
     expect(face?.getAttribute('src')).toContain('face.webp');
     const bear = screen.getByRole('link', { name: 'Gymnasiet och vuxna med Björnen' });
-    expect(bear.getAttribute('href')).toContain('band=upper');
+    expect(bear.getAttribute('href')).toContain('/gymnasiet');
   });
 
   it('names the younger bands for the upper band', () => {
     firstVisit('upper');
     expect(screen.getByRole('heading', { level: 2, name: 'Någon yngre hemma?' })).toBeDefined();
-    expect(screen.getByRole('link', { name: 'Åk 1–6 med Räven' }).getAttribute('href')).toContain('band=primary');
-    expect(screen.getByRole('link', { name: 'Högstadiet med Lodjuret' }).getAttribute('href')).toContain('band=middle');
+    expect(screen.getByRole('link', { name: 'Åk 1–6 med Räven' }).getAttribute('href')).toContain('/ak1-6');
+    expect(screen.getByRole('link', { name: 'Högstadiet med Lodjuret' }).getAttribute('href')).toContain('/hogstadiet');
   });
 
   it('the middle band invites both younger and older learners', () => {
     firstVisit('middle');
     expect(screen.getByRole('heading', { level: 2, name: 'Går du i en annan årskurs?' })).toBeDefined();
-    expect(screen.getByRole('link', { name: 'Åk 1–6 med Räven' }).getAttribute('href')).toContain('band=primary');
-    expect(screen.getByRole('link', { name: 'Gymnasiet och vuxna med Björnen' }).getAttribute('href')).toContain('band=upper');
+    expect(screen.getByRole('link', { name: 'Åk 1–6 med Räven' }).getAttribute('href')).toContain('/ak1-6');
+    expect(screen.getByRole('link', { name: 'Gymnasiet och vuxna med Björnen' }).getAttribute('href')).toContain('/gymnasiet');
   });
 
   it('returning visit shares the row between CTA and not-you', () => {
@@ -178,3 +202,41 @@ describe.each([
     });
   },
 );
+
+describe('household picker entry', () => {
+  it('opens the picker from Inte-namnet instead of the nameless view', () => {
+    localStorage.setItem('open-tutor-last-profile', 'p1');
+    const onNotYou = vi.fn();
+    render(
+      <LandingPage
+        profiles={[profile()]}
+        band={bandConfig('primary')}
+        onPick={() => {}}
+        starting={false}
+        onSwitch={() => {}}
+        onNotYou={onNotYou}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Inte Elsa?' }));
+    expect(onNotYou).toHaveBeenCalledTimes(1);
+    // The nameless view is not shown: still the returning view.
+    expect(screen.queryByText('Hej!')).toBeNull();
+    expect(screen.getByText('Hej Elsa!')).toBeDefined();
+  });
+
+  it('ignores a remembered learner from another band on a band route', () => {
+    localStorage.setItem('open-tutor-last-profile', 'p1');
+    render(
+      <LandingPage
+        profiles={[profile()]}
+        band={bandConfig('middle')}
+        onPick={() => {}}
+        starting={false}
+        onSwitch={() => {}}
+        ignoreLastId
+      />,
+    );
+    expect(screen.getByText('Hej!')).toBeDefined();
+    expect(screen.queryByText('Hej Elsa!')).toBeNull();
+  });
+});

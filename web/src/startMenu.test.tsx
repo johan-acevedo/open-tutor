@@ -22,8 +22,8 @@ it('uses the upper band switch label', () => {
 it('opens the about and privacy notes', () => {
   render(<StartMenu switchLabel="Byt elev" onSwitch={() => {}} />);
   fireEvent.click(screen.getByRole('button', { name: 'Meny' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Om Open Tutor' }));
-  expect(screen.getByLabelText('Om Open Tutor')).toBeDefined();
+  fireEvent.click(screen.getByRole('button', { name: 'Om Talarum' }));
+  expect(screen.getByLabelText('Om Talarum')).toBeDefined();
   fireEvent.click(screen.getByRole('button', { name: 'Integritet' }));
   expect(screen.getByLabelText('Integritet')).toBeDefined();
 });
@@ -33,9 +33,31 @@ it('supports a lifted panel state opened from outside', () => {
   const { rerender } = render(
     <StartMenu switchLabel="Byt elev" onSwitch={() => {}} open panel={null} onPanelChange={onPanelChange} />,
   );
-  expect(screen.queryByLabelText('Om Open Tutor')).toBeNull();
+  expect(screen.queryByLabelText('Om Talarum')).toBeNull();
   rerender(
     <StartMenu switchLabel="Byt elev" onSwitch={() => {}} open panel="privacy" onPanelChange={onPanelChange} />,
   );
   expect(screen.getByLabelText('Integritet')).toBeDefined();
+});
+
+it('links the privacy panel to the /integritet page', () => {
+  render(<StartMenu switchLabel="Byt elev" onSwitch={() => {}} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Meny' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Integritet' }));
+  const link = screen.getByRole('link', { name: /Läs om integritet/ });
+  expect(link.getAttribute('href')).toBe('/integritet');
+});
+
+it('says the profile travels with the next call and points at /integritet', () => {
+  render(<StartMenu switchLabel="Byt elev" onSwitch={() => {}} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Meny' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Integritet' }));
+  const panel = screen.getByLabelText('Integritet');
+  // Calm and accurate: saved in this browser, sent along when the next
+  // call starts so the tutor can continue — never browser-only.
+  expect(panel.textContent).toContain('webbläsaren');
+  expect(panel.textContent).toContain('skickas de med');
+  expect(panel.textContent).not.toContain('bara i den här webbläsaren');
+  // Model training is disclosed on /integritet, never in this summary.
+  expect(panel.textContent?.toLowerCase()).not.toContain('trän');
 });

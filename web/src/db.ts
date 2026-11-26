@@ -3,6 +3,7 @@
 
 import type { Note } from './protocol';
 import { cleanLearnerName, isValidLearnerName } from './learnerName';
+import type { BandId } from './bands';
 
 export type Profile = {
   id: string;
@@ -11,6 +12,9 @@ export type Profile = {
    *  naturally in the first call via the set_learner_grade tool; adults
    *  (band 3 adults) are never asked for one. */
   grade: number | null;
+  /** Age band the learner last started a call in. Set when a call starts;
+   *  older profiles predate it and stay valid without one. */
+  band?: BandId;
   notes: Note[];
   createdAt: number;
 };
@@ -132,20 +136,21 @@ export async function saveProfile(profile: Profile): Promise<void> {
   }
 }
 
-export async function createProfile(name: string, grade: number | null = null): Promise<Profile> {
+export async function createProfile(name: string, grade: number | null = null, band?: BandId): Promise<Profile> {
   const profile: Profile = {
     id: newProfileId(),
     name: name.trim(),
     grade,
     notes: [],
     createdAt: Date.now(),
+    ...(band ? { band } : {}),
   };
   await saveProfile(profile);
   return profile;
 }
 
-/** Patch a profile (grade learned mid-call, name fix). Returns the updated profile. */
-export async function updateProfile(profileId: string, patch: { grade?: number | null; name?: string }): Promise<Profile | undefined> {
+/** Patch a profile (grade learned mid-call, name fix, band on start). Returns the updated profile. */
+export async function updateProfile(profileId: string, patch: { grade?: number | null; name?: string; band?: BandId }): Promise<Profile | undefined> {
   let profile: Profile | undefined;
   if (idbBroken) {
     profile = memoryFallback.get(profileId);
@@ -162,6 +167,7 @@ export async function updateProfile(profileId: string, patch: { grade?: number |
     ...profile,
     ...(patch.grade !== undefined ? { grade: patch.grade } : {}),
     ...(patch.name !== undefined ? { name: patch.name.trim() || profile.name } : {}),
+    ...(patch.band !== undefined ? { band: patch.band } : {}),
   };
   await saveProfile(updated);
   return updated;
@@ -209,7 +215,19 @@ export async function deleteProfile(id: string): Promise<void> {
  *  profile, or undefined when stale/invalid. */
 export function enqueueProfileName(
   profileId: string, name: string, getActiveId: () => string | null,
-  opts?: { isCurrentSession?: () => boolean; naming?: NamingSession },
+  opts?: {
+    isCurrentSession?: () => boolean;
+    naming?: NamingSession;
+    /** Call band to stamp on the named profile, atomically inside the same
+     *  serialized write: the band write never races another profile write
+     *  and never delays the note binding with a second await outside. */
+    stampBand?: BandId;
+    /** Bound inside the queue the moment the named profile is known, before
+     *  the operation's promise settles: a note enqueued behind the naming
+     *  resolves its target (at execution time) to the named profile, never
+     *  to the transient start id. Only fires on the success path. */
+    bindNoteTarget?: (id: string) => void;
+  },
 ): Promise<Profile | undefined> {
   const wanted = cleanLearnerName(name);
   if (!isValidLearnerName(wanted)) return Promise.resolve(undefined);
@@ -218,6 +236,15 @@ export function enqueueProfileName(
     if (opts?.isCurrentSession && !opts.isCurrentSession()) return undefined;
     const activeId = getActiveId();
     if (!profileId || !activeId || profileId !== activeId) return undefined;
+    // Stamp the call band on the named profile before returning: the whole
+    // naming (name + band) lands as one serialized write.
+    const stamped = async (p: Profile | undefined): Promise<Profile | undefined> => {
+      if (!p) return undefined;
+      const band = opts?.stampBand;
+      const done = !band || p.band === band ? p : ((await updateProfile(p.id, { band })) ?? p);
+      opts?.bindNoteTarget?.(done.id);
+      return done;
+    };
     const stored = await listProfiles();
     // The generation may have turned while the read was in flight: nothing
     // has been written yet, so stand down.
@@ -241,37 +268,37 @@ export function enqueueProfileName(
         await saveProfile(attached);
         await deleteProfile(current.id);
         markCreated(null);
-        return attached;
+        return stamped(attached);
       }
       markCreated(null);
-      return match;
+      return stamped(match);
     }
     if (current) {
       if (match) {
         // Same profile, only the spelling changed: keep everything.
-        if (current.name !== wanted) return updateProfile(current.id, { name: wanted });
-        return current;
+        if (current.name !== wanted) return stamped(await updateProfile(current.id, { name: wanted }));
+        return stamped(current);
       }
       if (opts?.naming?.createdId === current.id) {
         // A correction of a name learned earlier in this session: rename in
         // place so the grade and notes learned meanwhile are kept.
-        return updateProfile(current.id, { name: wanted });
+        return stamped(await updateProfile(current.id, { name: wanted }));
       }
       // A stored profile from an earlier visit, corrected to a new name:
       // leave the stored one untouched and start a fresh profile.
       const created = await createProfile(wanted);
       markCreated(created.id);
-      return created;
+      return stamped(created);
     }
     // A nameless start has no stored profile yet (transient id): attach to
     // the stored profile with this name, or create it.
     if (match) {
       markCreated(null);
-      return match;
+      return stamped(match);
     }
     const created = await createProfile(wanted);
     markCreated(created.id);
-    return created;
+    return stamped(created);
   });
 }
 
@@ -284,6 +311,8 @@ export function resolveProfileSwitch(profiles: Profile[], name: string): Profile
 
 const LAST_KEY = 'open-tutor-last-profile';
 
+const lastKeyForBand = (band: BandId): string => `${LAST_KEY}:${band}`;
+
 /** The student the last visit assumed; the next visit starts with them. */
 export function getLastProfileId(): string | null {
   try {
@@ -293,9 +322,19 @@ export function getLastProfileId(): string | null {
   }
 }
 
-export function rememberLastProfileId(id: string): void {
+/** The student last assumed in one band (siblings on one device). */
+export function getLastProfileIdForBand(band: BandId): string | null {
+  try {
+    return localStorage.getItem(lastKeyForBand(band));
+  } catch {
+    return null;
+  }
+}
+
+export function rememberLastProfileId(id: string, band?: BandId): void {
   try {
     localStorage.setItem(LAST_KEY, id);
+    if (band) localStorage.setItem(lastKeyForBand(band), id);
   } catch {
     /* storage blocked: next visit just asks the name again */
   }

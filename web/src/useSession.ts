@@ -25,7 +25,7 @@ import {
   LEARNER_RPC_SET_NAME,
   LEARNER_RPC_SWITCH,
 } from './protocol';
-import { enqueueNote, enqueueProfileGrade, enqueueProfileName, enqueueProfileSwitch, rememberLastProfileId } from './db';
+import { enqueueNote, enqueueProfileGrade, enqueueProfileName, enqueueProfileSwitch, rememberLastProfileId, updateProfile } from './db';
 import type { NamingSession } from './db';
 import { handleNote, handleSetGrade, handleSetName, handleSwitch } from './learnerRpc';
 import { createEndGate, routeAfterDisconnect, routeAfterEnd } from './lessonEnd';
@@ -498,8 +498,20 @@ export function useSession(mobile = false, band: BandId = 'primary') {
     });
   }, [cleanupRoom]);
 
+  const clearProfilesOpen = useCallback(() => {
+    setProfilesOpen(false);
+  }, []);
+
   const start = useCallback(
-    async (p: Profile) => {
+    async (p: Profile, bandOverride?: BandId) => {
+      // A chooser card starts the call in its own band: the UI theme and
+      // the session request must agree in the same tick, before React
+      // re-renders, so the override is applied directly.
+      if (bandOverride) bandRef.current = bandOverride;
+      // The call band is captured once here and never re-read: a late
+      // /api/config, a Back press or any other band change mid-call must
+      // not move the session request or the profile writes to another band.
+      const callBand = bandRef.current;
       if (!preparedRoomRef.current) prepareStart();
       const room = roomRef.current;
       if (!room) return;
@@ -516,6 +528,20 @@ export function useSession(mobile = false, band: BandId = 'primary') {
       namingRef.current = { createdId: null };
       profileRef.current = p;
       setProfile(p);
+      // Stamp the call's band on a stored profile so the household picker
+      // can show which companion each remembered learner belongs to. Old
+      // profiles without a band stay valid; the stamp just fills it in.
+      if (p.name.trim() !== '' && p.band !== callBand) {
+        const stampId = p.id;
+        void updateProfile(stampId, { band: callBand })
+          .then((stamped) => {
+            if (stamped && profileRef.current?.id === stamped.id) {
+              profileRef.current = stamped;
+              setProfile(stamped);
+            }
+          })
+          .catch(() => undefined);
+      }
       setItems([]);
       setActiveItemId(null);
       setHomeworkDraft(null);
@@ -562,7 +588,7 @@ export function useSession(mobile = false, band: BandId = 'primary') {
           return fetch('/api/session', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ learner: { id: p.id, name: p.name, grade: p.grade, notes, band: bandRef.current, locale: localeId },
+            body: JSON.stringify({ learner: { id: p.id, name: p.name, grade: p.grade, notes, band: callBand, locale: localeId },
               board, device_id: getDeviceId() }),
           });
         };
@@ -866,17 +892,25 @@ export function useSession(mobile = false, band: BandId = 'primary') {
           // A name RPC from an ended or previous session writes nothing:
           // reject before the serialized write, not after it.
           if (!isCurrent()) return undefined;
+          // The band stamp and the note-target binding happen inside the
+          // same serialized write (db.ts): no second await outside can
+          // delay the binding or let the session turn in between. The
+          // generation is rechecked before any UI or last-learner state.
           const updated = await enqueueProfileName(
             profileId, name, () => profileRef.current?.id ?? null,
-            { isCurrentSession: isCurrent, naming: namingRef.current },
+            {
+              isCurrentSession: isCurrent,
+              naming: namingRef.current,
+              stampBand: callBand,
+              bindNoteTarget: (id) => { noteProfileId = id; },
+            },
           );
           if (updated && isCurrent()) {
             // The session's note binding follows the naming: notes saved
             // before the name was known would otherwise land nowhere.
-            noteProfileId = updated.id;
             profileRef.current = updated;
             setProfile(updated);
-            rememberLastProfileId(updated.id);
+            rememberLastProfileId(updated.id, callBand);
             identifyLearner(updated.grade);
           }
           return isCurrent() ? updated : undefined;
@@ -1323,6 +1357,14 @@ export function useSession(mobile = false, band: BandId = 'primary') {
     setProfilesOpen(true);
   }, []);
 
+  /** An explicit user navigation wins over a pending in-call-switch
+   *  prefill and clears it, so the prefill redirect never yanks the page
+   *  back (see App navigate). Idempotent. */
+  const clearPrefill = useCallback(() => {
+    pendingPrefillRef.current = null;
+    setPrefillId(null);
+  }, []);
+
   /** Menu "leave": send `end` so the worker saves the note, then open the
    *  nameless start page directly (no second click). The end transition itself owns
    *  idempotency (see endSession): a second call while one is in flight
@@ -1589,7 +1631,9 @@ export function useSession(mobile = false, band: BandId = 'primary') {
     backToProfiles,
     leaveToProfiles,
     showFirstVisit,
+    clearPrefill,
     profilesOpen,
+    clearProfilesOpen,
     prefillId,
     endReason,
     addFiles,
