@@ -31,7 +31,7 @@ export default function ChooserPage({ onBegin, starting }: Props) {
         <div className="ot-land-hero ot-land-hero-choose">
           <HomeChooser onBegin={onBegin} starting={starting} />
         </div>
-        <HowSteps band={bandConfig('primary')} />
+        <HowSteps band={bandConfig('primary')} neutral />
         <LandingFooter />
       </div>
     </div>

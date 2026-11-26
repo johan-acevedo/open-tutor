@@ -1091,9 +1091,6 @@ a:focus-visible {
   .ot-land-notyou {
     flex: 0 0 auto;
   }
-  .ot-land-cards {
-    grid-template-columns: 1fr;
-  }
   .ot-land-how {
     /* 32 px hero bottom + 32 px here keeps ≥64 px of air before the steps. */
     padding: 32px 24px 56px;
@@ -1916,7 +1913,9 @@ a:focus-visible {
 .ot-choose-head {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  /* The intro's last line sits on the headline's last baseline. */
   align-items: end;
+  align-items: last baseline;
   gap: 24px 72px;
   margin-bottom: clamp(28px, 5svh, 52px);
 }
@@ -1932,8 +1931,9 @@ a:focus-visible {
 }
 
 .ot-choose .ot-land-sub {
-  margin: 0 0 0.35em;
-  max-width: 38ch;
+  margin: 0;
+  max-width: 36ch;
+  justify-self: end;
   font-size: clamp(17px, 1.35vw, 20px);
 }
 
@@ -1944,8 +1944,8 @@ a:focus-visible {
   --ot-choose-glow: #f2995e;
   --ot-choose-wave: #c9652f;
   --ot-fig-w: 64%;
-  --ot-fig-top: 10%;
-  --ot-fig-x: 11%;
+  --ot-fig-top: 9%;
+  --ot-fig-x: 0%;
   list-style: none;
   display: flex;
   flex-direction: column;
@@ -1962,7 +1962,7 @@ a:focus-visible {
   --ot-choose-wave: #a8823c;
   --ot-fig-w: 98%;
   --ot-fig-top: 5%;
-  --ot-fig-x: 10%;
+  --ot-fig-x: 0%;
 }
 
 .ot-choose-card[data-companion="upper"] {
@@ -1971,7 +1971,7 @@ a:focus-visible {
   --ot-choose-wave: #8f7a52;
   --ot-fig-w: 96%;
   --ot-fig-top: 6%;
-  --ot-fig-x: 10%;
+  --ot-fig-x: 0%;
 }
 
 .ot-choose-cards {
@@ -2041,45 +2041,40 @@ a:focus-visible {
   }
 }
 
-/* Mini comic bubble, top left, tail toward the head. */
-.ot-choose-bubble {
+/* Round listen control, top right of the portrait: a dark frosted disc
+   with a cream speaker that turns apricot while the clip plays. */
+.ot-choose-listen {
   position: absolute;
-  left: 6%;
-  top: 8%;
-  width: clamp(100px, 29%, 128px);
-  aspect-ratio: 150 / 92;
+  top: 14px;
+  right: 14px;
   z-index: 1;
-  filter: drop-shadow(0 6px 14px #0000004d);
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--ot-paper);
+  background: rgba(23, 20, 17, 0.72);
+  border: 1px solid #f6f1e72e;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
 }
 
-.ot-choose-bubble-shape {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
+.ot-choose-listen svg {
+  width: 22px;
+  height: 22px;
+  margin-left: 2px;
 }
 
-.ot-choose-bubble-in {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 0;
-  height: 66%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  color: var(--ot-paper-ink);
-  font-weight: 800;
-  font-size: clamp(19px, 1.7vw, 24px);
-  letter-spacing: -0.01em;
+.ot-choose-portrait:hover .ot-choose-listen {
+  border-color: #f6f1e766;
 }
 
-.ot-choose-bubble-in svg {
-  width: 1.15em;
-  height: 1.15em;
-  flex: 0 0 auto;
+.ot-choose-portrait.is-playing .ot-choose-listen {
+  color: var(--ot-cyan);
+  border-color: color-mix(in srgb, var(--ot-cyan) 70%, transparent);
+  background: rgba(23, 20, 17, 0.85);
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -2154,6 +2149,28 @@ a:focus-visible {
 .ot-choose-cta:disabled {
   opacity: 0.55;
   cursor: default;
+}
+
+/* Front-door step 2: all three faces, slightly overlapping, then the
+   talking dots. */
+.ot-land-talk-trio {
+  align-items: center;
+  padding: 0 0 0 40px;
+  gap: 14px;
+}
+
+.ot-land-trio {
+  display: flex;
+}
+
+.ot-land-trio .ot-land-bandface {
+  width: 76px;
+  height: 76px;
+  box-shadow: 0 0 0 3px var(--ot-elevated), inset 0 0 0 1px #ffffff14;
+}
+
+.ot-land-trio .ot-land-bandface + .ot-land-bandface {
+  margin-left: -14px;
 }
 
 /* Household picker: one calm row per remembered learner. */
@@ -2297,7 +2314,122 @@ a:focus-visible {
   text-decoration: underline;
 }
 
-@media (max-width: 899px) {
+/* Steps: one column on phones only; tablets keep three smaller cards. */
+@media (max-width: 719px) {
+  .ot-land-cards {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 720px) and (max-width: 1023px) {
+  .ot-land-cards {
+    gap: 16px;
+  }
+  .ot-land-pic {
+    height: 180px;
+  }
+  .ot-land-num {
+    left: 16px;
+    top: 10px;
+    font-size: 48px;
+  }
+  .ot-land-paper {
+    width: 150px;
+    padding: 22px 8px;
+    font-size: 30px;
+  }
+  .ot-land-talk {
+    padding-left: 34px;
+    gap: 6px;
+  }
+  .ot-land-talk img {
+    height: 140px;
+  }
+  .ot-land-talk-trio {
+    justify-content: center;
+    padding-left: 0;
+  }
+  .ot-land-trio .ot-land-bandface {
+    width: 52px;
+    height: 52px;
+  }
+  .ot-land-trio .ot-land-bandface + .ot-land-bandface {
+    margin-left: -12px;
+  }
+  .ot-land-eq {
+    width: 150px;
+    font-size: 17px;
+  }
+  .ot-land-cardtxt {
+    padding: 6px 18px 22px;
+  }
+  .ot-land-cardtxt h3 {
+    font-size: 21px;
+  }
+  .ot-land-cardtxt p {
+    font-size: 15px;
+  }
+}
+
+/* Tablets and narrow windows (720–1023 px): keep the three-card gallery,
+   with tighter padding and type; the head stacks below 900 px. */
+@media (min-width: 720px) and (max-width: 1023px) {
+  .ot-choose-cards {
+    gap: 16px;
+  }
+  .ot-choose-card {
+    border-radius: 20px;
+  }
+  .ot-choose-portrait {
+    aspect-ratio: 1 / 1;
+    max-height: 34svh;
+    min-height: 200px;
+  }
+  .ot-choose-body {
+    padding: 8px 18px 20px;
+  }
+  .ot-choose-aud {
+    font-size: 22px;
+  }
+  .ot-choose-with {
+    font-size: 15px;
+    margin-bottom: 16px;
+  }
+  .ot-choose-cta {
+    min-height: 52px;
+    font-size: 16px;
+    border-radius: 12px;
+  }
+  .ot-choose-cta svg {
+    display: none;
+  }
+  .ot-choose-listen {
+    top: 10px;
+    right: 10px;
+    width: 40px;
+    height: 40px;
+  }
+}
+
+@media (min-width: 720px) and (max-width: 899px) {
+  .ot-land-hero-choose {
+    padding-top: 16px;
+  }
+  .ot-choose-head {
+    grid-template-columns: 1fr;
+    gap: 14px;
+    margin-bottom: 32px;
+  }
+  .ot-choose .ot-land-title {
+    font-size: 56px;
+  }
+  .ot-choose .ot-land-sub {
+    justify-self: start;
+    max-width: 44ch;
+  }
+}
+
+@media (max-width: 719px) {
   .ot-land-hero-choose {
     padding-top: 8px;
     padding-bottom: 40px;
@@ -2319,7 +2451,7 @@ a:focus-visible {
     gap: 12px;
   }
   /* Phones: a row per companion. Portrait tile left, label and the start
-     button right; the bubble shrinks to its speaker. */
+     button right; the listen disc sits in the tile's corner. */
   .ot-choose-card {
     display: grid;
     grid-template-columns: 108px minmax(0, 1fr);
@@ -2348,25 +2480,16 @@ a:focus-visible {
   .ot-choose-portrait::after {
     height: 26%;
   }
-  .ot-choose-bubble {
-    left: auto;
-    right: 6px;
+  .ot-choose-listen {
     top: auto;
-    bottom: 6px;
-    width: 34px;
-    height: 34px;
-    aspect-ratio: auto;
-    border-radius: 50%;
-    background: var(--ot-paper);
-    border: 2px solid #15110d;
+    bottom: 8px;
+    right: 8px;
+    width: 36px;
+    height: 36px;
   }
-  .ot-choose-bubble-shape,
-  .ot-choose-bubble-in span {
-    display: none;
-  }
-  .ot-choose-bubble-in {
-    height: 100%;
-    font-size: 16px;
+  .ot-choose-listen svg {
+    width: 18px;
+    height: 18px;
   }
   .ot-choose-body {
     padding: 14px 14px 14px 16px;
@@ -2389,6 +2512,51 @@ a:focus-visible {
   .ot-choose-cta svg {
     display: none;
   }
+}
+
+/* Small phones (≤ 380 px wide or ≤ 700 px tall): tighter head and rows so
+   the three cards sit comfortably, the last button clear of the edge. */
+@media (max-width: 719px) and (max-height: 700px), (max-width: 380px) {
+  .ot-land-hero-choose {
+    padding-top: 2px;
+  }
+  .ot-choose .ot-land-title {
+    font-size: clamp(32px, 9.6vw, 38px);
+  }
+  .ot-choose .ot-land-sub {
+    font-size: 15px;
+    line-height: 1.45;
+  }
+  .ot-choose-head {
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .ot-choose-cards {
+    gap: 10px;
+  }
+  .ot-choose-card {
+    grid-template-columns: 96px minmax(0, 1fr);
+  }
+  .ot-choose-portrait {
+    min-height: 116px;
+  }
+  .ot-choose-body {
+    padding: 10px 12px 12px 14px;
+  }
+  .ot-choose-aud {
+    font-size: 19px;
+  }
+  .ot-choose-with {
+    font-size: 14px;
+    margin: 0 0 8px;
+  }
+  .ot-choose-cta {
+    min-height: 44px;
+    font-size: 15px;
+  }
+}
+
+@media (max-width: 899px) {
   .ot-privacy {
     font-size: 17px;
     padding-top: 28px;

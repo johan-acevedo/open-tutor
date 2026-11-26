@@ -105,6 +105,23 @@ describe('HomeChooser card start', () => {
   });
 });
 
+describe('ChooserPage steps', () => {
+  it('keeps the how-it-works steps band-neutral under all three companions', () => {
+    render(<ChooserPage onBegin={vi.fn()} starting={false} />);
+    expect(screen.getByRole('heading', { name: 'Prata om uppgiften' })).toBeDefined();
+    expect(screen.getByText('Fota uppgiften, så syns den på tavlan.')).toBeDefined();
+    // The companion-specific step copy belongs to the band pages only.
+    expect(screen.queryByRole('heading', { name: 'Prata med Räven' })).toBeNull();
+    expect(screen.queryByText(/så ser Räven den/)).toBeNull();
+  });
+
+  it('gives each portrait a visible-on-hover listen title', () => {
+    render(<HomeChooser onBegin={vi.fn()} starting={false} />);
+    const fox = screen.getByRole('button', { name: /Lyssna på Räven$/ });
+    expect(fox.getAttribute('title')).toBe('Lyssna på Räven');
+  });
+});
+
 describe('HomeChooser listen state', () => {
   it('marks only the playing companion portrait as pressed', async () => {
     MockAudio.instances = [];

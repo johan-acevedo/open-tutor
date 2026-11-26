@@ -195,6 +195,11 @@ export const sv = {
   'landing.row2Upper': 'f′(x) = 2x + 3',
   'landing.row3Upper': 'f′(2) = 7',
   'landing.listenAria': '{greeting} Lyssna på {companion}',
+  'landing.listenTitle': 'Lyssna på {companion}',
+  // Band-neutral steps on the front door (/), under all three companions.
+  'landing.step1TextNeutral': 'Fota uppgiften, så syns den på tavlan.',
+  'landing.step2TitleNeutral': 'Prata om uppgiften',
+  'landing.step2TextNeutral': 'Säg vad du tänker. Din studiekompis lyssnar och frågar.',
   'landing.withCompanion': 'med {companion}',
 
   // Toasts (session errors)

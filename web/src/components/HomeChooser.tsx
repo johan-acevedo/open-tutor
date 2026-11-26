@@ -21,31 +21,19 @@ const CTA: Record<BandId, 'band.primary.startButton' | 'band.middle.startButton'
   upper: 'band.upper.startButton',
 };
 
-/** The small comic bubble on each portrait: the same language as the band
- *  landing hero (cream fill, dark outline, tail toward the head, speaker with
- *  waves), so "tap to hear" reads the same everywhere. The waves breathe
- *  only while that companion's clip plays. */
-function ListenBubble({ label }: { label: string }) {
+/** A calm round listen control on each portrait: dark frosted disc, cream
+ *  speaker, apricot while that companion's clip plays. The comic "Hej!"
+ *  bubble stays on the single-band pages, where there is one companion;
+ *  three of them in a row competed with the three start buttons. */
+function ListenIcon() {
   return (
-    <span className="ot-choose-bubble" aria-hidden="true">
-      <svg className="ot-choose-bubble-shape" viewBox="0 0 150 92">
-        <path
-          d="M26 3 H124 A23 23 0 0 1 147 26 V36 A23 23 0 0 1 124 59 H104 L142 89 L80 59 H26 A23 23 0 0 1 3 36 V26 A23 23 0 0 1 26 3 Z"
-          fill="var(--ot-paper)"
-          stroke="#15110d"
-          strokeWidth="3.5"
-          strokeLinejoin="round"
-        />
+    <span className="ot-choose-listen" aria-hidden="true">
+      <svg className="ot-land-spk" viewBox="0 0 52 48">
+        <path d="M6 18 H14 L25 9 V39 L14 30 H6 Z" fill="currentColor" stroke="currentColor" strokeWidth="3" strokeLinejoin="round" />
+        <path d="M31 17 a10 10 0 0 1 0 14" fill="none" stroke="currentColor" strokeWidth="4.5" strokeLinecap="round" />
+        <path d="M36 11 a18 18 0 0 1 0 26" fill="none" stroke="currentColor" strokeWidth="4.5" strokeLinecap="round" />
+        <path d="M41 6 a26 26 0 0 1 0 36" fill="none" stroke="currentColor" strokeWidth="4.5" strokeLinecap="round" opacity=".55" />
       </svg>
-      <span className="ot-choose-bubble-in">
-        <svg className="ot-land-spk" viewBox="0 0 52 48">
-          <path d="M6 18 H14 L25 9 V39 L14 30 H6 Z" fill="#1d1813" stroke="#1d1813" strokeWidth="3" strokeLinejoin="round" />
-          <path d="M31 17 a10 10 0 0 1 0 14" fill="none" stroke="var(--ot-choose-wave)" strokeWidth="4.5" strokeLinecap="round" />
-          <path d="M36 11 a18 18 0 0 1 0 26" fill="none" stroke="var(--ot-choose-wave)" strokeWidth="4.5" strokeLinecap="round" />
-          <path d="M41 6 a26 26 0 0 1 0 36" fill="none" stroke="var(--ot-choose-wave)" strokeWidth="4.5" strokeLinecap="round" opacity=".55" />
-        </svg>
-        <span>{label}</span>
-      </span>
     </span>
   );
 }
@@ -53,7 +41,7 @@ function ListenBubble({ label }: { label: string }) {
 /** The single-domain front door: one landing page with three equal-weight
  *  companion cards. Each card starts the call in one tap (the band switches
  *  in place first). The portrait is one big button that plays that
- *  companion's hello clip; the comic bubble on it says so. */
+ *  companion's hello clip; the round speaker on it says so. */
 export default function HomeChooser({ onBegin, starting }: Props) {
   const playingBand = usePlayingGreetingBand();
   return (
@@ -84,9 +72,10 @@ export default function HomeChooser({ onBegin, starting }: Props) {
                 onClick={() => toggleGreeting(id)}
                 aria-pressed={playing}
                 aria-label={t('landing.listenAria', { greeting: band.copy.welcomeBubble, companion: band.companion.name })}
+                title={t('landing.listenTitle', { companion: band.companion.name })}
               >
                 <img className="ot-choose-fig" src={band.companion.hero} alt="" aria-hidden="true" />
-                <ListenBubble label={band.copy.welcomeBubble} />
+                <ListenIcon />
               </button>
               <div className="ot-choose-body">
                 <h3 className="ot-choose-aud">{t(AUDIENCE[id])}</h3>
