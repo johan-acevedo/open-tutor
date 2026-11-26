@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { layoutMode, mapAvatarState } from './avatarState';
 import { BAND_PATHS, bandConfig, bandFromPath, bandFromSearch, explicitHostBand, normalizeAliasUrl, resolveBand, type BandId } from './bands';
+import { bandUrl } from './bandLinks';
 import { BandProvider } from './BandContext';
 import { getLastProfileId, getLastProfileIdForBand, listProfiles, newProfileId, rememberLastProfileId } from './db';
 import type { Profile } from './db';
@@ -145,8 +146,10 @@ export default function App() {
       if (phaseRef.current === 'profiles' || phaseRef.current === 'ended') {
         setBand(locationBand(next));
       }
-      // Back is an explicit navigation: a pending switch prefill loses.
-      session.clearPrefill();
+      // Back on the start pages is an explicit navigation: a pending switch
+      // prefill loses. During a call it must survive: an acknowledged in-call
+      // switch lands on the prefilled learner when the room closes.
+      if (phaseRef.current === 'profiles' || phaseRef.current === 'ended') session.clearPrefill();
       setPickerOpen(false);
       setForceChooser(false);
     };
@@ -155,6 +158,22 @@ export default function App() {
     // session.clearPrefill is a stable callback; the listener never re-subscribes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Back during a call keeps the call band (see onPop). When the start page
+  // or end card returns (call ended, or the start request failed), the band
+  // follows the URL again, so the page never shows one band under another
+  // band's path.
+  useEffect(() => {
+    if (session.phase !== 'profiles' && session.phase !== 'ended') return;
+    let named: BandId | null = null;
+    try {
+      named = bandFromSearch(window.location.search) ?? bandFromPath(route);
+    } catch {
+      named = null;
+    }
+    if (named && named !== band) setBand(named);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.phase, route]);
 
   // Server-advertised default band (TUTOR_BAND, via /api/config): only for
   // testing on hosts whose name picks no band, and only when nothing else
@@ -357,7 +376,12 @@ export default function App() {
   let assumeId: string | null | undefined = session.prefillId;
   if (!assumeId && phase === 'profiles' && !isPrivacy) {
     if (routeBand) {
-      assumeId = getLastProfileIdForBand(routeBand) ?? undefined;
+      // The band's remembered learner counts only while they still belong
+      // to this band: a legacy learner picked here and later stamped with
+      // another band (their first call ran there) is not assumed here.
+      const perBand = getLastProfileIdForBand(routeBand);
+      const perBandProfile = perBand ? profiles.find((p) => p.id === perBand) : undefined;
+      assumeId = perBandProfile && (perBandProfile.band ?? routeBand) === routeBand ? perBand ?? undefined : undefined;
       if (!assumeId) {
         const overall = (() => {
           try {
@@ -461,7 +485,15 @@ export default function App() {
           onSwitch={openPicker}
           onNotYou={openPicker}
           ignoreLastId={routeBand !== null}
-          onBandLink={(target) => navigate(BAND_PATHS[target])}
+          onBandLink={(target) => {
+            // Same target as the rendered href: other query parameters stay.
+            try {
+              const url = new URL(bandUrl(target, window.location.href));
+              navigate(url.pathname + url.search);
+            } catch {
+              navigate(BAND_PATHS[target]);
+            }
+          }}
         />
       )}
 

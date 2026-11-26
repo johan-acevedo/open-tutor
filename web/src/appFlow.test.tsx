@@ -245,3 +245,57 @@ describe('household picker Back', () => {
     expect(document.activeElement?.className).toContain('ot-land-cta');
   });
 });
+
+describe('final review edges', () => {
+  it('follows the URL band again when a connecting call falls back to the start page', async () => {
+    window.history.replaceState(null, '', '/ak1-6');
+    let phase = 'connecting';
+    sessionMock.useSession.mockImplementation(() =>
+      baseSession({ phase, profile: stored({ id: 'e1', name: 'Alva', band: 'primary', createdAt: 1 }) }),
+    );
+    const view = render(<App />);
+    window.history.pushState(null, '', '/hogstadiet');
+    fireEvent(window, new PopStateEvent('popstate'));
+    await waitFor(() => expect(window.location.pathname).toBe('/hogstadiet'));
+    expect(document.querySelector('.ot-root')?.getAttribute('data-band')).toBe('primary');
+    // The start request failed: back on the start page under /hogstadiet.
+    phase = 'profiles';
+    view.rerender(<App />);
+    await waitFor(() =>
+      expect(document.querySelector('.ot-root')?.getAttribute('data-band')).toBe('middle'),
+    );
+  });
+
+  it('does not assume a learner on a band page once their profile belongs to another band', async () => {
+    await saveProfile(stored({ id: 'e2', name: 'Noa', band: 'middle', createdAt: 2 }));
+    // Picked here as a legacy profile earlier, then their first call ran in middle.
+    localStorage.setItem('open-tutor-last-profile:primary', 'e2');
+    window.history.replaceState(null, '', '/ak1-6');
+    sessionMock.useSession.mockReturnValue(baseSession({}));
+    render(<App />);
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Prata med Räven' }).length).toBeGreaterThan(0));
+    expect(screen.queryByText('Hej Noa!')).toBeNull();
+  });
+
+  it('keeps a pending switch prefill when Back is pressed during the call', async () => {
+    window.history.replaceState(null, '', '/ak1-6');
+    const clearPrefill = vi.fn();
+    sessionMock.useSession.mockReturnValue(
+      baseSession({ phase: 'live', clearPrefill, profile: stored({ id: 'e3', name: 'Alva', band: 'primary', createdAt: 3 }) }),
+    );
+    render(<App />);
+    window.history.pushState(null, '', '/');
+    fireEvent(window, new PopStateEvent('popstate'));
+    await waitFor(() => expect(window.location.pathname).toBe('/'));
+    expect(clearPrefill).not.toHaveBeenCalled();
+  });
+
+  it('keeps unrelated query parameters on a cross-band click', async () => {
+    window.history.replaceState(null, '', '/hogstadiet?kampanj=x&band=middle');
+    sessionMock.useSession.mockReturnValue(baseSession({}));
+    render(<App />);
+    fireEvent.click(await screen.findByRole('link', { name: 'Åk 1–6 med Räven' }));
+    await waitFor(() => expect(window.location.pathname).toBe('/ak1-6'));
+    expect(window.location.search).toBe('?kampanj=x');
+  });
+});
