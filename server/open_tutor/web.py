@@ -91,7 +91,7 @@ class SessionLimiter:
 
 def create_app(environ: dict[str, str] | None = None) -> FastAPI:
     env = dict(os.environ if environ is None else environ)
-    app = FastAPI(title="Open Tutor", docs_url=None, redoc_url=None, openapi_url=None)
+    app = FastAPI(title="Talarum", docs_url=None, redoc_url=None, openapi_url=None)
     limiter = SessionLimiter(int(env.get("TUTOR_MAX_SESSIONS_PER_HOUR", "12")))
     allowed_countries = {country.strip().upper() for country in env.get("TUTOR_ALLOWED_COUNTRIES", "").split(",") if country.strip()}
 
@@ -101,7 +101,7 @@ def create_app(environ: dict[str, str] | None = None) -> FastAPI:
         # Health remains available for the machine's local service checks.
         if allowed_countries and request.url.path != "/api/health":
             if request.headers.get("cf-ipcountry", "").upper() not in allowed_countries:
-                return JSONResponse(status_code=403, content={"detail": "Open Tutor is currently available from Sweden only."})
+                return JSONResponse(status_code=403, content={"detail": "Talarum is currently available from Sweden only."})
         return await call_next(request)
 
     @app.get("/api/config")
