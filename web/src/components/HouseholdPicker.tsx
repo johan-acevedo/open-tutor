@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { BANDS, type BandId } from '../bands';
 import { t } from '../locales/sv';
 import type { Profile } from '../db';
@@ -21,12 +22,24 @@ function companionOf(profile: Profile): string | null {
  *  plus "+ Någon ny". Picking a learner switches band/theme in place and
  *  shows that learner's 1-tap start; nothing starts here. */
 export default function HouseholdPicker({ profiles, band, onPick, onNew, onBack }: Props) {
+  const titleRef = useRef<HTMLHeadingElement | null>(null);
+  // Opening the picker moves focus to its heading; closing returns focus
+  // to the opener (the start control) when it is still on screen. A pick
+  // or "+ Någon ny" replaces the whole view, so the opener is gone and
+  // the caller moves focus to the new view's start control instead.
+  useEffect(() => {
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    titleRef.current?.focus();
+    return () => {
+      if (opener?.isConnected) opener.focus();
+    };
+  }, []);
   const sorted = [...profiles]
     .filter((p) => p.name.trim() !== '')
     .sort((a, b) => a.createdAt - b.createdAt);
   return (
     <div className="ot-picker">
-      <h1 className="ot-picker-title">{t('picker.title')}</h1>
+      <h1 className="ot-picker-title" ref={titleRef} tabIndex={-1}>{t('picker.title')}</h1>
       <ul className="ot-picker-list">
         {sorted.map((p) => {
           const companion = companionOf(p);

@@ -197,6 +197,64 @@ describe('voice-first naming corrections', () => {
   });
 });
 
+describe('naming stamps the call band', () => {
+  it('sets the band on a created profile inside the same write', async () => {
+    const named = await enqueueProfileName('temp-b1', 'AlvaBand', () => 'temp-b1', {
+      isCurrentSession: () => true,
+      stampBand: 'middle',
+    });
+    expect(named?.band).toBe('middle');
+    expect((await getProfile(named!.id))?.band).toBe('middle');
+  });
+  it('stamps the band when attaching to an existing profile', async () => {
+    const existing = await createProfile('MoaBand');
+    const named = await enqueueProfileName('temp-b2', 'moaband', () => 'temp-b2', {
+      isCurrentSession: () => true,
+      stampBand: 'upper',
+    });
+    expect(named?.id).toBe(existing.id);
+    expect(named?.band).toBe('upper');
+  });
+  it('leaves an already-correct band alone', async () => {
+    const existing = await createProfile('NoaBand');
+    await updateProfile(existing.id, { band: 'primary' });
+    const named = await enqueueProfileName('temp-b3', 'noaband', () => 'temp-b3', {
+      isCurrentSession: () => true,
+      stampBand: 'primary',
+    });
+    expect(named?.band).toBe('primary');
+  });
+  it('binds the note target inside the queue, before the promise settles', async () => {
+    let active: string | null = 'temp-b4';
+    let bound: string | null = null;
+    const nameP = enqueueProfileName('temp-b4', 'AlvaBind', () => active, {
+      isCurrentSession: () => true,
+      stampBand: 'middle',
+      bindNoteTarget: (id) => { bound = id; },
+    });
+    // A note enqueued behind the naming resolves its target at execution
+    // time: the binder already ran inside the naming job, so the note lands
+    // on the named profile even though applyName has not resumed yet.
+    const noteP = enqueueNote(() => bound ?? 'temp-b4', { at: '2026-11-19', topic: 'Bråk' });
+    const named = await nameP;
+    active = named!.id;
+    expect(bound).toBe(named!.id);
+    expect(named?.band).toBe('middle');
+    const saved = await noteP;
+    expect(saved?.id).toBe(named!.id);
+  });
+  it('binds nothing when the naming is stale', async () => {
+    let bound: string | null = null;
+    const named = await enqueueProfileName('temp-b5', 'StaleNamnBand', () => 'other-id', {
+      isCurrentSession: () => true,
+      stampBand: 'middle',
+      bindNoteTarget: (id) => { bound = id; },
+    });
+    expect(named).toBeUndefined();
+    expect(bound).toBeNull();
+  });
+});
+
 describe('notes during naming', () => {
   // Finding 4: the note target is resolved inside the serialized queue at
   // execution time, so a note that arrived while the naming was in flight

@@ -66,6 +66,36 @@ describe('top bar', () => {
     const link = screen.getByRole('link', { name: /Läs om integritet/ });
     expect(link.getAttribute('href')).toBe('/integritet');
   });
+
+  it('the footer says profiles stay local and calls go to providers', () => {
+    firstVisit();
+    const footer = document.querySelector('.ot-land-foot');
+    expect(footer?.textContent).toContain('webbläsaren');
+    expect(footer?.textContent).toContain('Integritet');
+    // The old line claimed everything stays in the browser; conversation
+    // content goes to the providers named on /integritet.
+    expect(footer?.textContent).not.toContain('sparas bara i din webbläsare');
+  });
+
+  it('cross-band links navigate in place when the host picks no band', () => {
+    const onBandLink = vi.fn();
+    render(
+      <LandingPage
+        profiles={[]}
+        band={bandConfig('primary')}
+        onPick={() => {}}
+        starting={false}
+        onSwitch={() => {}}
+        onBandLink={onBandLink}
+      />,
+    );
+    const lynx = screen.getByRole('link', { name: 'Högstadiet med Lodjuret' });
+    // The href stays a real link (right-click, copy, no-JS), but a plain
+    // left click on a talarum-style host navigates without reloading.
+    expect(lynx.getAttribute('href')).toContain('/hogstadiet');
+    fireEvent.click(lynx);
+    expect(onBandLink).toHaveBeenCalledWith('middle');
+  });
   it('the ghost button stops the greeting clip when starting', async () => {
     resetGreetingForTests();
     MockAudio.instances = [];

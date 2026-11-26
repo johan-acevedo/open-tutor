@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyServerBand, bandConfig, bandFromHostname, bandFromSearch, currentBand } from './bands';
+import { applyServerBand, bandConfig, bandFromHostname, bandFromSearch, explicitHostBand, normalizeAliasUrl, resolveBand } from './bands';
 
 describe('bandFromHostname', () => {
   it('picks the band by subdomain prefix', () => {
@@ -27,18 +27,58 @@ describe('bandFromSearch', () => {
   });
 });
 
-describe('currentBand', () => {
-  it('lets ?band= win over the host', () => {
-    expect(currentBand('tutor2.example.se', '?band=upper')).toBe('upper');
+describe('explicitHostBand', () => {
+  it('names the band only on tutor.* hosts', () => {
+    expect(explicitHostBand('tutor.example.se')).toBe('primary');
+    expect(explicitHostBand('tutor2.example.se')).toBe('middle');
+    expect(explicitHostBand('tutor3.example.se')).toBe('upper');
+    expect(explicitHostBand('talarum.se')).toBeNull();
+    expect(explicitHostBand('localhost')).toBeNull();
+    expect(explicitHostBand('dell5500.tail2e1c4e.ts.net')).toBeNull();
+  });
+});
+
+describe('resolveBand', () => {
+  it('lets ?band= win over the path and the host', () => {
+    expect(resolveBand({ hostname: 'tutor2.example.se', search: '?band=upper', pathname: '/hogstadiet' })).toBe('upper');
+  });
+  it('lets the path win over the host', () => {
+    expect(resolveBand({ hostname: 'tutor.example.se', search: '', pathname: '/hogstadiet' })).toBe('middle');
+    expect(resolveBand({ hostname: 'tutor2.example.se', search: '', pathname: '/gymnasiet' })).toBe('upper');
+  });
+  it('falls back to the host with no override', () => {
+    expect(resolveBand({ hostname: 'tutor3.example.se', search: '' })).toBe('upper');
+    expect(resolveBand({ hostname: 'talarum.se', search: '', pathname: '/' })).toBe('primary');
   });
   it('never persists ?band=: the next load without it falls back to the host', () => {
     localStorage.clear();
-    expect(currentBand('tutor.example.se', '?band=middle')).toBe('middle');
+    expect(resolveBand({ hostname: 'tutor.example.se', search: '?band=middle' })).toBe('middle');
     expect(localStorage.getItem('open-tutor-band')).toBeNull();
-    expect(currentBand('tutor3.example.se', '')).toBe('upper');
+    expect(resolveBand({ hostname: 'tutor3.example.se', search: '' })).toBe('upper');
   });
-  it('falls back to the host with no override', () => {
-    expect(currentBand('tutor3.example.se', '')).toBe('upper');
+  it('uses the server band only when nothing else names a band', () => {
+    expect(resolveBand({ hostname: 'talarum.se', search: '', pathname: '/', serverBand: 'middle' })).toBe('middle');
+    expect(resolveBand({ hostname: 'talarum.se', search: '', pathname: '/', serverBand: 'nope' })).toBe('primary');
+    expect(resolveBand({ hostname: 'talarum.se', search: '', pathname: '/', serverBand: null })).toBe('primary');
+    // The path and ?band= both beat the server default.
+    expect(resolveBand({ hostname: 'talarum.se', search: '', pathname: '/hogstadiet', serverBand: 'upper' })).toBe('middle');
+    expect(resolveBand({ hostname: 'talarum.se', search: '?band=upper', pathname: '/', serverBand: 'middle' })).toBe('upper');
+    // The host prefix beats the server default too.
+    expect(resolveBand({ hostname: 'tutor2.example.se', search: '', pathname: '/', serverBand: 'upper' })).toBe('middle');
+  });
+});
+
+describe('normalizeAliasUrl', () => {
+  it('keeps the query string and fragment on alias normalization', () => {
+    expect(normalizeAliasUrl('/lodjuret', '?band=upper', '#x')).toBe('/hogstadiet?band=upper#x');
+    expect(normalizeAliasUrl('/raven', '', '')).toBe('/ak1-6');
+    expect(normalizeAliasUrl('/vuxen', '?a=b', '')).toBe('/gymnasiet?a=b');
+  });
+  it('leaves canonical paths and band-less paths alone', () => {
+    expect(normalizeAliasUrl('/hogstadiet', '?band=upper', '#x')).toBeNull();
+    expect(normalizeAliasUrl('/ak1-6', '', '')).toBeNull();
+    expect(normalizeAliasUrl('/', '', '')).toBeNull();
+    expect(normalizeAliasUrl('/integritet', '', '')).toBeNull();
   });
 });
 
@@ -90,10 +130,10 @@ describe('bandFromPath', () => {
   });
 
   it('gives the path precedence over the host, and ?band= over the path', async () => {
-    const { currentBand } = await import('./bands');
-    expect(currentBand('tutor.example.se', '', '/hogstadiet')).toBe('middle');
-    expect(currentBand('tutor2.example.se', '', '/gymnasiet')).toBe('upper');
-    expect(currentBand('tutor.example.se', '?band=upper', '/hogstadiet')).toBe('upper');
-    expect(currentBand('localhost', '', '/')).toBe('primary');
+    const { resolveBand } = await import('./bands');
+    expect(resolveBand({ hostname: 'tutor.example.se', search: '', pathname: '/hogstadiet' })).toBe('middle');
+    expect(resolveBand({ hostname: 'tutor2.example.se', search: '', pathname: '/gymnasiet' })).toBe('upper');
+    expect(resolveBand({ hostname: 'tutor.example.se', search: '?band=upper', pathname: '/hogstadiet' })).toBe('upper');
+    expect(resolveBand({ hostname: 'localhost', search: '', pathname: '/' })).toBe('primary');
   });
 });

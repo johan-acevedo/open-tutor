@@ -198,11 +198,53 @@ export function bandPath(band: BandId): string {
   return BAND_PATHS[band];
 }
 
-/** Band for this page load only: ?band= wins, then the path, then the host,
- *  then the server-advertised default. Deliberately not persisted — a testing
- *  override must not leak into later visits. */
-export function currentBand(hostname: string, search: string, pathname = '/'): BandId {
-  return bandFromSearch(search) ?? bandFromPath(pathname) ?? bandFromHostname(hostname);
+/** Band named explicitly by the request host (tutor./tutor2./tutor3.
+ *  prefixes), or null on any other host (talarum.se, localhost, tailnet
+ *  dev). A tutor.* host always names its band; anything else leaves the
+ *  band to the path, ?band= or server default. */
+export function explicitHostBand(hostname: string): BandId | null {
+  const host = (hostname || '').toLowerCase();
+  if (host.startsWith('tutor2.')) return 'middle';
+  if (host.startsWith('tutor3.')) return 'upper';
+  if (host.startsWith('tutor.')) return 'primary';
+  return null;
+}
+
+/** One band per navigation. Precedence: ?band= > path > host prefix >
+ *  server-advertised TUTOR_BAND (only when nothing else names a band) >
+ *  default. Deliberately not persisted: a testing override must not leak
+ *  into later visits. */
+export function resolveBand(opts: {
+  hostname: string;
+  search: string;
+  pathname?: string;
+  serverBand?: string | null;
+}): BandId {
+  const named =
+    bandFromSearch(opts.search) ??
+    (opts.pathname !== undefined ? bandFromPath(opts.pathname) : null) ??
+    explicitHostBand(opts.hostname);
+  if (named) return named;
+  const server = opts.serverBand;
+  if (server === 'primary' || server === 'middle' || server === 'upper') return server;
+  return 'primary';
+}
+
+/** Alias paths (/raven, /lodjuret, …) normalize to the canonical band path
+ *  while keeping the query string and fragment: a ?band= testing override
+ *  or #anchor survives the normalization. Returns the full normalized URL
+ *  (path + search + hash), or null when the path is already canonical or
+ *  names no band. */
+export function normalizeAliasUrl(pathname: string, search: string, hash: string): string | null {
+  const band = bandFromPath(pathname);
+  if (!band) return null;
+  const canon = BAND_PATHS[band];
+  try {
+    if (pathname.toLowerCase() === canon) return null;
+  } catch {
+    return null;
+  }
+  return canon + search + hash;
 }
 
 /** Server-advertised default band (TUTOR_BAND, via /api/config): only for

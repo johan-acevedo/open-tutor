@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { layoutMode, mapAvatarState } from './avatarState';
-import { BAND_PATHS, bandConfig, bandFromPath, currentBand, type BandId } from './bands';
+import { BAND_PATHS, bandConfig, bandFromPath, bandFromSearch, explicitHostBand, normalizeAliasUrl, resolveBand, type BandId } from './bands';
 import { BandProvider } from './BandContext';
 import { getLastProfileId, getLastProfileIdForBand, listProfiles, newProfileId, rememberLastProfileId } from './db';
 import type { Profile } from './db';
 import { useSession } from './useSession';
 import { initAnalytics, pageOpened } from './analytics';
 import Brand from './components/Brand';
-import LandingPage, { HowSteps, LandingFooter } from './components/LandingPage';
-import HomeChooser from './components/HomeChooser';
+import LandingPage from './components/LandingPage';
+import ChooserPage from './components/ChooserPage';
 import HouseholdPicker from './components/HouseholdPicker';
+import { focusStartControl } from './focus';
+import { stopGreeting } from './components/greetingAudio';
 import PrivacyPage from './components/PrivacyPage';
 import CallStage from './components/CallStage';
 import BottomBar from './components/BottomBar';
@@ -30,20 +32,16 @@ function pathOf(): string {
   }
 }
 
-/** A tutor.* host names its band explicitly; any other host leaves the band
- *  to the path, ?band= or server default. */
-function explicitHostBand(hostname: string): BandId | null {
-  const host = (hostname || '').toLowerCase();
-  if (host.startsWith('tutor2.')) return 'middle';
-  if (host.startsWith('tutor3.')) return 'upper';
-  if (host.startsWith('tutor.')) return 'primary';
-  return null;
-}
-
-function canonicalPathFor(path: string): string | null {
-  const band = bandFromPath(path);
-  if (!band) return null;
-  return BAND_PATHS[band];
+function locationBand(pathname: string): BandId {
+  try {
+    return resolveBand({
+      hostname: window.location.hostname,
+      search: window.location.search,
+      pathname,
+    });
+  } catch {
+    return 'primary';
+  }
 }
 
 export default function App() {
@@ -72,13 +70,10 @@ export default function App() {
   // Single-domain flow (precedence: ?band= > path > host prefix >
   // server TUTOR_BAND > default). The band stays fixed during a call:
   // switching happens only on the start pages, in place, without reload.
-  const [band, setBand] = useState<BandId>(() => {
-    try {
-      return currentBand(window.location.hostname, window.location.search, window.location.pathname);
-    } catch {
-      return 'primary';
-    }
-  });
+  // The route (URL path) is the source of truth: every navigation sets the
+  // band from the new location, so the greeting, the companion and the
+  // session request always agree on one band.
+  const [band, setBand] = useState<BandId>(() => locationBand(pathOf()));
   const [route, setRoute] = useState<string>(() => pathOf());
   // Household picker overlay (siblings on one device) and a forced chooser
   // ("+ Någon ny" goes to the 3-card page even with remembered learners).
@@ -86,32 +81,54 @@ export default function App() {
   const [forceChooser, setForceChooser] = useState(false);
 
   const navigate = useCallback((path: string) => {
+    const lower = path.toLowerCase();
     try {
-      window.history.pushState(null, '', path);
+      // Keep the query string: a ?band= testing override survives in-app
+      // navigation, and the band still resolves from it (it wins).
+      const search = window.location.search || '';
+      window.history.pushState(null, '', lower + search);
     } catch {
       /* ignore */
     }
-    setRoute(path.toLowerCase());
+    choseBandRef.current = true;
+    setRoute(lower);
+    setBand(locationBand(lower));
     setPickerOpen(false);
   }, []);
 
   // Alias paths (/raven, /lodjuret, /bjornen, /vuxen) normalize to the
-  // canonical band path without a reload or a history entry.
+  // canonical band path without a reload or a history entry. The query
+  // string and fragment survive: ?band= and #anchors are not dropped.
   useEffect(() => {
-    const canon = canonicalPathFor(route);
-    if (canon && route !== canon) {
+    let search = '';
+    let hash = '';
+    let pathname = route;
+    try {
+      search = window.location.search || '';
+      hash = window.location.hash || '';
+      pathname = window.location.pathname || route;
+    } catch {
+      /* ignore */
+    }
+    const normalized = normalizeAliasUrl(pathname, search, hash);
+    if (normalized) {
       try {
-        window.history.replaceState(null, '', canon);
+        window.history.replaceState(null, '', normalized);
       } catch {
         /* ignore */
       }
-      setRoute(canon);
+      setRoute(BAND_PATHS[bandFromPath(pathname) ?? 'primary']);
     }
   }, [route]);
 
   useEffect(() => {
     const onPop = () => {
-      setRoute(pathOf());
+      // Back/Forward restores the URL: the band follows it, so the theme
+      // can never stick to the previous band after a pop.
+      const next = pathOf();
+      choseBandRef.current = true;
+      setRoute(next);
+      setBand(locationBand(next));
       setPickerOpen(false);
       setForceChooser(false);
     };
@@ -119,21 +136,27 @@ export default function App() {
     return () => window.removeEventListener('popstate', onPop);
   }, []);
 
+  // Server-advertised default band (TUTOR_BAND, via /api/config): only for
+  // testing on hosts whose name picks no band, and only when nothing else
+  // names one. Ignored once the user has chosen (or a call is underway): a
+  // late response must never switch the theme under a connecting screen.
   useEffect(() => {
     let cancelled = false;
-    let hasOverride = false;
-    try {
-      hasOverride =
-        new URLSearchParams(window.location.search).has('band') ||
-        bandFromPath(window.location.pathname) !== null ||
-        explicitHostBand(window.location.hostname) !== null;
-    } catch {
-      hasOverride = true;
-    }
-    if (hasOverride) return;
     fetch('/api/config')
       .then((res) => (res.ok ? res.json() : null))
       .then((config: { band?: string } | null) => {
+        if (cancelled || choseBandRef.current) return;
+        if (phaseRef.current !== 'profiles') return;
+        let named: BandId | null = null;
+        try {
+          named =
+            bandFromSearch(window.location.search) ??
+            bandFromPath(window.location.pathname) ??
+            explicitHostBand(window.location.hostname);
+        } catch {
+          return;
+        }
+        if (named) return;
         if (!cancelled && (config?.band === 'primary' || config?.band === 'middle' || config?.band === 'upper')) {
           setBand(config.band);
         }
@@ -145,6 +168,14 @@ export default function App() {
   }, []);
   const config = bandConfig(band);
   const session = useSession(mobile, band);
+  // The user chose or navigated to a band this page load (picker, chooser
+  // card, cross-band link, Back): a late /api/config must not override it.
+  const choseBandRef = useRef(false);
+  const phaseRef = useRef(session.phase);
+  phaseRef.current = session.phase;
+  // After the picker closes onto a new start view (pick or "+ Någon ny"),
+  // move focus to that view's start control.
+  const focusStartAfterPickerRef = useRef(false);
   // Narrow portrait phones get the two-view stage: big fox, or item + fox strip.
   const phonePortrait = mobile && portrait;
   const stage = usePhoneStage({
@@ -217,19 +248,28 @@ export default function App() {
    *  exactly like the hero button (audio unlock first). */
   function beginInBand(target: BandId) {
     if (phase !== 'profiles') return;
+    choseBandRef.current = true;
+    // A card start stops the greeting clip first (see LandingPage.begin).
+    stopGreeting();
     session.prepareStart();
     if (target !== band) setBand(target);
     beginCall({ id: newProfileId(), name: '', grade: null, band: target, notes: [], createdAt: Date.now() }, target);
   }
 
-  /** Household picker choice: switch band/theme in place, show their start. */
+  /** Household picker choice: the picked profile and its band drive the
+   *  route, the greeting and the start request together, as one piece of
+   *  state. Showing their band view in place is not enough: the URL path
+   *  must name the band too, or the greeting and request disagree. */
   function pickHousehold(p: Profile) {
     const target = p.band ?? band;
-    if (target !== band) setBand(target);
     rememberLastProfileId(p.id, p.band);
     setPickerOpen(false);
     setForceChooser(false);
     session.clearProfilesOpen();
+    focusStartAfterPickerRef.current = true;
+    choseBandRef.current = true;
+    if (BAND_PATHS[target] !== route) navigate(BAND_PATHS[target]);
+    else if (target !== band) setBand(target);
   }
 
   function openPicker() {
@@ -243,9 +283,35 @@ export default function App() {
     setPickerOpen(false);
     session.clearProfilesOpen();
     // "+ Någon ny" always lands on the 3-card chooser, nameless.
+    focusStartAfterPickerRef.current = true;
     if (route !== '/') navigate('/');
     setForceChooser(true);
   }
+
+  // After the picker closes onto a new start view, move focus to that
+  // view's start control (the opener is gone with the old view).
+  useEffect(() => {
+    if (pickerOpen || !focusStartAfterPickerRef.current) return;
+    focusStartAfterPickerRef.current = false;
+    focusStartControl();
+  }, [pickerOpen]);
+
+  // After an in-call switch the prefilled learner's band drives the route,
+  // the same rule as a picker choice: B's greeting, companion and start
+  // request must agree, not A's route with B's name.
+  useEffect(() => {
+    if (phase !== 'profiles' || pickerOpen) return;
+    const prefillId = session.prefillId;
+    if (!prefillId) return;
+    const next = profiles.find((pr) => pr.id === prefillId);
+    const target = next?.band;
+    if (!target) return;
+    choseBandRef.current = true;
+    if (BAND_PATHS[target] !== route) navigate(BAND_PATHS[target]);
+    else if (target !== band) setBand(target);
+    // navigate / pickHousehold own their deps; profiles/route/band re-run.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, pickerOpen, session.prefillId, profiles, route, band]);
 
   const homeworkTray = session.homeworkDraft ? (
     <HomeworkTray
@@ -341,7 +407,7 @@ export default function App() {
           <div className="ot-land-scroll">
             <HouseholdPicker
               profiles={profiles}
-              band={routeBand ?? band}
+              band={band}
               onPick={pickHousehold}
               onNew={pickerNew}
               onBack={() => {
@@ -354,27 +420,14 @@ export default function App() {
       )}
 
       {phase === 'profiles' && !isPrivacy && !pickerOpen && showChooser && (
-        <div className="ot-land">
-          <header className="ot-land-top">
-            <div className="ot-land-topinner">
-              <Brand />
-            </div>
-          </header>
-          <div className="ot-land-scroll">
-            <div className="ot-land-hero ot-land-hero-choose">
-              <HomeChooser onBegin={beginInBand} starting={false} />
-            </div>
-            <HowSteps band={bandConfig('primary')} />
-            <LandingFooter />
-          </div>
-        </div>
+        <ChooserPage onBegin={beginInBand} starting={false} />
       )}
 
       {phase === 'profiles' && !isPrivacy && !pickerOpen && !showChooser && (
         <LandingPage
           profiles={profiles}
           band={config}
-          onPick={(p) => beginCall(p, routeBand ?? band)}
+          onPick={(p) => beginCall(p, band)}
           onStartGesture={session.prepareStart}
           starting={false}
           startOpen={session.profilesOpen}
@@ -382,6 +435,7 @@ export default function App() {
           onSwitch={openPicker}
           onNotYou={openPicker}
           ignoreLastId={routeBand !== null}
+          onBandLink={(target) => navigate(BAND_PATHS[target])}
         />
       )}
 

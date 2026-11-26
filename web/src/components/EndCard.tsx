@@ -27,11 +27,19 @@ function ShareCard({ band }: { band: BandId }) {
           text,
           url: SHARE_URL,
         });
-        return;
+      } else {
+        await copyFallback();
       }
-    } catch {
-      /* user dismissed the sheet or share failed: fall through to copy */
+    } catch (err) {
+      // The user dismissed the sheet: leave the clipboard alone. Any other
+      // failure (or no share sheet at all) falls back to copying the link.
+      if (err instanceof Error && err.name === 'AbortError') return;
+      const name = typeof err === 'object' && err !== null ? (err as { name?: unknown }).name : undefined;
+      if (name === 'AbortError') return;
+      await copyFallback();
     }
+  }
+  async function copyFallback() {
     try {
       if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(SHARE_URL);
@@ -53,14 +61,13 @@ function ShareCard({ band }: { band: BandId }) {
     <section className="ot-share" aria-label={young ? t('end.shareTitleYoung') : t('end.shareTitleOld')}>
       <h2>{young ? t('end.shareTitleYoung') : t('end.shareTitleOld')}</h2>
       <p>{t('end.shareText')}</p>
-      <button type="button" className="ot-land-ghost" onClick={() => void share()}>
+      <button type="button" className="ot-share-btn" onClick={() => void share()}>
         {copied ? t('end.shareCopied') : t('end.shareButton')}
       </button>
     </section>
   );
 }
 
-export default function EndCard({ learnerName, notes, onBack, band = 'primary' }: Props) {
 export default function EndCard({ learnerName, notes, onBack, endReason, band = 'primary' }: Props) {
   const last = notes.length > 0 ? notes[notes.length - 1] : null;
   return (

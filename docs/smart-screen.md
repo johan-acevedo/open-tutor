@@ -86,7 +86,20 @@ domain. Built on `feat/talarum-launch`:
   `uv run pytest -q`, and headless Chromium screenshots at 1440×900 and 390×844 of `/`,
   `/hogstadiet`, `/gymnasiet`, `/integritet`, the picker and the end card (see PR); zero console
   errors. A real child session and a screen reader were not tested.
->>>>>>> 92a08de (Talarum: og image script, SPA route test, launch docs)
+- **Review fixes (Codex gpt-6.2-sol, same PR).** The picked profile and its band now
+  drive the route, greeting and start request as one state (picker choice and the
+  post-call switch prefill both navigate to the learner's band path); one band per
+  navigation (`?band=` > path > host > `TUTOR_BAND` only when nothing else names a
+  band), alias normalization keeps query+fragment, popstate re-resolves the band,
+  cross-band links navigate in place on talarum-style hosts, a late `/api/config`
+  is ignored once the user has chosen or a call is underway, and the call band is
+  captured once at start for the session request and profile writes. The naming
+  write stamps the band and binds the note target inside the serialized queue, with
+  the generation rechecked before UI/last-learner updates. Share uses a dedicated
+  style (`AbortError` never touches the clipboard); the mobile hide rule is scoped
+  to the header; the chooser header carries a quiet Integritet link and the footer
+  no longer claims everything stays in the browser. Card starts stop the greeting
+  clip; the picker takes and returns focus.
 
 ## 2026-11-24: the call view follows the landing page (concept A)
 

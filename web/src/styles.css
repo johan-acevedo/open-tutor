@@ -961,8 +961,11 @@ a:focus-visible {
 }
 
 @media (max-width: 899px) {
-  .ot-land-links,
-  .ot-land-ghost {
+  /* Only the header chrome collapses on phones: the nav links and the
+     header ghost CTA. Page-body buttons that reuse .ot-land-ghost (the
+     end card is gone by then, the /integritet back button) stay visible. */
+  .ot-land-top .ot-land-links,
+  .ot-land-top .ot-land-ghost {
     display: none;
   }
   .ot-land-topinner {
@@ -2072,6 +2075,22 @@ a:focus-visible {
   font-family: inherit;
   cursor: pointer;
   min-height: 44px;
+}
+
+/* Quiet header link on the chooser (first-time visitors get a privacy link
+   before any call button). Plain text, never a pill; always visible. */
+.ot-choose-privacy {
+  color: var(--ot-text-dim);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  padding: 12px 4px;
+  white-space: nowrap;
+}
+
+.ot-choose-privacy:hover {
+  color: var(--ot-text);
+  text-decoration: underline;
 }
 
 @media (max-width: 899px) {

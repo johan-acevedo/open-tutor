@@ -1,7 +1,7 @@
 import { BANDS, BAND_IDS } from '../bands';
 import type { BandId } from '../bands';
 import { t } from '../locales/sv';
-import { toggleGreeting } from './greetingAudio';
+import { stopGreeting, toggleGreeting } from './greetingAudio';
 
 type Props = {
   /** Begin a call in this band (switches band in place, then starts). */
@@ -56,7 +56,12 @@ export default function HomeChooser({ onBegin, starting }: Props) {
                 type="button"
                 className="ot-land-cta ot-choose-cta"
                 disabled={starting}
-                onClick={() => onBegin(id)}
+                onClick={() => {
+                  // A card starts the call: stop the greeting clip first so
+                  // no stale greeting keeps playing under the new session.
+                  stopGreeting();
+                  onBegin(id);
+                }}
               >
                 {t(CTA[id])}
               </button>
