@@ -86,3 +86,23 @@ def test_rejected_countries_do_not_consume_session_allowance():
     client = TestClient(create_app({**ENV, "TUTOR_ALLOWED_COUNTRIES": "SE", "TUTOR_MAX_SESSIONS_PER_HOUR": "1"}))
     assert client.post("/api/session", json=LEARNER, headers={"cf-ipcountry": "US"}).status_code == 403
     assert client.post("/api/session", json=LEARNER, headers={"cf-ipcountry": "SE"}).status_code == 200
+
+
+def test_spa_routes_serve_index_for_direct_load_and_refresh(tmp_path, monkeypatch):
+    """Single-domain flow: /integritet and band paths load the SPA directly."""
+    import open_tutor.web as web
+
+    dist = tmp_path / "dist"
+    (dist / "assets").mkdir(parents=True)
+    (dist / "index.html").write_text("<html>Talarum</html>")
+    (dist / "assets" / "app.js").write_text("// app")
+    monkeypatch.setattr(web, "WEB_DIST", dist)
+
+    client = TestClient(create_app(ENV))
+    for path in ("/", "/integritet", "/ak1-6", "/hogstadiet", "/gymnasiet", "/raven"):
+        response = client.get(path)
+        assert response.status_code == 200, path
+        assert "Talarum" in response.text, path
+    # Static files still serve; unknown /api/* still 404s.
+    assert client.get("/assets/app.js").status_code == 200
+    assert client.get("/api/nope").status_code == 404
