@@ -2075,37 +2075,53 @@ a:focus-visible {
 }
 
 @media (max-width: 899px) {
+  .ot-land-hero-choose {
+    padding-bottom: 40px;
+  }
+  .ot-choose .ot-land-title {
+    font-size: 40px;
+    margin-bottom: 14px;
+  }
+  .ot-choose .ot-land-sub {
+    font-size: 16px;
+    margin-bottom: 6px;
+  }
   .ot-choose-cards {
     grid-template-columns: 1fr;
-    gap: 16px;
+    gap: 12px;
   }
   .ot-choose-card {
     flex-direction: row;
     flex-wrap: wrap;
     align-items: center;
     text-align: left;
-    padding: 16px 18px;
-    gap: 14px;
+    padding: 12px 14px;
+    gap: 12px;
   }
   .ot-choose-face {
-    width: 76px;
-    height: 76px;
+    width: 60px;
+    height: 60px;
   }
   .ot-choose-txt {
     flex: 1 1 auto;
     min-width: 140px;
   }
   .ot-choose-txt strong {
-    font-size: 22px;
+    font-size: 20px;
+  }
+  .ot-choose-txt span {
+    font-size: 14px;
   }
   .ot-choose-cta {
     flex: 1 1 100%;
-    margin-top: 2px;
-    min-height: 52px;
+    margin-top: 0;
+    min-height: 48px;
+    font-size: 16px;
+    padding: 10px 22px;
   }
   .ot-choose-title {
-    margin: 28px 0 16px;
-    font-size: 21px;
+    margin: 22px 0 12px;
+    font-size: 20px;
   }
   .ot-privacy {
     font-size: 17px;
