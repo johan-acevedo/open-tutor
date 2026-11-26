@@ -18,14 +18,25 @@ and the blue/purple read as AI slop next to the warm flame mark. Branch `feat/ta
 - **Chooser (`/`).** Editorial head (headline left, intro right on desktop); the headline
   keeps "prata med." together, so "med." is never alone. Cards are portraits: the transparent
   `hero.webp` on a backdrop in each band's own canvas and accent, fading into the card (no
-  white circles). The portrait is one button that plays the hello clip, marked by a small
-  comic "Hej!" bubble in the band-page bubble language (a speaker badge on phones).
+  white circles). The portrait is one button that plays the hello clip, marked by a calm
+  round speaker disc (dark frosted, cream icon, apricot while playing). Round 1 used a small
+  comic "Hej!" bubble per card; three in a row competed with the three start buttons, so the
+  comic bubble now lives only on the single-band pages.
   Buttons are cream, sit on the card's bottom edge and line up whatever the label wraps to.
   The visible "Välj vem du vill prata med" heading is now screen-reader only ("Välj efter ålder").
+- **Front-door steps are band-neutral.** `/` used Räven's step copy and picture under all
+  three companions; it now says "Prata om uppgiften" and shows the three faces. The band
+  pages keep their companion copy.
+- **Tablets (720–1023 px)** keep the three-card gallery and three step cards; below 720 px
+  the cards become rows. The intro sits on the headline's last baseline (36ch measure).
+- **Review (Codex gpt-6.1-sol, cross-family):** one bug. A late error from the previous
+  greeting clip cleared the new card's playing state after switching companions. Fixed:
+  only the current audio element may change the state (`greetingAudio.ts`), with a
+  regression test that fails without the fix.
 - **Also:** cross-link faces lost their white disc, the footer rule sits on the content grid,
   the privacy page's back link is right-aligned and visible on phones, `og.png` is warm.
-- **Verified:** Playwright on the built app (1440×900, 1280×720, 820×1180, 390×844,
-  360×640; `/`, the three band pages, `/integritet`, the screen demo): no console errors, no
+- **Verified:** Playwright on the built app (1440×900, 1280×720, 1000×760, 820×1180,
+  390×844, 360×640; `/`, the three band pages, `/integritet`, the screen demo): no console errors, no
   broken images. Not verified: a real call, real devices, Safari.
 
 ## 2026-11-26: Talarum, one domain, /integritet (launch)

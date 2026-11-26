@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import HomeChooser from './components/HomeChooser';
 import ChooserPage from './components/ChooserPage';
 import HouseholdPicker from './components/HouseholdPicker';
@@ -134,6 +134,23 @@ describe('HomeChooser listen state', () => {
     expect(bear.getAttribute('aria-pressed')).toBe('false');
     stopGreeting();
     await waitFor(() => expect(lynx.getAttribute('aria-pressed')).toBe('false'));
+  });
+
+  it('ignores a late error from a clip it already switched away from', async () => {
+    MockAudio.instances = [];
+    vi.stubGlobal('Audio', MockAudio as unknown as typeof Audio);
+    render(<HomeChooser onBegin={vi.fn()} starting={false} />);
+    const lynx = screen.getByRole('button', { name: /Lyssna på Lodjuret$/ });
+    const bear = screen.getByRole('button', { name: /Lyssna på Björnen$/ });
+    fireEvent.click(lynx);
+    await waitFor(() => expect(lynx.getAttribute('aria-pressed')).toBe('true'));
+    fireEvent.click(bear);
+    await waitFor(() => expect(bear.getAttribute('aria-pressed')).toBe('true'));
+    // The lynx clip fails late (a 404 arriving after the switch).
+    act(() => MockAudio.instances[0].emit('error'));
+    expect(bear.getAttribute('aria-pressed')).toBe('true');
+    expect(lynx.getAttribute('aria-pressed')).toBe('false');
+    stopGreeting();
   });
 });
 

@@ -62,6 +62,7 @@ records, not served pages.
 Johan found live v1 "okej men långt ifrån hur bra det kan bli" and the blue/purple AI-slop-like,
 clashing with the warm flame mark. v2 moves the brand pages and the primary band to the warm
 Talarum palette (`design/STYLE-GUIDE.md` §4) and rebuilds the `/` chooser as three companion
-portraits (transparent heroes on band-coloured backdrops, a comic "Hej!" bubble as the listen
-affordance, cream buttons on one baseline). Decisions above still hold: no pills above the
+portraits (transparent heroes on band-coloured backdrops, a round speaker disc as the listen
+affordance, cream buttons on one baseline). The comic "Hej!" bubble stays on the single-band
+pages; three of them on `/` competed with the start buttons. The steps on `/` name no companion. Decisions above still hold: no pills above the
 headline, no gradient text, no fine print under buttons, one tap from card to call.

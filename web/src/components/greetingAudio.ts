@@ -60,10 +60,16 @@ function ensure(band: BandId): HTMLAudioElement {
   if (!el || elBand !== band) {
     stopGreeting();
     elBand = band;
-    el = new Audio(helloAudioUrl(band));
-    el.addEventListener('ended', () => setPlaying(false));
-    el.addEventListener('error', () => setPlaying(false));
-    el.addEventListener('pause', () => setPlaying(false));
+    const audio = new Audio(helloAudioUrl(band));
+    el = audio;
+    // Only the current clip may change the state: a late error or pause
+    // from a clip we already switched away from must not clear the new one.
+    const stopIfCurrent = () => {
+      if (el === audio) setPlaying(false);
+    };
+    audio.addEventListener('ended', stopIfCurrent);
+    audio.addEventListener('error', stopIfCurrent);
+    audio.addEventListener('pause', stopIfCurrent);
   }
   return el;
 }
@@ -81,8 +87,12 @@ export function toggleGreeting(band: BandId): void {
     const played = audio.play();
     if (played && typeof (played as Promise<void>).catch === 'function') {
       (played as Promise<void>).then(
-        () => setPlaying(true),
-        () => setPlaying(false),
+        () => {
+          if (el === audio && !audio.paused) setPlaying(true);
+        },
+        () => {
+          if (el === audio) setPlaying(false);
+        },
       );
     } else {
       setPlaying(true);
