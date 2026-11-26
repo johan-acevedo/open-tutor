@@ -3,26 +3,29 @@
    the page fill the pane without scrolling (see fit() in shell.js). */
 
 :root {
-  --bg: #181b22;
-  --surface: #222731;
-  --surface-2: #2a303c;
-  --border: #2e3543;
-  --border-2: #3d4657;
-  --text: #f3f5f8;
-  --muted: #a3abbb;
-  --cyan: #22d3ee;
-  --violet: #a78bfa;
-  --green: #34d399;
-  --amber: #f5b544;
-  --pink: #f472b6;
-  --red: #f87171;
-  --paper: #f6f4ee;
-  --ink: #181b22;
-  --cyan-soft: rgba(34, 211, 238, 0.14);
-  --violet-soft: rgba(167, 139, 250, 0.16);
-  --green-soft: rgba(52, 211, 153, 0.15);
-  --amber-soft: rgba(245, 181, 68, 0.16);
-  --pink-soft: rgba(244, 114, 182, 0.16);
+  /* Talarum warm palette (primary band and default, 2026-11-26): espresso
+     canvas, cream paper, apricot accent from the brand mark, dusty plum as
+     the second accent. Middle and upper override these in their theme.css. */
+  --bg: #171411;
+  --surface: #221d19;
+  --surface-2: #2b251f;
+  --border: #3a322b;
+  --border-2: #4e443a;
+  --text: #f5efe6;
+  --muted: #b8ac9c;
+  --cyan: #f2995e;
+  --violet: #d79ab4;
+  --green: #8fcf9f;
+  --amber: #f2b94b;
+  --pink: #e7a3a0;
+  --red: #ef8a7d;
+  --paper: #f6f1e7;
+  --ink: #1d1813;
+  --cyan-soft: rgba(242, 153, 94, 0.15);
+  --violet-soft: rgba(215, 154, 180, 0.16);
+  --green-soft: rgba(143, 207, 159, 0.15);
+  --amber-soft: rgba(242, 185, 75, 0.16);
+  --pink-soft: rgba(231, 163, 160, 0.16);
   --radius: 0.6em;
   --gap: 1em;
   --font: "Lexend Variable", "Lexend", "Segoe UI", Roboto, system-ui, sans-serif;
@@ -131,8 +134,8 @@ small, .small { font-size: 0.85em; }
   min-width: 0;
 }
 .card > h2, .card > h3 { margin-bottom: 0.05em; }
-.card.cyan { border-color: rgba(34, 211, 238, 0.5); background: linear-gradient(var(--cyan-soft), var(--cyan-soft)), var(--surface); color: var(--text); }
-.card.violet { border-color: rgba(167, 139, 250, 0.5); background: linear-gradient(var(--violet-soft), var(--violet-soft)), var(--surface); color: var(--text); }
+.card.cyan { border-color: color-mix(in srgb, var(--cyan) 50%, transparent); background: linear-gradient(var(--cyan-soft), var(--cyan-soft)), var(--surface); color: var(--text); }
+.card.violet { border-color: color-mix(in srgb, var(--violet) 50%, transparent); background: linear-gradient(var(--violet-soft), var(--violet-soft)), var(--surface); color: var(--text); }
 .card.green { border-color: rgba(52, 211, 153, 0.5); background: linear-gradient(var(--green-soft), var(--green-soft)), var(--surface); color: var(--text); }
 .card.amber { border-color: rgba(245, 181, 68, 0.5); background: linear-gradient(var(--amber-soft), var(--amber-soft)), var(--surface); color: var(--text); }
 .paper {
@@ -207,7 +210,7 @@ ot-answer > label { font-weight: 650; }
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
-.ot-send { background: var(--cyan); border-color: var(--cyan); color: #06222a; }
+.ot-send { background: var(--cyan); border-color: var(--cyan); color: var(--ink); }
 .ot-send[data-sent] { background: transparent; color: var(--green); border-color: var(--green-soft); }
 ot-choice { display: flex; flex-wrap: wrap; gap: 0.6em; }
 ot-choice.column { flex-direction: column; align-items: stretch; }
@@ -257,7 +260,7 @@ ot-hidden[data-revealed] > .ot-cover { display: none; }
   outline: 0.16em solid var(--cyan);
   outline-offset: 0.22em;
   border-radius: 0.35em;
-  box-shadow: 0 0 0 0.5em rgba(34, 211, 238, 0.12);
+  box-shadow: 0 0 0 0.5em color-mix(in srgb, var(--cyan) 12%, transparent);
 }
 ot-step.ot-pointed, ot-event.ot-pointed { outline: none; box-shadow: none; }
 

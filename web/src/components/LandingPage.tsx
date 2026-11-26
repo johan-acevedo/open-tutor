@@ -89,7 +89,7 @@ function Bands({ band, onNavigate }: { band: BandConfig; onNavigate?: (target: B
               onNavigate(id);
             }}
           >
-            <img className="ot-land-bandface" src={BANDS[id].companion.face} alt="" aria-hidden="true" />
+            <img className="ot-land-bandface" data-companion={id} src={BANDS[id].companion.face} alt="" aria-hidden="true" />
             <span className="ot-land-bandtxt">
               <strong>{t(AUDIENCES[id])}</strong>
               <span>{t('landing.withCompanion', { companion: BANDS[id].companion.name })}</span>
@@ -102,8 +102,10 @@ function Bands({ band, onNavigate }: { band: BandConfig; onNavigate?: (target: B
   );
 }
 
-/** The three "how it works" cards: paper task, talking companion, mini board. */
-export function HowSteps({ band }: { band: BandConfig }) {
+/** The three "how it works" cards: paper task, talking companion, mini board.
+ *  `neutral` is the front door (/): it sits under all three companions, so
+ *  the copy names no companion and step 2 shows all three faces. */
+export function HowSteps({ band, neutral = false }: { band: BandConfig; neutral?: boolean }) {
   const rows = ROWS[band.id];
   return (
     <section className="ot-land-how" id="sa-funkar-det">
@@ -116,22 +118,35 @@ export function HowSteps({ band }: { band: BandConfig }) {
           </div>
           <div className="ot-land-cardtxt">
             <h3>{t('landing.step1Title')}</h3>
-            <p>{t('landing.step1Text', { companion: band.companion.name })}</p>
+            <p>{neutral ? t('landing.step1TextNeutral') : t('landing.step1Text', { companion: band.companion.name })}</p>
           </div>
         </article>
         <article className="ot-land-card">
           <div className="ot-land-pic">
             <span className="ot-land-num" aria-hidden="true">2</span>
-            <div className="ot-land-talk">
-              <img src={band.companion.poses.speaking} alt="" aria-hidden="true" />
-              <div className="ot-land-chat" aria-hidden="true">
-                <i /><i /><i />
+            {neutral ? (
+              <div className="ot-land-talk ot-land-talk-trio">
+                <span className="ot-land-trio" aria-hidden="true">
+                  {BAND_IDS.map((id) => (
+                    <img key={id} className="ot-land-bandface" data-companion={id} src={BANDS[id].companion.face} alt="" />
+                  ))}
+                </span>
+                <div className="ot-land-chat" aria-hidden="true">
+                  <i /><i /><i />
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="ot-land-talk">
+                <img src={band.companion.poses.speaking} alt="" aria-hidden="true" />
+                <div className="ot-land-chat" aria-hidden="true">
+                  <i /><i /><i />
+                </div>
+              </div>
+            )}
           </div>
           <div className="ot-land-cardtxt">
-            <h3>{t('landing.step2Title', { companion: band.companion.name })}</h3>
-            <p>{t('landing.step2Text', { companion: band.companion.name })}</p>
+            <h3>{neutral ? t('landing.step2TitleNeutral') : t('landing.step2Title', { companion: band.companion.name })}</h3>
+            <p>{neutral ? t('landing.step2TextNeutral') : t('landing.step2Text', { companion: band.companion.name })}</p>
           </div>
         </article>
         <article className="ot-land-card">

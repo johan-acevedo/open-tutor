@@ -8,10 +8,11 @@
 :root {
   --ot-call-max: 1440px;
   --ot-call-pad: 104px;
-  --ot-paper-line: #0b0d12;
-  --ot-ink-on-paper: #12151b;
-  --ot-state-on-paper: #0e7490;
-  --ot-bars-on-paper: #0891b2;
+  --ot-paper-line: #15110d;
+  --ot-ink-on-paper: #1d1813;
+  /* Warm, high-contrast on the cream paper bubble (AA ≥ 4.5:1). */
+  --ot-state-on-paper: #94431b;
+  --ot-bars-on-paper: #b8592a;
 }
 
 /* ---------- Plain canvas in the call ---------- */
@@ -207,7 +208,7 @@
   translate: -50% -50%;
   pointer-events: none;
   border-radius: 50%;
-  background: radial-gradient(circle, #a78bfa30 0%, #22d3ee18 42%, transparent 70%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--ot-cyan) 16%, transparent) 0%, color-mix(in srgb, var(--ot-cyan) 7%, transparent) 42%, transparent 70%);
 }
 
 .ot-stage-halo::before,
@@ -419,7 +420,7 @@
   aspect-ratio: 1;
   border-radius: 50%;
   pointer-events: none;
-  background: radial-gradient(circle, #a78bfa30 0%, #22d3ee18 42%, transparent 70%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--ot-cyan) 16%, transparent) 0%, color-mix(in srgb, var(--ot-cyan) 7%, transparent) 42%, transparent 70%);
 }
 
 .ot-root.ot-phone .ot-fox-hero .ot-fox-hero-figure::after {
@@ -614,7 +615,7 @@
 .ot-root.ot-phone .ot-show-page {
   background: var(--ot-cyan);
   border: none;
-  color: #062a31;
+  color: var(--ot-on-accent, #1d1410);
   font-weight: 700;
 }
 

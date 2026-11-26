@@ -172,7 +172,7 @@ export const sv = {
   'landing.footerPrivacy': 'Läs om integritet',
   'landing.headerPrivacy': 'Integritet',
   'landing.unifiedIntro': 'Talarum är en AI du pratar med om läxan. Den lyssnar, förklarar och ritar medan du själv löser uppgiften. Gratis än så länge.',
-  'landing.chooserTitle': 'Välj vem du vill prata med',
+  'landing.chooserTitle': 'Välj efter ålder',
   'landing.introPrimary': 'Räven är en AI för dig som går i åk 1–6. Räven lyssnar, förklarar och ritar på tavlan medan du själv löser uppgiften. Gratis än så länge.',
   'landing.bandsTitlePrimary': 'Går du i en annan årskurs?',
   'landing.audiencePrimary': 'Åk 1–6',
@@ -195,6 +195,11 @@ export const sv = {
   'landing.row2Upper': 'f′(x) = 2x + 3',
   'landing.row3Upper': 'f′(2) = 7',
   'landing.listenAria': '{greeting} Lyssna på {companion}',
+  'landing.listenTitle': 'Lyssna på {companion}',
+  // Band-neutral steps on the front door (/), under all three companions.
+  'landing.step1TextNeutral': 'Fota uppgiften, så syns den på tavlan.',
+  'landing.step2TitleNeutral': 'Prata om uppgiften',
+  'landing.step2TextNeutral': 'Säg vad du tänker. Din studiekompis lyssnar och frågar.',
   'landing.withCompanion': 'med {companion}',
 
   // Toasts (session errors)

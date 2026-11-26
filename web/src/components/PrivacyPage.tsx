@@ -11,8 +11,13 @@ export default function PrivacyPage({ onBack }: { onBack: () => void }) {
       <header className="ot-land-top">
         <div className="ot-land-topinner">
           <Brand />
-          <nav className="ot-land-links" aria-label={t('landing.navLabel')}>
-            <a href="/">{t('privacy.back')}</a>
+          {/* Right-aligned like the chooser's Integritet link, and visible on
+              phones too (the centred nav collapses there). */}
+          <nav className="ot-land-topright" aria-label={t('landing.navLabel')}>
+            <a className="ot-choose-privacy" href="/">
+              <span aria-hidden="true">← </span>
+              {t('privacy.back')}
+            </a>
           </nav>
         </div>
       </header>

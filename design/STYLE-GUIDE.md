@@ -16,7 +16,7 @@ Target: desktop browsers on school Chromebooks (`1366×768`) and Windows PCs (`1
 
 ### Proposed visual choices (open to iteration)
 - **Dark studio slate canvas** with faint grid, plus **warm off-white paper cards** for uploaded homework and pasted text.
-- **Restrained cyan and violet accents** for pedagogical focus and interactive states, not decorative chrome.
+- **Restrained warm accents (apricot, dusty plum)** for pedagogical focus and interactive states, not decorative chrome.
 - **Character:** Retain the blue creature from the first mockups, with no wings and simpler clothing. The original three-candidate sheet remains a record of exploration.
 
 ## 2. Critical Review of the First Mockups
@@ -41,15 +41,24 @@ Aim for **competent indie-game companion meets calm study desk**—original and 
 
 ## 4. Semantic Color Palette
 
-Strip back gradients so color carries strict meaning:
-- **Canvas primary (`#181B22`):** Background with `24px` grid (`#FFFFFF08`, 3% opacity).
-- **Elevated surface (`#222731`):** Cards and bottom bar (`#14171D` with `#2E3543` 1px border).
-- **Paper surface (`#F6F4EE`):** Homework photos, PDFs, and pasted drafts (`#181B22` ink).
-- **Text primary (`#F3F5F8`) & secondary (`#9BA3B4`):** Equations/headings vs. labels and static waiting copy.
-- **Focus Cyan (`#22D3EE`):** Active step (`#22D3EE1F` fill), speaking indicator, `Starta` CTA, input focus ring.
-- **Teaching Violet (`#A78BFA`):** Step arrows, mind-map connectors, `Tänker / Ritar…` state.
-- **Verified Green (`#34D399`):** Correct result border (`#34D39945`) and check mark (`08`).
-- **Caution Amber (`#F59E0B`) & End Red (`#DC4A4A`):** Warning banner (`10`); red strictly for `Avsluta` (`#B93838` fill).
+Warm Talarum palette since 2026-11-26 (replaced the cold slate + neon cyan/violet set, which
+read as generic dark AI-SaaS and clashed with the warm flame mark). It covers the brand pages
+(`/`, `/integritet`) and the primary band; middle and upper keep their own warm themes in
+`design/bands/<band>/theme.css`. Token names `--ot-cyan` / `--cyan` and `--ot-violet` /
+`--violet` are historical: read them as "accent" and "second accent".
+
+Strip back gradients so color carries strict meaning. No gradient text, no neon glow.
+- **Canvas (`#171411`):** espresso background; faint warm grid (`#FFF1DC09`) only in the call.
+- **Elevated surface (`#221D19`):** cards and dock (`#120F0D` bar, `#3A322B` 1px border).
+- **Paper surface (`#F6F1E7`):** homework, speech bubbles, card buttons (`#1D1813` ink).
+- **Text primary (`#F5EFE6`) & secondary (`#B3A797`).**
+- **Accent apricot (`#F2995E`):** taken from the mark (amber `#FFAF2B` → coral `#F95648`);
+  active step (`#F2995E1F` fill), speaking indicator, start CTA, focus ring. Ink on it: `#1D1410`.
+- **Second accent, dusty plum (`#D79AB4`):** from the mark's plum end; step arrows, carries.
+- **Verified green (`#8FCF9F`), caution amber (`#F2B94B`), end red (`#E8705F`, `#B2392F` fill).**
+  Red stays strictly for ending the call and reads clearly apart from the apricot accent.
+- **Per-band accents on the chooser:** apricot (Räven), sand gold `#D8B573` (Lodjuret),
+  brass `#CAB28A` (Björnen), each on its band's own canvas tone.
 
 ## 5. Typography, Swedish Copy & Maths
 

@@ -50,7 +50,7 @@ function GreetingBubble({ band, label, long }: { band: BandConfig; label: string
         <path
           d="M46 4 H224 A42 42 0 0 1 266 46 V58 A42 42 0 0 1 224 100 H196 L262 156 L150 100 H46 A42 42 0 0 1 4 58 V46 A42 42 0 0 1 46 4 Z"
           fill="var(--ot-paper)"
-          stroke="#0b0d12"
+          stroke="#15110d"
           strokeWidth="5"
           strokeLinejoin="round"
         />
@@ -59,7 +59,7 @@ function GreetingBubble({ band, label, long }: { band: BandConfig; label: string
         {/* The outer wave reaches past x=48, so the viewBox leaves room:
             without it the wave's right edge is cut off. */}
         <svg className="ot-land-spk" viewBox="0 0 52 48">
-          <path d="M6 18 H14 L25 9 V39 L14 30 H6 Z" fill="#12151b" stroke="#12151b" strokeWidth="3" strokeLinejoin="round" />
+          <path d="M6 18 H14 L25 9 V39 L14 30 H6 Z" fill="#1d1813" stroke="#1d1813" strokeWidth="3" strokeLinejoin="round" />
           <path d="M31 17 a10 10 0 0 1 0 14" fill="none" stroke="var(--ot-cyan)" strokeWidth="4.5" strokeLinecap="round" />
           <path d="M36 11 a18 18 0 0 1 0 26" fill="none" stroke="var(--ot-cyan)" strokeWidth="4.5" strokeLinecap="round" />
           <path d="M41 6 a26 26 0 0 1 0 36" fill="none" stroke="var(--ot-cyan)" strokeWidth="4.5" strokeLinecap="round" opacity=".55" />
@@ -91,11 +91,15 @@ export default function Welcome({ profiles, band, onPick, starting, onStartGestu
       <div className="ot-land-grid" aria-hidden="true" />
       <div className="ot-land-glow" aria-hidden="true" />
       <div className="ot-land-copy">
+        {/* "prata med." never splits: a break lands before the accent word
+            or earlier, never leaving "med." alone on a line. */}
         <h1 className="ot-land-title">
           {t('landing.titlePrefix')}
-          <span className="ot-land-accent">{t('landing.titleAccent')}</span>
-          {t('landing.titleSuffix')}
-          <span className="ot-land-dot">{t('landing.titlePeriod')}</span>
+          <span className="ot-nowrap">
+            <span className="ot-land-accent">{t('landing.titleAccent')}</span>
+            {t('landing.titleSuffix')}
+            <span className="ot-land-dot">{t('landing.titlePeriod')}</span>
+          </span>
         </h1>
         <p className="ot-land-sub">{t(INTRO[band.id])}</p>
         <div className="ot-land-cta-row">
