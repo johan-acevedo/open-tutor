@@ -102,6 +102,11 @@ export const TOPIC_HOMEWORK = 'homework';
 export const TOPIC_HOMEWORK_TEXT = 'homework-text';
 export const TOPIC_SESSION_EVENT = 'session-event';
 export const TOPIC_NOTE = 'note';
+/** Worker → browser stream: the call is ending on the worker's initiative.
+ *  { type: 'ended', reason } — today only { reason: 'idle_timeout' } after a
+ *  long learner silence. Arrives before the room is deleted, so the page can
+ *  show the normal end card (with the reason) instead of its error banner. */
+export const TOPIC_TUTOR_EVENT = 'tutor-event';
 /** Worker → browser RPCs for the tutor's learner tools. Acknowledged
  *  request/response (the tool returns only after the browser answers):
  *

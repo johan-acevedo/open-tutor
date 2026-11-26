@@ -42,6 +42,13 @@ PROVIDER_FAILED_APOLOGY = (
     "Stäng fönstret och starta en ny session, så försöker vi igen."
 )
 
+# Said once, through fixed TTS, when a long silence ends the call (idle.py).
+# The page shows the same reason on its end card (web end.idle).
+IDLE_GOODBYE = (
+    "Det har varit tyst ett tag nu, så jag säger hej då här. "
+    "Kom tillbaka när du vill fortsätta!"
+)
+
 DEFAULT_NOTE_TOPIC = "Läxhjälp"
 
 # Shown on screen while the next page is prepared (screen.screen_loading).

@@ -99,6 +99,7 @@ export const sv = {
   // End card
   'end.greetingNamed': 'Bra jobbat idag, {name}!',
   'end.greetingAnon': 'Bra jobbat idag!',
+  'end.idle': 'Samtalet avslutades eftersom det var tyst en stund.',
   'end.topicLabel': 'Det här pratade vi om:',
   'end.clickedLabel': 'Det här klickade:',
   'end.nextLabel': 'Nästa gång:',

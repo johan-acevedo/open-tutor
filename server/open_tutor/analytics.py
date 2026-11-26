@@ -76,7 +76,10 @@ def posthog_settings(environ: dict[str, str] | Any | None = None) -> dict[str, s
 
 
 def normalize_learner_name(name: Any) -> str:
-    """Lowercase, trimmed, single-spaced. Mirrors web/src/analytics.ts."""
+    """Lowercase, trimmed, single-spaced.
+
+    Kept for the debug trail and session notes; analytics no longer uses it —
+    the learner's name never leaves the worker (see ``stable_distinct_id``)."""
     return " ".join(str(name or "").strip().lower().split())
 
 
@@ -85,7 +88,7 @@ def normalize_learner_name(name: Any) -> str:
 # trail) is mapped down to one of these before it leaves the worker.
 _KNOWN_OUTCOMES = frozenset({
     "ended_by_child", "child_left", "provider_error",
-    "sdk_closed_early", "error", "unknown",
+    "sdk_closed_early", "idle_timeout", "error", "unknown",
 })
 
 
@@ -108,19 +111,17 @@ def sanitize_outcome(outcome: Any) -> tuple[str, str | None]:
     return "unknown", None
 
 
-def stable_distinct_id(device_id: Any, learner_name: Any, room: str) -> str:
-    """The id both the page and the worker derive for one learner on one device.
+def stable_distinct_id(device_id: Any, room: str = "unknown-room") -> str:
+    """The id both the page and the worker derive for one browser.
 
-    Falls back to the room name when the page sent no device id (older page,
-    forged request): still countable per session, just not linkable.
-    """
+    The learner's name is never part of it: children's names stay out of
+    analytics entirely. Falls back to the room name when the page sent no
+    device id (older page, forged request): still countable per session,
+    just not linkable. MUST match web/src/analytics.ts stableLearnerId."""
     device = str(device_id or "").strip()
     if not device:
         return str(room or "unknown-room")
-    name = normalize_learner_name(learner_name)
-    if not name:
-        return f"device:{device}"
-    return f"device:{device}:learner:{name}"
+    return f"device:{device}"
 
 
 def summarize_llm_turns(turns: list[dict[str, Any]] | None) -> dict[str, Any]:

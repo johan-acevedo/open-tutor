@@ -130,12 +130,20 @@ def test_session_without_device_id_has_none_in_metadata():
 
 
 def test_stable_distinct_id():
-    assert stable_distinct_id("dev-1", "Leo", "tutor-x") == "device:dev-1:learner:leo"
-    # Browser and worker must derive the same id: case and spacing collapse.
-    assert stable_distinct_id("dev-1", "  LEO  ", "tutor-x") == \
-        stable_distinct_id("dev-1", "leo", "tutor-x")
-    assert stable_distinct_id(None, "Leo", "tutor-x") == "tutor-x"
-    assert stable_distinct_id("dev-1", "", "tutor-x") == "device:dev-1"
+    assert stable_distinct_id("dev-1", "tutor-x") == "device:dev-1"
+    assert stable_distinct_id(None, "tutor-x") == "tutor-x"
+    assert stable_distinct_id("dev-1", "") == "device:dev-1"
+
+
+def test_stable_distinct_id_never_carries_a_name():
+    # Children's names stay out of analytics entirely: the id is the
+    # anonymous device id, falling back to the room name without one.
+    hostile = "Noa Möller"
+    assert hostile not in stable_distinct_id("dev-1", "tutor-x")
+    assert "learner" not in stable_distinct_id("dev-1", "tutor-x")
+    assert hostile not in stable_distinct_id(None, "tutor-x")
+    # The sanitizer passes the idle outcome through as a fixed category.
+    assert sanitize_outcome("idle_timeout") == ("idle_timeout", None)
 
 
 def test_analytics_disabled_without_key_sends_nothing():
@@ -153,7 +161,7 @@ def test_session_events_reach_fake_client_with_expected_shapes():
     fake = FakePostHog()
     analytics = Analytics.from_env({"TUTOR_POSTHOG_KEY": "phc_test"}, client=fake)
     assert analytics.enabled
-    distinct = stable_distinct_id("dev-1", "Leo", "tutor-x")
+    distinct = stable_distinct_id("dev-1", "tutor-x")
     analytics.capture(distinct, "tutor_session_started", {
         "room": "tutor-x", "grade": 8, "returning": True,
         "llm_route": "go", "tts": "elevenlabs eleven_v4_turbo"})
@@ -164,7 +172,7 @@ def test_session_events_reach_fake_client_with_expected_shapes():
     assert [c["event"] for c in fake.captured] == [
         "tutor_session_started", "tutor_session_ended"]
     started = fake.captured[0]
-    assert started["distinct_id"] == "device:dev-1:learner:leo"
+    assert started["distinct_id"] == "device:dev-1"
     assert started["properties"]["room"] == "tutor-x"
     ended = fake.captured[1]["properties"]
     assert ended["outcome"] == "ended_by_child" and ended["tool_errors"] == 0
@@ -224,8 +232,8 @@ def test_capture_uses_keyword_arguments_like_posthog_7x():
     call raises TypeError and the fake's keyword-only signature would catch it."""
     fake = FakePostHog()
     analytics = Analytics.from_env({"TUTOR_POSTHOG_KEY": "phc_test"}, client=fake)
-    analytics.capture("device:dev-1:learner:leo", "tutor_session_started", {"room": "tutor-x"})
-    assert fake.captured == [{"distinct_id": "device:dev-1:learner:leo",
+    analytics.capture("device:dev-1", "tutor_session_started", {"room": "tutor-x"})
+    assert fake.captured == [{"distinct_id": "device:dev-1",
                               "event": "tutor_session_started",
                               "properties": {"room": "tutor-x"}}]
 

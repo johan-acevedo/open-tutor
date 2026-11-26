@@ -4,6 +4,34 @@ Lead: the thread "state of the project" (Claude, 2026-11-12). The lead keeps thi
 Workers read it before starting and report against it. Decisions here were agreed with Johan
 on 2026-11-12 unless marked open.
 
+## 2026-11-26: no learner names in PostHog; 20-minute idle timeout
+
+Two changes from one privacy-minded brief, built on `feat/privacy-idle-timeout`:
+
+- **Names out of PostHog.** Both the page (`web/src/analytics.ts`) and the worker
+  (`server/open_tutor/analytics.py`) derived the distinct id as
+  `device:<uuid>:learner:<name>` and the page sent `learner_name` as a person
+  property. Now the id is just `device:<uuid>` (the anonymous browser id from
+  `open-tutor-device-id`, so returning-device retention still works) and identify
+  carries only the grade. Grade stays: teaching to the right school year needs it,
+  and it cannot identify a child. Unit tests on both sides assert no name appears
+  in the id or the properties. The `set_learner_name` tool is unchanged: the name
+  still lives in local browser profiles, it just never leaves for analytics.
+- **Idle-silence timeout.** `TUTOR_IDLE_TIMEOUT_S` (default 1200, 20 minutes; 0 or
+  negative disables) ends a call nobody is using — a forgotten open tab, not a
+  thinking child. The policy is a small pure class (`server/open_tutor/idle.py`,
+  injectable clock, unit-tested). Learner speech (final or interim transcript),
+  typed chat, homework uploads, page answers and mic-button presses reset the clock;
+  tutor speech alone never does, and the check waits until the tutor is quiet instead
+  of cutting a sentence off. On timeout the worker says one short fixed Swedish line,
+  saves the session note as usual, tells the page the reason on a `tutor-event` stream,
+  and takes the normal ending path with outcome `idle_timeout`. The page lands on the
+  normal end card with "Samtalet avslutades eftersom det var tyst en stund." and the
+  existing restart — never the reconnect banner.
+- Not tested live: no real voice call was run (paid providers). Proven by the full
+  server and web suites plus typecheck and build; the idle path end-to-end (worker
+  line → page end card) awaits a dev-instance call.
+
 ## 2026-11-24: the call view follows the landing page (concept A)
 
 After the landing page, the call view looked unfinished: chrome pinned to the edges, a large

@@ -54,7 +54,7 @@ describe('analytics', () => {
     pageOpened();
     micPermission(true);
     sessionStartRequested();
-    identifyLearner('Leo', 8);
+    identifyLearner(8);
     sessionStarted('tutor-x');
     sessionFailed(500);
     sessionEnded('ended_by_child', 60);
@@ -147,23 +147,32 @@ describe('analytics', () => {
     expect(JSON.stringify(calls)).not.toContain('data:image');
   });
 
-  it('identifies the learner with the stable device+name id and person properties', async () => {
+  it('identifies the session with the anonymous device id and grade only', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(configResponse(POSTHOG_KEY)));
     await initAnalytics();
     const device = getDeviceId();
     expect(device).toBeTruthy();
     expect(getDeviceId()).toBe(device); // stable in this browser
-    identifyLearner('Leo', 8);
-    expect(posthogMock.identify).toHaveBeenCalledWith(`device:${device}:learner:leo`, {
-      learner_name: 'Leo',
+    identifyLearner(8);
+    expect(posthogMock.identify).toHaveBeenCalledWith(`device:${device}`, {
       grade: 8,
     });
   });
 
-  it('derives the same stable id as the worker: case and spacing collapse', () => {
-    expect(stableLearnerId('dev-1', 'Leo')).toBe('device:dev-1:learner:leo');
-    expect(stableLearnerId('dev-1', '  LEO  ')).toBe('device:dev-1:learner:leo');
-    expect(stableLearnerId('dev-1', 'Anna  Maria')).toBe('device:dev-1:learner:anna maria');
+  it('never sends a learner name in the distinct id or identify properties', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(configResponse(POSTHOG_KEY)));
+    await initAnalytics();
+    const device = getDeviceId();
+    // identifyLearner takes no name at all: a name cannot leak through it.
+    identifyLearner(8);
+    const payload = JSON.stringify(posthogMock.identify.mock.calls);
+    expect(payload).not.toContain('learner_name');
+    expect(payload).not.toContain('learner:');
+    expect(payload).toContain(`device:${device}`);
+  });
+
+  it('derives the same stable id as the worker: the anonymous device id', () => {
+    expect(stableLearnerId('dev-1')).toBe('device:dev-1');
   });
 
   it('scrubs kod from URL-like properties via the before_send hook', async () => {
@@ -240,7 +249,7 @@ describe('analytics', () => {
     pageOpened();
     pageOpened();
     sessionStartRequested();
-    identifyLearner('Leo', 8);
+    identifyLearner(8);
     expect(posthogMock.capture).not.toHaveBeenCalled();
     resolveConfig(undefined);
     await ready;
@@ -250,8 +259,7 @@ describe('analytics', () => {
     expect(events).toContain('session_start_requested');
     expect(posthogMock.identify).toHaveBeenCalledTimes(1);
     const device = getDeviceId();
-    expect(posthogMock.identify).toHaveBeenCalledWith(`device:${device}:learner:leo`, {
-      learner_name: 'Leo',
+    expect(posthogMock.identify).toHaveBeenCalledWith(`device:${device}`, {
       grade: 8,
     });
   });
@@ -264,7 +272,7 @@ describe('analytics', () => {
     vi.stubGlobal('fetch', vi.fn().mockReturnValue(gate.then(() => configResponse(null))));
     const ready = initAnalytics();
     pageOpened();
-    identifyLearner('Leo', 8);
+    identifyLearner(8);
     resolveConfig(undefined);
     await ready;
     expect(analyticsEnabled()).toBe(false);
@@ -311,7 +319,7 @@ describe('kod scrubbing against the real posthog-js SDK', () => {
         },
       });
       const device = getDeviceId();
-      ph.identify(stableLearnerId(device, 'Leo'));
+      ph.identify(stableLearnerId(device));
       ph.capture('turn_sent', { modality: 'typed' });
 
       expect(seen.length).toBeGreaterThan(0);
@@ -355,21 +363,19 @@ describe('pre-init queue ordering', () => {
       vi.fn().mockReturnValue(gate.then(() => configResponse(POSTHOG_KEY))),
     );
     const ready = initAnalytics();
-    identifyLearner('Anna', 3);
+    identifyLearner(3);
     turnSent();
-    identifyLearner('Bella', 4);
+    identifyLearner(4);
     homeworkShared('image');
     resolveConfig(undefined);
     await ready;
     expect(analyticsEnabled()).toBe(true);
     const device = getDeviceId();
     expect(posthogMock.identify).toHaveBeenCalledTimes(2);
-    expect(posthogMock.identify).toHaveBeenNthCalledWith(1, `device:${device}:learner:anna`, {
-      learner_name: 'Anna',
+    expect(posthogMock.identify).toHaveBeenNthCalledWith(1, `device:${device}`, {
       grade: 3,
     });
-    expect(posthogMock.identify).toHaveBeenNthCalledWith(2, `device:${device}:learner:bella`, {
-      learner_name: 'Bella',
+    expect(posthogMock.identify).toHaveBeenNthCalledWith(2, `device:${device}`, {
       grade: 4,
     });
     expect(posthogMock.capture.mock.calls.map(([event]) => event)).toEqual([
