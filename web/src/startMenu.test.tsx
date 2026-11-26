@@ -47,3 +47,17 @@ it('links the privacy panel to the /integritet page', () => {
   const link = screen.getByRole('link', { name: /Läs om integritet/ });
   expect(link.getAttribute('href')).toBe('/integritet');
 });
+
+it('says the profile travels with the next call and points at /integritet', () => {
+  render(<StartMenu switchLabel="Byt elev" onSwitch={() => {}} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Meny' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Integritet' }));
+  const panel = screen.getByLabelText('Integritet');
+  // Calm and accurate: saved in this browser, sent along when the next
+  // call starts so the tutor can continue — never browser-only.
+  expect(panel.textContent).toContain('webbläsaren');
+  expect(panel.textContent).toContain('skickas de med');
+  expect(panel.textContent).not.toContain('bara i den här webbläsaren');
+  // Model training is disclosed on /integritet, never in this summary.
+  expect(panel.textContent?.toLowerCase()).not.toContain('trän');
+});

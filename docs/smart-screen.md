@@ -42,6 +42,14 @@ Two changes from one privacy-minded brief, built on `feat/privacy-idle-timeout`:
 - Not tested live: no real voice call was run (paid providers). Proven by the full
   server and web suites plus typecheck and build; the idle path end-to-end (worker
   line → page end card) awaits a dev-instance call.
+- **After the second Codex review (launch flow fixes):** a picked legacy profile
+  (no band) is remembered under the current band, so the greeting and the session
+  request are theirs, not the previously remembered learner's; a pending switch
+  prefill suppresses the chooser and any explicit navigation clears it; Back during
+  connecting/live/ending no longer moves the theme; cross-band links land on exactly
+  the href's path+query; the menu privacy line says the profile travels with the next
+  call; picker Back focuses the start control. Proven by new App-level tests plus a
+  headless pass over the built app with /api/session intercepted (never a real call).
 
 ## 2026-11-26: no learner names in PostHog; 20-minute idle timeout
 

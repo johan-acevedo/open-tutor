@@ -79,22 +79,33 @@ export default function App() {
   // ("+ Någon ny" goes to the 3-card page even with remembered learners).
   const [pickerOpen, setPickerOpen] = useState(false);
   const [forceChooser, setForceChooser] = useState(false);
+  const session = useSession(mobile, band);
+  // The user chose or navigated to a band this page load (picker, chooser
+  // card, cross-band link, Back): a late /api/config must not override it.
+  const choseBandRef = useRef(false);
+  const phaseRef = useRef(session.phase);
+  phaseRef.current = session.phase;
 
-  const navigate = useCallback((path: string) => {
-    const lower = path.toLowerCase();
+  const navigate = useCallback((path: string, opts?: { keepPrefill?: boolean }) => {
+    // The href owns the query: a cross-band link drops ?band=, so in-app
+    // navigation lands on exactly the href's path+query, never with a
+    // stale testing override attached.
+    const qIndex = path.indexOf('?');
+    const lower = (qIndex >= 0 ? path.slice(0, qIndex) : path).toLowerCase();
+    const search = qIndex >= 0 ? path.slice(qIndex) : '';
     try {
-      // Keep the query string: a ?band= testing override survives in-app
-      // navigation, and the band still resolves from it (it wins).
-      const search = window.location.search || '';
       window.history.pushState(null, '', lower + search);
     } catch {
       /* ignore */
     }
     choseBandRef.current = true;
+    // An explicit user navigation wins over a pending in-call-switch
+    // prefill and clears it; the prefill effect's own redirect keeps it.
+    if (!opts?.keepPrefill) session.clearPrefill();
     setRoute(lower);
     setBand(locationBand(lower));
     setPickerOpen(false);
-  }, []);
+  }, [session.clearPrefill]);
 
   // Alias paths (/raven, /lodjuret, /bjornen, /vuxen) normalize to the
   // canonical band path without a reload or a history entry. The query
@@ -123,17 +134,26 @@ export default function App() {
 
   useEffect(() => {
     const onPop = () => {
-      // Back/Forward restores the URL: the band follows it, so the theme
-      // can never stick to the previous band after a pop.
+      // Back/Forward restores the URL, but the band stays fixed while a
+      // call is underway: the session request and the profile writes
+      // already captured the call band, so a Back press must not move the
+      // theme under a connecting/live/ending screen. The band follows the
+      // URL again once back on the start pages (profiles) or the end card.
       const next = pathOf();
       choseBandRef.current = true;
       setRoute(next);
-      setBand(locationBand(next));
+      if (phaseRef.current === 'profiles' || phaseRef.current === 'ended') {
+        setBand(locationBand(next));
+      }
+      // Back is an explicit navigation: a pending switch prefill loses.
+      session.clearPrefill();
       setPickerOpen(false);
       setForceChooser(false);
     };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
+    // session.clearPrefill is a stable callback; the listener never re-subscribes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Server-advertised default band (TUTOR_BAND, via /api/config): only for
@@ -167,12 +187,6 @@ export default function App() {
     };
   }, []);
   const config = bandConfig(band);
-  const session = useSession(mobile, band);
-  // The user chose or navigated to a band this page load (picker, chooser
-  // card, cross-band link, Back): a late /api/config must not override it.
-  const choseBandRef = useRef(false);
-  const phaseRef = useRef(session.phase);
-  phaseRef.current = session.phase;
   // After the picker closes onto a new start view (pick or "+ Någon ny"),
   // move focus to that view's start control.
   const focusStartAfterPickerRef = useRef(false);
@@ -259,10 +273,13 @@ export default function App() {
   /** Household picker choice: the picked profile and its band drive the
    *  route, the greeting and the start request together, as one piece of
    *  state. Showing their band view in place is not enough: the URL path
-   *  must name the band too, or the greeting and request disagree. */
+   *  must name the band too, or the greeting and request disagree. A legacy
+   *  profile without a band stays in the current band; remembering it under
+   *  that band's key (not just overall) is what makes the greeting and the
+   *  start request theirs instead of the previously remembered learner's. */
   function pickHousehold(p: Profile) {
     const target = p.band ?? band;
-    rememberLastProfileId(p.id, p.band);
+    rememberLastProfileId(p.id, target);
     setPickerOpen(false);
     setForceChooser(false);
     session.clearProfilesOpen();
@@ -307,7 +324,9 @@ export default function App() {
     const target = next?.band;
     if (!target) return;
     choseBandRef.current = true;
-    if (BAND_PATHS[target] !== route) navigate(BAND_PATHS[target]);
+    // The prefill redirect keeps the prefill: it is the navigation the
+    // prefill itself asked for. Any other navigation clears it (see navigate).
+    if (BAND_PATHS[target] !== route) navigate(BAND_PATHS[target], { keepPrefill: true });
     else if (target !== band) setBand(target);
     // navigate / pickHousehold own their deps; profiles/route/band re-run.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -365,6 +384,9 @@ export default function App() {
     !isPrivacy &&
     !pickerOpen &&
     !routeBand &&
+    // A pending in-call-switch prefill shows the prefilled learner's start
+    // view, never the generic chooser: the prefill would be dropped.
+    !session.prefillId &&
     (route === '/' ? (forceChooser || !profiles.some((p) => p.id === getLastProfileIdSafe() && p.name.trim() !== '')) : true);
 
   return (
@@ -411,6 +433,10 @@ export default function App() {
               onPick={pickHousehold}
               onNew={pickerNew}
               onBack={() => {
+                // Back also lands on a new start view (the opener is gone
+                // with the old view), so focus moves to its start control
+                // instead of falling back to <body>.
+                focusStartAfterPickerRef.current = true;
                 setPickerOpen(false);
                 session.clearProfilesOpen();
               }}

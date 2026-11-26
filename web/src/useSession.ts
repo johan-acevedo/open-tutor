@@ -1357,6 +1357,14 @@ export function useSession(mobile = false, band: BandId = 'primary') {
     setProfilesOpen(true);
   }, []);
 
+  /** An explicit user navigation wins over a pending in-call-switch
+   *  prefill and clears it, so the prefill redirect never yanks the page
+   *  back (see App navigate). Idempotent. */
+  const clearPrefill = useCallback(() => {
+    pendingPrefillRef.current = null;
+    setPrefillId(null);
+  }, []);
+
   /** Menu "leave": send `end` so the worker saves the note, then open the
    *  nameless start page directly (no second click). The end transition itself owns
    *  idempotency (see endSession): a second call while one is in flight
@@ -1623,6 +1631,7 @@ export function useSession(mobile = false, band: BandId = 'primary') {
     backToProfiles,
     leaveToProfiles,
     showFirstVisit,
+    clearPrefill,
     profilesOpen,
     clearProfilesOpen,
     prefillId,

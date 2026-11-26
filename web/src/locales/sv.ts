@@ -74,7 +74,7 @@ export const sv = {
   'startmenu.about': 'Om Talarum',
   'startmenu.aboutText': 'Talarum är ett experiment: en AI du pratar med om läxan. Den förklarar och ritar på tavlan medan du själv löser uppgiften. Gratis än så länge.',
   'startmenu.privacy': 'Integritet',
-  'startmenu.privacyText': 'Din profil och anteckningar sparas bara i den här webbläsaren. Röstsamtalet går via våra leverantörer så att tutorn kan höra dig. Inget konto behövs.',
+  'startmenu.privacyText': 'Din profil och dina anteckningar sparas i den här webbläsaren. När ett nytt samtal börjar skickas de med så att tutorn kan fortsätta där ni slutade. Läs mer under Integritet.',
   'startmenu.privacyLink': 'Läs om integritet',
 
   // Homework tray
