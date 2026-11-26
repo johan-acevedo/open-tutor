@@ -16,8 +16,8 @@ export function AvatarFallback() {
   return (
     <div className="ot-avatar-fallback" role="img" aria-label={t('avatar.tutorLabel')}>
       <svg width="120" height="120" viewBox="0 0 120 120" aria-hidden="true">
-        <circle cx="60" cy="44" r="22" fill="#9BA3B4" />
-        <ellipse cx="60" cy="96" rx="34" ry="24" fill="#9BA3B4" />
+        <circle cx="60" cy="44" r="22" fill="#B3A797" />
+        <ellipse cx="60" cy="96" rx="34" ry="24" fill="#B3A797" />
       </svg>
     </div>
   );

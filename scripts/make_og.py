@@ -17,10 +17,13 @@ ROOT = Path(__file__).resolve().parents[1]
 WEB_PUBLIC = ROOT / "web" / "public"
 
 WIDTH, HEIGHT = 1200, 630
-# Calm canvas matching the primary landing background.
-BG_TOP = (27, 32, 39)
-BG_BOTTOM = (19, 22, 28)
-HALO = (46, 58, 72)
+# Warm Talarum canvas (2026-11-26), matching the landing background
+# (--ot-canvas #171411), with a soft glow per companion in its band accent
+# (apricot, sand gold, brass) so the three themes read as one family.
+BG_TOP = (33, 27, 23)
+BG_BOTTOM = (23, 20, 17)
+HALO = (64, 46, 34)
+GLOWS = [(242, 153, 94), (216, 181, 115), (202, 178, 138)]
 
 HEROES = [
     WEB_PUBLIC / "character" / "hero.webp",
@@ -70,6 +73,15 @@ def main() -> int:
     total = sum(f.width for f in figs) + gap * (len(figs) - 1)
     x = (WIDTH - total) // 2
     baseline = HEIGHT - 30
+    # A soft glow behind each head, in that companion's band accent.
+    gx = x
+    for fig, colour in zip(figs, GLOWS):
+        cx, cy = gx + fig.width // 2, baseline - fig.height + 170
+        mask = Image.new("L", (WIDTH, HEIGHT), 0)
+        ImageDraw.Draw(mask).ellipse([cx - 190, cy - 170, cx + 190, cy + 170], fill=46)
+        mask = mask.filter(ImageFilter.GaussianBlur(70))
+        canvas = Image.composite(Image.new("RGB", (WIDTH, HEIGHT), colour), canvas, mask)
+        gx += fig.width + gap
     for fig in figs:
         canvas.paste(fig, (x, baseline - fig.height), fig)
         x += fig.width + gap

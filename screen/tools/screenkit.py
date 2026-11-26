@@ -80,7 +80,7 @@ def compose(body: str, shell: pathlib.Path | None = None, *, band: str = "primar
 
 
 def host_page(doc: str) -> str:
-    return ("<!doctype html><html><head><meta charset='utf-8'><style>html,body{margin:0;height:100%;background:#181b22}"
+    return ("<!doctype html><html><head><meta charset='utf-8'><style>html,body{margin:0;height:100%;background:#171411}"
             "iframe{border:0;width:100%;height:100%;display:block}</style></head><body>"
             f"<iframe sandbox='allow-scripts' srcdoc=\"{htmllib.escape(doc, quote=True)}\"></iframe></body></html>")
 

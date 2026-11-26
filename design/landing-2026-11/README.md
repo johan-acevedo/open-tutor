@@ -56,3 +56,12 @@ records, not served pages.
 - A5: lynx and bear must carry the same visual weight as the fox; step 2 uses a talking bubble
   with dots instead of voice bars; step 3 drops the operation labels (primary:
   30 + 40 = 70 → 6 + 7 = 13 → 70 + 13 = 83).
+
+## Design v2: warm palette and portrait chooser (2026-11-26)
+
+Johan found live v1 "okej men långt ifrån hur bra det kan bli" and the blue/purple AI-slop-like,
+clashing with the warm flame mark. v2 moves the brand pages and the primary band to the warm
+Talarum palette (`design/STYLE-GUIDE.md` §4) and rebuilds the `/` chooser as three companion
+portraits (transparent heroes on band-coloured backdrops, a comic "Hej!" bubble as the listen
+affordance, cream buttons on one baseline). Decisions above still hold: no pills above the
+headline, no gradient text, no fine print under buttons, one tap from card to call.

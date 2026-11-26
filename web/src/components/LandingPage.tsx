@@ -89,7 +89,7 @@ function Bands({ band, onNavigate }: { band: BandConfig; onNavigate?: (target: B
               onNavigate(id);
             }}
           >
-            <img className="ot-land-bandface" src={BANDS[id].companion.face} alt="" aria-hidden="true" />
+            <img className="ot-land-bandface" data-companion={id} src={BANDS[id].companion.face} alt="" aria-hidden="true" />
             <span className="ot-land-bandtxt">
               <strong>{t(AUDIENCES[id])}</strong>
               <span>{t('landing.withCompanion', { companion: BANDS[id].companion.name })}</span>

@@ -35,11 +35,11 @@ describe('HomeChooser', () => {
     expect(onBegin).toHaveBeenCalledWith('middle');
   });
 
-  it('plays the hello clip when a face is tapped', () => {
+  it('plays the hello clip when a portrait is tapped', () => {
     const onBegin = vi.fn();
     render(<HomeChooser onBegin={onBegin} starting={false} />);
     const face = screen.getByRole('button', { name: /Lyssna på Björnen$/ });
-    expect(face.querySelector('img')?.getAttribute('src')).toContain('face.webp');
+    expect(face.querySelector('img')?.getAttribute('src')).toContain('hero.webp');
   });
 });
 
@@ -102,6 +102,21 @@ describe('HomeChooser card start', () => {
     expect(MockAudio.instances[0].paused).toBe(true);
     expect(onBegin).toHaveBeenCalledWith('middle');
     stopGreeting();
+  });
+});
+
+describe('HomeChooser listen state', () => {
+  it('marks only the playing companion portrait as pressed', async () => {
+    MockAudio.instances = [];
+    vi.stubGlobal('Audio', MockAudio as unknown as typeof Audio);
+    render(<HomeChooser onBegin={vi.fn()} starting={false} />);
+    const lynx = screen.getByRole('button', { name: /Lyssna på Lodjuret$/ });
+    const bear = screen.getByRole('button', { name: /Lyssna på Björnen$/ });
+    fireEvent.click(lynx);
+    await waitFor(() => expect(lynx.getAttribute('aria-pressed')).toBe('true'));
+    expect(bear.getAttribute('aria-pressed')).toBe('false');
+    stopGreeting();
+    await waitFor(() => expect(lynx.getAttribute('aria-pressed')).toBe('false'));
   });
 });
 

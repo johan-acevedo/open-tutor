@@ -46,6 +46,16 @@ export function useGreetingPlaying(): boolean {
   return useSyncExternalStore(subscribeGreeting, isGreetingPlaying, isGreetingPlaying);
 }
 
+/** The band whose clip is playing right now, or null. */
+export function playingGreetingBand(): BandId | null {
+  return playing ? elBand : null;
+}
+
+/** Hook form of playingGreetingBand(): the chooser marks only that card. */
+export function usePlayingGreetingBand(): BandId | null {
+  return useSyncExternalStore(subscribeGreeting, playingGreetingBand, playingGreetingBand);
+}
+
 function ensure(band: BandId): HTMLAudioElement {
   if (!el || elBand !== band) {
     stopGreeting();

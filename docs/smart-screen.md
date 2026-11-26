@@ -4,6 +4,30 @@ Lead: the thread "state of the project" (Claude, 2026-11-12). The lead keeps thi
 Workers read it before starting and report against it. Decisions here were agreed with Johan
 on 2026-11-12 unless marked open.
 
+## 2026-11-26: warm Talarum palette and companion-portrait chooser (design v2)
+
+Johan on the live v1: "okej första version men långt ifrån hur bra jag tror det kan bli",
+and the blue/purple read as AI slop next to the warm flame mark. Branch `feat/talarum-design-v2`.
+
+- **One warm colour world.** `:root` in `web/src/styles.css` and `screen/shell/shell.css`
+  (brand pages, primary band, Smart Screen) moved from slate `#181b22` + cyan `#22d3ee` +
+  violet `#a78bfa` to espresso `#171411`, cream paper `#f6f1e7`, apricot accent `#f2995e`
+  and dusty plum `#d79ab4`. Hardcoded cyan/violet halos, paper-bubble state colours and
+  ink-on-accent colours now derive from tokens, so middle and upper lost their stray cyan halo
+  in the call too. Middle and upper themes are unchanged. Tokens: `design/STYLE-GUIDE.md` §4.
+- **Chooser (`/`).** Editorial head (headline left, intro right on desktop); the headline
+  keeps "prata med." together, so "med." is never alone. Cards are portraits: the transparent
+  `hero.webp` on a backdrop in each band's own canvas and accent, fading into the card (no
+  white circles). The portrait is one button that plays the hello clip, marked by a small
+  comic "Hej!" bubble in the band-page bubble language (a speaker badge on phones).
+  Buttons are cream, sit on the card's bottom edge and line up whatever the label wraps to.
+  The visible "Välj vem du vill prata med" heading is now screen-reader only ("Välj efter ålder").
+- **Also:** cross-link faces lost their white disc, the footer rule sits on the content grid,
+  the privacy page's back link is right-aligned and visible on phones, `og.png` is warm.
+- **Verified:** Playwright on the built app (1440×900, 1280×720, 820×1180, 390×844,
+  360×640; `/`, the three band pages, `/integritet`, the screen demo): no console errors, no
+  broken images. Not verified: a real call, real devices, Safari.
+
 ## 2026-11-26: Talarum, one domain, /integritet (launch)
 
 Two changes from one privacy-minded brief, built on `feat/privacy-idle-timeout`:

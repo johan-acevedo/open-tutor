@@ -126,7 +126,7 @@
 }
 .ot-homework-tray .ot-primary {
   background: var(--ot-cyan);
-  color: #062a31;
+  color: var(--ot-on-accent, #1d1410);
 }
 .ot-tray-actions {
   margin-top: 8px;
@@ -545,8 +545,8 @@
   width: 100%;
   height: calc(1.4em * 4);
   min-height: calc(1.4em * 4);
-  background: #eef0f7;
-  color: #171a24;
+  background: var(--ot-paper);
+  color: var(--ot-paper-ink);
   border-radius: 14px;
   padding: 9px 12px;
   font-size: 16px;
@@ -576,7 +576,7 @@
   -webkit-line-clamp: 3;
 }
 .ot-fox-bubble-state {
-  color: #4a5068;
+  color: #5d5347;
 }
 
 /* Turning from the fox to the item fades the page in, calmly. */
@@ -606,10 +606,10 @@
 @keyframes ot-fox-ring {
   0%,
   100% {
-    box-shadow: 0 0 0 0 #22d3ee55;
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--ot-cyan) 33%, transparent);
   }
   50% {
-    box-shadow: 0 0 0 5px #22d3ee00;
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--ot-cyan) 0%, transparent);
   }
 }
 

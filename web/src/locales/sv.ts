@@ -172,7 +172,7 @@ export const sv = {
   'landing.footerPrivacy': 'Läs om integritet',
   'landing.headerPrivacy': 'Integritet',
   'landing.unifiedIntro': 'Talarum är en AI du pratar med om läxan. Den lyssnar, förklarar och ritar medan du själv löser uppgiften. Gratis än så länge.',
-  'landing.chooserTitle': 'Välj vem du vill prata med',
+  'landing.chooserTitle': 'Välj efter ålder',
   'landing.introPrimary': 'Räven är en AI för dig som går i åk 1–6. Räven lyssnar, förklarar och ritar på tavlan medan du själv löser uppgiften. Gratis än så länge.',
   'landing.bandsTitlePrimary': 'Går du i en annan årskurs?',
   'landing.audiencePrimary': 'Åk 1–6',

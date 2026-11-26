@@ -1,23 +1,31 @@
 /* Talarum — ordinary CSS, tokens from design/STYLE-GUIDE.md. */
 
 :root {
-  --ot-canvas: #181b22;
-  --ot-grid: #ffffff08;
-  --ot-elevated: #222731;
-  --ot-bottombar: #14171d;
-  --ot-border: #2e3543;
-  --ot-paper: #f6f4ee;
-  --ot-paper-ink: #181b22;
-  --ot-text: #f3f5f8;
-  --ot-text-dim: #9ba3b4;
-  --ot-cyan: #22d3ee;
-  --ot-cyan-fill: #22d3ee1f;
-  --ot-violet: #a78bfa;
-  --ot-green: #34d399;
-  --ot-green-border: #34d39945;
-  --ot-amber: #f59e0b;
-  --ot-red: #dc4a4a;
-  --ot-end-fill: #b93838;
+  /* Talarum warm palette (2026-11-26): the brand shell (/, /integritet) and
+     the primary band share it. Espresso canvas, cream paper, an apricot
+     accent taken from the flame mark (amber → coral → plum) and a dusty plum
+     second accent. The token names (--ot-cyan, --ot-violet) are historical:
+     they mean "accent" and "second accent". Middle and upper keep their own
+     themes (design/bands/<band>/theme.css). */
+  --ot-canvas: #171411;
+  --ot-grid: #fff1dc09;
+  --ot-elevated: #221d19;
+  --ot-bottombar: #120f0d;
+  --ot-border: #3a322b;
+  --ot-paper: #f6f1e7;
+  --ot-paper-ink: #1d1813;
+  --ot-text: #f5efe6;
+  --ot-text-dim: #b3a797;
+  --ot-cyan: #f2995e;
+  --ot-cyan-fill: #f2995e1f;
+  --ot-violet: #d79ab4;
+  --ot-green: #8fcf9f;
+  --ot-green-border: #8fcf9f55;
+  --ot-amber: #f2b94b;
+  --ot-red: #e8705f;
+  --ot-end-fill: #b2392f;
+  /* Ink on an accent fill (buttons, highlighted rows). */
+  --ot-on-accent: #1d1410;
   --ot-font: "Segoe UI", Roboto, "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
 }
 
@@ -456,7 +464,7 @@ a:focus-visible {
 .ot-land-title {
   font-size: clamp(44px, 5.4vw, 76px);
   line-height: 1.06;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.022em;
   margin: 0 0 28px;
   font-weight: 800;
 }
@@ -493,7 +501,7 @@ a:focus-visible {
   align-items: center;
   gap: 14px;
   background: var(--ot-cyan);
-  color: #14171d;
+  color: var(--ot-on-accent, #1d1410);
   border: none;
   border-radius: 999px;
   font-weight: 800;
@@ -633,7 +641,7 @@ a:focus-visible {
   align-items: center;
   justify-content: center;
   gap: 10px;
-  color: #12151b;
+  color: var(--ot-paper-ink);
   font-weight: 800;
   letter-spacing: -0.02em;
   font-size: 40px;
@@ -788,7 +796,7 @@ a:focus-visible {
   position: relative;
   align-self: center;
   background: var(--ot-paper);
-  border: 2px solid #0b0d12;
+  border: 2px solid #15110d;
   border-radius: 16px;
   padding: 12px 14px;
   display: flex;
@@ -805,8 +813,8 @@ a:focus-visible {
   height: 12px;
   margin-top: -6px;
   background: var(--ot-paper);
-  border-left: 2px solid #0b0d12;
-  border-bottom: 2px solid #0b0d12;
+  border-left: 2px solid #15110d;
+  border-bottom: 2px solid #15110d;
   transform: rotate(45deg);
 }
 
@@ -838,7 +846,7 @@ a:focus-visible {
 .ot-land-eq-on {
   background: var(--ot-cyan);
   border-color: var(--ot-cyan);
-  color: #14171d;
+  color: var(--ot-on-accent, #1d1410);
 }
 
 .ot-land-bands {
@@ -881,7 +889,18 @@ a:focus-visible {
   border-radius: 50%;
   object-fit: cover;
   flex: 0 0 auto;
-  background: var(--ot-paper);
+  /* The cut-out face on a soft backdrop in the target band's own colours,
+     never a stark white disc. */
+  background: radial-gradient(circle at 50% 38%, #f2995e55 0%, #2a221c 72%);
+  box-shadow: inset 0 0 0 1px #ffffff14;
+}
+
+.ot-land-bandface[data-companion="middle"] {
+  background: radial-gradient(circle at 50% 38%, #d8b57355 0%, #20262e 72%);
+}
+
+.ot-land-bandface[data-companion="upper"] {
+  background: radial-gradient(circle at 50% 38%, #cab28a55 0%, #26302b 72%);
 }
 
 .ot-land-bandtxt {
@@ -913,8 +932,9 @@ a:focus-visible {
 }
 
 .ot-land-foot {
-  border-top: 1px solid var(--ot-border);
-  padding: 28px 104px 40px;
+  --ot-foot-pad: 104px;
+  position: relative;
+  padding: 28px var(--ot-foot-pad) 40px;
   max-width: 1400px;
   margin: 0 auto;
   width: 100%;
@@ -926,6 +946,16 @@ a:focus-visible {
   color: var(--ot-text-dim);
   font-size: 17px;
   line-height: 1.6;
+}
+
+/* The rule spans the content column, aligned with the logo and the cards. */
+.ot-land-foot::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: var(--ot-foot-pad);
+  right: var(--ot-foot-pad);
+  border-top: 1px solid var(--ot-border);
 }
 
 .ot-land-foot p {
@@ -957,6 +987,9 @@ a:focus-visible {
   .ot-land-foot {
     padding-left: 32px;
     padding-right: 32px;
+  }
+  .ot-land-foot {
+    --ot-foot-pad: 32px;
   }
 }
 
@@ -1072,6 +1105,7 @@ a:focus-visible {
     padding: 0 24px 56px;
   }
   .ot-land-foot {
+    --ot-foot-pad: 24px;
     padding: 24px 24px 32px;
     flex-direction: column;
     align-items: flex-start;
@@ -1487,7 +1521,7 @@ a:focus-visible {
 .ot-klar-btn {
   margin-top: 12px;
   background: var(--ot-cyan);
-  color: #062a31;
+  color: var(--ot-on-accent, #1d1410);
   border: none;
   border-radius: 10px;
   font-size: 16px;
@@ -1739,9 +1773,9 @@ a:focus-visible {
 }
 
 .ot-banner-amber {
-  background: #3a2a12;
+  background: #3a2a14;
   border: 1px solid var(--ot-amber);
-  color: #ffd88a;
+  color: #ffdc94;
 }
 
 .ot-banner-info {
@@ -1752,7 +1786,7 @@ a:focus-visible {
 
 .ot-banner button {
   background: var(--ot-cyan);
-  color: #062a31;
+  color: var(--ot-on-accent, #1d1410);
   border: none;
   border-radius: 999px;
   font-weight: 700;
@@ -1862,94 +1896,264 @@ a:focus-visible {
   text-decoration: none;
 }
 
-/* Single-column hero for the 3-card chooser (no companion stage beside it). */
+/* ---------- Chooser (/): editorial head + three companion portraits ----------
+   Redesign 2026-11-26 (warm Nordic). The head is a two-column editorial
+   row on desktop (headline left, intro right on the headline's baseline);
+   the cards are portraits: each companion's transparent hero emerges from
+   a backdrop in its own band colours, so the three themes read as one
+   family on the Talarum canvas. No white circles, no pricing-table chrome. */
 .ot-land-hero-choose {
   display: block;
   min-height: auto;
-  padding-bottom: 56px;
+  padding-top: clamp(16px, 4svh, 48px);
+  padding-bottom: 72px;
 }
 
 .ot-choose {
-  max-width: 1100px;
-  margin: 0 auto;
+  width: 100%;
+}
+
+.ot-choose-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  align-items: end;
+  gap: 24px 72px;
+  margin-bottom: clamp(28px, 5svh, 52px);
 }
 
 .ot-choose .ot-land-title {
-  max-width: 16ch;
+  font-size: clamp(48px, 5vw, 76px);
+  line-height: 1.04;
+  margin: 0;
 }
 
-.ot-choose-title {
-  font-size: 24px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  margin: 40px 0 20px;
+.ot-nowrap {
+  white-space: nowrap;
+}
+
+.ot-choose .ot-land-sub {
+  margin: 0 0 0.35em;
+  max-width: 38ch;
+  font-size: clamp(17px, 1.35vw, 20px);
+}
+
+/* Per-band portrait colours, taken from each band's own theme so the
+   chooser previews where each card leads. */
+.ot-choose-card {
+  --ot-choose-bg: #2a221c;
+  --ot-choose-glow: #f2995e;
+  --ot-choose-wave: #c9652f;
+  --ot-fig-w: 64%;
+  --ot-fig-top: 10%;
+  --ot-fig-x: 11%;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--ot-elevated);
+  border: 1px solid var(--ot-border);
+  border-radius: 22px;
+  overflow: hidden;
+}
+
+.ot-choose-card[data-companion="middle"] {
+  --ot-choose-bg: #20262e;
+  --ot-choose-glow: #d8b573;
+  --ot-choose-wave: #a8823c;
+  --ot-fig-w: 98%;
+  --ot-fig-top: 5%;
+  --ot-fig-x: 10%;
+}
+
+.ot-choose-card[data-companion="upper"] {
+  --ot-choose-bg: #26302b;
+  --ot-choose-glow: #cab28a;
+  --ot-choose-wave: #8f7a52;
+  --ot-fig-w: 96%;
+  --ot-fig-top: 6%;
+  --ot-fig-x: 10%;
 }
 
 .ot-choose-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 24px;
 }
 
-.ot-choose-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  background: var(--ot-elevated);
-  border: 1px solid var(--ot-border);
-  border-radius: var(--ot-radius, 24px);
-  padding: 28px 24px;
-  text-align: center;
+/* The portrait is one button: tapping it plays the hello clip. */
+.ot-choose-portrait {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 5 / 4;
+  max-height: 36svh;
+  min-height: 220px;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  overflow: hidden;
+  cursor: pointer;
+  background:
+    radial-gradient(ellipse 62% 58% at calc(50% + var(--ot-fig-x)) 40%,
+      color-mix(in srgb, var(--ot-choose-glow) 30%, transparent) 0%,
+      color-mix(in srgb, var(--ot-choose-glow) 8%, transparent) 55%,
+      transparent 78%),
+    linear-gradient(180deg, var(--ot-choose-bg) 0%, color-mix(in srgb, var(--ot-choose-bg) 60%, var(--ot-elevated)) 70%, var(--ot-elevated) 100%);
 }
 
-.ot-choose-face {
-  background: var(--ot-paper);
-  border: none;
-  border-radius: 50%;
-  width: 112px;
-  height: 112px;
-  padding: 0;
-  cursor: pointer;
-  overflow: hidden;
+/* The figure dissolves into the card body: no seam between portrait and text. */
+.ot-choose-portrait::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 30%;
+  pointer-events: none;
+  background: linear-gradient(180deg, transparent 0%, var(--ot-elevated) 96%);
+}
+
+.ot-choose-portrait:focus-visible {
+  outline-offset: -4px;
+}
+
+/* The figure sits at the same head height in every card and dissolves into
+   the card at the bottom instead of being cut off by a hard edge. */
+.ot-choose-fig {
+  position: absolute;
+  left: calc(50% + var(--ot-fig-x));
+  top: var(--ot-fig-top);
+  width: var(--ot-fig-w);
+  height: auto;
+  translate: -50% 0;
+  display: block;
+  pointer-events: none;
+  transition: scale 0.35s ease;
+  transform-origin: 50% 20%;
+}
+
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .ot-choose-portrait:hover .ot-choose-fig {
+    scale: 1.025;
+  }
+}
+
+/* Mini comic bubble, top left, tail toward the head. */
+.ot-choose-bubble {
+  position: absolute;
+  left: 6%;
+  top: 8%;
+  width: clamp(100px, 29%, 128px);
+  aspect-ratio: 150 / 92;
+  z-index: 1;
+  filter: drop-shadow(0 6px 14px #0000004d);
+}
+
+.ot-choose-bubble-shape {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.ot-choose-bubble-in {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 66%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--ot-paper-ink);
+  font-weight: 800;
+  font-size: clamp(19px, 1.7vw, 24px);
+  letter-spacing: -0.01em;
+}
+
+.ot-choose-bubble-in svg {
+  width: 1.15em;
+  height: 1.15em;
   flex: 0 0 auto;
 }
 
-.ot-choose-face img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
+@media (prefers-reduced-motion: no-preference) {
+  .ot-choose-portrait.is-playing .ot-land-spk path:not(:first-child) {
+    animation: ot-land-wave 1.2s ease-in-out infinite;
+  }
+  .ot-choose-portrait.is-playing .ot-land-spk path:nth-child(3) {
+    animation-delay: 0.15s;
+  }
+  .ot-choose-portrait.is-playing .ot-land-spk path:nth-child(4) {
+    animation-delay: 0.3s;
+  }
 }
 
-.ot-choose-txt {
+/* Text and the start button. The button sits on the card's bottom edge
+   (margin-top: auto), so all three line up whatever the label wraps to. */
+.ot-choose-body {
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  padding: 8px 28px 28px;
 }
 
-.ot-choose-txt strong {
-  font-size: 26px;
+.ot-choose-aud {
+  margin: 0;
+  font-size: clamp(24px, 2vw, 30px);
   font-weight: 800;
-  line-height: 1.2;
+  line-height: 1.15;
   letter-spacing: -0.02em;
+  text-wrap: balance;
 }
 
-.ot-choose-txt span {
+.ot-choose-with {
+  margin: 4px 0 22px;
   color: var(--ot-text-dim);
-  font-size: 16px;
+  font-size: 17px;
 }
 
 .ot-choose-cta {
-  margin-top: 8px;
-  font-size: 18px;
-  padding: 14px 26px;
-  width: 100%;
+  margin-top: auto;
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 56px;
+  padding: 14px 12px;
+  border: none;
+  border-radius: 14px;
+  background: var(--ot-paper);
+  color: var(--ot-paper-ink);
+  font: inherit;
+  font-size: clamp(16px, 1.25vw, 18px);
+  white-space: nowrap;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
 }
 
 .ot-choose-cta svg {
-  display: none;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  color: var(--ot-choose-wave);
+}
+
+.ot-choose-cta:hover:not(:disabled) {
+  background: #fffaf1;
+}
+
+.ot-choose-cta:disabled {
+  opacity: 0.55;
+  cursor: default;
 }
 
 /* Household picker: one calm row per remembered learner. */
@@ -2095,52 +2299,95 @@ a:focus-visible {
 
 @media (max-width: 899px) {
   .ot-land-hero-choose {
+    padding-top: 8px;
     padding-bottom: 40px;
   }
+  .ot-choose-head {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    margin-bottom: 22px;
+  }
   .ot-choose .ot-land-title {
-    font-size: 40px;
-    margin-bottom: 14px;
+    font-size: clamp(36px, 10.6vw, 44px);
   }
   .ot-choose .ot-land-sub {
     font-size: 16px;
-    margin-bottom: 6px;
+    margin: 0;
   }
   .ot-choose-cards {
     grid-template-columns: 1fr;
     gap: 12px;
   }
+  /* Phones: a row per companion. Portrait tile left, label and the start
+     button right; the bubble shrinks to its speaker. */
   .ot-choose-card {
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: center;
-    text-align: left;
-    padding: 12px 14px;
-    gap: 12px;
+    display: grid;
+    grid-template-columns: 108px minmax(0, 1fr);
+    border-radius: 18px;
+    --ot-fig-w: 100%;
+    --ot-fig-top: 8%;
+    --ot-fig-x: 0%;
   }
-  .ot-choose-face {
-    width: 60px;
-    height: 60px;
+  .ot-choose-card[data-companion="middle"] {
+    --ot-fig-w: 140%;
+    --ot-fig-top: 5%;
+    --ot-fig-x: 0%;
   }
-  .ot-choose-txt {
-    flex: 1 1 auto;
-    min-width: 140px;
+  .ot-choose-card[data-companion="upper"] {
+    --ot-fig-w: 140%;
+    --ot-fig-top: 5%;
+    --ot-fig-x: 0%;
   }
-  .ot-choose-txt strong {
-    font-size: 20px;
+  .ot-choose-portrait {
+    aspect-ratio: auto;
+    height: 100%;
+    min-height: 136px;
+    max-height: none;
   }
-  .ot-choose-txt span {
-    font-size: 14px;
+  /* The tile sits beside the text: fade into the tile's foot, not sideways. */
+  .ot-choose-portrait::after {
+    height: 26%;
+  }
+  .ot-choose-bubble {
+    left: auto;
+    right: 6px;
+    top: auto;
+    bottom: 6px;
+    width: 34px;
+    height: 34px;
+    aspect-ratio: auto;
+    border-radius: 50%;
+    background: var(--ot-paper);
+    border: 2px solid #15110d;
+  }
+  .ot-choose-bubble-shape,
+  .ot-choose-bubble-in span {
+    display: none;
+  }
+  .ot-choose-bubble-in {
+    height: 100%;
+    font-size: 16px;
+  }
+  .ot-choose-body {
+    padding: 14px 14px 14px 16px;
+  }
+  .ot-choose-aud {
+    font-size: 21px;
+  }
+  .ot-choose-with {
+    font-size: 15px;
+    margin: 2px 0 12px;
   }
   .ot-choose-cta {
-    flex: 1 1 100%;
-    margin-top: 0;
     min-height: 48px;
     font-size: 16px;
-    padding: 10px 22px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    white-space: nowrap;
   }
-  .ot-choose-title {
-    margin: 22px 0 12px;
-    font-size: 20px;
+  /* The narrow column needs every pixel for the label. */
+  .ot-choose-cta svg {
+    display: none;
   }
   .ot-privacy {
     font-size: 17px;
