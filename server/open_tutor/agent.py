@@ -46,6 +46,7 @@ from .debug_log import DebugLog, clear_active, record_active, set_active
 from .diag import parse_diag
 from .dialogue_tts import DialogueTTS, is_dialogue_model
 from .deepgram_tts import DeepgramFluxTTS, DEFAULT_MODEL as DEEPGRAM_DEFAULT_MODEL, parse_expressivity
+from .screen_context import count_screen_shots, prune_screen_shots, screen_tag, shots_kept
 from .session_llm import SessionLLM
 from .page_answers import PageAnswers
 from .text_input import TOPIC_CHAT, TypedChat
@@ -601,6 +602,10 @@ class SmartTutor(Tutor):
         super().__init__(learner, room, board=board, greeting_note=greeting_note)
         # The Screen renders at the pane size the tutor keeps current.
         screen.set_pane_source(lambda: (self.board_w, self.board_h))
+        # Read once per session, so a bad setting fails at the greeting and
+        # not halfway through a lesson.
+        self._screen_shots_kept = shots_kept()
+        self.screen_shots_dropped = 0
 
     @function_tool()
     async def ask_screen(self, context: RunContext, ask: str, show: str = "auto") -> str:
@@ -768,6 +773,41 @@ class SmartTutor(Tutor):
         except Exception:  # noqa: BLE001 - clearing is best-effort
             return False
 
+    def _live_pages(self) -> set[str]:
+        """Pages the tutor may still have to teach from: the one the child can
+        see, and any finished page they have not seen yet (``show="hold"``)."""
+        live = set(self.screen.unshown_pages())
+        if self.screen.visible_id:
+            live.add(self.screen.visible_id)
+        return live
+
+    async def _add_screen_message(self, text: str, parts: list[Any], *,
+                                  kind: str, page_id: str) -> None:
+        """Put one screen page or change into the tutor's context.
+
+        Tagged so ``screen_context`` can find it again without reading its
+        text, and followed by a prune: the screen shows one page at a time, so
+        only the newest screenshot (and the visible page's, while another page
+        is being held back) is worth re-sending with every later voice turn.
+        See ``screen_context`` for why editing the retained context is safe on
+        our routes."""
+        ctx = self.chat_ctx.copy()
+        ctx.add_message(role="user", content=[text, *parts],
+                        extra=screen_tag(kind, page_id))
+        dropped = prune_screen_shots(ctx, keep=self._screen_shots_kept,
+                                     live_pages=self._live_pages())
+        if dropped:
+            self.screen_shots_dropped += dropped
+            record_active("screen_context_pruned",
+                          {"page": page_id, "kind": kind, "dropped": dropped,
+                           "kept": count_screen_shots(ctx)})
+        await self.update_chat_ctx(ctx)
+
+    def context_stats_for_analytics(self) -> dict[str, Any]:
+        """Per-session context stats for ``tutor_session_ended`` (counts only)."""
+        return {"screen_shots_dropped": self.screen_shots_dropped,
+                "screen_shots_kept_setting": self._screen_shots_kept}
+
     async def screen_page_ready(self, session: AgentSession, page: Any) -> None:
         """A new page finished: show it at once, or hold it when asked.
 
@@ -794,9 +834,8 @@ class SmartTutor(Tutor):
                 record_active("screen_ready", {"page": page.page_id, "title": page.title,
                                                    "image": bool(getattr(page, 'png', None)),
                                                    "shown": True})
-                ctx = self.chat_ctx.copy()
-                ctx.add_message(role="user", content=[text, *parts])
-                await self.update_chat_ctx(ctx)
+                await self._add_screen_message(text, parts, kind="page",
+                                               page_id=page.page_id)
                 asyncio.create_task(self._prompt_when_free(
                     session, f"Screen page {page.page_id} ('{page.title}') is on screen now. "
                               f"Teach from what it actually shows."))
@@ -816,9 +855,7 @@ class SmartTutor(Tutor):
         await self._clear_loading()
         record_active("screen_ready", {"page": page.page_id, "title": page.title,
                                            "image": bool(getattr(page, 'png', None))})
-        ctx = self.chat_ctx.copy()
-        ctx.add_message(role="user", content=[text, *parts])
-        await self.update_chat_ctx(ctx)
+        await self._add_screen_message(text, parts, kind="page", page_id=page.page_id)
         asyncio.create_task(self._prompt_when_free(
             session, f"Screen page {page.page_id} ('{page.title}') is ready but not visible. "
                       f"If it fits the lesson now, call show_page('{page.page_id}'); "
@@ -840,9 +877,7 @@ class SmartTutor(Tutor):
         text = (f"[Screen change {applied} (page {patch.page_id}). "
                 f"Patch source:\n{patch.patch}\nThe screenshot shows the page now.]")
         record_active("screen_patched", {"page": patch.page_id, "ok": ok})
-        ctx = self.chat_ctx.copy()
-        ctx.add_message(role="user", content=[text, *parts])
-        await self.update_chat_ctx(ctx)
+        await self._add_screen_message(text, parts, kind="patch", page_id=patch.page_id)
         return ok
 
     async def screen_failed(self, session: AgentSession, message: str) -> None:
@@ -1484,6 +1519,8 @@ async def entrypoint(ctx: JobContext) -> None:
                     })
                 ended.update(session_llm.hedge_summary_for_analytics())
             ended.update(screen.screen_stats_summary())
+            if isinstance(tutor, SmartTutor):
+                ended.update(tutor.context_stats_for_analytics())
             analytics.capture(distinct_id, "tutor_session_ended", ended)
         finally:
             # Off the event loop with a short timeout: a slow analytics

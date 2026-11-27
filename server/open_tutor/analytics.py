@@ -14,6 +14,12 @@ Two events per session, both with a ``room`` property:
   child_typed_turns, tutor_replies, tool_calls, tool_errors,
   provider_errors}
 
+``tutor_session_ended`` also carries the screen's own per-session counts
+(``screen_calls*``, ``screen_pages_total``, ``screen_look``,
+``screen_retry``, ``screen_pages_with_residual_lint``) and how many
+superseded screen screenshots were dropped from the tutor's context
+(``screen_shots_dropped``). All counts, categories and timings.
+
 ``outcome`` is a fixed category (``ended_by_child``, ``child_left``,
 ``provider_error``, ``sdk_closed_early``, ``error``, ``unknown``): exception
 messages never leave the worker. For ``error`` the exception class name
@@ -210,6 +216,51 @@ def summarize_screen_calls(calls: list[dict[str, Any]] | None) -> dict[str, Any]
         kinds[kind] = entry
     return {"calls_total": len(calls or []), "hedged_calls": hedged,
             "provider_wins": wins, "calls": kinds}
+
+
+def _seconds(values: list[float]) -> dict[str, float]:
+    """Median and max of a list of seconds; empty for no samples."""
+    if not values:
+        return {}
+    return {"median": round(statistics.median(values), 2), "max": round(max(values), 2)}
+
+
+def summarize_screen_repairs(pages: list[dict[str, Any]] | None) -> dict[str, Any]:
+    """Aggregate the per-page look/retry records into outcome counts.
+
+    Pure, like ``summarize_screen_calls``. The question it exists to answer
+    over months of real sessions: does the vision ``look`` pass earn its keep?
+    ``look`` counts every page by outcome (``fixed`` is an intervention,
+    ``ok`` is a page that survived its own inspection, ``skipped_*`` /
+    ``timed_out`` / ``off`` are pages it never judged), and ``look_s`` says
+    what the passes that did run cost (a page whose record has ``look_s:
+    None`` never ran one). ``retry`` does the same for the one lint retry.
+    Counts, categories and timings only: never a page, an ask or a child's
+    words.
+    """
+    looks: dict[str, int] = {}
+    retries: dict[str, int] = {}
+    look_times: list[float] = []
+    retry_times: list[float] = []
+    residual = 0
+    for page in pages or []:
+        look = str(page.get("look") or "?")
+        retry = str(page.get("retry") or "?")
+        looks[look] = looks.get(look, 0) + 1
+        retries[retry] = retries.get(retry, 0) + 1
+        # ``None`` means the step never ran; 0.0 means it ran and was quick.
+        if page.get("look_s") is not None:
+            look_times.append(float(page["look_s"]))
+        if page.get("retry_s") is not None:
+            retry_times.append(float(page["retry_s"]))
+        if page.get("residual_lint"):
+            residual += 1
+    return {"pages": len(pages or []),
+            "look": dict(sorted(looks.items())),
+            "retry": dict(sorted(retries.items())),
+            "look_s": _seconds(look_times),
+            "retry_s": _seconds(retry_times),
+            "pages_with_residual_lint": residual}
 
 
 class Analytics:

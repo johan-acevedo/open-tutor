@@ -55,6 +55,7 @@ SAFE_CONFIG_KEYS = (
     "TUTOR_CLOUD_RECORDING",
     "TUTOR_DEBUG_LOG",
     "TUTOR_MAX_SESSIONS_PER_HOUR",
+    "TUTOR_SCREEN_SHOTS",
 )
 
 _SAFE_ID = re.compile(r"[^A-Za-z0-9_-]")

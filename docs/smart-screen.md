@@ -4,6 +4,106 @@ Lead: the thread "state of the project" (Claude, 2026-11-12). The lead keeps thi
 Workers read it before starting and report against it. Decisions here were agreed with Johan
 on 2026-11-12 unless marked open.
 
+## 2026-11-27: one screenshot in the tutor's context, and look-pass evidence
+
+Two changes to what the live tutor carries and what we can measure about the
+screen. Branch `t3/prune-screen-context-analytics`. Not deployed, not on `main`,
+and **not verified in a live call** -- the evidence below is code analysis plus
+the server test suite (`server/tests/test_screen_context.py`,
+`server/tests/test_screen_repair.py`; 680 tests green including 46 new tests).
+
+### Only the screenshot the child can see stays in the tutor's context
+
+Every finished page and every applied change put a line of text, the source and a
+high-detail PNG into `SmartTutor.chat_ctx`, and nothing ever removed one. A
+20-minute session with 5-15 pages and changes therefore re-sent every earlier
+screenshot with every voice turn: roughly 1 100 input tokens each on the
+OpenAI-style tiling our pane sizes land on, and 50-200 kB of base64 per shot that
+has to go up the home uplink before the model can start the reply. The cost is
+not the main point: the model was shown ten pictures of a screen that only ever
+shows one page, with no reliable way to tell which one the child is looking at.
+
+- **The rule.** When a new screen message is added, the screenshot is dropped from
+  every older screen message, except the newest `TUTOR_SCREEN_SHOTS` (default 1)
+  and the newest shot of every *live* page: the page on screen, and any finished
+  page the child has not seen yet (`show="hold"`). Setting `TUTOR_SCREEN_SHOTS=0`
+  drops every screen screenshot (including live pages) so text-only screen
+  context can be tested too. A held page is the one case where an older
+  screenshot still shows something real -- the tutor teaches from it once
+  `show_page` brings it in, and `show_page` answers with a one-line note, not a
+  fresh screenshot. `Screen.unshown_pages()` is the ledger.
+- **Text is never pruned.** A typical page body is under 1 kB (the saved bodies in
+  `screen/review/` run 650-1 000 bytes), so the source is a few hundred tokens
+  against ~1 100 for its screenshot. It also carries the part ids `reveal` and
+  `point` need, it is what the tutor teaches from, and it is what a `page-answer`
+  event from a page the child navigated back to refers to. Dropping it would buy
+  little and risk the lesson. A message that loses its screenshot keeps all of
+  its text and gains one line saying the picture is gone, so the tutor is never
+  told "the screenshot shows the page now" with no screenshot in the message.
+- **Homework images are left alone,** deliberately. They are the child's own work,
+  and the photo that must survive is usually the *first* one (the exercise), not
+  the newest, so a newest-N rule would be the wrong one. See the open question
+  below.
+- **Why mutating the retained context is safe on our routes.** The Responses route
+  is built with `store=False`, so the plugin never sends `previous_response_id`
+  and every request carries the whole context; nothing depends on server-side
+  state. `ChatContext.copy()` is shallow, so editing an item in place is what
+  `tutor_llm.heal_tool_arguments` already does before every request. Gemini's
+  thought signatures ride on `function_call` items' `extra`; only the content of
+  worker-written `user` messages is touched. The tag that marks these messages
+  lives in `ChatMessage.extra`, which the provider formats filter down to their
+  own keys (`google`, `livekit`, `xai`), so it never reaches a provider and no
+  text has to be parsed to find the messages again -- pinned by a test.
+- **Prompt caching.** Pruning runs only when a new screen message is appended, so
+  the earliest changed position is where the *previous* screen message sits: the
+  suffix a provider has to re-read is the few turns since then, once. What the
+  providers actually cache is the static prefix (Go reported ~3 300 of 3 340
+  tokens cached from the second call, "Muse at its default temperature" below),
+  and that is untouched. Against one re-read, every later turn in the session
+  stops re-sending the dropped shots.
+- **Reversible without a deploy.** `TUTOR_SCREEN_SHOTS=99` keeps every screenshot,
+  which is exactly the old behaviour, so a session can be compared against it.
+  `tutor_session_ended` carries `screen_shots_dropped` and the setting in use,
+  and `debug_log.SAFE_CONFIG_KEYS` records `TUTOR_SCREEN_SHOTS`.
+- **Cross-family review (Gemini 4 Neon on Claude Opus 5's implementation):**
+  fixed `TUTOR_SCREEN_SHOTS=0` so `live_pages` no longer overrides `keep=0`,
+  and added `TUTOR_SCREEN_SHOTS` to `debug_log.SAFE_CONFIG_KEYS`.
+- **Open question (not addressed).** A shared PDF renders up to 10 pages, each a
+  separate high-detail image (`web/src/pdf.ts`), and a child can share several
+  files. Ten pages is ~7 600 tokens and 2-4 MB re-sent every turn. The Screen's
+  own model already only sees the newest `MAX_HOMEWORK_IMAGES = 4`; the tutor sees
+  all of them. Any cap here changes what the child can get help with, so it waits
+  for Johan.
+
+### What the look pass actually did, per page and per session
+
+We keep server-side rendering and the vision `look` pass because letting the model
+see what it rendered may catch a visual bug or a leaked answer before a child
+does. Whether that is still true is a question only months of real sessions can
+answer, and the only numbers that left the machine were call counts by kind: a
+`look` that timed out, one that said "OK" and one that rewrote the page all
+counted the same.
+
+- **Per page,** `repair` in `meta.json` and the debug trail gains `look_outcome`
+  and `retry_outcome`, one word each, alongside today's booleans and notes:
+  look `off` | `skipped_budget` | `skipped_lint` | `timed_out` | `failed` | `ok`
+  (looked, nothing to change) | `fixed` (rewrote it, and the rewrite shipped) |
+  `fix_dropped`; retry `not_needed` | `after_look` | `off` | `skipped_budget` |
+  `timed_out` | `failed` | `no_change` | `applied` | `worse` | `dropped`.
+  Behaviour is unchanged: the flow is the same, only the record is richer.
+- **Per session,** `tutor_session_ended` gains `screen_pages_total`,
+  `screen_look` and `screen_retry` (outcome counts), `screen_look_s` /
+  `screen_retry_s` (median and max over the passes that *ran*; a page the look
+  never judged has no time, so it cannot pull the median to zero) and
+  `screen_pages_with_residual_lint`. `analytics.summarize_screen_repairs` is a
+  pure function, like `summarize_screen_calls`.
+- **Privacy unchanged:** counts, category words and timings. No page, ask, source
+  or child's words, pinned by a test over the whole summary.
+- **The question it should answer** once there is data: how often `look` actually
+  intervenes (`fixed`) against how often it only confirms (`ok`) or never runs at
+  all, and what those passes cost in seconds. That is the evidence for deciding
+  later whether server-side rendering and the look pass keep earning their keep.
+
 ## 2026-11-27: warm paper editorial landing (v3) and a simpler /integritet
 
 Johan picked concept B of three commercial explorations (warm light paper, serif display
@@ -709,6 +809,8 @@ One `Screen` per session, owned by the worker next to the `Tutor`.
   loading and credit issues stay in the log.
 - Failed or late optional work keeps the already rendered page. Remaining lint and skipped
   work are saved in `meta.json` (`residual_lint`, `repair`) and logged. Patches get no retry.
+  Since 2026-11-27 `repair` also carries `look_outcome` and `retry_outcome` (one word each),
+  which `tutor_session_ended` counts per session: see the 2026-11-27 section above.
 - Quality tradeoff: a clean page can be delivered without semantic inspection. Lint cannot
   catch an answer given away in a diagram or explanation. The reference still tells the
   writer to hide answers, but a clean lint result is not a teaching-quality guarantee.
@@ -1516,6 +1618,11 @@ This change hedges both (PR: hedged tutor turns, hedged screen calls) with these
   Only turns served to completion count as wins: a partial-then-failed
   secondary is an attempt and an error for its route (`turns_errored` globally
   and per route), never a win. Fully off without `TUTOR_POSTHOG_KEY`, as before.
+  Since 2026-11-27 it also carries what the look pass and the lint retry did per
+  page (`screen_look`, `screen_retry`, `screen_look_s`, `screen_retry_s`,
+  `screen_pages_total`, `screen_pages_with_residual_lint`) and how many superseded
+  screen screenshots were dropped from the tutor's context
+  (`screen_shots_dropped`).
 - **Warm connections:** one shared httpx transport per (process, loop, host) with
   ~120 s keep-alive for the tutor and screen clients -- an async transport is
   bound to its loop, so each loop owns its clients and they are closed at
