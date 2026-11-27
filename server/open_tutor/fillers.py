@@ -99,15 +99,15 @@ def voice_fingerprint(engine: Any) -> str:
     voice id and voice controls such as expressivity. A change regenerates the
     clips instead of replaying the previous voice.
     """
-    provider = str(getattr(engine, "provider", type(engine).__name__))
-    model = str(getattr(engine, "model", "") or "")
-    voice = ""
-    for attribute in ("voice_id", "voice"):
-        value = getattr(engine, attribute, None)
-        if value:
-            voice = str(value)
-            break
-    expressivity = getattr(engine, "expressivity", None)
+    from .tts_fallback import extract_voice_name
+
+    # Unwrap FallbackTTS so filler clips match the engine actually serving this
+    # session (e.g. Bella normally, or Aoede when Bella is cooling down).
+    target = getattr(engine, "active_engine", engine)
+    provider = str(getattr(target, "provider", type(target).__name__))
+    model = str(getattr(target, "model", "") or "")
+    voice = extract_voice_name(target)
+    expressivity = getattr(target, "expressivity", None)
     parts = [f"v{CLIP_VERSION}", provider, model, voice]
     if expressivity is not None:
         parts.append(f"expressivity={expressivity}")
@@ -301,8 +301,12 @@ class FillerClips:
     """The clip set for one voice, generated once and reused from disk."""
 
     def __init__(self, engine: Any, directory: Path | None = None) -> None:
-        self.engine = engine
-        self.directory = directory or clip_directory(engine)
+        # Pin to a concrete non-switching engine so failover mid-prep can never
+        # write fallback audio into the primary voice's cache directory.
+        concrete = getattr(engine, "active_engine", engine)
+        self.engine = concrete
+        self.fingerprint = voice_fingerprint(concrete)
+        self.directory = directory or clip_directory(concrete)
         self.clips: list[Clip] = []
         self._prepared = False
         self._failed = False
@@ -366,8 +370,12 @@ class Fillers:
         rng: random.Random | None = None,
         mode: Callable[[], str] | None = None,
     ) -> None:
+        self._engine = engine
+        self._clip_sets: dict[str, FillerClips] = {}
         self.clips = clips if clips is not None else (
             FillerClips(engine) if engine is not None else None)
+        if self.clips is not None and getattr(self.clips, "fingerprint", None):
+            self._clip_sets[self.clips.fingerprint] = self.clips
         self.delay = max(0.05, float(delay))
         self.volume = max(0.0, min(1.0, float(volume)))
         self._player = player
@@ -393,25 +401,54 @@ class Fillers:
 
     async def start(self, room: Any = None) -> None:
         """Publish the background track and start making the clips."""
-        if self.clips is not None:
-            self.clips.load_cached()
-            if not self.clips.ready:
-                self._prep_task = asyncio.create_task(self._prepare_clips())
+        clips = self._sync_active_clips(schedule_prep=False)
+        if clips is not None:
+            clips.load_cached()
+            if not clips.ready:
+                self._prep_task = asyncio.create_task(self._prepare_clips(clips))
         if self._player is not None or room is None:
             return
         try:
             player = BackgroundAudioPlayer()
             await player.start(room=room)
             self._player = player
-            log.info("filler sounds ready from %s", self.clips.directory if self.clips else "?")
+            log.info("filler sounds ready from %s", clips.directory if clips else "?")
         except Exception as error:  # no track, no fillers; never break the session
             log.warning("filler sounds are off: %s: %s", type(error).__name__, error)
             self._player = None
 
-    async def _prepare_clips(self) -> None:
-        assert self.clips is not None
+    def _sync_active_clips(self, *, schedule_prep: bool = True) -> FillerClips | None:
+        """Keep ``self.clips`` matched to the TTS engine currently speaking.
+
+        If ``FallbackTTS`` switches voices mid-session, stop playing clips cached
+        under the previous voice and switch to (or prepare) the new voice's set.
+        """
+        if self._engine is None:
+            return self.clips
+        active = getattr(self._engine, "active_engine", self._engine)
+        fp = voice_fingerprint(active)
+        if self.clips is not None and getattr(self.clips, "fingerprint", None) == fp:
+            return self.clips
+        clip_set = self._clip_sets.get(fp)
+        if clip_set is None:
+            clip_set = FillerClips(active)
+            clip_set.load_cached()
+            self._clip_sets[fp] = clip_set
+        self.clips = clip_set
+        if schedule_prep and not clip_set.ready and not self._closed:
+            if self._prep_task is not None and not self._prep_task.done():
+                self._prep_task.cancel()
+            try:
+                self._prep_task = asyncio.create_task(self._prepare_clips(clip_set))
+            except RuntimeError:
+                pass
+        return clip_set
+
+    async def _prepare_clips(self, clips: FillerClips | None = None) -> None:
+        target = clips or self.clips
+        assert target is not None
         try:
-            await self.clips.prepare()
+            await target.prepare()
         except Exception as error:  # prepare() already logs; belt and braces
             log.warning("filler sounds are off: %s: %s", type(error).__name__, error)
 
@@ -488,7 +525,8 @@ class Fillers:
             return "closed"
         if self._player is None:
             return "no_player"
-        if self.clips is None or not self.clips.ready:
+        clips = self._sync_active_clips()
+        if clips is None or not clips.ready:
             return "no_clips"
         if self._mode() != "talking":
             return f"mode:{self._mode()}"
@@ -520,7 +558,8 @@ class Fillers:
                 return "child_speaking"
         if self._mode() != "talking":
             return f"mode:{self._mode()}"
-        if self.clips is None or not self.clips.ready:
+        clips = self._sync_active_clips()
+        if clips is None or not clips.ready:
             return "no_clips"
         if self._player is None:
             return "no_player"
