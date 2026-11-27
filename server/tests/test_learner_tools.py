@@ -320,3 +320,11 @@ async def test_metadata_tool_returns_ask_for_one_reply():
     assert "one warm reply" in await Tutor.set_learner_name(t, FakeCtx(), "Noa")
     t = tutor({"id": "p1", "name": "Leo", "grade": None})
     assert "in one reply" in await Tutor.set_learner_grade(t, FakeCtx(), 8)
+
+
+def test_adults_get_no_unconditional_grade_call():
+    """Review 2026-11-27: an adult with no school year was told both to skip
+    the year and to call set_learner_grade."""
+    text = prompt.learner_context({"name": "Kim", "grade": None, "band": "upper"})
+    assert "Only adults skip the school year" in text
+    assert "When you do save a school year" in text

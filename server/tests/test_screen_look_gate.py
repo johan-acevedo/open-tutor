@@ -57,6 +57,12 @@ def counting_model(body, looks):
     '<ot-cycle></ot-cycle>',
     '<svg viewBox="0 0 10 10"></svg>',
     '<OT-GRAPH></OT-GRAPH>',
+    # An answer still to be given: the look's answer-leak check is worth it.
+    '<p>3x = 15</p><ot-answer id="svar" label="x ="></ot-answer>',
+    '<p lang="en">How <ot-gap id="g1" answer="much"></ot-gap> is it?</p>',
+    '<ot-hidden id="facit">x = 5</ot-hidden>',
+    '<ot-choice id="val"></ot-choice>',
+    '<ot-steps><ot-step note="÷3" later>x = 5</ot-step></ot-steps>',
 ])
 def test_spatial_pages_need_a_look(body):
     assert page_needs_visual_look(body)
@@ -70,6 +76,7 @@ def test_spatial_pages_need_a_look(body):
     "<table><tr><td>1</td></tr></table>",
     "<ot-quiz><ot-option>A</ot-option></ot-quiz>",
     "<p>Rita en graf i häftet.</p>",  # the word, not the tag
+    '<p class="later-note">Vi tar det sen.</p>',  # not a later attribute
 ])
 def test_text_pages_do_not(body):
     assert not page_needs_visual_look(body)

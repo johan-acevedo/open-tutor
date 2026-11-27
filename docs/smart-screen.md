@@ -25,8 +25,13 @@ Counts and timings only below; no words from the call are kept here.
   still shown and already in the context (`_add_screen_message`), so the tutor
   teaches from it in its reply to the child's answer. A bridge that ends with a
   statement is still prompted at once. Held pages follow the same rule.
-  `screen_failed` passes `defer_if_question=False`: a failure notice is never
-  swallowed.
+  `screen_failed` and a page whose automatic show failed pass
+  `defer_if_question=False`: a failure is never swallowed. Before judging,
+  the prompt waits until the tutor is neither speaking nor still writing a
+  reply (`thinking`) and its speech handle is done (`wait_until_settled`), so
+  a page that lands while the bridge is being written is judged on that
+  bridge. Homework and page-answer notes the worker writes are tagged
+  (`worker_note_extra`) and never count as the child's answer.
 - `ask_screen`'s return now asks for one short bridge, no question the coming
   page will answer, and no "I am making a page".
 - **Not tested live:** whether the model reliably teaches from the page in its
@@ -63,8 +68,10 @@ Counts and timings only below; no words from the call are kept here.
 - **Now (look gating, `screen.py`):** `page_needs_visual_look(body)` is true when
   the page has a spatial tag (`ot-graph`, `ot-map`, `ot-image`, `ot-chart`,
   `ot-clock`, `ot-fraction`, `ot-numberline`, `ot-balance`, `ot-written`,
-  `ot-cycle`, `svg`). With `SCREEN_LOOK=1` (default) and no actionable lint, a
-  page without one skips the look at once: new outcome `skipped_simple`
+  `ot-cycle`, `svg`) or an answer still to be given (`ot-answer`, `ot-gap`,
+  `ot-hidden`, `ot-choice`, a `later` attribute), because the look's
+  answer-leak check matters on exercises. With `SCREEN_LOOK=1` (default) and no
+  actionable lint, a page with none of these skips the look at once: new outcome `skipped_simple`
   (counted by `summarize_screen_repairs` like the others). A visual page gets
   `VISUAL_LOOK_TARGET_S` = 14 s as its soft target (capped by the job limit)
   instead of `PAGE_TARGET_S` = 12 s. `SCREEN_LOOK=0` and `SCREEN_LOOK=always`
@@ -78,36 +85,47 @@ Counts and timings only below; no words from the call are kept here.
 - **Seen:** with `turn_detection="stt"` and `min_delay` 0.6 s, a child who
   paused mid-thought on a filler word and an open conjunction was answered
   0.6 s after Soniox's endpoint.
-- **Now:** `TUTOR_TURN_DETECTION=hesitation` (default) passes
-  `turn_detector.SwedishHesitationTurnDetector` to LiveKit. Pure Python, no
-  model: it reads the turn's words and returns 0.05 (below LiveKit's 0.5
-  threshold) when the turn is only fillers, ends on a filler (`eh`, `öh`, `hm`,
-  `asså`, `typ` …, even with a full stop after it), ends on a word that cannot
-  end a statement (`att`, `och`, `men`, `eller`, `som`, `när` …), ends on a
-  comma, dash or ellipsis, or (with more than one word and no closing `.?!`)
-  ends on a word that usually leaves a sentence open (prepositions, pronouns,
-  auxiliaries, articles). Then LiveKit waits `max_delay` =
-  `TUTOR_MAX_ENDPOINT` (2.8 s) of silence instead of `min_delay`. Everything
-  else returns 0.95 and keeps the 0.6 s. Short complete answers ("Ja.", a
-  name, a number, "Nej, jag vet inte.") are pinned as not held; a lone "Mm" is
-  a Swedish yes and is not held either. Every hold writes `turn_hold {reason,
-  words}` to the debug trail, never the words.
-- **What changes in LiveKit (1.8.10, checked in the installed package):** a
-  detector object makes turn detection VAD-based (`_turn_detection_mode` is
-  None) instead of `stt`. Soniox only sends a final transcript at its own
-  endpoint, so that endpoint still gates the turn; the detector then picks
-  `min_delay` or `max_delay`, counted from Silero's end of speech. Speech that
-  resumes cancels the wait and joins the same turn. Preemptive generation is
-  turned off in this mode: LiveKit enables it by default and would start a
-  reply on every final transcript, which in `stt` mode effectively never
-  happened. A test drives a real `AudioRecognition` with Soniox-shaped final
-  transcripts (languages `sv`, `sv-SE` and empty) and checks both delays.
-- **Rollback:** `TUTOR_TURN_DETECTION=stt` restores exactly the old settings
-  (`stt`, `min_delay` 0.6, `max_delay` 4.0). Both settings are in the debug
-  trail's config snapshot.
-- **Not tested live:** a real voice call. Watch for `turn_hold` counts, and
-  for a tutor that now feels slow after short answers that end on a pronoun
-  without punctuation.
+- **Now:** LiveKit's turn detection stays exactly `stt`. With
+  `TUTOR_TURN_DETECTION=hesitation` (default), `Tutor.stt_node` wraps the Soniox
+  event stream in `turn_detector.hold_hesitations`. Soniox sends one final
+  transcript at its endpoint, immediately followed by an end-of-speech event,
+  and in `stt` mode that end event is what lets LiveKit close the turn. When
+  the turn's words so far look unfinished (`hesitation_reason`: only fillers or
+  ending on a filler such as `eh`, `ehum`, `öh`, `hm`, `asså`, `typ`, even with
+  a full stop after it; ending on a word that cannot end a statement such as
+  `att`, `och`, `men`, `eller`, `som`, `när`; ending on a comma, dash or
+  ellipsis; or, with more than one word and no closing `.`/`!`, ending on a word
+  that usually leaves a sentence open), the end event is held for
+  `TUTOR_MAX_ENDPOINT − TUTOR_MIN_ENDPOINT` (2.8 − 0.6 = 2.2 s) after the
+  endpoint. If the child carries on (Soniox starts a new segment or sends
+  words) the held event is dropped, the new words join the same turn, and the
+  next endpoint is judged on the whole turn. If not, the event goes out and the
+  turn ends as before. A turn ending in a question mark is never held. Short
+  complete answers ("Ja.", a name, a number, "Nej, jag vet inte.", a lone "Mm")
+  are pinned as not held. A stream that ends or fails during a hold still
+  delivers the held end event. Every hold writes `turn_hold {reason, words}`
+  and every resumption `turn_hold_resumed {held_s}` to the debug trail, never
+  the words.
+- **First take, dropped the same day after the cross-family review (Codex):** a
+  LiveKit `_TurnDetector` object. In livekit-agents 1.8.10 passing one turns
+  `AudioRecognition` into VAD-based turn detection (`_turn_detection_mode` is
+  None), which ignores Soniox's start and end events. A replay in the SDK
+  showed an answer that was never committed while Silero still heard
+  "speech", a fragment committed while Soniox was transcribing the
+  continuation, and a max delay counted from Silero's last speech, so a slow
+  Soniox endpoint left a hesitation *less* time (0.30 s) than `main` (0.60 s).
+  The gate keeps every `stt`-mode behaviour (user state, interruption,
+  preemptive generation, timing anchors) untouched and only delays one event.
+- Tests drive a real `AudioRecognition` in `stt` mode through the gate with
+  Soniox-shaped events (languages `sv`, `sv-SE` and empty): a hesitation
+  commits only after the hold, a complete answer at `min_delay`, and the words
+  after a hesitation join one turn.
+- **Rollback:** `TUTOR_TURN_DETECTION=stt` wraps nothing: the exact behaviour
+  before. Both settings are in the debug trail's config snapshot; an unknown
+  mode stops the worker in `prewarm`.
+- **Not tested live:** a real voice call. Watch `turn_hold` /
+  `turn_hold_resumed` counts, and for a tutor that now feels slow after short
+  answers that end on a pronoun without punctuation.
 
 ## 2026-11-27: Bella primary + Google Cloud Chirp 3: HD Aoede TTS fallback
 

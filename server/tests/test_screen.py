@@ -2302,13 +2302,13 @@ def _session():
     return FakeSession
 
 
-async def _page_after(tmp_path, monkeypatch, tutor_said, reveal="show"):
+async def _page_after(tmp_path, monkeypatch, tutor_said, reveal="show", room=None):
     monkeypatch.setenv("SCREEN_LOOK", "0")
     recorded = []
     monkeypatch.setattr("open_tutor.agent.record_active",
                         lambda kind, data: recorded.append((kind, data)))
     screen = make_screen(tmp_path, model_call=AsyncMock(return_value="<h1>Bråk</h1>"))
-    tutor = smart_tutor(FakeRoom(), screen)
+    tutor = smart_tutor(room or FakeRoom(), screen)
     await tutor.update_chat_ctx(_ctx(("user", "Kan du rita en tårta i fjärdedelar?"), ("assistant", tutor_said)))
     pages = []
     screen.on_page = pages.append
@@ -2365,3 +2365,88 @@ async def test_ask_screen_keeps_the_bridge_short_and_unspoiled(tmp_path, monkeyp
     assert "say you are making a page" in note
     await screen.wait_idle()
     await screen.aclose()
+
+
+async def test_a_failed_auto_show_after_a_question_is_still_prompted(tmp_path, monkeypatch):
+    """The child expects a page that never appeared: the tutor must hear it."""
+    tutor, session, recorded = await _page_after(tmp_path, monkeypatch, "Vad tror du?",
+                                                 room=FakeRoom(reply='{"ok":false}'))
+    assert tutor.screen.visible_id is None
+    assert "show_page('p1')" in session.generate_reply.call_args.kwargs["user_input"]
+    assert not any(kind == "screen_prompt_deferred" for kind, _ in recorded)
+
+
+async def test_a_page_landing_while_the_bridge_is_written_waits_for_it(tmp_path, monkeypatch):
+    """Review 2026-11-27: a page that arrived during ``thinking`` passed the old
+    wait and prompted before the bridge question was in the history."""
+    from unittest.mock import Mock
+
+    monkeypatch.setenv("SCREEN_LOOK", "0")
+    monkeypatch.setattr("open_tutor.agent.record_active", lambda kind, data: None)
+    screen = make_screen(tmp_path, model_call=AsyncMock(return_value="<h1>Bråk</h1>"))
+    tutor = smart_tutor(FakeRoom(), screen)
+    await tutor.update_chat_ctx(_ctx(("user", "Kan du rita en tårta?")))
+    pages = []
+    screen.on_page = pages.append
+    screen.ask("Bråk")
+    await screen.wait_idle()
+
+    class Session:
+        agent_state = "thinking"
+        user_state = "listening"
+        current_speech = None
+        generate_reply = Mock()
+
+    session = Session()
+    task = asyncio.create_task(tutor._prompt_when_free(session, "Page ready.", page_id="p1"))
+    await asyncio.sleep(0.05)
+    assert not task.done()  # still writing: not judged yet
+    ctx = tutor.chat_ctx.copy()
+    ctx.add_message(role="assistant", content=["Hur många bitar tror du?"])
+    await tutor.update_chat_ctx(ctx)
+    session.agent_state = "listening"
+    await asyncio.wait_for(task, 2.0)
+    session.generate_reply.assert_not_called()
+    await screen.aclose()
+
+
+async def test_an_unfinished_speech_handle_also_counts_as_busy():
+    from unittest.mock import Mock
+
+    from open_tutor.agent import wait_until_settled
+
+    class Handle:
+        finished = False
+
+        def done(self):
+            return self.finished
+
+    handle = Handle()
+    session = Mock(agent_state="listening", user_state="listening", current_speech=handle)
+    task = asyncio.create_task(wait_until_settled(session, poll_s=0.01))
+    await asyncio.sleep(0.05)
+    assert not task.done()
+    handle.finished = True
+    await asyncio.wait_for(task, 1.0)
+
+
+def test_late_worker_notes_do_not_answer_the_question():
+    """A homework note or a page answer the child also said aloud has its own
+    reply path; written after the tutor's newest question, it must not count
+    as the child's answer to it."""
+    from open_tutor.agent import tutor_awaits_answer, worker_note_extra
+
+    for kind, text in (("homework", "[Shared homework: en bild]"),
+                       ("page_answer", "[Svar på sidan. They also said it aloud.]")):
+        ctx = _ctx(("user", "Hjälp."), ("assistant", "Vad tror du?"))
+        ctx.add_message(role="user", content=[text], extra=worker_note_extra(kind))
+        assert tutor_awaits_answer(ctx), kind
+
+
+async def test_homework_is_tagged_as_a_worker_note(tmp_path):
+    from open_tutor.agent import WORKER_NOTE_KEY
+
+    tutor = smart_tutor(FakeRoom(), make_screen(tmp_path))
+    await tutor.add_homework([], "en bild av uppgift 3")
+    last = tutor.chat_ctx.items[-1]
+    assert last.extra[WORKER_NOTE_KEY] == {"kind": "homework"}

@@ -231,10 +231,19 @@ VISUAL_LOOK_TAGS = ("<ot-graph", "<ot-map", "<ot-image", "<ot-chart", "<ot-clock
                     "<ot-cycle", "<svg")
 
 
+# An exercise with an answer the child has not given yet: the look's
+# answer-leak check (a solution printed above its own answer box) is worth it
+# even on a lint-clean text page.
+ANSWER_LOOK_TAGS = ("<ot-answer", "<ot-gap", "<ot-hidden", "<ot-choice")
+_LATER_ATTR = re.compile(r"<[a-z][^>]*\slater(?:[\s=/>])", re.IGNORECASE)
+
+
 def page_needs_visual_look(body: str) -> bool:
-    """True when the page has spatial content a vision look can catch bugs in."""
+    """True when the look can catch something lint cannot: spatial content
+    (graphs, maps, pictures, drawn diagrams) or an answer still to be given."""
     lowered = (body or "").lower()
-    return any(tag in lowered for tag in VISUAL_LOOK_TAGS)
+    return (any(tag in lowered for tag in VISUAL_LOOK_TAGS + ANSWER_LOOK_TAGS)
+            or bool(_LATER_ATTR.search(body or "")))
 
 
 def actionable_issues(issues: Iterable[Any] | None) -> list[str]:

@@ -56,7 +56,7 @@ from .tts_fallback import (
     describe_tts,
     parse_cooldown_s,
 )
-from .turn_detector import SwedishHesitationTurnDetector
+from .turn_detector import hold_hesitations
 from .screen_context import (
     count_screen_shots,
     is_screen_message,
@@ -111,20 +111,8 @@ def clamp_board_size(w: Any, h: Any) -> tuple[int, int]:
 TURN_DETECTION_MODES = ("hesitation", "stt")
 
 
-def turn_detection_options(environ: dict[str, str] | Any | None = None) -> dict[str, Any]:
-    """Turn detection and endpointing for the AgentSession.
-
-    ``TUTOR_TURN_DETECTION=hesitation`` (default, 2026-11-27): the Soniox
-    endpoint plus ``SwedishHesitationTurnDetector``. A complete answer gets
-    ``TUTOR_MIN_ENDPOINT`` (0.6 s); a turn that trails off on "eh", "att" or a
-    comma waits up to ``TUTOR_MAX_ENDPOINT`` (2.8 s) of silence instead of being
-    cut off. Preemptive generation stays off, as it effectively was in ``stt``
-    mode: LiveKit would otherwise start a reply on every final transcript,
-    including during a held hesitation (see turn_detector.py for the details).
-
-    ``TUTOR_TURN_DETECTION=stt`` restores the exact behaviour before that: the
-    turn ends ``TUTOR_MIN_ENDPOINT`` after Soniox's endpoint, whatever was said.
-    """
+def _turn_settings(environ: dict[str, str] | Any | None = None) -> tuple[str, float, float]:
+    """(mode, min_delay, max_delay) from the environment; an unknown mode raises."""
     env = os.environ if environ is None else environ
     mode = str(env.get("TUTOR_TURN_DETECTION", "hesitation")).strip().lower() or "hesitation"
     if mode not in TURN_DETECTION_MODES:
@@ -138,14 +126,28 @@ def turn_detection_options(environ: dict[str, str] | Any | None = None) -> dict[
             return default
 
     min_delay = number("TUTOR_MIN_ENDPOINT", 0.6)
-    if mode == "stt":
-        return {"turn_detection": "stt",
-                "endpointing": {"min_delay": min_delay, "max_delay": 4.0}}
-    max_delay = max(number("TUTOR_MAX_ENDPOINT", 2.8), min_delay)
-    detector = SwedishHesitationTurnDetector(record=lambda kind, data: record_active(kind, data))
-    return {"turn_detection": detector,
-            "endpointing": {"min_delay": min_delay, "max_delay": max_delay},
-            "preemptive_generation": {"enabled": False}}
+    return mode, min_delay, max(number("TUTOR_MAX_ENDPOINT", 2.8), min_delay)
+
+
+def turn_detection_options(environ: dict[str, str] | Any | None = None) -> dict[str, Any]:
+    """Turn detection and endpointing for the AgentSession: always LiveKit's
+    ``stt`` mode, exactly as before 2026-11-27. The hesitation hold lives in
+    ``Tutor.stt_node`` (``hesitation_hold_s``), so a turn still ends only on
+    Soniox's endpoint. Raises on an unknown ``TUTOR_TURN_DETECTION``."""
+    _, min_delay, _ = _turn_settings(environ)
+    return {"turn_detection": "stt",
+            "endpointing": {"min_delay": min_delay, "max_delay": 4.0}}
+
+
+def hesitation_hold_s(environ: dict[str, str] | Any | None = None) -> float:
+    """How long a turn that trails off waits after Soniox's endpoint.
+
+    ``TUTOR_TURN_DETECTION=hesitation`` (default): ``TUTOR_MAX_ENDPOINT`` (2.8 s)
+    minus ``TUTOR_MIN_ENDPOINT`` (0.6 s), so about 2.8 s of quiet after the
+    child stops instead of 0.6 s; see turn_detector.py. ``stt``: 0, the exact
+    behaviour before (no hold, nothing wrapped)."""
+    mode, min_delay, max_delay = _turn_settings(environ)
+    return 0.0 if mode == "stt" else max(0.0, max_delay - min_delay)
 
 
 def build_stt() -> soniox.STT:
@@ -697,6 +699,16 @@ class Tutor(Agent):
                 "you, call stay_quiet.] ",
             )
 
+    # A turn that trails off ("eh", a trailing "att" or comma) keeps Soniox's end
+    # event back for a moment, so a thinking child is not cut off (turn_detector.py).
+    def stt_node(self, audio, model_settings):
+        events = Agent.default.stt_node(self, audio, model_settings)
+        hold_s = hesitation_hold_s()
+        if hold_s <= 0:
+            return events
+        return hold_hesitations(events, hold_s=hold_s,
+                                record=lambda kind, data: record_active(kind, data))
+
     # Tool calls arrive as structured calls and run as tools. Only the reply's words may
     # reach the voice, the caption and (through the caption) the chat history.
     def tts_node(self, text, model_settings):
@@ -712,7 +724,8 @@ class Tutor(Agent):
                                            "parts": len(parts),
                                            "image_parts": sum(1 for p in parts if hasattr(p, "image"))})
         ctx = self.chat_ctx.copy()
-        ctx.add_message(role="user", content=[f"[Shared homework: {description}]", *parts])
+        ctx.add_message(role="user", content=[f"[Shared homework: {description}]", *parts],
+                        extra=worker_note_extra("homework"))
         await self.update_chat_ctx(ctx)
 
 
@@ -901,7 +914,7 @@ class SmartTutor(Tutor):
         2026-11-27). The page is already in the context, so the tutor teaches
         from it in its reply to the child. A failure notice passes
         ``defer_if_question=False`` and is never swallowed."""
-        await wait_until_free(session)
+        await wait_until_settled(session)
         if defer_if_question and tutor_awaits_answer(self.chat_ctx):
             record_active("screen_prompt_deferred",
                           {"page": page_id, "reason": "tutor_asked_question"})
@@ -970,6 +983,7 @@ class SmartTutor(Tutor):
             parts.append(llm.ImageContent(
                 image=f"data:image/png;base64,{base64.b64encode(page.png).decode()}",
                 inference_detail="high"))
+        show_failed = False
         if getattr(page, "reveal", "show") == "show":
             old_id = self.screen.visible_id
             ok, note = await self._show_page_object(page)
@@ -991,7 +1005,10 @@ class SmartTutor(Tutor):
                     page_id=page.page_id))
                 return
             # Auto-show failed: fall through to the held path so the tutor
-            # still gets the page and can bring it in with show_page.
+            # still gets the page and can bring it in with show_page. That
+            # prompt is never deferred: the child expects a page that is not
+            # there, so the tutor must hear about it.
+            show_failed = True
             text = (f"[Screen page {page.page_id} ('{page.title}') is ready but NOT visible "
                     f"(it could not be shown by itself: {note}). "
                     f"Source:\n{page.body}\nCall show_page('{page.page_id}') when it fits "
@@ -1010,7 +1027,7 @@ class SmartTutor(Tutor):
             session, f"Screen page {page.page_id} ('{page.title}') is ready but not visible. "
                       f"If it fits the lesson now, call show_page('{page.page_id}'); "
                       f"otherwise keep teaching and bring it in later.",
-            page_id=page.page_id))
+            defer_if_question=not show_failed, page_id=page.page_id))
 
     async def screen_patch_ready(self, session: AgentSession, patch: Any) -> bool:
         """A change finished: apply it at once, add it to the context, no prompt.
@@ -1059,15 +1076,49 @@ async def wait_until_free(session: Any, *, poll_s: float = 0.3, max_polls: int =
         return
 
 
+async def wait_until_settled(session: Any, *, poll_s: float = 0.3, max_polls: int = 100) -> None:
+    """Like ``wait_until_free``, but also wait while a reply is still being
+    written (``thinking``) or its speech handle is unfinished (bounded, ~30 s).
+
+    A page that lands while the tutor is still writing its bridge must be
+    judged on the bridge it then speaks, and a playback pause during an
+    interruption can show ``listening`` before the speech is done."""
+    try:
+        for _ in range(max_polls):
+            speech = getattr(session, "current_speech", None)
+            speech_busy = speech is not None and not speech.done()
+            if (session.agent_state not in ("speaking", "thinking")
+                    and session.user_state != "speaking" and not speech_busy):
+                return
+            await asyncio.sleep(poll_s)
+    except Exception:  # noqa: BLE001 - a missing state never blocks the prompt
+        return
+
+
 # A question mark at the very end, allowing closing quotes, brackets and
 # spaces after it: 'Vad tror du?', 'Vad tror du?"', '»Varför?«', 'Va?)'.
 _TRAILING_QUESTION = re.compile(r"\?[\s\"'»«”“’‘)\]]*$")
 _EVENT_PREFIXES = ("[Session event", "[Screen page", "[Screen change")
+# ChatMessage.extra key on worker-written notes (shared homework, a page answer
+# the child also said aloud). Provider formats keep only their own extra keys,
+# so it never leaves the worker.
+WORKER_NOTE_KEY = "open_tutor_note"
+
+
+def worker_note_extra(kind: str) -> dict[str, dict[str, str]]:
+    return {WORKER_NOTE_KEY: {"kind": kind}}
 
 
 def _is_worker_event(item: Any) -> bool:
-    """A user-role message the worker wrote, not something the learner did."""
+    """A user-role message the worker wrote, not something the learner did.
+
+    Homework and page-answer notes have their own reply path (or ride on
+    the spoken one), so a late one must not count as an answer to the
+    tutor's newest question."""
     if is_screen_message(item):
+        return True
+    extra = getattr(item, "extra", None)
+    if isinstance(extra, dict) and WORKER_NOTE_KEY in extra:
         return True
     text = (getattr(item, "text_content", None) or "").lstrip()
     return text.startswith(_EVENT_PREFIXES)
@@ -1440,7 +1491,7 @@ async def entrypoint(ctx: JobContext) -> None:
 
     async def note_page_answer(text: str) -> None:
         ctx_ = tutor.chat_ctx.copy()
-        ctx_.add_message(role="user", content=[text])
+        ctx_.add_message(role="user", content=[text], extra=worker_note_extra("page_answer"))
         await tutor.update_chat_ctx(ctx_)
 
     page_answers = PageAnswers(

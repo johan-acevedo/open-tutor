@@ -179,9 +179,9 @@ def learner_context(learner: dict[str, Any]) -> str:
         lines.append("Their school year is not known yet: find it out naturally early in this call "
                      "and save it with `set_learner_grade`. Until then, pitch to åk 1–6.")
     if not (isinstance(grade, int) and 1 <= grade <= 12):
-        lines.append("Call `set_learner_grade` silently too: no spoken words before the call. "
-                     "After it returns, confirm the year warmly and ask your next question in "
-                     "one single spoken reply.")
+        lines.append("When you do save a school year, call `set_learner_grade` silently too: "
+                     "no spoken words before the call. After it returns, confirm the year warmly "
+                     "and ask your next question in one single spoken reply.")
     notes = learner.get("notes") or []
     if notes:
         lines.append("Notes from earlier sessions in this browser (newest first). "

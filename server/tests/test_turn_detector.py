@@ -1,39 +1,28 @@
-"""The Swedish hesitation turn detector (2026-11-27).
+"""Holding the turn while a child trails off (2026-11-27).
 
-A child who paused mid-thought on a filler or an open "att" was cut off 0.6 s after the recogniser's
-endpoint. These tests pin which turns are held (and which are not, so a
-complete short answer stays snappy), how the detector meets LiveKit's
-``_TurnDetector`` protocol, and -- against the installed livekit-agents --
-that a real ``AudioRecognition`` fed Soniox-shaped final transcripts waits
-``max_delay`` on a hesitation and ``min_delay`` on a complete answer.
+A child who paused mid-thought on a filler or an open "att" was cut off 0.6 s
+after the recogniser's endpoint. These tests pin which turns are held (and
+which are not, so a complete short answer stays snappy), the event gate that
+holds Soniox's end-of-speech back, and -- against the installed livekit-agents
+in its unchanged ``stt`` mode -- that a real ``AudioRecognition`` commits a
+hesitation only after the hold, a complete answer at ``min_delay``, and joins
+the words that follow a hesitation into the same turn.
 """
 
 import asyncio
 import time
+from types import SimpleNamespace
 
 import pytest
 from livekit.agents import AgentSession, TurnHandlingOptions, llm, stt
 from livekit.agents.voice.audio_recognition import AudioRecognition
 from livekit.agents.voice.endpointing import create_endpointing
-from livekit.agents.voice.turn import _StreamingTurnDetector
 
 from open_tutor import debug_log
-from open_tutor.agent import turn_detection_options
-from open_tutor.turn_detector import (
-    DONE_PROBABILITY,
-    HOLD_PROBABILITY,
-    UNLIKELY_THRESHOLD,
-    SwedishHesitationTurnDetector,
-    hesitation_reason,
-    latest_user_text,
-)
+from open_tutor.agent import Tutor, hesitation_hold_s, turn_detection_options
+from open_tutor.turn_detector import hesitation_reason, hold_hesitations, is_filler
 
-
-def ctx(*messages):
-    chat = llm.ChatContext.empty()
-    for role, text in messages:
-        chat.add_message(role=role, content=[text])
-    return chat
+S = stt.SpeechEventType
 
 
 # ---- which turns are held --------------------------------------------------
@@ -43,6 +32,9 @@ def ctx(*messages):
     ("Eh.", "filler"),
     ("Öh,", "filler"),
     ("Hmm...", "filler"),
+    ("Ehum", "filler"),
+    ("Eeeh", "filler"),
+    ("Ööhm.", "filler"),
     ("Asså", "filler"),
     ("Det är typ", "filler"),
     ("Jag tror att, eh.", "filler"),
@@ -69,80 +61,36 @@ def test_unfinished_turns_are_held(text, reason):
     "Ja.", "Nej.", "Ja", "Nej", "Noa.", "Det är fyra hörn.", "Nej, jag vet inte.",
     "Sex.", "42", "Mm.", "Mhm", "En.", "Ett", "Jag.", "Det kan jag.", "En till.",
     "Stäng av.", "Jag sitter fast.", "Minus.", "När?", "Ja, eller?", "Varför då?",
-    "Okej, jag fattar!", "", "   ",
+    "Vilken typ?", "Eh?", "Okej, jag fattar!", "Hej", "", "   ",
 ])
 def test_complete_answers_are_not(text):
     assert hesitation_reason(text) is None
 
 
-def test_latest_user_text_reads_only_a_trailing_learner_message():
-    assert latest_user_text(ctx(("assistant", "Vad tror du?"), ("user", "Öh, för att"))) == "Öh, för att"
-    assert latest_user_text(ctx(("user", "Eh"), ("assistant", "Mm?"))) == ""
-    assert latest_user_text(ctx()) == ""
-    assert latest_user_text(object()) == ""
-
-
-# ---- the _TurnDetector protocol --------------------------------------------
-
-@pytest.mark.parametrize("language", [None, "", "sv", "sv-SE", "en"])
-async def test_every_language_is_supported_with_one_threshold(language):
-    detector = SwedishHesitationTurnDetector()
-    assert await detector.supports_language(language) is True
-    assert await detector.unlikely_threshold(language) == UNLIKELY_THRESHOLD
-
-
-async def test_predictions_fall_on_either_side_of_the_threshold():
-    detector = SwedishHesitationTurnDetector()
-    held = await detector.predict_end_of_turn(ctx(("assistant", "Hur många?"), ("user", "Öh, för att")))
-    done = await detector.predict_end_of_turn(ctx(("assistant", "Hur många?"), ("user", "Sex.")),
-                                              timeout=1.0)
-    assert held == HOLD_PROBABILITY < UNLIKELY_THRESHOLD < DONE_PROBABILITY == done
-
-
-async def test_a_hold_is_logged_without_the_childs_words():
-    recorded = []
-    detector = SwedishHesitationTurnDetector(record=lambda kind, data: recorded.append((kind, data)))
-    await detector.predict_end_of_turn(ctx(("user", "Jag tror att")))
-    await detector.predict_end_of_turn(ctx(("user", "Sex.")))
-    assert recorded == [("turn_hold", {"reason": "open_word", "words": 3})]
-
-
-async def test_a_broken_logger_never_changes_the_turn():
-    def boom(kind, data):
-        raise RuntimeError("log down")
-
-    detector = SwedishHesitationTurnDetector(record=boom)
-    assert await detector.predict_end_of_turn(ctx(("user", "Eh"))) == HOLD_PROBABILITY
-
-
-def test_it_is_a_plain_turn_detector_not_a_streaming_one():
-    detector = SwedishHesitationTurnDetector()
-    assert not isinstance(detector, _StreamingTurnDetector)
-    assert detector.model and detector.provider
+@pytest.mark.parametrize("word, filler", [
+    ("eh", True), ("ehm", True), ("ehum", True), ("öhh", True), ("äh", True), ("hmmm", True),
+    ("um", True), ("uhm", True), ("mmh", True), ("typ", True),
+    ("hej", False), ("en", False), ("men", False), ("eller", False), ("mhm", False),
+])
+def test_filler_sounds(word, filler):
+    assert is_filler(word) is filler
 
 
 # ---- configuration -----------------------------------------------------------
 
-def test_hesitation_is_the_default():
-    options = turn_detection_options({})
-    assert isinstance(options["turn_detection"], SwedishHesitationTurnDetector)
-    assert options["endpointing"] == {"min_delay": 0.6, "max_delay": 2.8}
-    assert options["preemptive_generation"] == {"enabled": False}
+def test_turn_detection_stays_exactly_stt():
+    for env in ({}, {"TUTOR_TURN_DETECTION": "stt"}, {"TUTOR_TURN_DETECTION": "hesitation"}):
+        assert turn_detection_options(env) == {
+            "turn_detection": "stt", "endpointing": {"min_delay": 0.6, "max_delay": 4.0}}
+    assert turn_detection_options({"TUTOR_MIN_ENDPOINT": "0.8"})["endpointing"]["min_delay"] == 0.8
 
 
-def test_stt_restores_the_exact_old_settings():
-    assert turn_detection_options({"TUTOR_TURN_DETECTION": "stt"}) == {
-        "turn_detection": "stt", "endpointing": {"min_delay": 0.6, "max_delay": 4.0}}
-    assert turn_detection_options({"TUTOR_TURN_DETECTION": "STT", "TUTOR_MIN_ENDPOINT": "0.8"})[
-        "endpointing"] == {"min_delay": 0.8, "max_delay": 4.0}
-
-
-def test_the_endpoints_are_configurable_and_sane():
-    options = turn_detection_options({"TUTOR_MIN_ENDPOINT": "0.5", "TUTOR_MAX_ENDPOINT": "3.5"})
-    assert options["endpointing"] == {"min_delay": 0.5, "max_delay": 3.5}
-    # A max below the min would end a hesitation sooner than an answer.
-    assert turn_detection_options({"TUTOR_MAX_ENDPOINT": "0.1"})["endpointing"]["max_delay"] == 0.6
-    assert turn_detection_options({"TUTOR_MAX_ENDPOINT": "lång"})["endpointing"]["max_delay"] == 2.8
+def test_the_hold_is_on_by_default_and_off_in_stt_mode():
+    assert hesitation_hold_s({}) == pytest.approx(2.2)
+    assert hesitation_hold_s({"TUTOR_TURN_DETECTION": "STT"}) == 0.0
+    assert hesitation_hold_s({"TUTOR_MIN_ENDPOINT": "0.5", "TUTOR_MAX_ENDPOINT": "3.5"}) == 3.0
+    assert hesitation_hold_s({"TUTOR_MAX_ENDPOINT": "0.1"}) == 0.0  # never below min
+    assert hesitation_hold_s({"TUTOR_MAX_ENDPOINT": "lång"}) == pytest.approx(2.2)
 
 
 def test_an_unknown_mode_fails_at_startup():
@@ -155,38 +103,169 @@ def test_both_settings_reach_the_debug_log_config():
     assert "TUTOR_MAX_ENDPOINT" in debug_log.SAFE_CONFIG_KEYS
 
 
+def test_the_tutor_wraps_its_stt_node_only_when_holding(monkeypatch):
+    from livekit.agents import Agent
+
+    sentinel = object()
+    monkeypatch.setattr(Agent.default, "stt_node", lambda agent, audio, settings: sentinel)
+    monkeypatch.setenv("TUTOR_TURN_DETECTION", "stt")
+    assert Tutor.stt_node(SimpleNamespace(), None, None) is sentinel
+    monkeypatch.setenv("TUTOR_TURN_DETECTION", "hesitation")
+    wrapped = Tutor.stt_node(SimpleNamespace(), None, None)
+    assert wrapped is not sentinel and hasattr(wrapped, "__anext__")
+
+
 async def test_agent_session_accepts_the_options():
-    options = turn_detection_options({})
-    session = AgentSession(turn_handling=TurnHandlingOptions(
-        **options,
-        interruption={"enabled": True, "mode": "vad", "min_duration": 0.4}))
-    turn = session.options.turn_handling
-    assert session.turn_detection is options["turn_detection"]
-    assert turn["endpointing"]["min_delay"] == 0.6 and turn["endpointing"]["max_delay"] == 2.8
-    assert turn["preemptive_generation"]["enabled"] is False
+    session = AgentSession(turn_handling=TurnHandlingOptions(**turn_detection_options({})))
+    assert session.turn_detection == "stt"
 
 
-# ---- a real AudioRecognition, fed the way Soniox feeds it --------------------
+# ---- the event gate -----------------------------------------------------------
+
+def start():
+    return stt.SpeechEvent(type=S.START_OF_SPEECH)
+
+
+def final(text, language="sv"):
+    return stt.SpeechEvent(type=S.FINAL_TRANSCRIPT, alternatives=[
+        stt.SpeechData(language=language, text=text, confidence=0.9)])
+
+
+def interim(text):
+    return stt.SpeechEvent(type=S.INTERIM_TRANSCRIPT, alternatives=[
+        stt.SpeechData(language="sv", text=text, confidence=0.5)])
+
+
+def end():
+    return stt.SpeechEvent(type=S.END_OF_SPEECH)
+
+
+class Source:
+    """A Soniox-shaped event stream the test pushes into."""
+
+    def __init__(self):
+        self.queue = asyncio.Queue()
+        self.closed = False
+
+    def push(self, *events):
+        for event in events:
+            self.queue.put_nowait(event)
+
+    async def events(self):
+        try:
+            while True:
+                event = await self.queue.get()
+                if event is None:
+                    return
+                if isinstance(event, BaseException):
+                    raise event
+                yield event
+        finally:
+            self.closed = True
+
+
+async def collect(gate, out):
+    try:
+        async for event in gate:
+            out.append((time.monotonic(), event))
+    except Exception as error:  # noqa: BLE001
+        out.append((time.monotonic(), error))
+
+
+async def test_a_complete_answer_passes_straight_through():
+    source, out = Source(), []
+    task = asyncio.create_task(collect(hold_hesitations(source.events(), hold_s=1.0), out))
+    source.push(start(), final("Sex."), end(), None)
+    await asyncio.wait_for(task, 1.0)
+    assert [e.type for _, e in out] == [S.START_OF_SPEECH, S.FINAL_TRANSCRIPT, S.END_OF_SPEECH]
+
+
+async def test_a_hesitation_holds_the_end_event_for_the_hold():
+    source, out, recorded = Source(), [], []
+    gate = hold_hesitations(source.events(), hold_s=0.3,
+                            record=lambda kind, data: recorded.append((kind, data)))
+    task = asyncio.create_task(collect(gate, out))
+    t0 = time.monotonic()
+    source.push(start(), final("Jag tror att"), end())
+    await asyncio.sleep(0.15)
+    assert [e.type for _, e in out] == [S.START_OF_SPEECH, S.FINAL_TRANSCRIPT]
+    await asyncio.sleep(0.25)
+    assert out[-1][1].type == S.END_OF_SPEECH and out[-1][0] - t0 >= 0.3
+    assert recorded == [("turn_hold", {"reason": "open_word", "words": 3})]
+    source.push(None)
+    await asyncio.wait_for(task, 1.0)
+
+
+async def test_carrying_on_drops_the_held_end_and_judges_the_whole_turn():
+    source, out, recorded = Source(), [], []
+    gate = hold_hesitations(source.events(), hold_s=0.5,
+                            record=lambda kind, data: recorded.append((kind, data)))
+    task = asyncio.create_task(collect(gate, out))
+    source.push(start(), final("Öh, för att"), end())
+    await asyncio.sleep(0.1)
+    source.push(start(), interim("den"), final("den har fyra hörn."), end(), None)
+    await asyncio.wait_for(task, 1.0)
+    types = [e.type for _, e in out]
+    assert types.count(S.END_OF_SPEECH) == 1 and types[-1] == S.END_OF_SPEECH
+    assert [kind for kind, _ in recorded] == ["turn_hold", "turn_hold_resumed"]
+
+
+async def test_usage_events_do_not_cancel_a_hold():
+    source, out = Source(), []
+    task = asyncio.create_task(collect(hold_hesitations(source.events(), hold_s=0.2), out))
+    source.push(start(), final("Eh"), end(),
+                stt.SpeechEvent(type=S.RECOGNITION_USAGE))
+    await asyncio.sleep(0.35)
+    assert [e.type for _, e in out][-2:] == [S.RECOGNITION_USAGE, S.END_OF_SPEECH]
+    source.push(None)
+    await asyncio.wait_for(task, 1.0)
+
+
+async def test_a_stream_that_ends_or_fails_never_swallows_a_held_end():
+    source, out = Source(), []
+    task = asyncio.create_task(collect(hold_hesitations(source.events(), hold_s=5.0), out))
+    source.push(start(), final("Eh"), end(), None)
+    await asyncio.wait_for(task, 1.0)
+    assert out[-1][1].type == S.END_OF_SPEECH
+
+    source, out = Source(), []
+    task = asyncio.create_task(collect(hold_hesitations(source.events(), hold_s=5.0), out))
+    source.push(start(), final("Eh"), end(), RuntimeError("socket closed"))
+    await asyncio.wait_for(task, 1.0)
+    assert out[-2][1].type == S.END_OF_SPEECH and isinstance(out[-1][1], RuntimeError)
+
+
+async def test_closing_the_gate_closes_the_inner_stream():
+    source = Source()
+    gate = hold_hesitations(source.events(), hold_s=1.0)
+    source.push(start())
+    assert (await anext(gate)).type == S.START_OF_SPEECH
+    reader = asyncio.ensure_future(anext(gate))  # waits on the inner stream
+    await asyncio.sleep(0.01)
+    reader.cancel()
+    await asyncio.wait({reader})
+    await gate.aclose()
+    assert source.closed
+
+
+# ---- a real AudioRecognition in stt mode, fed through the gate -----------------
 
 class Hooks:
     """The RecognitionHooks AgentActivity provides, reduced to a recorder."""
 
     interruption_by_audio_activity_enabled = True
 
-    def __init__(self, history):
-        self.history = history
+    def __init__(self):
         self.turns = []
-        self.predictions = []
 
     def retrieve_chat_ctx(self):
-        return self.history
+        chat = llm.ChatContext.empty()
+        chat.add_message(role="assistant", content=["Hur många hörn har en kvadrat?"])
+        return chat
 
     def on_end_of_turn(self, info):
         self.turns.append((time.monotonic(), info.new_transcript))
         return True
-
-    def on_eot_prediction(self, ev):
-        self.predictions.append((ev.probability, ev.threshold))
 
     def __getattr__(self, name):  # every other hook is a no-op here
         if name.startswith("on_"):
@@ -194,18 +273,10 @@ class Hooks:
         raise AttributeError(name)
 
 
-def final(text, language="sv"):
-    return stt.SpeechEvent(type=stt.SpeechEventType.FINAL_TRANSCRIPT, alternatives=[
-        stt.SpeechData(language=language, text=text, confidence=0.9)])
-
-
-async def recognition(min_delay=0.05, max_delay=0.6):
-    detector = SwedishHesitationTurnDetector()
+async def recognition(hold_s=0.5, min_delay=0.05):
     session = AgentSession(turn_handling=TurnHandlingOptions(
-        turn_detection=detector,
-        endpointing={"min_delay": min_delay, "max_delay": max_delay},
-        preemptive_generation={"enabled": False}))
-    hooks = Hooks(ctx(("assistant", "Hur många hörn har en kvadrat?")))
+        turn_detection="stt", endpointing={"min_delay": min_delay, "max_delay": 4.0}))
+    hooks = Hooks()
 
     async def stt_node(audio, model_settings):  # never pulled: no start()
         yield
@@ -214,7 +285,14 @@ async def recognition(min_delay=0.05, max_delay=0.6):
         session, hooks=hooks, stt=stt_node, vad=None, interruption_detection=None,
         endpointing=create_endpointing(session.options.turn_handling["endpointing"]),
         turn_detection=session.turn_detection)
-    return rec, hooks
+    assert rec._turn_detection_mode == "stt"
+    source = Source()
+
+    async def pump():
+        async for event in hold_hesitations(source.events(), hold_s=hold_s):
+            await rec._on_stt_event(event)
+
+    return source, hooks, asyncio.create_task(pump())
 
 
 async def wait_for_turn(hooks, timeout=2.0):
@@ -224,33 +302,36 @@ async def wait_for_turn(hooks, timeout=2.0):
 
 
 @pytest.mark.parametrize("language", ["sv", "sv-SE", ""])
-async def test_real_recognition_holds_a_hesitation_for_max_delay(language):
-    rec, hooks = await recognition()
-    assert rec._turn_detection_mode is None  # VAD/final-transcript based, see turn_detector.py
+async def test_real_recognition_commits_a_hesitation_after_the_hold(language):
+    source, hooks, task = await recognition()
     t0 = time.monotonic()
-    await rec._on_stt_event(final("Öh, för att", language))
-    await asyncio.sleep(0.25)
-    assert hooks.turns == []  # still waiting: min_delay alone would have ended it
+    source.push(start(), final("Öh, för att", language), end())
+    await asyncio.sleep(0.3)
+    assert hooks.turns == []  # min_delay alone would have ended it by now
     await wait_for_turn(hooks)
     assert hooks.turns and hooks.turns[0][0] - t0 >= 0.5
-    assert hooks.predictions == [(HOLD_PROBABILITY, UNLIKELY_THRESHOLD)]
+    source.push(None)
+    await asyncio.wait_for(task, 1.0)
 
 
 async def test_real_recognition_ends_a_complete_answer_at_min_delay():
-    rec, hooks = await recognition()
+    source, hooks, task = await recognition()
     t0 = time.monotonic()
-    await rec._on_stt_event(final("Sex."))
+    source.push(start(), final("Sex."), end())
     await wait_for_turn(hooks)
-    assert hooks.turns and hooks.turns[0][0] - t0 < 0.4
+    assert hooks.turns and hooks.turns[0][0] - t0 < 0.3
     assert hooks.turns[0][1] == "Sex."
-    assert hooks.predictions == [(DONE_PROBABILITY, UNLIKELY_THRESHOLD)]
+    source.push(None)
+    await asyncio.wait_for(task, 1.0)
 
 
 async def test_real_recognition_joins_the_words_after_a_hesitation():
-    rec, hooks = await recognition()
-    await rec._on_stt_event(final("Öh, för att"))
+    source, hooks, task = await recognition()
+    source.push(start(), final("Öh, för att"), end())
     await asyncio.sleep(0.2)
-    await rec._on_stt_event(final("den har fyra hörn."))
+    source.push(start(), final("den har fyra hörn."), end())
     await wait_for_turn(hooks)
+    await asyncio.sleep(0.2)
     assert [text for _, text in hooks.turns] == ["Öh, för att den har fyra hörn."]
-    assert hooks.predictions[-1] == (DONE_PROBABILITY, UNLIKELY_THRESHOLD)
+    source.push(None)
+    await asyncio.wait_for(task, 1.0)
