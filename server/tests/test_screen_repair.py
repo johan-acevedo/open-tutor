@@ -28,6 +28,14 @@ HEADING = {"kind": "heading", "where": "<h1>",
                   "put the question below it."}
 
 
+@pytest.fixture(autouse=True)
+def every_page_is_visual(monkeypatch):
+    """These tests pin what the look pass does once it runs. Since 2026-11-27 a
+    clean page with nothing spatial on it skips the look (``skipped_simple``,
+    see test_screen_look_gate.py), so the short test pages here count as visual."""
+    monkeypatch.setattr("open_tutor.screen.page_needs_visual_look", lambda body: True)
+
+
 def make_screen(tmp_path, **kwargs):
     kwargs.setdefault("model_call", AsyncMock(return_value="<h1>Hej</h1>"))
     kwargs.setdefault("render_page", AsyncMock(return_value=(b"PNG", [])))
@@ -108,6 +116,7 @@ async def test_actionable_lint_skips_the_look_and_the_retry_takes_over(tmp_path,
 async def test_a_look_with_no_room_in_the_page_target_is_recorded_as_skipped(tmp_path, monkeypatch):
     monkeypatch.setenv("SCREEN_LOOK", "1")
     monkeypatch.setattr("open_tutor.screen.PAGE_TARGET_S", 0.05, raising=False)
+    monkeypatch.setattr("open_tutor.screen.VISUAL_LOOK_TARGET_S", 0.05, raising=False)
     monkeypatch.setattr("open_tutor.screen.FINAL_RENDER_RESERVE_S", 0.01)
     monkeypatch.setattr("open_tutor.screen.MIN_OPTIONAL_STEP_S", 0.005)
 

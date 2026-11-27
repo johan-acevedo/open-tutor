@@ -166,7 +166,9 @@ def test_nameless_call_asks_repeats_and_saves_the_name():
     text = prompt.learner_context({"name": "", "grade": None})
     assert "not known yet" in text
     assert "set_learner_name" in text
-    assert "repeat the name back" in text
+    # Silent save (2026-11-27): no spoken preamble before the tool, one reply after.
+    assert "repeat the name back" not in text
+    assert "silently" in text and "one" in text and "single spoken reply" in text
     assert "text field" in text
     # The grade flow is unchanged underneath the naming.
     assert "set_learner_grade" in text
@@ -295,3 +297,34 @@ async def test_set_learner_name_same_profile_correction_keeps_grade():
     assert "årskurs 5" in result
     assert len(seen) == 1
     assert "Noa" in seen[0] and "årskurs 5" in seen[0]
+
+
+def test_metadata_tools_are_called_silently():
+    """2026-11-27: "repeat the name back first" gave a spoken preamble, a pause
+    for the tool round-trip, then a second full turn. Both tools are now
+    called without words before them, and confirmed in one reply after."""
+    unknown_year = prompt.learner_context({"name": "Leo", "grade": None})
+    assert "`set_learner_grade` silently" in unknown_year
+    assert "one single spoken reply" in unknown_year
+    known_year = prompt.learner_context({"name": "Leo", "grade": 5})
+    assert "set_learner_grade" not in known_year
+    for tool in (Tutor.set_learner_name, Tutor.set_learner_grade):
+        doc = " ".join(((getattr(tool, "__wrapped__", None) or tool).__doc__ or "").split())
+        assert "silently" in doc and "one single spoken reply" in doc
+        assert "repeat the name back first" not in doc
+
+
+async def test_metadata_tool_returns_ask_for_one_reply():
+    t = tutor({"id": "temp-1", "name": "", "grade": None},
+              replies={LEARNER_RPC_SET_NAME: {"ok": True, "profile": {"id": "p9", "name": "Noa", "grade": None}}})
+    assert "one warm reply" in await Tutor.set_learner_name(t, FakeCtx(), "Noa")
+    t = tutor({"id": "p1", "name": "Leo", "grade": None})
+    assert "in one reply" in await Tutor.set_learner_grade(t, FakeCtx(), 8)
+
+
+def test_adults_get_no_unconditional_grade_call():
+    """Review 2026-11-27: an adult with no school year was told both to skip
+    the year and to call set_learner_grade."""
+    text = prompt.learner_context({"name": "Kim", "grade": None, "band": "upper"})
+    assert "Only adults skip the school year" in text
+    assert "When you do save a school year" in text

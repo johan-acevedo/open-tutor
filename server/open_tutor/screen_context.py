@@ -101,6 +101,11 @@ def _tag(item: Any) -> dict[str, Any] | None:
     return tag if isinstance(tag, dict) else None
 
 
+def is_screen_message(item: Any) -> bool:
+    """True for a worker-written screen page or change message."""
+    return _tag(item) is not None
+
+
 def _has_image(item: Any) -> bool:
     return any(isinstance(part, llm.ImageContent) for part in item.content)
 

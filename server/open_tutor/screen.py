@@ -65,6 +65,10 @@ IMAGE_REVIEW_SETTLE_BOUND_S = 1.0
 # does with no fallback configured.
 FALLBACK_MIN_S = 2.0
 PAGE_TARGET_S = 12.0
+# Pages with spatial content (graphs, maps, pictures, drawn diagrams) are the
+# ones a vision look can actually catch something on, so they get a little
+# more of the soft target than PAGE_TARGET_S. Still capped by the job limit.
+VISUAL_LOOK_TARGET_S = 14.0
 OPTIONAL_STEP_LIMIT_S = 6.0
 # At most this many image slots resolve in the background while the page is
 # still being written; further slots resolve inline afterwards, as before.
@@ -97,6 +101,7 @@ STEP_FAILED = "failed"
 LOOK_OFF = "off"                        # SCREEN_LOOK=0
 LOOK_SKIPPED_BUDGET = "skipped_budget"  # no room inside the page target
 LOOK_SKIPPED_LINT = "skipped_lint"      # actionable lint: correct it directly
+LOOK_SKIPPED_SIMPLE = "skipped_simple"  # clean text/card/steps page: nothing visual to check
 LOOK_OK = "ok"                          # looked, nothing to change
 LOOK_FIXED = "fixed"                    # looked, fixed, and the fix shipped
 LOOK_FIX_DROPPED = "fix_dropped"        # wrote a fix, no time to render it
@@ -216,6 +221,29 @@ def is_actionable(issue: Any) -> bool:
         text = issue_text(issue).lower()
         return not any(word in text for word in _ADVISORY_IMAGE_WORDS)
     return False
+
+
+# Tags whose output is spatial: what the child sees depends on geometry,
+# placement or a picture, which the lint pass cannot judge. Plain text, card,
+# steps, mindmap, table and quiz pages lint well and gain little from a look.
+VISUAL_LOOK_TAGS = ("<ot-graph", "<ot-map", "<ot-image", "<ot-chart", "<ot-clock",
+                    "<ot-fraction", "<ot-numberline", "<ot-balance", "<ot-written",
+                    "<ot-cycle", "<svg")
+
+
+# An exercise with an answer the child has not given yet: the look's
+# answer-leak check (a solution printed above its own answer box) is worth it
+# even on a lint-clean text page.
+ANSWER_LOOK_TAGS = ("<ot-answer", "<ot-gap", "<ot-hidden", "<ot-choice")
+_LATER_ATTR = re.compile(r"<[a-z][^>]*\slater(?:[\s=/>])", re.IGNORECASE)
+
+
+def page_needs_visual_look(body: str) -> bool:
+    """True when the look can catch something lint cannot: spatial content
+    (graphs, maps, pictures, drawn diagrams) or an answer still to be given."""
+    lowered = (body or "").lower()
+    return (any(tag in lowered for tag in VISUAL_LOOK_TAGS + ANSWER_LOOK_TAGS)
+            or bool(_LATER_ATTR.search(body or "")))
 
 
 def actionable_issues(issues: Iterable[Any] | None) -> list[str]:
@@ -1852,9 +1880,22 @@ class Screen:
 
         # Spend the soft target only on optional inspection. Known lint goes
         # straight to one correction instead of paying for a look first.
+        # A clean page with nothing spatial on it skips the look (it cost
+        # 3.5-4 s per text page and found nothing, 2026-11-27); a visual page
+        # gets a slightly larger soft target so the diagrams that need the
+        # look are the ones that get it. ``always`` inspects every page.
         look_mode = _screen_env("SCREEN_LOOK", "1")
-        look_target = self.timeout if look_mode == "always" else min(self.timeout, PAGE_TARGET_S)
-        if look_mode != "0" and not actionable_issues(issues):
+        visual = page_needs_visual_look(body)
+        if look_mode == "always":
+            look_target = self.timeout
+        elif visual:
+            look_target = min(self.timeout, VISUAL_LOOK_TARGET_S)
+        else:
+            look_target = min(self.timeout, PAGE_TARGET_S)
+        if look_mode not in ("0", "always") and not visual and not actionable_issues(issues):
+            repair["notes"].append("look pass skipped: no visual content")
+            repair["look_outcome"] = LOOK_SKIPPED_SIMPLE
+        elif look_mode != "0" and not actionable_issues(issues):
             if look_target - (time.monotonic() - t0) >= step_s + reserve_s:
                 repair["look"] = True
                 fixed, look_s, why = await self._bounded(

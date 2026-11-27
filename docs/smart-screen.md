@@ -4,6 +4,129 @@ Lead: the thread "state of the project" (Claude, 2026-11-12). The lead keeps thi
 Workers read it before starting and report against it. Decisions here were agreed with Johan
 on 2026-11-12 unless marked open.
 
+## 2026-11-27: four fixes from a family test call
+
+One real family call on `main` at `07ac5a6` (middle band, homework in science)
+showed four things that made the tutor feel less like a calm older student.
+Counts and timings only below; no words from the call are kept here.
+
+### The tutor no longer answers its own question when a page lands
+
+- **Seen:** on 4 of 4 screen pages the tutor called `ask_screen`, spoke a bridge
+  that ended with a question to the child, and 0.1-0.3 s later the page-ready
+  prompt (`screen_page_ready` → `_prompt_when_free` → `prompt_event`) made it
+  reply again, answering its own question before the child could speak.
+- **Now:** after waiting until nobody speaks, `_prompt_when_free` checks the
+  tutor's latest spoken reply since the latest real learner message
+  (`agent.tutor_awaits_answer`; screen pages, session events, tool calls and
+  empty turns are skipped). If it ends with a question mark (closing quotes or
+  brackets allowed) the prompt is skipped and the debug trail gets
+  `screen_prompt_deferred {page, reason: "tutor_asked_question"}`. The page is
+  still shown and already in the context (`_add_screen_message`), so the tutor
+  teaches from it in its reply to the child's answer. A bridge that ends with a
+  statement is still prompted at once. Held pages follow the same rule.
+  `screen_failed` and a page whose automatic show failed pass
+  `defer_if_question=False`: a failure is never swallowed. Before judging,
+  the prompt waits until the tutor is neither speaking nor still writing a
+  reply (`thinking`) and its speech handle is done (`wait_until_settled`), so
+  a page that lands while the bridge is being written is judged on that
+  bridge. Homework and page-answer notes the worker writes are tagged
+  (`worker_note_extra`) and never count as the child's answer.
+- `ask_screen`'s return now asks for one short bridge, no question the coming
+  page will answer, and no "I am making a page".
+- **Not tested live:** whether the model reliably teaches from the page in its
+  next reply without the prompt. Watch `screen_prompt_deferred` counts against
+  what the child sees in the next family call.
+
+### Name and school year are saved silently
+
+- **Seen:** the prompt and the `set_learner_name` docstring said "repeat the name
+  back first, then call the tool". The model spoke a short confirmation, paused
+  for the tool round-trip and then spoke a second full turn; the same happened
+  for the school year. The first ~35 s of the call felt choppy.
+- **Now:** `prompt.learner_context` and both tool docstrings say to call
+  `set_learner_name` / `set_learner_grade` silently (no words before the call),
+  then confirm warmly and ask the next question in one spoken reply after the
+  tool returns. The tool results repeat that ("Now say one warm reply …").
+- **Not tested live:** the model's compliance. Count spoken turns before and
+  after each tool call in the next call's debug trail.
+
+### Science diagrams come from Commons, and the look goes where it helps
+
+- **Seen:** asked for a molecule diagram, the composer never used `ot-image`
+  (`image_s` 0.0) because `REFERENCE.md` only named photos, paintings and maps;
+  it drew the molecule with a broken `ot-polygon` and floating `ot-text`
+  labels. Meanwhile the look pass spent 3.6-4.0 s each on two clean
+  text/mindmap pages (0 lint issues, nothing changed) and was then
+  `skipped_budget` on the two diagram pages that needed it.
+- **Now (composer):** `screen/REFERENCE.md` lists molecular structures, chemical
+  formulas and rings, cells, anatomy and other science diagrams under
+  `ot-image` with descriptive English Commons queries, and forbids approximating
+  them with `ot-graph` / `ot-polygon` / `ot-text`, which stay for maths,
+  geometry, coordinates and simple physics. `ask_screen`'s docstring names
+  science diagrams next to pictures and maps.
+- **Now (look gating, `screen.py`):** `page_needs_visual_look(body)` is true when
+  the page has a spatial tag (`ot-graph`, `ot-map`, `ot-image`, `ot-chart`,
+  `ot-clock`, `ot-fraction`, `ot-numberline`, `ot-balance`, `ot-written`,
+  `ot-cycle`, `svg`) or an answer still to be given (`ot-answer`, `ot-gap`,
+  `ot-hidden`, `ot-choice`, a `later` attribute), because the look's
+  answer-leak check matters on exercises. With `SCREEN_LOOK=1` (default) and no
+  actionable lint, a page with none of these skips the look at once: new outcome `skipped_simple`
+  (counted by `summarize_screen_repairs` like the others). A visual page gets
+  `VISUAL_LOOK_TARGET_S` = 14 s as its soft target (capped by the job limit)
+  instead of `PAGE_TARGET_S` = 12 s. `SCREEN_LOOK=0` and `SCREEN_LOOK=always`
+  are unchanged; `always` still inspects every page.
+- **Expected:** ~3.5-4 s faster clean text pages, and diagram pages that are
+  actually looked at. **Not measured yet:** both, on real pages; compare
+  `screen_look` outcome counts and page times after the next calls.
+
+### The child may hesitate without being cut off
+
+- **Seen:** with `turn_detection="stt"` and `min_delay` 0.6 s, a child who
+  paused mid-thought on a filler word and an open conjunction was answered
+  0.6 s after Soniox's endpoint.
+- **Now:** LiveKit's turn detection stays exactly `stt`. With
+  `TUTOR_TURN_DETECTION=hesitation` (default), `Tutor.stt_node` wraps the Soniox
+  event stream in `turn_detector.hold_hesitations`. Soniox sends one final
+  transcript at its endpoint, immediately followed by an end-of-speech event,
+  and in `stt` mode that end event is what lets LiveKit close the turn. When
+  the turn's words so far look unfinished (`hesitation_reason`: only fillers or
+  ending on a filler such as `eh`, `ehum`, `öh`, `hm`, `asså`, `typ`, even with
+  a full stop after it; ending on a word that cannot end a statement such as
+  `att`, `och`, `men`, `eller`, `som`, `när`; ending on a comma, dash or
+  ellipsis; or, with more than one word and no closing `.`/`!`, ending on a word
+  that usually leaves a sentence open), the end event is held for
+  `TUTOR_MAX_ENDPOINT − TUTOR_MIN_ENDPOINT` (2.8 − 0.6 = 2.2 s) after the
+  endpoint. If the child carries on (Soniox starts a new segment or sends
+  words) the held event is dropped, the new words join the same turn, and the
+  next endpoint is judged on the whole turn. If not, the event goes out and the
+  turn ends as before. A turn ending in a question mark is never held. Short
+  complete answers ("Ja.", a name, a number, "Nej, jag vet inte.", a lone "Mm")
+  are pinned as not held. A stream that ends or fails during a hold still
+  delivers the held end event. Every hold writes `turn_hold {reason, words}`
+  and every resumption `turn_hold_resumed {held_s}` to the debug trail, never
+  the words.
+- **First take, dropped the same day after the cross-family review (Codex):** a
+  LiveKit `_TurnDetector` object. In livekit-agents 1.8.10 passing one turns
+  `AudioRecognition` into VAD-based turn detection (`_turn_detection_mode` is
+  None), which ignores Soniox's start and end events. A replay in the SDK
+  showed an answer that was never committed while Silero still heard
+  "speech", a fragment committed while Soniox was transcribing the
+  continuation, and a max delay counted from Silero's last speech, so a slow
+  Soniox endpoint left a hesitation *less* time (0.30 s) than `main` (0.60 s).
+  The gate keeps every `stt`-mode behaviour (user state, interruption,
+  preemptive generation, timing anchors) untouched and only delays one event.
+- Tests drive a real `AudioRecognition` in `stt` mode through the gate with
+  Soniox-shaped events (languages `sv`, `sv-SE` and empty): a hesitation
+  commits only after the hold, a complete answer at `min_delay`, and the words
+  after a hesitation join one turn.
+- **Rollback:** `TUTOR_TURN_DETECTION=stt` wraps nothing: the exact behaviour
+  before. Both settings are in the debug trail's config snapshot; an unknown
+  mode stops the worker in `prewarm`.
+- **Not tested live:** a real voice call. Watch `turn_hold` /
+  `turn_hold_resumed` counts, and for a tutor that now feels slow after short
+  answers that end on a pronoun without punctuation.
+
 ## 2026-11-27: Bella primary + Google Cloud Chirp 3: HD Aoede TTS fallback
 
 After a blind Swedish TTS bake-off (Deepgram Flux `flux-ludvig-sv`, ElevenLabs
@@ -127,7 +250,8 @@ counted the same.
 
 - **Per page,** `repair` in `meta.json` and the debug trail gains `look_outcome`
   and `retry_outcome`, one word each, alongside today's booleans and notes:
-  look `off` | `skipped_budget` | `skipped_lint` | `timed_out` | `failed` | `ok`
+  look `off` | `skipped_budget` | `skipped_lint` | `skipped_simple` (clean page
+  with nothing spatial, since 2026-11-27) | `timed_out` | `failed` | `ok`
   (looked, nothing to change) | `fixed` (rewrote it, and the rewrite shipped) |
   `fix_dropped`; retry `not_needed` | `after_look` | `off` | `skipped_budget` |
   `timed_out` | `failed` | `no_change` | `applied` | `worse` | `dropped`.
@@ -912,7 +1036,8 @@ One `Screen` per session, owned by the worker next to the `Tutor`.
 - The default job limit is 20 s. Generation leaves two seconds for the first render. A
   generation timeout reports failure to the tutor so it can explain in words.
 - Clean pages get a look only when it can fit the 12 s soft target, including a final-render
-  reserve. The look sees the source, screenshot, ask and pane, with short readability and
+  reserve. Since 2026-11-27 a clean page with nothing spatial on it skips the look
+  (`skipped_simple`) and a visual page gets a 14 s soft target. The look sees the source, screenshot, ask and pane, with short readability and
   answer-leak criteria. Each optional call is capped at 6 s. `SCREEN_LOOK=0` disables it;
   `SCREEN_LOOK=always` allows inspection up to the hard limit for diagnostics.
 - Actionable lint goes directly to one source-and-lint correction instead of a visual look

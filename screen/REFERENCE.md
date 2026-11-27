@@ -76,6 +76,8 @@ A step without `$` is a short explanation line. `result` on a step makes it gree
 ```
 `sides` labels each side in turn (A→B, B→C, C→A). Right angles are marked by themselves.
 Draw labelled sides to scale; if a sketch is deliberately not to scale, mark that ot-polygon (or ot-graph) `schematic`.
+`ot-graph` and `ot-polygon` are for maths, geometry, coordinates and simple physics sketches only. Never approximate
+a molecule, a chemical structure, anatomy or a biological diagram with them: use an `ot-image` (below).
 
 **Circle:** no `ot-circle` tag. For radius 4 at (0, 0), use two `ot-fn color="cyan" domain="-4 4"`
 curves in one `ot-graph`: `sqrt(16-x^2)` and `-sqrt(16-x^2)`. Add `<ot-point id="medelpunkt" x="0" y="0"></ot-point>`
@@ -125,6 +127,9 @@ can be pointed at by id `lan-<bokstav>`: `lan-M` is Skåne, `lan-BD` is Norrbott
 Use only `ot-image`, never raw `img` or SVG images. Prefer `query`; supplied `src` and credits are verified too.
 When the ask wants a real picture, photo, painting or map, put it on the page as an `ot-image` with a
 descriptive English `query` (for a historical map, for example `query="Swedish Empire 1658 map"`); never link an image yourself.
+Science diagrams are images too: molecular structures, chemical formulas and rings, cells, anatomy, organs and
+other biology or chemistry diagrams come from Commons, e.g. `query="alpha D glucose Haworth structure diagram"`
+or `query="animal cell diagram"`. Never draw them yourself with `ot-polygon`, `ot-text` or SVG.
 `ot-label` marks a part: `at` is x and y in percent of the image.
 ```html
 <ot-image query="Colosseum Rome" alt="Colosseum i Rom"></ot-image>
