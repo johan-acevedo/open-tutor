@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import contextlib
 import json
 import logging
 import time
@@ -237,6 +238,9 @@ class DialogueStream(tts.SynthesizeStream):
         sentences = self._tts._tokenizer.stream()
         last_send = time.monotonic()
         first_text: float | None = None
+        pending_audio = asyncio.Event()
+        pending_flushes = 0
+        close_sent = False
 
         async def send(message: dict) -> None:
             nonlocal last_send
@@ -252,7 +256,7 @@ class DialogueStream(tts.SynthesizeStream):
             sentences.end_input()
 
         async def send_text() -> None:
-            nonlocal first_text
+            nonlocal first_text, pending_flushes, close_sent
             await send({"voices": [self._opts.voice_id]})
             async for sentence in sentences:
                 text = sentence.token.strip()
@@ -263,8 +267,15 @@ class DialogueStream(tts.SynthesizeStream):
                 # The server waits for ~40 characters before speaking; flushing each
                 # sentence lets a short reply such as "Ja." start at once.
                 await send({"inputs": [{"text": text + " ", "voice_id": self._opts.voice_id}]})
+                # Mark the flush pending BEFORE awaiting the socket write so a fast
+                # response arriving before send() resumes cannot underflow the counter,
+                # and a slow second write cannot let turn 1 clear the timeout.
+                pending_flushes += 1
+                pending_audio.set()
                 await send({"flush": True})
                 self._mark_started()
+            close_sent = True
+            pending_audio.set()
             await send({"close_socket": True})
 
         async def keep_alive() -> None:
@@ -273,11 +284,43 @@ class DialogueStream(tts.SynthesizeStream):
                 if time.monotonic() - last_send >= KEEP_ALIVE_INTERVAL:
                     await send({"keep_alive": True})
 
+        async def _recv_bounded() -> Any:
+            timeout = self._conn_options.timeout
+            if pending_audio.is_set():
+                try:
+                    return await asyncio.wait_for(ws.receive(), timeout)
+                except asyncio.TimeoutError:
+                    raise APITimeoutError(
+                        "ElevenLabs text-to-dialogue timed out waiting for audio"
+                    ) from None
+            recv_task = asyncio.create_task(ws.receive())
+            wait_pending = asyncio.create_task(pending_audio.wait())
+            try:
+                done, _ = await asyncio.wait(
+                    {recv_task, wait_pending}, return_when=asyncio.FIRST_COMPLETED
+                )
+                if recv_task in done:
+                    wait_pending.cancel()
+                    return recv_task.result()
+                try:
+                    return await asyncio.wait_for(recv_task, timeout)
+                except asyncio.TimeoutError:
+                    raise APITimeoutError(
+                        "ElevenLabs text-to-dialogue timed out waiting for audio"
+                    ) from None
+            finally:
+                for task in (recv_task, wait_pending):
+                    if not task.done():
+                        task.cancel()
+                        with contextlib.suppress(asyncio.CancelledError, Exception):
+                            await task
+
         async def receive() -> None:
+            nonlocal pending_flushes
             captions = _Captions()
             first_audio: float | None = None
             while True:
-                message = await ws.receive()
+                message = await _recv_bounded()
                 if message.type in (aiohttp.WSMsgType.CLOSE, aiohttp.WSMsgType.CLOSED, aiohttp.WSMsgType.CLOSING):
                     raise APIStatusError(
                         "ElevenLabs text-to-dialogue closed before the reply finished",
@@ -308,6 +351,9 @@ class DialogueStream(tts.SynthesizeStream):
                     output_emitter.push_timed_transcript(words)
                 if data.get("is_final_audio_for_turn"):
                     captions.end_turn()
+                    pending_flushes = max(0, pending_flushes - 1)
+                    if pending_flushes == 0 and not close_sent:
+                        pending_audio.clear()
                 if data.get("is_final"):
                     output_emitter.push_timed_transcript(captions.finish())
                     return

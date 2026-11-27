@@ -46,6 +46,16 @@ from .debug_log import DebugLog, clear_active, record_active, set_active
 from .diag import parse_diag
 from .dialogue_tts import DialogueTTS, is_dialogue_model
 from .deepgram_tts import DeepgramFluxTTS, DEFAULT_MODEL as DEEPGRAM_DEFAULT_MODEL, parse_expressivity
+from .tts_fallback import (
+    CooldownLedger,
+    DEFAULT_GOOGLE_LANGUAGE,
+    DEFAULT_GOOGLE_VOICE,
+    FallbackTTS,
+    build_google_tts,
+    default_cooldown_path,
+    describe_tts,
+    parse_cooldown_s,
+)
 from .screen_context import count_screen_shots, prune_screen_shots, screen_tag, shots_kept
 from .session_llm import SessionLLM
 from .page_answers import PageAnswers
@@ -102,33 +112,103 @@ def build_stt() -> soniox.STT:
     )
 
 
-def build_tts():
-    provider = os.environ.get("TUTOR_TTS", "elevenlabs")
-    if provider == "cartesia":
+_TTS_PROVIDERS = ("elevenlabs", "google", "deepgram", "cartesia")
+
+
+def _build_tts_provider(
+    provider: str,
+    *,
+    model: str = "",
+    voice: str = "",
+    expressivity: str | None = None,
+    is_fallback: bool = False,
+    environ: dict[str, str] | Any | None = None,
+):
+    env = os.environ if environ is None else environ
+    name = (provider or "elevenlabs").strip().lower()
+    if name not in _TTS_PROVIDERS:
+        raise ValueError(f"TTS provider must be one of {', '.join(_TTS_PROVIDERS)}, not {provider!r}")
+    if name == "cartesia":
+        if is_fallback:
+            chosen_voice = voice
+            if not chosen_voice:
+                raise ValueError(
+                    "TUTOR_TTS_FALLBACK_VOICE is required when TUTOR_TTS_FALLBACK=cartesia"
+                )
+        else:
+            chosen_voice = voice or env["TUTOR_TTS_VOICE"]
         return cartesia.TTS(
-            model=os.environ.get("TUTOR_TTS_MODEL", "sonic-3"),
-            voice=os.environ["TUTOR_TTS_VOICE"],
+            model=model or "sonic-3",
+            voice=chosen_voice,
             language="sv",
+            api_key=env.get("CARTESIA_API_KEY") or None,
         )
-    if provider == "deepgram":
+    if name == "deepgram":
         # Deepgram Flux TTS (/v2/speak) over streaming linear16 PCM, Swedish voice
         # flux-ludvig-sv with expressivity=1 (see deepgram_tts.py). No silent
         # fallback: a missing key or bad expressivity raises here, before the session.
+        raw_expr = expressivity if expressivity is not None else env.get("TUTOR_TTS_EXPRESSIVITY", "1")
         return DeepgramFluxTTS(
-            model=os.environ.get("TUTOR_TTS_MODEL", DEEPGRAM_DEFAULT_MODEL),
-            expressivity=parse_expressivity(
-                os.environ.get("TUTOR_TTS_EXPRESSIVITY", "1")
-            ),
-            api_key=os.environ.get("DEEPGRAM_API_KEY") or None,
+            model=model or DEEPGRAM_DEFAULT_MODEL,
+            expressivity=parse_expressivity(raw_expr),
+            api_key=env.get("DEEPGRAM_API_KEY") or None,
         )
-    model = os.environ.get("TUTOR_TTS_MODEL", DEFAULT_TTS_MODEL)
-    voice = os.environ.get("TUTOR_TTS_VOICE") or DEFAULT_TTS_VOICE
-    api_key = os.environ.get("ELEVENLABS_API_KEY") or os.environ.get("ELEVEN_API_KEY") or ""
-    if is_dialogue_model(model):
+    if name == "google":
+        return build_google_tts(
+            voice=voice or DEFAULT_GOOGLE_VOICE,
+            language=DEFAULT_GOOGLE_LANGUAGE,
+            environ=env,
+        )
+    eff_model = model or DEFAULT_TTS_MODEL
+    eff_voice = voice or DEFAULT_TTS_VOICE
+    api_key = env.get("ELEVENLABS_API_KEY") or env.get("ELEVEN_API_KEY") or ""
+    if is_dialogue_model(eff_model):
         # Eleven v4: the documented single-context text-to-dialogue socket (dialogue_tts.py).
-        return DialogueTTS(api_key=api_key, voice_id=voice, model=model, language="sv")
+        return DialogueTTS(api_key=api_key, voice_id=eff_voice, model=eff_model, language="sv")
     # Earlier models (e.g. eleven_flash_v2_5) through LiveKit's plugin, kept for rollback.
-    return elevenlabs.TTS(model=model, voice_id=voice, language="sv", api_key=api_key)
+    return elevenlabs.TTS(model=eff_model, voice_id=eff_voice, language="sv", api_key=api_key)
+
+
+def build_tts(environ: dict[str, str] | Any | None = None):
+    env = os.environ if environ is None else environ
+    provider = (env.get("TUTOR_TTS") or "elevenlabs").strip().lower()
+    primary = _build_tts_provider(
+        provider,
+        model=(env.get("TUTOR_TTS_MODEL") or "").strip(),
+        voice=(env.get("TUTOR_TTS_VOICE") or "").strip(),
+        expressivity=env.get("TUTOR_TTS_EXPRESSIVITY"),
+        environ=env,
+    )
+    fallback_provider = (env.get("TUTOR_TTS_FALLBACK") or "").strip().lower()
+    if not fallback_provider:
+        return primary
+    if fallback_provider not in _TTS_PROVIDERS:
+        raise ValueError(
+            f"TUTOR_TTS_FALLBACK must be empty or one of {', '.join(_TTS_PROVIDERS)}, "
+            f"not {fallback_provider!r}"
+        )
+    cooldown_s = parse_cooldown_s(env)
+    try:
+        fallback = _build_tts_provider(
+            fallback_provider,
+            model=(env.get("TUTOR_TTS_FALLBACK_MODEL") or "").strip(),
+            voice=(env.get("TUTOR_TTS_FALLBACK_VOICE") or "").strip(),
+            is_fallback=True,
+            environ=env,
+        )
+    except (ValueError, KeyError):
+        log.warning(
+            "TTS fallback %s disabled (invalid or missing configuration); primary %s serves alone",
+            fallback_provider,
+            describe_tts(primary),
+        )
+        return primary
+    cooldowns = (
+        CooldownLedger(path=default_cooldown_path(env))
+        if environ is not None and (env.get("TUTOR_TTS_COOLDOWN_FILE") or "").strip()
+        else None
+    )
+    return FallbackTTS(primary, fallback, cooldown_s=cooldown_s, cooldowns=cooldowns)
 
 
 def screen_mode_notice(environ: dict[str, str] | None = None) -> str | None:
@@ -168,9 +248,7 @@ def is_valid_learner_name(name: Any) -> bool:
 
 
 def tts_route(engine) -> str:
-    if isinstance(engine, DialogueTTS):
-        return engine.route()
-    return f"{engine.provider} {engine.model}"
+    return describe_tts(engine)
 
 
 class Tutor(Agent):
@@ -1521,6 +1599,8 @@ async def entrypoint(ctx: JobContext) -> None:
             ended.update(screen.screen_stats_summary())
             if isinstance(tutor, SmartTutor):
                 ended.update(tutor.context_stats_for_analytics())
+            if isinstance(voice, FallbackTTS):
+                ended.update(voice.stats_for_analytics())
             analytics.capture(distinct_id, "tutor_session_ended", ended)
         finally:
             # Off the event loop with a short timeout: a slow analytics

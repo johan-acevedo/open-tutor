@@ -4,6 +4,47 @@ Lead: the thread "state of the project" (Claude, 2026-11-12). The lead keeps thi
 Workers read it before starting and report against it. Decisions here were agreed with Johan
 on 2026-11-12 unless marked open.
 
+## 2026-11-27: Bella primary + Google Cloud Chirp 3: HD Aoede TTS fallback
+
+After a blind Swedish TTS bake-off (Deepgram Flux `flux-ludvig-sv`, ElevenLabs
+`eleven_v4_turbo` Bella/Olivia/Tommy, Google `gemini-3.8-flash-tts` /
+`flash-lite-tts`, and Google Cloud `Chirp 3: HD` Aoede/Leda/Puck), Johan chose
+**ElevenLabs `eleven_v4_turbo` Bella** as primary (~100 ms TTFA, warmest voice,
+word-synced captions, `[brackets]` tag ready; measured 293 credits for 1,472
+chars / 1.81 min on Starter) with **Google Cloud `Chirp 3: HD` Aoede**
+(`sv-SE-Chirp3-HD-Aoede`, 1M chars/month permanent free tier ≈ ~65 active call
+hours/month, verified 344 ms cold streaming TTFA via `livekit-plugins-google`)
+as automatic fallback. Branch `feat/tts-bella-google-fallback`.
+
+- **Why a custom `FallbackTTS` (`server/open_tutor/tts_fallback.py`) instead of
+  LiveKit's stock `tts.FallbackAdapter`:** Stock `FallbackAdapter` computes
+  `aligned_transcript = all(...)`, which silently degrades Bella's word-by-word
+  captions to sentence-level even while Bella is healthy because `google.TTS`
+  reports `aligned_transcript=False`. `FallbackTTS` advertises the active
+  engine's capability (and refreshes `self._capabilities` on failover so later
+  turns skip waiting on an empty aligned stream), owns the retry budget once
+  (`max_retry=0` on inner child streams so retries never multiply and raw
+  provider error bodies never hit SDK retry logs), replays buffered text into
+  fallback if primary fails before emitting PCM, propagates sanitized
+  non-retryable partial failures once PCM has already reached the speaker,
+  stays session-sticky so voices never ping-pong mid-lesson, and persists a
+  shared file-backed cooldown (`TUTOR_TTS_FALLBACK_COOLDOWN_S`, default 600 s;
+  `TUTOR_TTS_COOLDOWN_FILE`, default `~/.cache/open-tutor/tts-cooldowns.json`,
+  mode `0600`) across LiveKit job processes on quota/auth errors
+  (`401`/`402`/`429`/`quota_exceeded`).
+- **Fillers and observability:** `FillerClips` pins to a concrete non-switching
+  engine per voice fingerprint (so failover mid-prep can never cache Aoede
+  audio under Bella's directory) and `Fillers` follows `active_engine` at
+  playback so cached Bella clips stop playing once a session switches to Aoede.
+  Failovers log `tts_failover` (route names, error class/code, cooldown — never
+  spoken text or keys) and `tutor_session_ended` gains `tts_fallback_armed`,
+  `tts_started_on_fallback`, `tts_failovers`, and `tts_served_by`.
+- **Credentials:** `GOOGLE_TTS_CREDENTIALS_JSON` (compact service-account JSON
+  string for Infisical/env), `GOOGLE_APPLICATION_CREDENTIALS` file path, or ADC,
+  eagerly parsed and validated via `google.auth` at `build_tts()` time. Missing
+  or invalid fallback credentials log a fixed warning (never echoing key text)
+  and run primary alone.
+
 ## 2026-11-27: one screenshot in the tutor's context, and look-pass evidence
 
 Two changes to what the live tutor carries and what we can measure about the
