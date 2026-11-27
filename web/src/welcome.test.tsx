@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { bandConfig } from './bands';
 import { helloAudioUrl } from './bands';
 import type { Profile } from './db';
@@ -21,7 +21,7 @@ function profile(over: Partial<Profile> = {}): Profile {
 it('first visit shows the listen control and one start button, no name field or grid', () => {
   render(<Welcome profiles={[]} band={bandConfig('primary')} onPick={() => {}} starting={false} />);
   // No visible bubble: the greeting lives in the listen button's name.
-  expect(screen.getByRole('button', { name: 'Hej! Lyssna på Räven' })).toBeDefined();
+  expect(screen.getByRole('button', { name: /Hör rösten\s*– Räven/ })).toBeDefined();
   expect(screen.queryByText('Hej Elsa!')).toBeNull();
   expect(screen.getByRole('button', { name: 'Prata med Räven' })).toBeDefined();
   expect(screen.queryByRole('textbox')).toBeNull();
@@ -78,7 +78,7 @@ it('the wrong-person link returns to the nameless first-visit page', () => {
     <Welcome profiles={[profile()]} band={bandConfig('primary')} onPick={pick} starting={false} />,
   );
   fireEvent.click(screen.getByRole('button', { name: 'Inte Elsa?' }));
-  expect(screen.getByRole('button', { name: 'Hej! Lyssna på Räven' })).toBeDefined();
+  expect(screen.getByRole('button', { name: /Hör rösten\s*– Räven/ })).toBeDefined();
   expect(screen.queryByText('Hej Elsa!')).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: 'Prata med Räven' }));
   expect(pick).toHaveBeenCalledTimes(1);
@@ -90,7 +90,7 @@ it('opens the nameless first visit directly when asked', () => {
   render(
     <Welcome profiles={[profile()]} band={bandConfig('primary')} onPick={() => {}} starting={false} startOpen />,
   );
-  expect(screen.getByRole('button', { name: 'Hej! Lyssna på Räven' })).toBeDefined();
+  expect(screen.getByRole('button', { name: /Hör rösten\s*– Räven/ })).toBeDefined();
   expect(screen.queryByText('Hej Elsa!')).toBeNull();
 });
 
@@ -119,51 +119,54 @@ it('prefills the assumed student after an in-call switch', () => {
   expect(pick).toHaveBeenCalledWith(profiles[1]);
 });
 
-describe('greeting bubble', () => {
+describe('listen control', () => {
   beforeEach(() => {
     resetGreetingForTests();
     MockAudio.instances = [];
     vi.stubGlobal('Audio', MockAudio as unknown as typeof Audio);
   });
 
-  function bubble(label: RegExp | string) {
+  function listen(label: RegExp | string) {
     return screen.getByRole('button', { name: label });
   }
 
-  it('is a button that names the greeting and the companion', () => {
+  it('is a button whose name is the visible label plus the hidden companion', () => {
     render(<Welcome profiles={[]} band={bandConfig('primary')} onPick={() => {}} starting={false} />);
-    const b = bubble(/Lyssna på Räven$/);
+    const b = listen(/Hör rösten\s*– Räven/);
     expect(b.getAttribute('aria-pressed')).toBe('false');
-    expect(b.getAttribute('aria-label')).toBe('Hej! Lyssna på Räven');
+    expect(b.textContent).toContain('Hör rösten');
+    expect(b.getAttribute('title')).toBe('Lyssna på Räven');
   });
 
   it('names the other companions on their bands', () => {
     render(<Welcome profiles={[]} band={bandConfig('middle')} onPick={() => {}} starting={false} />);
-    expect(bubble(/Lyssna på Lodjuret$/)).toBeDefined();
+    expect(listen(/Hör rösten\s*– Lodjuret/)).toBeDefined();
     cleanup();
     render(<Welcome profiles={[]} band={bandConfig('upper')} onPick={() => {}} starting={false} />);
-    expect(bubble(/Lyssna på Björnen$/)).toBeDefined();
+    expect(listen(/Hör rösten\s*– Björnen/)).toBeDefined();
   });
 
   it('plays the band greeting on tap, stops and rewinds on the next tap', async () => {
     render(<Welcome profiles={[]} band={bandConfig('primary')} onPick={() => {}} starting={false} />);
-    const b = bubble(/Lyssna på Räven$/);
+    const b = listen(/Hör rösten\s*– Räven/);
     expect(MockAudio.instances).toHaveLength(0);
     fireEvent.click(b);
     expect(MockAudio.instances).toHaveLength(1);
     expect(MockAudio.instances[0].src).toBe(helloAudioUrl('primary'));
     expect(MockAudio.instances[0].preload).toBe('auto');
     await waitFor(() => expect(b.getAttribute('aria-pressed')).toBe('true'));
+    expect(b.textContent).toContain('Spelar…');
     MockAudio.instances[0].currentTime = 1.4;
     fireEvent.click(b);
     expect(MockAudio.instances[0].paused).toBe(true);
     expect(MockAudio.instances[0].currentTime).toBe(0);
     expect(b.getAttribute('aria-pressed')).toBe('false');
+    expect(b.textContent).toContain('Hör rösten');
   });
 
   it('preloads on pointer/focus intent and reuses the clip on click without autoplaying', async () => {
     render(<Welcome profiles={[]} band={bandConfig('primary')} onPick={() => {}} starting={false} />);
-    const b = bubble(/Lyssna på Räven$/);
+    const b = listen(/Hör rösten\s*– Räven/);
     expect(MockAudio.instances).toHaveLength(0);
     fireEvent.pointerEnter(b);
     expect(MockAudio.instances).toHaveLength(1);
@@ -191,7 +194,7 @@ describe('greeting bubble', () => {
     render(
       <Welcome profiles={[]} band={bandConfig('primary')} onPick={(p: Profile) => { order.push('pick'); pick(p); }} starting={false} onStartGesture={() => order.push('unlock')} />,
     );
-    const b = bubble(/Lyssna på Räven$/);
+    const b = listen(/Hör rösten\s*– Räven/);
     fireEvent.click(b);
     await waitFor(() => expect(b.getAttribute('aria-pressed')).toBe('true'));
     fireEvent.click(screen.getByRole('button', { name: 'Prata med Räven' }));
@@ -201,23 +204,41 @@ describe('greeting bubble', () => {
     expect(pick).toHaveBeenCalledTimes(1);
   });
 
-  it('its accessible name starts with the visible greeting', () => {
+  it('its accessible name starts with the visible label', () => {
     render(<Welcome profiles={[]} band={bandConfig('primary')} onPick={() => {}} starting={false} />);
-    expect(bubble('Hej! Lyssna på Räven')).toBeDefined();
+    const b = listen(/Hör rösten\s*– Räven/);
+    const visible = b.querySelector('.tp-listen-label')?.textContent ?? '';
+    expect(visible).toContain('Hör rösten');
+    expect(screen.getByRole('button', { name: /Hör rösten\s*– Räven/ })).toBe(b);
   });
 
   it('stops the clip when the band changes or the page unmounts', async () => {
     const { rerender, unmount } = render(
       <Welcome profiles={[]} band={bandConfig('primary')} onPick={() => {}} starting={false} />,
     );
-    fireEvent.click(bubble(/Lyssna på Räven$/));
+    fireEvent.click(listen(/Hör rösten\s*– Räven/));
     await waitFor(() => expect(MockAudio.instances[0].paused).toBe(false));
     rerender(<Welcome profiles={[]} band={bandConfig('middle')} onPick={() => {}} starting={false} />);
     expect(MockAudio.instances[0].paused).toBe(true);
-    expect(bubble(/Lyssna på Lodjuret$/).getAttribute('aria-pressed')).toBe('false');
-    fireEvent.click(bubble(/Lyssna på Lodjuret$/));
+    expect(listen(/Hör rösten\s*– Lodjuret/).getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(listen(/Hör rösten\s*– Lodjuret/));
     await waitFor(() => expect(MockAudio.instances.at(-1)!.paused).toBe(false));
     unmount();
     expect(MockAudio.instances.at(-1)!.paused).toBe(true);
+  });
+
+  it('ignores a late error from a clip it already switched away from', async () => {
+    const { rerender } = render(
+      <Welcome profiles={[]} band={bandConfig('primary')} onPick={() => {}} starting={false} />,
+    );
+    fireEvent.click(listen(/Hör rösten\s*– Räven/));
+    await waitFor(() => expect(MockAudio.instances.length).toBe(1));
+    rerender(<Welcome profiles={[]} band={bandConfig('middle')} onPick={() => {}} starting={false} />);
+    const lynxListen = listen(/Hör rösten\s*– Lodjuret/);
+    fireEvent.click(lynxListen);
+    await waitFor(() => expect(lynxListen.getAttribute('aria-pressed')).toBe('true'));
+    // The Räven clip fails late (a 404 arriving after the switch).
+    act(() => MockAudio.instances[0].emit('error'));
+    expect(lynxListen.getAttribute('aria-pressed')).toBe('true');
   });
 });

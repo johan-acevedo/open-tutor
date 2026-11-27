@@ -1,3 +1,4 @@
+import type { BandId } from '../bands';
 import { t, type SvKey } from '../locales/sv';
 import { PaperFooter, PaperMast, PaperPage } from './Paper';
 
@@ -10,27 +11,14 @@ const SECTIONS: Array<[SvKey, SvKey]> = [
 /** Public privacy page at /integritet: a short, calm statement of how
  *  Talarum treats what is said, on the same warm paper as the start pages.
  *  Principles, not a vendor list, so it stays true as providers change.
- *  Copy lives in web/src/locales/sv.ts. */
-export default function PrivacyPage({ onBack }: { onBack: () => void }) {
+ *  The masthead's band nav leads back to the start pages, so the page ends
+ *  with one back button and no second back link at the top. Copy lives in
+ *  web/src/locales/sv.ts. */
+export default function PrivacyPage({ onBack, onNavigate }: { onBack: () => void; onNavigate?: (target: BandId) => void }) {
   const email = t('privacy.contactEmail');
   return (
     <PaperPage>
-      <PaperMast
-        right={
-          <a
-            className="tp-mast-link"
-            href="/"
-            onClick={(event) => {
-              if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-              event.preventDefault();
-              onBack();
-            }}
-          >
-            <span aria-hidden="true">← </span>
-            {t('privacy.back')}
-          </a>
-        }
-      />
+      <PaperMast active="privacy" onNavigate={onNavigate} />
       <main className="tp-privacy tp-wrap">
         <p className="tp-kicker">{t('privacy.kicker')}</p>
         <h1 className="tp-h1 tp-privacy-title">{t('privacy.title')}</h1>

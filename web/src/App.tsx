@@ -101,6 +101,14 @@ export default function App() {
       /* ignore */
     }
     choseBandRef.current = true;
+    // The paper pages scroll on the document: a new page starts at the top
+    // (the privacy page's back button sits at the bottom).
+    try {
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+    } catch {
+      /* ignore */
+    }
     // An explicit user navigation wins over a pending in-call-switch
     // prefill and clears it; the prefill effect's own redirect keeps it.
     if (!opts?.keepPrefill) session.clearPrefill();
@@ -261,6 +269,13 @@ export default function App() {
     } catch {
       /* ignore */
     }
+    // Paper pages scroll on the document (iOS URL-bar collapse, status-bar
+    // tap to top); the call view keeps its fixed viewport (paper.css).
+    try {
+      document.documentElement.classList.toggle('ot-doc-scroll', paperView);
+    } catch {
+      /* ignore */
+    }
   }, [paperView]);
 
   const inSession = phase === 'live' || phase === 'ending' || phase === 'connecting';
@@ -279,12 +294,23 @@ export default function App() {
     document.querySelector<HTMLInputElement>('.ot-chat-input')?.focus();
   }
 
-  /** Quiet cross-links: a band page, or the family front door (/). Same
-   *  target as the rendered href, so other query parameters stay. */
+  /** Band nav: a band page, or the front door (/) for Åk 1–6. Same target
+   *  as the rendered href, so other query parameters stay. On / a
+   *  remembered Åk 1–6 learner is greeted by name; anyone else gets the
+   *  nameless front door (never another band's companion under "Åk 1–6"). */
   function navigateTo(target: BandId | '/') {
-    if (target === '/') {
-      setForceChooser(true);
-      navigate('/');
+    if (target === '/' || target === 'primary') {
+      const lastId = getLastProfileIdSafe();
+      const learner = lastId ? profiles.find((p) => p.id === lastId && p.name.trim() !== '') : undefined;
+      setForceChooser(!learner || (learner.band ?? 'primary') !== 'primary');
+      try {
+        const url = new URL(window.location.href);
+        url.pathname = '/';
+        url.searchParams.delete('band');
+        navigate(url.pathname + url.search);
+      } catch {
+        navigate('/');
+      }
       return;
     }
     try {
@@ -468,12 +494,12 @@ export default function App() {
       )}
 
       {phase === 'profiles' && isPrivacy && (
-        <PrivacyPage onBack={() => navigate('/')} />
+        <PrivacyPage onBack={() => navigate('/')} onNavigate={navigateTo} />
       )}
 
       {phase === 'profiles' && !isPrivacy && pickerOpen && (
         <PaperPage>
-          <PaperMast />
+          <PaperMast onNavigate={navigateTo} />
           <main className="tp-wrap">
             <HouseholdPicker
               profiles={profiles}
