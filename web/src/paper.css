@@ -19,6 +19,8 @@
   --tp-terra: #c85634;
   /* Small text in the accent: darker for contrast on paper (5:1). */
   --tp-terra-ink: #a4442a;
+  /* Large accent text (headline accent, open maths line): 4.5:1 on paper. */
+  --tp-terra-text: #b84d2e;
   --tp-coral: #d45c38;
   --tp-amber: #e0a13e;
   --tp-pen: #22314a;
@@ -273,7 +275,7 @@ html:has(.tp) body {
 
 .tp-h1 i {
   font-style: italic;
-  color: var(--tp-terra);
+  color: var(--tp-terra-text);
 }
 
 .tp-h2 {
@@ -562,7 +564,7 @@ html:has(.tp) body {
 }
 
 .tp-hand-next {
-  color: var(--tp-terra);
+  color: var(--tp-terra-text);
 }
 
 .tp-said {
@@ -1415,17 +1417,18 @@ html:has(.tp) body {
       0 18px 36px -18px #1a1613b3,
       inset 0 1px 0 #ffffff1a;
   }
+  /* Sized so the eyes and the pointing hand both fit the small frame. */
   .tp-show[data-companion="primary"] .tp-call img {
-    width: 150%;
+    width: 140%;
     right: -38%;
   }
   .tp-show[data-companion="middle"] .tp-call img {
-    width: 172%;
-    right: -52%;
+    width: 140%;
+    right: -36%;
   }
   .tp-show[data-companion="upper"] .tp-call img {
-    width: 172%;
-    right: -60%;
+    width: 140%;
+    right: -40%;
   }
   .tp-call .tp-wave {
     bottom: 9px;

@@ -154,6 +154,25 @@ Johan approved the Gemini v2 mockup; v4 brings the live paper landing to it. Bra
 - **`/integritet`** keeps Johan's text; the top "← Tillbaka" link was dropped (the band nav leads
   back), leaving one "Tillbaka till start" button at the end.
 - `og.png` kept: it is the v3 warm paper card and still matches.
+- **Review (Codex gpt-6.2-astra, cross-family):** one blocker and six should-fixes, all fixed
+  with tests. (1) Blocker: on a `tutor.*` host the band links kept the path (`tutor3.…/ak1-6`), and
+  the path outranks the host, so the page stayed on Räven. Host links now reset the path to `/`
+  (`bandLinkHref`, pure and tested). (2) Back to a `/` entry reached via `Åk 1–6` brought back the
+  remembered Högstadiet learner. The history entry now stores the explicit choice. (3) The Räven
+  front door lost the household menu when someone was remembered; it now has it. (4) The mobile
+  picture-in-picture cropped Björnen's and Lodjuret's eyes; all three poses were re-sized so the
+  eyes and the pointing hand fit. (5) The step equations were all `aria-hidden`, so the finished
+  line was never read; each illustration is now a labelled image (`36 + 47`, `30 + 40 = 70`,
+  `70 + 13 = 83`). (6) The headline accent and the open maths line were 3.9 and 4.1:1; a new
+  `--tp-terra-text` (`#b84d2e`) gives 4.5 and 4.8:1. (7) A band click that swaps the page component
+  dropped keyboard focus to `<body>`; focus now moves to the new page's current band link.
+- **Verified:** web 318 vitest, `tsc`, build; server 680 pytest. Playwright (system Chrome) on the
+  built app served by the real FastAPI web service on a private port, 19 views at 1440×900,
+  820×1180, 390×844 and 360×640 (`/`, `/hogstadiet`, `/gymnasiet`, `/studier`, `/integritet`,
+  returning learner, household picker; fictional profiles). No horizontal overflow, console errors
+  or broken images. The start button ends at 383 px or less on phones, and start + `Hör rösten`
+  stay on one row at 390 and 360. Not verified: a real call, real devices, iOS Safari's URL bar,
+  and audio on the new listen pill (logic unchanged, unit-tested).
 
 ## 2026-11-27: warm paper editorial landing (v3) and a simpler /integritet
 

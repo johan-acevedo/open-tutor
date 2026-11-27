@@ -226,6 +226,54 @@ describe('band nav', () => {
   });
 });
 
+describe('band nav review fixes', () => {
+  it('Back restores the nameless Åk 1–6 page, not the remembered learner', async () => {
+    await saveProfile(stored({ id: 'r1', name: 'Mio', grade: 7, band: 'middle', createdAt: 1 }));
+    localStorage.setItem('open-tutor-last-profile', 'r1');
+    window.history.replaceState(null, '', '/hogstadiet');
+    sessionMock.useSession.mockReturnValue(baseSession({}));
+    render(<App />);
+    await waitFor(() => expect(screen.getByText('Hej Mio!')).toBeDefined());
+    fireEvent.click(screen.getByRole('link', { name: 'Åk 1–6' }));
+    await waitFor(() => expect(window.location.pathname).toBe('/'));
+    expect(screen.queryByText('Hej Mio!')).toBeNull();
+    fireEvent.click(screen.getByRole('link', { name: 'Gymnasiet' }));
+    await waitFor(() => expect(window.location.pathname).toBe('/gymnasiet'));
+    // Browser Back to the / entry: still the Räven front door.
+    window.history.back();
+    await waitFor(() => expect(window.location.pathname).toBe('/'));
+    await waitFor(() => expect(document.querySelector('.ot-root')?.getAttribute('data-band')).toBe('primary'));
+    expect(screen.queryByText('Hej Mio!')).toBeNull();
+    expect(screen.getAllByRole('button', { name: 'Prata med Räven' }).length).toBeGreaterThan(0);
+  });
+
+  it('keeps the household menu on the Räven front door when the device remembers someone', async () => {
+    await saveProfile(stored({ id: 'r2', name: 'Mio', grade: 7, band: 'middle', createdAt: 2 }));
+    localStorage.setItem('open-tutor-last-profile', 'r2');
+    window.history.replaceState(null, '', '/hogstadiet');
+    sessionMock.useSession.mockReturnValue(baseSession({}));
+    render(<App />);
+    await waitFor(() => expect(screen.getByText('Hej Mio!')).toBeDefined());
+    fireEvent.click(screen.getByRole('link', { name: 'Åk 1–6' }));
+    await waitFor(() => expect(window.location.pathname).toBe('/'));
+    fireEvent.click(screen.getByRole('button', { name: 'Meny' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Byt elev' }));
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Vem ska prata?' })).toBeDefined());
+  });
+
+  it('keeps keyboard focus on the band nav when the page component changes', async () => {
+    window.history.replaceState(null, '', '/');
+    sessionMock.useSession.mockReturnValue(baseSession({}));
+    render(<App />);
+    const middle = await screen.findByRole('link', { name: 'Högstadiet' });
+    middle.focus();
+    fireEvent.click(middle);
+    await waitFor(() => expect(window.location.pathname).toBe('/hogstadiet'));
+    await waitFor(() => expect(document.activeElement?.textContent).toBe('Högstadiet'));
+    expect(document.activeElement?.getAttribute('aria-current')).toBe('page');
+  });
+});
+
 describe('household picker Back', () => {
   it('moves focus to the start control instead of dropping it to <body>', async () => {
     await saveProfile(stored({ id: 't6-old', name: 'Alva', grade: 4, band: 'primary', createdAt: 6 }));

@@ -46,23 +46,30 @@ const NAV: Array<[BandId, SvKey]> = [
   ['upper', 'landing.navUpper'],
 ];
 
-/** Where a band link points. On a tutor.* host the prefix is swapped (full
- *  load); on any other host Åk 1–6 is the front door (/) and the other bands
- *  their own paths. */
-export function bandHref(target: BandId): string {
+/** Where a band link points, from the current page's URL. On a tutor.*
+ *  host the prefix is swapped and the path reset to / (a full load; a kept
+ *  path such as /ak1-6 or /integritet would outrank the new host and show the
+ *  wrong page). On any other host Åk 1–6 is the front door (/) and the other
+ *  bands their own paths; other query parameters stay, ?band= is dropped.
+ *  Pure: takes and returns strings. */
+export function bandLinkHref(target: BandId, href: string): string {
+  const url = new URL(href);
+  if (explicitHostBand(url.hostname) !== null) {
+    const next = new URL(bandUrl(target, href));
+    next.pathname = '/';
+    next.hash = '';
+    return next.toString();
+  }
+  const next = target === 'primary' ? url : new URL(bandUrl(target, href));
+  if (target === 'primary') next.pathname = '/';
+  next.searchParams.delete('band');
+  next.hash = '';
+  return next.pathname + next.search;
+}
+
+function bandHref(target: BandId): string {
   try {
-    const href = window.location.href;
-    if (explicitHostBand(window.location.hostname) !== null) return bandUrl(target, href);
-    if (target === 'primary') {
-      const url = new URL(href);
-      url.pathname = '/';
-      url.searchParams.delete('band');
-      url.hash = '';
-      return url.pathname + url.search;
-    }
-    const url = new URL(bandUrl(target, href));
-    url.hash = '';
-    return url.pathname + url.search;
+    return bandLinkHref(target, window.location.href);
   } catch {
     return target === 'primary' ? '/' : `/${target === 'middle' ? 'hogstadiet' : 'gymnasiet'}`;
   }
@@ -385,10 +392,10 @@ export function StepsSection({ band }: { band: BandConfig }) {
         <h2 className="tp-h2" id="tp-how-title">{t(parent ? 'landing.howHeadPrimary' : 'landing.howHeadYou')}</h2>
         <ol className="tp-steps" data-companion={band.id}>
           <li>
-            <div className="tp-art tp-art-capture" aria-hidden="true">
+            <div className="tp-art tp-art-capture" role="img" aria-label={t(book.problem)}>
               <img src="/illustrations/step-capture.webp" alt="" width={960} height={536} loading="lazy" decoding="async" />
-              <span className="tp-ink tp-ink-page">{t(book.problem)}</span>
-              <span className="tp-ink tp-ink-screen">{t(book.problem)}</span>
+              <span className="tp-ink tp-ink-page" aria-hidden="true">{t(book.problem)}</span>
+              <span className="tp-ink tp-ink-screen" aria-hidden="true">{t(book.problem)}</span>
             </div>
             <h3>
               <span className="tp-step-n">{t('landing.stepN', { n: 1 })}</span> {t('landing.step1Title')}
@@ -396,9 +403,9 @@ export function StepsSection({ band }: { band: BandConfig }) {
             <p>{t(parent ? 'landing.step1TextPrimary' : 'landing.step1TextYou')}</p>
           </li>
           <li>
-            <div className="tp-art tp-art-talk" aria-hidden="true">
+            <div className="tp-art tp-art-talk" role="img" aria-label={t(book.row1)}>
               <img src={TALK_ART[band.id]} alt="" width={960} height={536} loading="lazy" decoding="async" />
-              <span className="tp-ink tp-ink-board">{t(book.row1)}</span>
+              <span className="tp-ink tp-ink-board" aria-hidden="true">{t(book.row1)}</span>
               <Wave bars={19} className="tp-wave-board" />
             </div>
             <h3>
@@ -407,9 +414,9 @@ export function StepsSection({ band }: { band: BandConfig }) {
             <p>{t(parent ? 'landing.step2TextPrimary' : 'landing.step2TextYou', { companion })}</p>
           </li>
           <li>
-            <div className="tp-art tp-art-solve" aria-hidden="true">
+            <div className="tp-art tp-art-solve" role="img" aria-label={t(book.done).replace(/\s+/g, ' ')}>
               <img src="/illustrations/step-solve.webp" alt="" width={960} height={536} loading="lazy" decoding="async" />
-              <span className="tp-ink tp-ink-done">
+              <span className="tp-ink tp-ink-done" aria-hidden="true">
                 {t(book.done)} <b>✓</b>
               </span>
             </div>

@@ -328,6 +328,15 @@ describe('steps', () => {
   });
 });
 
+describe('steps for screen readers', () => {
+  it('names each step equation once, including the finished line', () => {
+    firstVisit('primary');
+    const steps = document.getElementById('sa-gar-det-till') as HTMLElement;
+    const names = within(steps).getAllByRole('img').map((el) => el.getAttribute('aria-label'));
+    expect(names).toEqual(['36 + 47', '30 + 40 = 70', '70 + 13 = 83']);
+  });
+});
+
 describe('price', () => {
   it('comes after the steps and names the free test period', () => {
     firstVisit();
