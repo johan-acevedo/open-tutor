@@ -73,6 +73,7 @@ describe('normalizeAliasUrl', () => {
     expect(normalizeAliasUrl('/lodjuret', '?band=upper', '#x')).toBe('/hogstadiet?band=upper#x');
     expect(normalizeAliasUrl('/raven', '', '')).toBe('/ak1-6');
     expect(normalizeAliasUrl('/vuxen', '?a=b', '')).toBe('/gymnasiet?a=b');
+    expect(normalizeAliasUrl('/studier', '?a=b', '#x')).toBe('/gymnasiet?a=b#x');
   });
   it('leaves canonical paths and band-less paths alone', () => {
     expect(normalizeAliasUrl('/hogstadiet', '?band=upper', '#x')).toBeNull();
@@ -126,6 +127,7 @@ describe('bandFromPath', () => {
     expect(bandFromPath('/lodjuret')).toBe('middle');
     expect(bandFromPath('/bjornen')).toBe('upper');
     expect(bandFromPath('/vuxen')).toBe('upper');
+    expect(bandFromPath('/studier')).toBe('upper');
     expect(bandFromPath('/hogstadiet/')).toBe('middle');
   });
 
@@ -135,5 +137,6 @@ describe('bandFromPath', () => {
     expect(resolveBand({ hostname: 'tutor2.example.se', search: '', pathname: '/gymnasiet' })).toBe('upper');
     expect(resolveBand({ hostname: 'tutor.example.se', search: '?band=upper', pathname: '/hogstadiet' })).toBe('upper');
     expect(resolveBand({ hostname: 'localhost', search: '', pathname: '/' })).toBe('primary');
+    expect(resolveBand({ hostname: 'talarum.se', search: '', pathname: '/studier' })).toBe('upper');
   });
 });

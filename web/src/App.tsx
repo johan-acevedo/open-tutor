@@ -11,6 +11,7 @@ import Brand from './components/Brand';
 import LandingPage from './components/LandingPage';
 import ChooserPage from './components/ChooserPage';
 import HouseholdPicker from './components/HouseholdPicker';
+import { PaperMast, PaperPage } from './components/Paper';
 import { focusStartControl } from './focus';
 import { stopGreeting } from './components/greetingAudio';
 import PrivacyPage from './components/PrivacyPage';
@@ -108,7 +109,7 @@ export default function App() {
     setPickerOpen(false);
   }, [session.clearPrefill]);
 
-  // Alias paths (/raven, /lodjuret, /bjornen, /vuxen) normalize to the
+  // Alias paths (/raven, /lodjuret, /bjornen, /vuxen, /studier) normalize to the
   // canonical band path without a reload or a history entry. The query
   // string and fragment survive: ?band= and #anchors are not dropped.
   useEffect(() => {
@@ -251,6 +252,17 @@ export default function App() {
     if (learner?.band && learner.band !== band) setBand(learner.band);
   }, [phase, pickerOpen, forceChooser, profiles, route, band]);
 
+  // The start pages are warm light paper; the call views stay dark. The
+  // browser chrome follows (index.html carries the paper default).
+  const paperView = phase === 'profiles';
+  useEffect(() => {
+    try {
+      document.querySelector('meta[name="theme-color"]')?.setAttribute('content', paperView ? '#f6f1e7' : '#171411');
+    } catch {
+      /* ignore */
+    }
+  }, [paperView]);
+
   const inSession = phase === 'live' || phase === 'ending' || phase === 'connecting';
   const showBottomBar = phase === 'live' || phase === 'ending';
   const mode = layoutMode(session.items.length);
@@ -265,6 +277,22 @@ export default function App() {
 
   function focusChatInput() {
     document.querySelector<HTMLInputElement>('.ot-chat-input')?.focus();
+  }
+
+  /** Quiet cross-links: a band page, or the family front door (/). Same
+   *  target as the rendered href, so other query parameters stay. */
+  function navigateTo(target: BandId | '/') {
+    if (target === '/') {
+      setForceChooser(true);
+      navigate('/');
+      return;
+    }
+    try {
+      const url = new URL(bandUrl(target, window.location.href));
+      navigate(url.pathname + url.search);
+    } catch {
+      navigate(BAND_PATHS[target]);
+    }
   }
 
   /** Start a call, stamping the band on a stored profile and remembering it
@@ -444,13 +472,9 @@ export default function App() {
       )}
 
       {phase === 'profiles' && !isPrivacy && pickerOpen && (
-        <div className="ot-land">
-          <header className="ot-land-top">
-            <div className="ot-land-topinner">
-              <Brand />
-            </div>
-          </header>
-          <div className="ot-land-scroll">
+        <PaperPage>
+          <PaperMast />
+          <main className="tp-wrap">
             <HouseholdPicker
               profiles={profiles}
               band={band}
@@ -465,12 +489,12 @@ export default function App() {
                 session.clearProfilesOpen();
               }}
             />
-          </div>
-        </div>
+          </main>
+        </PaperPage>
       )}
 
       {phase === 'profiles' && !isPrivacy && !pickerOpen && showChooser && (
-        <ChooserPage onBegin={beginInBand} starting={false} />
+        <ChooserPage onBegin={beginInBand} starting={false} onNavigate={navigateTo} />
       )}
 
       {phase === 'profiles' && !isPrivacy && !pickerOpen && !showChooser && (
@@ -485,15 +509,7 @@ export default function App() {
           onSwitch={openPicker}
           onNotYou={openPicker}
           ignoreLastId={routeBand !== null}
-          onBandLink={(target) => {
-            // Same target as the rendered href: other query parameters stay.
-            try {
-              const url = new URL(bandUrl(target, window.location.href));
-              navigate(url.pathname + url.search);
-            } catch {
-              navigate(BAND_PATHS[target]);
-            }
-          }}
+          onBandLink={navigateTo}
         />
       )}
 

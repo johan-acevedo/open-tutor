@@ -4,6 +4,44 @@ Lead: the thread "state of the project" (Claude, 2026-11-12). The lead keeps thi
 Workers read it before starting and report against it. Decisions here were agreed with Johan
 on 2026-11-12 unless marked open.
 
+## 2026-11-27: warm paper editorial landing (v3) and a simpler /integritet
+
+Johan picked concept B of three commercial explorations (warm light paper, serif display
+type, a squared exercise book as the board, a ruled price list). Branch `feat/talarum-paper-v3`.
+
+- **Light paper on the start pages only.** `/`, the band pages, the household picker and
+  `/integritet` share `web/src/paper.css` (scoped under `.tp`): paper `#f6f1e7`/`#fbf8f2`,
+  espresso ink `#1a1613`, stone `#61584f`, hairlines `#ddd5c8`, terracotta `#c85634` from the
+  light logo (darker `#a4442a` for small accent text). The call view, end card and Smart Screen
+  keep their dark band themes; `theme-color` follows (paper before the call, dark in it).
+- **Self-hosted fonts.** Fraunces (variable, opsz + italic), Plus Jakarta Sans and Caveat come
+  from fontsource; the Lexend link to jsdelivr in `BandContext.tsx` became a fontsource import
+  too. The Smart Screen frame still loads Lexend and its libraries from jsdelivr (unchanged).
+- **One audience per page.** `/` speaks to grundskola families only: "En lugn läxkompis som
+  *pratar* – och visar.", a two-way switch (Åk 1–6 · Räven | Högstadiet · Lodjuret) that swaps
+  the exercise book, the companion, the listen button and the single dark start button (one tap
+  starts the call). `/gymnasiet` (aliases `/studier`, `/bjornen`, `/vuxen`) is adult
+  studiestöd with no "läxkompis" or "ditt barn" ("Lugnt studiestöd du kan *prata* med.",
+  derivative board). Each page links the other audience quietly above the footer
+  ("Pluggar du på gymnasiet eller som vuxen? → Studiestöd med Björnen"; "Yngre syskon hemma? →
+  Läxhjälp för åk 1–9"). The returning view on `/` keeps "Hej {name}!", the one-tap start and
+  "Inte {name}?" → household picker with all three bands.
+- **Honest planned price.** Beside the start button: "Gratis medan vi testar." plus the planned
+  price (2 tim/vecka gratis, sedan 25 kr/tim, ingen prenumeration). Below the hero a ruled
+  "Planerat pris" list and a bar comparison with human tutoring (300–500 kr/tim), stating that
+  everything is free during the test period with no account or card. Nothing is billed and no
+  weekly reset exists yet; the copy says "planerat" throughout.
+- **`/integritet` is principles, not a vendor list.** Four short sections (what stays in the
+  browser, what is sent during a call, statistics and ads, contact). No named providers, so it
+  stays true when providers change; the photo-covering tip was cut at Johan's request.
+- **Removed:** the dark landing and chooser CSS (`.ot-land-*`, `.ot-choose-*`, `.ot-privacy*`,
+  about 1,370 lines), the header ghost CTA and the "Om Talarum" nav button on band pages (the
+  hamburger keeps switch, about and privacy). `og.png` is now on paper with a faint grid.
+- **Verified:** Playwright on the built app via `vite preview` (1440×900, 820×1180, 390×844,
+  360×640; `/`, switcher on Lodjuret, `/ak1-6`, `/hogstadiet`, `/gymnasiet`, `/studier`,
+  `/integritet`, returning learner and picker with fictional profiles): no horizontal overflow,
+  start button above the fold at 360×640. Not verified: a real call, real devices, Safari.
+
 ## 2026-11-26: warm Talarum palette and companion-portrait chooser (design v2)
 
 Johan on the live v1: "okej första version men långt ifrån hur bra jag tror det kan bli",

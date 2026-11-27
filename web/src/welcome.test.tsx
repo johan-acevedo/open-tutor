@@ -18,9 +18,11 @@ function profile(over: Partial<Profile> = {}): Profile {
   return { id: 'p1', name: 'Elsa', grade: 4, notes: [], createdAt: 0, ...over };
 }
 
-it('first visit shows the bubble and one start button, no name field or grid', () => {
+it('first visit shows the listen control and one start button, no name field or grid', () => {
   render(<Welcome profiles={[]} band={bandConfig('primary')} onPick={() => {}} starting={false} />);
-  expect(screen.getByText('Hej!')).toBeDefined();
+  // No visible bubble: the greeting lives in the listen button's name.
+  expect(screen.getByRole('button', { name: 'Hej! Lyssna på Räven' })).toBeDefined();
+  expect(screen.queryByText('Hej Elsa!')).toBeNull();
   expect(screen.getByRole('button', { name: 'Prata med Räven' })).toBeDefined();
   expect(screen.queryByRole('textbox')).toBeNull();
   expect(screen.queryByRole('listbox')).toBeNull();
@@ -53,15 +55,20 @@ it('returning visit assumes the same student with the same button', () => {
   expect(pick).toHaveBeenCalledWith(profile());
 });
 
-it('returning visit keeps the not-you link on the same row as the button', () => {
+it('returning visit keeps the name and the not-you link in one paragraph', () => {
   localStorage.setItem('open-tutor-last-profile', 'p1');
   render(
     <Welcome profiles={[profile()]} band={bandConfig('primary')} onPick={() => {}} starting={false} />,
   );
+  const hello = document.querySelector('p.tp-hello');
+  expect(hello).not.toBeNull();
+  expect(hello?.textContent).toContain('Hej Elsa!');
   const cta = screen.getByRole('button', { name: 'Prata med Räven' });
   const notYou = screen.getByRole('button', { name: 'Inte Elsa?' });
-  expect(cta.parentElement).toBe(notYou.parentElement);
-  expect(cta.parentElement?.className).toContain('ot-land-cta-row');
+  // The greeting shares its paragraph with the not-you link; the start
+  // button sits beside the listen control in the CTA row.
+  expect(notYou.parentElement).toBe(hello);
+  expect(cta.parentElement?.className).toContain('tp-cta-row');
 });
 
 it('the wrong-person link returns to the nameless first-visit page', () => {
@@ -71,7 +78,7 @@ it('the wrong-person link returns to the nameless first-visit page', () => {
     <Welcome profiles={[profile()]} band={bandConfig('primary')} onPick={pick} starting={false} />,
   );
   fireEvent.click(screen.getByRole('button', { name: 'Inte Elsa?' }));
-  expect(screen.getByText('Hej!')).toBeDefined();
+  expect(screen.getByRole('button', { name: 'Hej! Lyssna på Räven' })).toBeDefined();
   expect(screen.queryByText('Hej Elsa!')).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: 'Prata med Räven' }));
   expect(pick).toHaveBeenCalledTimes(1);
@@ -83,7 +90,7 @@ it('opens the nameless first visit directly when asked', () => {
   render(
     <Welcome profiles={[profile()]} band={bandConfig('primary')} onPick={() => {}} starting={false} startOpen />,
   );
-  expect(screen.getByText('Hej!')).toBeDefined();
+  expect(screen.getByRole('button', { name: 'Hej! Lyssna på Räven' })).toBeDefined();
   expect(screen.queryByText('Hej Elsa!')).toBeNull();
 });
 
@@ -123,11 +130,11 @@ describe('greeting bubble', () => {
     return screen.getByRole('button', { name: label });
   }
 
-  it('is a button that names the companion', () => {
+  it('is a button that names the greeting and the companion', () => {
     render(<Welcome profiles={[]} band={bandConfig('primary')} onPick={() => {}} starting={false} />);
     const b = bubble(/Lyssna på Räven$/);
     expect(b.getAttribute('aria-pressed')).toBe('false');
-    expect(b.textContent).toContain('Hej!');
+    expect(b.getAttribute('aria-label')).toBe('Hej! Lyssna på Räven');
   });
 
   it('names the other companions on their bands', () => {
