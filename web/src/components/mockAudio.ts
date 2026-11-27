@@ -5,13 +5,19 @@
 export class MockAudio {
   static instances: MockAudio[] = [];
   src: string;
+  preload = '';
   paused = true;
   currentTime = 0;
+  loadCalls = 0;
   private handlers = new Map<string, (() => void)[]>();
 
   constructor(src?: string) {
     this.src = src ?? '';
     MockAudio.instances.push(this);
+  }
+
+  load(): void {
+    this.loadCalls += 1;
   }
 
   play(): Promise<void> {

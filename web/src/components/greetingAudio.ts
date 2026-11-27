@@ -61,6 +61,7 @@ function ensure(band: BandId): HTMLAudioElement {
     stopGreeting();
     elBand = band;
     const audio = new Audio(helloAudioUrl(band));
+    audio.preload = 'auto';
     el = audio;
     // Only the current clip may change the state: a late error or pause
     // from a clip we already switched away from must not clear the new one.
@@ -74,13 +75,25 @@ function ensure(band: BandId): HTMLAudioElement {
   return el;
 }
 
+/** Pre-fetch and decode the greeting clip on user intent (hover, pointerdown,
+ *  focus) so the first tap plays from a warm buffer without autoplaying or
+ *  interrupting a clip that is already playing. */
+export function preloadGreeting(band: BandId): void {
+  if (playing || (el && !el.paused) || (el && elBand === band)) return;
+  const audio = ensure(band);
+  try {
+    audio.load?.();
+  } catch {
+    /* jsdom or stubbed Audio without load() */
+  }
+}
+
 /** Toggle the greeting clip for this band. Safe to call when the file is
  *  missing (404): the error listener just flips back to not playing. */
 export function toggleGreeting(band: BandId): void {
   const audio = ensure(band);
   if (!audio.paused) {
-    audio.pause();
-    setPlaying(false);
+    stopGreeting();
     return;
   }
   try {

@@ -5,7 +5,7 @@ import { helloAudioUrl } from './bands';
 import type { Profile } from './db';
 import Welcome from './components/Welcome';
 import { MockAudio } from './components/mockAudio';
-import { resetGreetingForTests } from './components/greetingAudio';
+import { preloadGreeting, resetGreetingForTests } from './components/greetingAudio';
 
 afterEach(() => {
   cleanup();
@@ -145,17 +145,44 @@ describe('greeting bubble', () => {
     expect(bubble(/Lyssna på Björnen$/)).toBeDefined();
   });
 
-  it('plays the band greeting on tap, stops on the next tap', async () => {
+  it('plays the band greeting on tap, stops and rewinds on the next tap', async () => {
     render(<Welcome profiles={[]} band={bandConfig('primary')} onPick={() => {}} starting={false} />);
     const b = bubble(/Lyssna på Räven$/);
     expect(MockAudio.instances).toHaveLength(0);
     fireEvent.click(b);
     expect(MockAudio.instances).toHaveLength(1);
     expect(MockAudio.instances[0].src).toBe(helloAudioUrl('primary'));
+    expect(MockAudio.instances[0].preload).toBe('auto');
     await waitFor(() => expect(b.getAttribute('aria-pressed')).toBe('true'));
+    MockAudio.instances[0].currentTime = 1.4;
     fireEvent.click(b);
     expect(MockAudio.instances[0].paused).toBe(true);
+    expect(MockAudio.instances[0].currentTime).toBe(0);
     expect(b.getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('preloads on pointer/focus intent and reuses the clip on click without autoplaying', async () => {
+    render(<Welcome profiles={[]} band={bandConfig('primary')} onPick={() => {}} starting={false} />);
+    const b = bubble(/Lyssna på Räven$/);
+    expect(MockAudio.instances).toHaveLength(0);
+    fireEvent.pointerEnter(b);
+    expect(MockAudio.instances).toHaveLength(1);
+    expect(MockAudio.instances[0].paused).toBe(true);
+    expect(MockAudio.instances[0].preload).toBe('auto');
+    expect(MockAudio.instances[0].loadCalls).toBe(1);
+    // Repeated intent events and the click itself reuse the same Audio element.
+    fireEvent.focus(b);
+    fireEvent.pointerDown(b);
+    expect(MockAudio.instances).toHaveLength(1);
+    expect(MockAudio.instances[0].loadCalls).toBe(1);
+    fireEvent.click(b);
+    expect(MockAudio.instances).toHaveLength(1);
+    await waitFor(() => expect(b.getAttribute('aria-pressed')).toBe('true'));
+    // Preloading another band while a clip is already playing must not interrupt it.
+    preloadGreeting('middle');
+    expect(MockAudio.instances).toHaveLength(1);
+    expect(MockAudio.instances[0].paused).toBe(false);
+    expect(b.getAttribute('aria-pressed')).toBe('true');
   });
 
   it('stops the clip when the call starts, keeping unlock before pick', async () => {

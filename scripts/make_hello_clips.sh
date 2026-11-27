@@ -25,9 +25,11 @@ for band in primary middle upper; do
     "https://api.deepgram.com/v2/speak?model=flux-ludvig-sv&expressivity=1&encoding=linear16&container=wav" \
     -H 'Content-Type: application/json' \
     --data "$body" -o "$out/hello-$band.wav"
+  # Add a short 300 ms lead-in silence (plus a 10 ms de-click fade-in) after
+  # trimming so cold browser/OS/Bluetooth audio sinks wake up before "Hej!".
   ffmpeg -loglevel error -y -i "$out/hello-$band.wav" \
-    -af "silenceremove=start_periods=1:start_threshold=-50dB,areverse,silenceremove=start_periods=1:start_threshold=-50dB,areverse,loudnorm=I=-18:TP=-1.5" \
-    -ac 1 -ar 44100 -b:a 64k "$out/hello-$band.mp3"
+    -af "silenceremove=start_periods=1:start_threshold=-50dB,areverse,silenceremove=start_periods=1:start_threshold=-50dB,areverse,loudnorm=I=-18:TP=-1.5,afade=t=in:st=0:d=0.01,adelay=300:all=1" \
+    -ac 1 -ar 44100 -b:a 96k "$out/hello-$band.mp3"
   rm "$out/hello-$band.wav"
   echo "$band: $(ffprobe -v error -show_entries format=duration -of csv=p=0 "$out/hello-$band.mp3") s"
 done

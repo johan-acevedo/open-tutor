@@ -24,8 +24,8 @@ export const POSE_VERSION = '20261119';
 export const LANDING_IMG_VERSION = '20261125';
 
 // Cache-bust version for the spoken landing greetings
-// (web/public/audio/hello-<band>.mp3, added 2026-11-24). Bump when the clips change.
-export const HELLO_AUDIO_VERSION = '20261124';
+// (web/public/audio/hello-<band>.mp3). Bump when the clips change.
+export const HELLO_AUDIO_VERSION = '20261127';
 
 /** Versioned URL of the spoken greeting clip behind the landing speech bubble. */
 export function helloAudioUrl(band: BandId): string {

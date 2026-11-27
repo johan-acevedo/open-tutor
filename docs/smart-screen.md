@@ -48,6 +48,23 @@ type, a squared exercise book as the board, a ruled price list). Branch `feat/ta
   `/integritet`, returning learner and picker with fictional profiles): no horizontal overflow,
   start button above the fold at 360×640. Not verified: a real call, real devices, Safari.
 
+## 2026-11-27: landing greeting clip cold-start fix
+
+First tap on the landing speaker button crackled and clipped the opening "Hej!" while the second
+tap sounded clean. Root cause: `scripts/make_hello_clips.sh` trimmed all leading silence down to
+0 ms (`silenceremove`), and `greetingAudio.ts` constructed `new Audio(...)` lazily on click, so
+cold OS/Bluetooth/browser audio sinks were still waking up during the first ~200 ms of speech.
+Branch `fix/greeting-audio-leadin`.
+
+- **300 ms lead-in silence + 10 ms fade-in.** Added `afade=t=in:st=0:d=0.01,adelay=300:all=1`
+  (96 kbit/s mono 44.1 kHz) to `web/public/audio/hello-{primary,middle,upper}.mp3` and
+  `scripts/make_hello_clips.sh`, and bumped `HELLO_AUDIO_VERSION` in `web/src/bands.ts` to
+  `20261127` to bust Cloudflare/browser caches.
+- **Preload on intent and rewind on stop.** `greetingAudio.ts` now sets `audio.preload = 'auto'`,
+  exposes `preloadGreeting(band)` (triggered on `pointerenter`/`pointerdown`/`focus` of
+  `ListenButton`, without creating `Audio` on mount or interrupting an active clip), and resets
+  `currentTime = 0` when tapping the button to stop so the next play always starts from "Hej!".
+
 ## 2026-11-26: warm Talarum palette and companion-portrait chooser (design v2)
 
 Johan on the live v1: "okej första version men långt ifrån hur bra jag tror det kan bli",
