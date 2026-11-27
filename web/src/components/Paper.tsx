@@ -9,7 +9,7 @@ import '@fontsource/caveat/600.css';
 import '@fontsource/caveat/700.css';
 import { BANDS, explicitHostBand, type BandConfig, type BandId } from '../bands';
 import { t, type SvKey } from '../locales/sv';
-import { usePlayingGreetingBand, toggleGreeting } from './greetingAudio';
+import { usePlayingGreetingBand, preloadGreeting, toggleGreeting } from './greetingAudio';
 
 // Warm paper editorial pages (2026-11-27): the start pages (/, the band
 // pages), the household picker and /integritet share one light paper look.
@@ -200,6 +200,9 @@ export function ListenButton({ band, greeting }: { band: BandConfig; greeting: s
     <button
       type="button"
       className={`tp-listen${playing ? ' is-playing' : ''}`}
+      onPointerEnter={() => preloadGreeting(band.id)}
+      onPointerDown={() => preloadGreeting(band.id)}
+      onFocus={() => preloadGreeting(band.id)}
       onClick={() => toggleGreeting(band.id)}
       aria-pressed={playing}
       aria-label={t('landing.listenAria', { greeting, companion: band.companion.name })}
