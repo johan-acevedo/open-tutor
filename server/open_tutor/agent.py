@@ -56,7 +56,14 @@ from .tts_fallback import (
     describe_tts,
     parse_cooldown_s,
 )
-from .screen_context import count_screen_shots, prune_screen_shots, screen_tag, shots_kept
+from .turn_detector import SwedishHesitationTurnDetector
+from .screen_context import (
+    count_screen_shots,
+    is_screen_message,
+    prune_screen_shots,
+    screen_tag,
+    shots_kept,
+)
 from .session_llm import SessionLLM
 from .page_answers import PageAnswers
 from .text_input import TOPIC_CHAT, TypedChat
@@ -99,6 +106,46 @@ def clamp_board_size(w: Any, h: Any) -> tuple[int, int]:
     except (TypeError, ValueError):
         ch = DEFAULT_BOARD_H
     return max(BOARD_MIN, min(cw, BOARD_MAX)), max(BOARD_MIN, min(ch, BOARD_MAX))
+
+
+TURN_DETECTION_MODES = ("hesitation", "stt")
+
+
+def turn_detection_options(environ: dict[str, str] | Any | None = None) -> dict[str, Any]:
+    """Turn detection and endpointing for the AgentSession.
+
+    ``TUTOR_TURN_DETECTION=hesitation`` (default, 2026-11-27): the Soniox
+    endpoint plus ``SwedishHesitationTurnDetector``. A complete answer gets
+    ``TUTOR_MIN_ENDPOINT`` (0.6 s); a turn that trails off on "eh", "att" or a
+    comma waits up to ``TUTOR_MAX_ENDPOINT`` (2.8 s) of silence instead of being
+    cut off. Preemptive generation stays off, as it effectively was in ``stt``
+    mode: LiveKit would otherwise start a reply on every final transcript,
+    including during a held hesitation (see turn_detector.py for the details).
+
+    ``TUTOR_TURN_DETECTION=stt`` restores the exact behaviour before that: the
+    turn ends ``TUTOR_MIN_ENDPOINT`` after Soniox's endpoint, whatever was said.
+    """
+    env = os.environ if environ is None else environ
+    mode = str(env.get("TUTOR_TURN_DETECTION", "hesitation")).strip().lower() or "hesitation"
+    if mode not in TURN_DETECTION_MODES:
+        raise ValueError(f"TUTOR_TURN_DETECTION must be one of {', '.join(TURN_DETECTION_MODES)}, "
+                         f"not {mode!r}")
+
+    def number(name: str, default: float) -> float:
+        try:
+            return float(env.get(name, default))
+        except (TypeError, ValueError):
+            return default
+
+    min_delay = number("TUTOR_MIN_ENDPOINT", 0.6)
+    if mode == "stt":
+        return {"turn_detection": "stt",
+                "endpointing": {"min_delay": min_delay, "max_delay": 4.0}}
+    max_delay = max(number("TUTOR_MAX_ENDPOINT", 2.8), min_delay)
+    detector = SwedishHesitationTurnDetector(record=lambda kind, data: record_active(kind, data))
+    return {"turn_detection": detector,
+            "endpointing": {"min_delay": min_delay, "max_delay": max_delay},
+            "preemptive_generation": {"enabled": False}}
 
 
 def build_stt() -> soniox.STT:
@@ -495,7 +542,9 @@ class Tutor(Agent):
         """Save the learner's first name, so later calls start with it.
 
         Call it once, right after they tell you their name early in a nameless
-        call: repeat the name back first to confirm you heard it. The browser
+        call, silently: say nothing before the call (no spoken preamble, no
+        repeating the name first). After it returns, greet them by name and
+        ask your next question in one single spoken reply. The browser
         creates the local profile, or attaches to an existing local profile
         with the same name (its school year and notes are then already known
         and come back in the acknowledgement). A later correction ("I said
@@ -546,8 +595,9 @@ class Tutor(Agent):
             await self.update_instructions(Tutor._instructions(self.learner))
         record_active("name", {"name": clean,
                                  "profile_id": self.learner.get("id")})
-        return (f"Saved: the learner is called {clean}.{known} Use the name naturally "
-                "from here on, and carry on with the lesson.")
+        return (f"Saved: the learner is called {clean}.{known} Now say one warm reply "
+                "that uses the name and asks your next question; use the name naturally "
+                "from here on.")
 
     @function_tool()
     async def set_learner_grade(self, context: RunContext, grade: int) -> str:
@@ -555,7 +605,9 @@ class Tutor(Agent):
 
         Call it once, when the grade first becomes clear early in the call
         (asked naturally, or inferred from shared homework) — never at the
-        greeting and never for adults (band 3). The browser applies it only
+        greeting and never for adults (band 3). Call it silently: say nothing
+        before the call; after it returns, confirm the year warmly and ask
+        your next question in one single spoken reply. The browser applies it only
         when the profile is still this call's; the grade here updates only on
         acknowledgement.
 
@@ -576,7 +628,8 @@ class Tutor(Agent):
         self.learner["grade"] = g
         record_active("grade", {"grade": g})
         return (f"Saved: the learner is in årskurs {g}. "
-                "Keep this call's register as it is; later calls start with it.")
+                "Keep this call's register as it is; later calls start with it. "
+                "Now confirm it warmly and ask your next question, in one reply.")
 
     @function_tool()
     async def switch_student(self, context: RunContext, name: str) -> str:
@@ -696,8 +749,9 @@ class SmartTutor(Tutor):
         A finished page appears on the screen by itself as soon as it is ready
         (show="show", the default); pass show="hold" when the page must stay
         hidden until the child has tried, and bring it in later with show_page.
-        When the child wants to see a real picture, photo, painting or map, say so
-        in the ask: the screen finds and checks the image itself.
+        When the child wants to see a real picture, photo, painting or map, or a
+        science diagram (a molecule, a cell, anatomy), say so in the ask: the
+        screen finds and checks the image itself.
         A change to the visible page applies by itself and arrives with a note.
 
         Args:
@@ -715,8 +769,12 @@ class SmartTutor(Tutor):
         job = self.screen.ask(ask, reveal=mode)
         if mode == "show":
             return ("The screen is working on it now "
-                    f"(job {job}). Keep talking with the child in words: explain, ask, "
-                    "or react to what they just said. Do not announce a wait. "
+                    f"(job {job}). Keep talking with the child in words, briefly: one "
+                    "short bridge that explains or reacts to what they just said. Do not "
+                    "announce a wait or say you are making a page. Do not ask a question "
+                    "the coming page will answer. If you do end on a question, the page "
+                    "still appears, but you are not prompted: teach from it in your reply "
+                    "to the child's answer. "
                     "The finished page appears on the screen by itself as soon as it is "
                     "ready; you get its source and a screenshot then.")
         return ("The screen is working on it now "
@@ -831,10 +889,23 @@ class SmartTutor(Tutor):
             return f"Part {part} could not be highlighted. Explain in words instead, briefly."
         return f"Part {part} is highlighted. Talk about it."
 
-    async def _prompt_when_free(self, session: AgentSession, text: str) -> None:
+    async def _prompt_when_free(self, session: AgentSession, text: str, *,
+                                defer_if_question: bool = True,
+                                page_id: str | None = None) -> None:
         """Prompt the tutor once it is not speaking; while it (or the child)
-        is speaking, wait for that speech to finish first (bounded)."""
+        is speaking, wait for that speech to finish first (bounded).
+
+        A finished page that lands right after the tutor asked the child a
+        question is not prompted: the prompt made the tutor answer its own
+        question before the child could (4 of 4 pages in a real call,
+        2026-11-27). The page is already in the context, so the tutor teaches
+        from it in its reply to the child. A failure notice passes
+        ``defer_if_question=False`` and is never swallowed."""
         await wait_until_free(session)
+        if defer_if_question and tutor_awaits_answer(self.chat_ctx):
+            record_active("screen_prompt_deferred",
+                          {"page": page_id, "reason": "tutor_asked_question"})
+            return
         prompt_event(session, text)
 
     async def _clear_loading(self, page_id: str | None = None) -> bool:
@@ -916,7 +987,8 @@ class SmartTutor(Tutor):
                                                page_id=page.page_id)
                 asyncio.create_task(self._prompt_when_free(
                     session, f"Screen page {page.page_id} ('{page.title}') is on screen now. "
-                              f"Teach from what it actually shows."))
+                              f"Teach from what it actually shows.",
+                    page_id=page.page_id))
                 return
             # Auto-show failed: fall through to the held path so the tutor
             # still gets the page and can bring it in with show_page.
@@ -937,7 +1009,8 @@ class SmartTutor(Tutor):
         asyncio.create_task(self._prompt_when_free(
             session, f"Screen page {page.page_id} ('{page.title}') is ready but not visible. "
                       f"If it fits the lesson now, call show_page('{page.page_id}'); "
-                      f"otherwise keep teaching and bring it in later."))
+                      f"otherwise keep teaching and bring it in later.",
+            page_id=page.page_id))
 
     async def screen_patch_ready(self, session: AgentSession, patch: Any) -> bool:
         """A change finished: apply it at once, add it to the context, no prompt.
@@ -969,7 +1042,8 @@ class SmartTutor(Tutor):
         await self._prompt_when_free(
             session,
             f"The screen failed: {message} Tell the child in one short sentence that "
-            "the picture did not work, and carry on teaching in words.")
+            "the picture did not work, and carry on teaching in words.",
+            defer_if_question=False)
 
 
 async def wait_until_free(session: Any, *, poll_s: float = 0.3, max_polls: int = 100) -> None:
@@ -983,6 +1057,48 @@ async def wait_until_free(session: Any, *, poll_s: float = 0.3, max_polls: int =
             await asyncio.sleep(poll_s)
     except Exception:  # noqa: BLE001 - a missing state never blocks the prompt
         return
+
+
+# A question mark at the very end, allowing closing quotes, brackets and
+# spaces after it: 'Vad tror du?', 'Vad tror du?"', '»Varför?«', 'Va?)'.
+_TRAILING_QUESTION = re.compile(r"\?[\s\"'»«”“’‘)\]]*$")
+_EVENT_PREFIXES = ("[Session event", "[Screen page", "[Screen change")
+
+
+def _is_worker_event(item: Any) -> bool:
+    """A user-role message the worker wrote, not something the learner did."""
+    if is_screen_message(item):
+        return True
+    text = (getattr(item, "text_content", None) or "").lstrip()
+    return text.startswith(_EVENT_PREFIXES)
+
+
+def tutor_awaits_answer(chat_ctx: Any) -> bool:
+    """True when the tutor's latest spoken reply ends with a question that
+    the learner has not answered yet.
+
+    Walks back from the newest item: worker-written events (screen pages,
+    session events), tool calls and empty assistant turns are skipped; the
+    first real learner message means the question was answered (False); the
+    first spoken assistant message decides."""
+    try:
+        items = list(chat_ctx.items)
+    except Exception:  # noqa: BLE001 - no context never blocks a prompt
+        return False
+    for item in reversed(items):
+        if getattr(item, "type", None) != "message":
+            continue
+        role = getattr(item, "role", None)
+        if role == "assistant":
+            text = (getattr(item, "text_content", None) or "").strip()
+            if not text:
+                continue
+            return bool(_TRAILING_QUESTION.search(text))
+        if role == "user":
+            if _is_worker_event(item):
+                continue
+            return False
+    return False
 
 
 def prompt_event(session: AgentSession, text: str):
@@ -1135,6 +1251,8 @@ def prewarm(proc: JobProcess) -> None:
     # filter then loads its native side here: on 2026-11-14 the first import inside a
     # session blocked the loop for about a second and pushed the greeting back.
     noise.warm_up(noise.noise_cancellation_mode())
+    # Same for a misspelt TUTOR_TURN_DETECTION: fail at boot, not at a child's greeting.
+    turn_detection_options()
     proc.userdata["vad"] = silero.VAD.load(min_silence_duration=0.5)
     warm_up()
     # The first analytics capture inside a session blocked the loop importing the
@@ -1238,8 +1356,7 @@ async def entrypoint(ctx: JobContext) -> None:
         tts=voice,
         vad=ctx.proc.userdata["vad"],
         turn_handling=TurnHandlingOptions(
-            turn_detection="stt",
-            endpointing={"min_delay": env_float("TUTOR_MIN_ENDPOINT", 0.6), "max_delay": 4.0},
+            **turn_detection_options(),
             # TUTOR_INTERRUPT_MIN_S: how long sound must last before it stops the fox.
             # 0.4 s let room noise cut it off; the dev setup tries 2.0 (2026-11-13).
             interruption={"enabled": True, "mode": "vad",

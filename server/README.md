@@ -102,7 +102,9 @@ The worker logs the route at the start of each session (`tutor TTS route elevenl
 | `TUTOR_SCREEN_SHOTS` | Default `1`. How many of the newest Smart Screen screenshots stay in the live tutor's chat context. Each screen page and each applied change adds a high-detail PNG; without a limit every earlier one was re-sent with every voice turn (~1 100 tokens and 50-200 kB each). The newest shot of the page on screen and of any page still held back (`show="hold"`) is always kept, and only screenshots are dropped: the page source stays. `99` keeps every screenshot (the behaviour before 2026-11-27), `0` keeps none. See [the tutor's context](../docs/smart-screen.md#2026-11-27-one-screenshot-in-the-tutors-context-and-look-pass-evidence) |
 | `TUTOR_POSTHOG_KEY` | PostHog project token (`phc_…`, EU cloud). Unset (default): analytics fully off, no SDK load, no network calls |
 | `TUTOR_POSTHOG_HOST` | PostHog host, default `https://eu.i.posthog.com` |
-| `TUTOR_STT_MAX_ENDPOINT_MS`, `TUTOR_MIN_ENDPOINT` | Turn-taking tuning for pauses while a child thinks |
+| `TUTOR_STT_MAX_ENDPOINT_MS`, `TUTOR_MIN_ENDPOINT` | Turn-taking tuning for pauses while a child thinks. `TUTOR_MIN_ENDPOINT` (default `0.6` s) is the silence after a complete answer before the tutor speaks |
+| `TUTOR_TURN_DETECTION` | `hesitation` (default): a small Swedish word-based turn detector holds the turn while the child trails off (only filler sounds, a trailing `att`/`och`/comma/ellipsis …) and keeps `TUTOR_MIN_ENDPOINT` for complete answers. `stt` restores the earlier behaviour exactly (the turn ends `TUTOR_MIN_ENDPOINT` after Soniox's endpoint). An unknown value stops the worker at boot. See [the hesitation detector](../docs/smart-screen.md#the-child-may-hesitate-without-being-cut-off) |
+| `TUTOR_MAX_ENDPOINT` | Default `2.8` s, `hesitation` mode only: how long the tutor waits in silence after a hesitation before it speaks. Never below `TUTOR_MIN_ENDPOINT` |
 | `TUTOR_NOISE_CANCELLATION` | `off` (default, today's behaviour), `nc` or `bvc`: LiveKit's enhanced noise cancellation on the child's inbound audio, before the VAD and the recogniser. See [noise and background voice cancellation](#noise-and-background-voice-cancellation). An unknown value stops the worker at boot |
 | `TUTOR_FILLERS` | `1` lets the fox make one short pre-made sound when a reply to the child's turn is late. Off by default |
 | `TUTOR_FILLER_AFTER_S` | How long the child may wait for the reply before the sound (default `0.7`) |
@@ -283,6 +285,11 @@ metrics. Not captured: credentials, keys, tokens, the whole environment, or
 audio (LiveKit Cloud recording keeps that when `TUTOR_CLOUD_RECORDING=1`). The
 config snapshot is an explicit allowlist. The normal log stream stays free of
 session content either way.
+
+Turn-taking events added 2026-11-27: `turn_hold` (the hesitation detector held a
+turn open; reason word and word count only) and `screen_prompt_deferred` (a
+finished page arrived right after the tutor asked the child a question, so the
+page-ready prompt was skipped).
 
 Review the most recent sessions where the worker runs:
 

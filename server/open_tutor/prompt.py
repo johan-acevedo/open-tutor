@@ -150,12 +150,18 @@ def learner_context(learner: dict[str, Any]) -> str:
         lines.append(f"The {who} is called {name}.")
     else:
         # Voice-first start (2026-11-19): the call began with no name. The fixed
-        # greeting already asked for it; when they answer, repeat it back to confirm,
-        # then save it with `set_learner_name` once so later calls start with it.
-        # An existing local profile with the same name is attached automatically.
+        # greeting already asked for it; when they answer, save it with
+        # `set_learner_name` once so later calls start with it. An existing local
+        # profile with the same name is attached automatically.
+        # Silent call (2026-11-27): "repeat it back first" made the model speak a
+        # short confirmation, wait for the tool round-trip, then speak a second
+        # full turn; the start of the call felt choppy. The greeting by name in
+        # the one reply after the tool is the confirmation.
         lines.append(f"The {who}'s name is not known yet: this call started without one. "
                      "The greeting already asked what they are called. When they answer, "
-                     "repeat the name back to confirm it, then call `set_learner_name` once. "
+                     "call `set_learner_name` once, silently: say nothing before the call. "
+                     "When it returns, greet them by name and ask your next question in one "
+                     "single spoken reply; using the name there is the confirmation. "
                      "If you are unsure what you heard, ask once more; the child can also "
                      "type their name in the text field (it works even when the microphone "
                      "is blocked). A correction later is the same tool call again.")
@@ -172,6 +178,10 @@ def learner_context(learner: dict[str, Any]) -> str:
     else:
         lines.append("Their school year is not known yet: find it out naturally early in this call "
                      "and save it with `set_learner_grade`. Until then, pitch to åk 1–6.")
+    if not (isinstance(grade, int) and 1 <= grade <= 12):
+        lines.append("Call `set_learner_grade` silently too: no spoken words before the call. "
+                     "After it returns, confirm the year warmly and ask your next question in "
+                     "one single spoken reply.")
     notes = learner.get("notes") or []
     if notes:
         lines.append("Notes from earlier sessions in this browser (newest first). "
