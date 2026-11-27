@@ -172,12 +172,14 @@ describe('pending in-call-switch prefill on /', () => {
     expect(clearPrefill).not.toHaveBeenCalled();
     await waitFor(() => expect(screen.getByText('Hej Bea!')).toBeDefined());
 
-    // …but the user tapping another band's quiet link wins: the prefill is
-    // cleared, so the page is not yanked back.
-    fireEvent.click(screen.getByRole('link', { name: /Läxhjälp med Räven/ }));
+    // …but the user tapping another band in the masthead nav wins: the
+    // prefill is cleared, so the page is not yanked back.
+    fireEvent.click(screen.getByRole('link', { name: 'Åk 1–6' }));
     await waitFor(() => expect(clearPrefill).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(window.location.pathname).toBe('/ak1-6'));
-    expect(window.location.pathname).toBe('/ak1-6');
+    await waitFor(() => expect(window.location.pathname).toBe('/'));
+    // Bea belongs to Högstadiet: Åk 1–6 shows the nameless Räven front door.
+    await waitFor(() => expect(screen.queryByText('Hej Bea!')).toBeNull());
+    expect(document.querySelector('.ot-root')?.getAttribute('data-band')).toBe('primary');
   });
 });
 
@@ -203,7 +205,7 @@ describe('band during a call', () => {
   });
 });
 
-describe('cross-band links', () => {
+describe('band nav', () => {
   it('navigates to exactly the href path+query, dropping ?band=', async () => {
     // A remembered middle-band learner: / shows their middle start page.
     await saveProfile(stored({ id: 't4-m', name: 'Mio', grade: 7, band: 'middle', createdAt: 4 }));
@@ -214,10 +216,61 @@ describe('cross-band links', () => {
     await waitFor(() =>
       expect(document.querySelector('.ot-root')?.getAttribute('data-band')).toBe('middle'),
     );
-    fireEvent.click(screen.getByRole('link', { name: /Läxhjälp med Räven/ }));
-    await waitFor(() => expect(window.location.pathname).toBe('/ak1-6'));
+    const ak16 = screen.getByRole('link', { name: 'Åk 1–6' });
+    expect(ak16.getAttribute('href')).toBe('/');
+    fireEvent.click(ak16);
+    await waitFor(() => expect(window.location.pathname).toBe('/'));
     expect(window.location.search).toBe('');
+    expect(screen.queryByText('Hej Mio!')).toBeNull();
     expect(document.querySelector('.ot-root')?.getAttribute('data-band')).toBe('primary');
+  });
+});
+
+describe('band nav review fixes', () => {
+  it('Back restores the nameless Åk 1–6 page, not the remembered learner', async () => {
+    await saveProfile(stored({ id: 'r1', name: 'Mio', grade: 7, band: 'middle', createdAt: 1 }));
+    localStorage.setItem('open-tutor-last-profile', 'r1');
+    window.history.replaceState(null, '', '/hogstadiet');
+    sessionMock.useSession.mockReturnValue(baseSession({}));
+    render(<App />);
+    await waitFor(() => expect(screen.getByText('Hej Mio!')).toBeDefined());
+    fireEvent.click(screen.getByRole('link', { name: 'Åk 1–6' }));
+    await waitFor(() => expect(window.location.pathname).toBe('/'));
+    expect(screen.queryByText('Hej Mio!')).toBeNull();
+    fireEvent.click(screen.getByRole('link', { name: 'Gymnasiet' }));
+    await waitFor(() => expect(window.location.pathname).toBe('/gymnasiet'));
+    // Browser Back to the / entry: still the Räven front door.
+    window.history.back();
+    await waitFor(() => expect(window.location.pathname).toBe('/'));
+    await waitFor(() => expect(document.querySelector('.ot-root')?.getAttribute('data-band')).toBe('primary'));
+    expect(screen.queryByText('Hej Mio!')).toBeNull();
+    expect(screen.getAllByRole('button', { name: 'Prata med Räven' }).length).toBeGreaterThan(0);
+  });
+
+  it('keeps the household menu on the Räven front door when the device remembers someone', async () => {
+    await saveProfile(stored({ id: 'r2', name: 'Mio', grade: 7, band: 'middle', createdAt: 2 }));
+    localStorage.setItem('open-tutor-last-profile', 'r2');
+    window.history.replaceState(null, '', '/hogstadiet');
+    sessionMock.useSession.mockReturnValue(baseSession({}));
+    render(<App />);
+    await waitFor(() => expect(screen.getByText('Hej Mio!')).toBeDefined());
+    fireEvent.click(screen.getByRole('link', { name: 'Åk 1–6' }));
+    await waitFor(() => expect(window.location.pathname).toBe('/'));
+    fireEvent.click(screen.getByRole('button', { name: 'Meny' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Byt elev' }));
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Vem ska prata?' })).toBeDefined());
+  });
+
+  it('keeps keyboard focus on the band nav when the page component changes', async () => {
+    window.history.replaceState(null, '', '/');
+    sessionMock.useSession.mockReturnValue(baseSession({}));
+    render(<App />);
+    const middle = await screen.findByRole('link', { name: 'Högstadiet' });
+    middle.focus();
+    fireEvent.click(middle);
+    await waitFor(() => expect(window.location.pathname).toBe('/hogstadiet'));
+    await waitFor(() => expect(document.activeElement?.textContent).toBe('Högstadiet'));
+    expect(document.activeElement?.getAttribute('aria-current')).toBe('page');
   });
 });
 
@@ -290,12 +343,31 @@ describe('final review edges', () => {
     expect(clearPrefill).not.toHaveBeenCalled();
   });
 
-  it('keeps unrelated query parameters on a cross-band click', async () => {
+  it('keeps unrelated query parameters on a band nav click', async () => {
     window.history.replaceState(null, '', '/hogstadiet?kampanj=x&band=middle');
     sessionMock.useSession.mockReturnValue(baseSession({}));
     render(<App />);
-    fireEvent.click(await screen.findByRole('link', { name: /Läxhjälp med Räven/ }));
-    await waitFor(() => expect(window.location.pathname).toBe('/ak1-6'));
+    const ak16 = await screen.findByRole('link', { name: 'Åk 1–6' });
+    expect(ak16.getAttribute('href')).toBe('/?kampanj=x');
+    fireEvent.click(ak16);
+    await waitFor(() => expect(window.location.pathname).toBe('/'));
     expect(window.location.search).toBe('?kampanj=x');
+    fireEvent.click(screen.getByRole('link', { name: 'Gymnasiet' }));
+    await waitFor(() => expect(window.location.pathname).toBe('/gymnasiet'));
+    expect(window.location.search).toBe('?kampanj=x');
+    expect(document.querySelector('.ot-root')?.getAttribute('data-band')).toBe('upper');
+  });
+
+  it('lets the paper pages scroll on the document, but not the call view', async () => {
+    window.history.replaceState(null, '', '/hogstadiet');
+    let phase = 'profiles';
+    sessionMock.useSession.mockImplementation(() =>
+      baseSession({ phase, profile: stored({ id: 'e4', name: 'Alva', band: 'middle', createdAt: 4 }) }),
+    );
+    const view = render(<App />);
+    await waitFor(() => expect(document.documentElement.classList.contains('ot-doc-scroll')).toBe(true));
+    phase = 'live';
+    view.rerender(<App />);
+    await waitFor(() => expect(document.documentElement.classList.contains('ot-doc-scroll')).toBe(false));
   });
 });

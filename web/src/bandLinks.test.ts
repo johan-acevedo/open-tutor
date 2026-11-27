@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { bandUrl } from './bandLinks';
+import { bandLinkHref } from './components/Paper';
 
 describe('bandUrl', () => {
   it('swaps the host prefix on band hosts and keeps the rest', () => {
@@ -32,5 +33,19 @@ describe('bandUrl', () => {
     expect(bandUrl('primary', 'http://localhost:5173/?band=middle')).toBe(
       'http://localhost:5173/ak1-6',
     );
+  });
+});
+
+describe('bandLinkHref (masthead band nav)', () => {
+  it('on a tutor.* host swaps the prefix and resets the path, so the new host picks the band', () => {
+    expect(bandLinkHref('upper', 'https://tutor.example.test/ak1-6')).toBe('https://tutor3.example.test/');
+    expect(bandLinkHref('middle', 'https://tutor3.example.test/integritet?band=upper')).toBe('https://tutor2.example.test/');
+    expect(bandLinkHref('primary', 'https://tutor2.example.test/hogstadiet#x')).toBe('https://tutor.example.test/');
+  });
+
+  it('on a single-domain host points Åk 1–6 at / and keeps other query parameters', () => {
+    expect(bandLinkHref('primary', 'https://talarum.example/hogstadiet?kampanj=x&band=middle')).toBe('/?kampanj=x');
+    expect(bandLinkHref('middle', 'https://talarum.example/integritet')).toBe('/hogstadiet');
+    expect(bandLinkHref('upper', 'http://localhost:5173/?band=primary#top')).toBe('/gymnasiet');
   });
 });

@@ -104,6 +104,76 @@ counted the same.
   all, and what those passes cost in seconds. That is the evidence for deciding
   later whether server-side rendering and the look pass keep earning their keep.
 
+## 2026-11-27: Talarum paper v4 — band nav, one voice per page, call window, illustrated steps
+
+Johan approved the Gemini v2 mockup; v4 brings the live paper landing to it. Branch
+`feat/talarum-paper-v4`. Code: `web/src/components/Paper.tsx` (shared pieces),
+`LandingPage.tsx`, `ChooserPage.tsx` (`/` first visit), `Welcome.tsx`, `PrivacyPage.tsx`,
+`web/src/paper.css`, copy in `web/src/locales/sv.ts` (`landing.*`).
+
+- **Band nav in the masthead, no switch in the hero.** Logo left, `Åk 1–6 · Högstadiet ·
+  Gymnasiet` centred (`/`, `/hogstadiet`, `/gymnasiet`; `aria-current` + terracotta underline on
+  the current band, the links never move between pages), `Integritet` far right. On phones the
+  three links are a slim strip under the top bar. The `Så går det till` / `Pris` section links and
+  the quiet cross-link rows above the footer are gone. In-app navigation on talarum-style hosts,
+  full load on `tutor.*` hosts. `Åk 1–6` lands on `/`: a remembered Åk 1–6 learner is greeted
+  there, anyone else gets the nameless Räven page (never another band's companion under that
+  label). The hamburger (switch person, about, privacy) shows only when the device remembers a
+  named learner; a first visit had nothing to switch to.
+- **One voice per page.** `/` and `/ak1-6`: parents about *barnet* throughout ("En lugn läxhjälp
+  som *pratar* – och visar.", steps "Så hjälper Talarum barnet framåt.", "Barnet löser själv",
+  "Redo att testa på kvällens läxa?"). `/hogstadiet`: the student, *du* ("En lugn läxhjälp du kan
+  *prata* med.", no "ditt barn"). `/gymnasiet` (+ `/studier`, `/bjornen`, `/vuxen`): studiestöd,
+  *du*, no "läxhjälp" in the hero. The `/` front door is now the Räven page in the parent voice; the
+  old two-way Räven/Lodjuret switch was removed (`HomeChooser.tsx` deleted).
+- **Hero.** Dark charcoal start pill with the companion's face, a labelled outline `Hör rösten`
+  pill beside it (reads `Spelar…` with a stop mark while the hello plays; accessible name "Hör
+  rösten – Räven"), and one quiet line under both on every width: "Gratis medan vi testar · Inget
+  konto" (the mobile price box above the button is gone). On the right a squared exercise book
+  with work in progress, never the answer (`30 + 40 = 70` *tiotal*, `6 + 7 = ?`) and a two-line
+  exchange (Barnet/Du, then the companion's question), beside a dark slate call window with a warm
+  rim, the companion's `pointing.webp` pose (all three already point left at the book, so no flip)
+  and a CSS voice waveform that moves only while the hello plays. Below 640 px the call window is a
+  picture-in-picture over the book's lower right corner so the maths keeps the full width.
+- **Steps, then price, then a closing call to action.** Three cards with text-free watercolour
+  illustrations (`web/public/illustrations/step-*.webp`, 960×536, 31–43 KB) and the band's maths
+  written over them in HTML (Caveat): the problem on the notebook page and inside the phone's
+  viewfinder, the intermediate step on the blank board left of the companion's hand, the finished
+  line on the right-hand page by the pencil tip. The art container keeps the exact 960/536 ratio
+  and uses container units, so the percentage coordinates and font sizes hold at every width.
+  Then "Planerat pris" on a warm sand band (Nu 0 kr · Planerat senare 2 tim/vecka gratis, sedan
+  25 kr/tim · Ingen prenumeration, beside the 25 kr vs 300–500 kr/tim bars), then a centred
+  closing strip with the same start and listen controls. Footer: "Ett svenskt experiment av Johan
+  Acevedo. Inget konto krävs – läs hur samtal och uppgifter hanteras." (the "sparas lokalt" half
+  truth is gone; `/integritet` explains what is sent during a call).
+- **Document scroll.** The paper pages no longer scroll inside a fixed-height `div.tp`: App sets
+  `html.ot-doc-scroll` while the start pages show, the root grows with the page (also on phones,
+  where `.ot-phone` is otherwise pinned to the visual viewport), so iOS can collapse the URL bar
+  and a status-bar tap scrolls to the top. The call view keeps its fixed viewport (the class is
+  removed as soon as the phase leaves `profiles`). In-app navigation resets the scroll to the top.
+- **`/integritet`** keeps Johan's text; the top "← Tillbaka" link was dropped (the band nav leads
+  back), leaving one "Tillbaka till start" button at the end.
+- `og.png` kept: it is the v3 warm paper card and still matches.
+- **Review (Codex gpt-6.2-astra, cross-family):** one blocker and six should-fixes, all fixed
+  with tests. (1) Blocker: on a `tutor.*` host the band links kept the path (`tutor3.…/ak1-6`), and
+  the path outranks the host, so the page stayed on Räven. Host links now reset the path to `/`
+  (`bandLinkHref`, pure and tested). (2) Back to a `/` entry reached via `Åk 1–6` brought back the
+  remembered Högstadiet learner. The history entry now stores the explicit choice. (3) The Räven
+  front door lost the household menu when someone was remembered; it now has it. (4) The mobile
+  picture-in-picture cropped Björnen's and Lodjuret's eyes; all three poses were re-sized so the
+  eyes and the pointing hand fit. (5) The step equations were all `aria-hidden`, so the finished
+  line was never read; each illustration is now a labelled image (`36 + 47`, `30 + 40 = 70`,
+  `70 + 13 = 83`). (6) The headline accent and the open maths line were 3.9 and 4.1:1; a new
+  `--tp-terra-text` (`#b84d2e`) gives 4.5 and 4.8:1. (7) A band click that swaps the page component
+  dropped keyboard focus to `<body>`; focus now moves to the new page's current band link.
+- **Verified:** web 318 vitest, `tsc`, build; server 680 pytest. Playwright (system Chrome) on the
+  built app served by the real FastAPI web service on a private port, 19 views at 1440×900,
+  820×1180, 390×844 and 360×640 (`/`, `/hogstadiet`, `/gymnasiet`, `/studier`, `/integritet`,
+  returning learner, household picker; fictional profiles). No horizontal overflow, console errors
+  or broken images. The start button ends at 383 px or less on phones, and start + `Hör rösten`
+  stay on one row at 390 and 360. Not verified: a real call, real devices, iOS Safari's URL bar,
+  and audio on the new listen pill (logic unchanged, unit-tested).
+
 ## 2026-11-27: warm paper editorial landing (v3) and a simpler /integritet
 
 Johan picked concept B of three commercial explorations (warm light paper, serif display

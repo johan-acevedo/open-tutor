@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import HomeChooser from './components/HomeChooser';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import ChooserPage from './components/ChooserPage';
 import HouseholdPicker from './components/HouseholdPicker';
 import PrivacyPage from './components/PrivacyPage';
@@ -8,7 +7,7 @@ import EndCard from './components/EndCard';
 import { focusStartControl } from './focus';
 import type { Profile } from './db';
 import { MockAudio } from './components/mockAudio';
-import { resetGreetingForTests, stopGreeting } from './components/greetingAudio';
+import { resetGreetingForTests } from './components/greetingAudio';
 
 afterEach(() => {
   cleanup();
@@ -20,67 +19,64 @@ function profile(over: Partial<Profile> = {}): Profile {
   return { id: 'p1', name: 'Alva', grade: 4, band: 'primary', notes: [], createdAt: 0, ...over };
 }
 
-describe('HomeChooser', () => {
-  it('offers the two grundskola bands in a switch with one start button', () => {
+/** The h1 is built from three catalogue parts with NBSPs; compare plainly. */
+function norm(s: string | null | undefined): string {
+  return (s ?? '').replace(/ /g, ' ');
+}
+
+describe('ChooserPage', () => {
+  it('is always the first-visit Räven page: no band switch, two start buttons', () => {
     const onBegin = vi.fn();
-    render(<HomeChooser onBegin={onBegin} starting={false} />);
-    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('En lugn läxkompis som pratar – och visar.');
-    const group = screen.getByRole('group', { name: 'Välj årskurs' });
-    const options = within(group).getAllByRole('button');
-    expect(options).toHaveLength(2);
-    expect(options[0].textContent).toContain('Åk 1–6');
-    expect(options[0].textContent).toContain('Räven');
-    expect(options[1].textContent).toContain('Högstadiet');
-    expect(options[1].textContent).toContain('Lodjuret');
-    // Räven is selected by default; exactly one start button follows it.
-    expect(options[0].getAttribute('aria-pressed')).toBe('true');
-    expect(options[1].getAttribute('aria-pressed')).toBe('false');
-    expect(screen.getByRole('button', { name: 'Prata med Räven' })).toBeDefined();
+    render(<ChooserPage onBegin={onBegin} starting={false} />);
+    expect(norm(screen.getByRole('heading', { level: 1 }).textContent)).toBe(
+      'En lugn läxhjälp som pratar – och visar.',
+    );
+    expect(screen.queryByRole('group', { name: 'Välj årskurs' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Prata med Lodjuret' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Prata med Björnen' })).toBeNull();
+    expect(screen.getAllByRole('button', { name: 'Prata med Räven' })).toHaveLength(2);
     // The hero is honest about the price from the start.
-    expect(screen.getByText('Gratis medan vi testar.')).toBeDefined();
+    expect(screen.getByText('Gratis medan vi testar')).toBeDefined();
+    expect(screen.getByText('Inget konto')).toBeDefined();
   });
 
-  it('switching the band moves the start button, the board and the listen control', () => {
-    const onBegin = vi.fn();
-    render(<HomeChooser onBegin={onBegin} starting={false} />);
-    fireEvent.click(screen.getByRole('button', { name: /Högstadiet/ }));
-    expect(screen.getByRole('button', { name: /Högstadiet/ }).getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByRole('button', { name: /Åk 1–6/ }).getAttribute('aria-pressed')).toBe('false');
-    // One start button, now for Lodjuret; the board shows the middle example.
-    expect(screen.getByRole('button', { name: 'Prata med Lodjuret' })).toBeDefined();
-    expect(screen.queryByRole('button', { name: 'Prata med Räven' })).toBeNull();
-    expect(screen.getAllByText('3x + 5 = 20').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByRole('button', { name: 'Hej! Lyssna på Lodjuret' })).toBeDefined();
-    fireEvent.click(screen.getByRole('button', { name: 'Prata med Lodjuret' }));
-    expect(onBegin).toHaveBeenCalledWith('middle');
-  });
-
-  it('the front door has no Björnen start, only a quiet link to /gymnasiet', () => {
-    render(<ChooserPage onBegin={vi.fn()} starting={false} />);
-    expect(screen.queryByRole('button', { name: 'Prata med Björnen' })).toBeNull();
-    const quiet = screen.getByRole('link', { name: /Studiestöd med Björnen/ });
-    expect(quiet.getAttribute('href')).toBe('/gymnasiet');
-  });
-
-  it('the price section names the planned price and the free test period', () => {
-    render(<ChooserPage onBegin={vi.fn()} starting={false} />);
-    const section = document.getElementById('pris');
-    expect(section).not.toBeNull();
-    const scoped = within(section as HTMLElement);
-    expect(scoped.getByText('25 kr/tim')).toBeDefined();
-    expect(scoped.getByText(/Just nu helt gratis under testperioden/)).toBeDefined();
-  });
-
-  it('the listen button plays the hello clip for the selected companion', () => {
+  it('both start buttons begin primary and stop the greeting', async () => {
     MockAudio.instances = [];
     vi.stubGlobal('Audio', MockAudio as unknown as typeof Audio);
-    render(<HomeChooser onBegin={vi.fn()} starting={false} />);
-    const listen = screen.getByRole('button', { name: 'Hej! Lyssna på Räven' });
+    const onBegin = vi.fn();
+    render(<ChooserPage onBegin={onBegin} starting={false} />);
+    const listen = screen.getAllByRole('button', { name: /Hör rösten\s*– Räven/ })[0];
+    fireEvent.click(listen);
+    await waitFor(() => expect(listen.getAttribute('aria-pressed')).toBe('true'));
+    const buttons = screen.getAllByRole('button', { name: 'Prata med Räven' });
+    fireEvent.click(buttons[0]);
+    expect(MockAudio.instances[0].paused).toBe(true);
+    expect(onBegin).toHaveBeenCalledTimes(1);
+    expect(onBegin).toHaveBeenCalledWith('primary');
+    fireEvent.click(buttons[1]);
+    expect(onBegin).toHaveBeenCalledTimes(2);
+    expect(onBegin).toHaveBeenNthCalledWith(2, 'primary');
+  });
+
+  it('the listen button plays the primary hello', () => {
+    MockAudio.instances = [];
+    vi.stubGlobal('Audio', MockAudio as unknown as typeof Audio);
+    render(<ChooserPage onBegin={vi.fn()} starting={false} />);
+    const listen = screen.getAllByRole('button', { name: /Hör rösten\s*– Räven/ })[0];
     fireEvent.click(listen);
     expect(MockAudio.instances).toHaveLength(1);
     expect(MockAudio.instances[0].src).toContain('hello-primary.mp3');
-    stopGreeting();
+  });
+
+  it('leaving the front door stops the hello', async () => {
+    MockAudio.instances = [];
+    vi.stubGlobal('Audio', MockAudio as unknown as typeof Audio);
+    const { unmount } = render(<ChooserPage onBegin={vi.fn()} starting={false} />);
+    fireEvent.click(screen.getAllByRole('button', { name: /Hör rösten\s*– Räven/ })[0]);
+    await waitFor(() => expect(MockAudio.instances.length).toBeGreaterThan(0));
+    expect(MockAudio.instances[0].paused).toBe(false);
+    unmount();
+    expect(MockAudio.instances[0].paused).toBe(true);
   });
 });
 
@@ -118,7 +114,7 @@ describe('HouseholdPicker', () => {
   });
 });
 
-describe('ChooserPage', () => {
+describe('ChooserPage mast', () => {
   it('shows a quiet Integritet link in the mast before any call button', () => {
     render(<ChooserPage onBegin={() => {}} starting={false} />);
     const mast = document.querySelector('.tp-mast') as HTMLElement;
@@ -129,90 +125,36 @@ describe('ChooserPage', () => {
     expect(link.className).not.toContain('tp-cta');
     expect(link.className).not.toContain('tp-listen');
     // The mast comes before the hero start button in the document.
-    const cta = screen.getByRole('button', { name: 'Prata med Räven' });
+    const cta = screen.getAllByRole('button', { name: 'Prata med Räven' })[0];
     expect(link.compareDocumentPosition(cta) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it('navigates in place on the quiet /gymnasiet link', () => {
+  it('the band nav points at the other bands; the front door stays put', () => {
     const onNavigate = vi.fn();
     render(<ChooserPage onBegin={() => {}} starting={false} onNavigate={onNavigate} />);
-    const quiet = screen.getByRole('link', { name: /Studiestöd med Björnen/ });
-    fireEvent.click(quiet);
+    const nav = screen.getByRole('navigation', { name: 'Skolnivå' });
+    expect(within(nav).getByRole('link', { name: 'Åk 1–6' }).getAttribute('href')).toBe('/');
+    expect(within(nav).getByRole('link', { name: 'Högstadiet' }).getAttribute('href')).toBe('/hogstadiet');
+    fireEvent.click(within(nav).getByRole('link', { name: 'Gymnasiet' }));
     expect(onNavigate).toHaveBeenCalledWith('upper');
+    // Åk 1–6 is the page we are already on: no navigation.
+    fireEvent.click(within(nav).getByRole('link', { name: 'Åk 1–6' }));
+    expect(onNavigate).toHaveBeenCalledTimes(1);
   });
 });
 
-describe('HomeChooser switch start', () => {
-  it('stops the greeting clip when a call starts after switching bands', async () => {
-    MockAudio.instances = [];
-    vi.stubGlobal('Audio', MockAudio as unknown as typeof Audio);
-    const onBegin = vi.fn();
-    render(<HomeChooser onBegin={onBegin} starting={false} />);
-    // Switch to Lodjuret first: the start button follows the switch.
-    fireEvent.click(screen.getByRole('button', { name: /Högstadiet/ }));
-    const listen = screen.getByRole('button', { name: 'Hej! Lyssna på Lodjuret' });
-    fireEvent.click(listen);
-    await waitFor(() => expect(listen.getAttribute('aria-pressed')).toBe('true'));
-    fireEvent.click(screen.getByRole('button', { name: 'Prata med Lodjuret' }));
-    expect(MockAudio.instances[0].paused).toBe(true);
-    expect(onBegin).toHaveBeenCalledWith('middle');
-    stopGreeting();
-  });
-});
-
-describe('ChooserPage steps', () => {
-  it('shows the steps for the selected band and follows the switch', () => {
+describe('ChooserPage sections', () => {
+  it('shows the primary steps and the planned price after them', () => {
     render(<ChooserPage onBegin={vi.fn()} starting={false} />);
     const steps = document.getElementById('sa-gar-det-till') as HTMLElement;
     expect(within(steps).getByText('Så går det till')).toBeDefined();
-    expect(screen.getByRole('heading', { name: 'Det barnet hör syns samtidigt på tavlan.' })).toBeDefined();
-    expect(screen.getByRole('heading', { name: 'Visa läxan' })).toBeDefined();
-    // Family steps name the companion that asks how the child thought.
-    expect(screen.getByText(/Räven frågar först/)).toBeDefined();
+    expect(screen.getByRole('heading', { name: 'Så hjälper Talarum barnet framåt.' })).toBeDefined();
+    expect(screen.getByRole('heading', { name: /Barnet löser själv/ })).toBeDefined();
     expect(screen.getAllByText('30 + 40 = 70').length).toBeGreaterThanOrEqual(1);
-    // Switching to Högstadiet moves the steps to the middle example.
-    fireEvent.click(screen.getByRole('button', { name: /Högstadiet/ }));
-    expect(screen.getByText(/Lodjuret frågar först/)).toBeDefined();
-    expect(screen.getAllByText('3x = 15').length).toBeGreaterThanOrEqual(1);
-  });
-
-  it('gives the listen control a visible-on-hover title', () => {
-    render(<HomeChooser onBegin={vi.fn()} starting={false} />);
-    const listen = screen.getByRole('button', { name: 'Hej! Lyssna på Räven' });
-    expect(listen.getAttribute('title')).toBe('Lyssna på Räven');
-  });
-});
-
-describe('HomeChooser listen state', () => {
-  it('switching the band stops the playing greeting', async () => {
-    MockAudio.instances = [];
-    vi.stubGlobal('Audio', MockAudio as unknown as typeof Audio);
-    render(<HomeChooser onBegin={vi.fn()} starting={false} />);
-    const foxListen = screen.getByRole('button', { name: 'Hej! Lyssna på Räven' });
-    fireEvent.click(foxListen);
-    await waitFor(() => expect(foxListen.getAttribute('aria-pressed')).toBe('true'));
-    // Picking another companion: its hello must not keep playing.
-    fireEvent.click(screen.getByRole('button', { name: /Högstadiet/ }));
-    expect(MockAudio.instances[0].paused).toBe(true);
-    const lynxListen = screen.getByRole('button', { name: 'Hej! Lyssna på Lodjuret' });
-    expect(lynxListen.getAttribute('aria-pressed')).toBe('false');
-    stopGreeting();
-  });
-
-  it('ignores a late error from a clip it already switched away from', async () => {
-    MockAudio.instances = [];
-    vi.stubGlobal('Audio', MockAudio as unknown as typeof Audio);
-    render(<HomeChooser onBegin={vi.fn()} starting={false} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Hej! Lyssna på Räven' }));
-    await waitFor(() => expect(MockAudio.instances.length).toBe(1));
-    fireEvent.click(screen.getByRole('button', { name: /Högstadiet/ }));
-    const lynxListen = screen.getByRole('button', { name: 'Hej! Lyssna på Lodjuret' });
-    fireEvent.click(lynxListen);
-    await waitFor(() => expect(lynxListen.getAttribute('aria-pressed')).toBe('true'));
-    // The Räven clip fails late (a 404 arriving after the switch).
-    act(() => MockAudio.instances[0].emit('error'));
-    expect(lynxListen.getAttribute('aria-pressed')).toBe('true');
-    stopGreeting();
+    const price = document.getElementById('pris') as HTMLElement;
+    expect(steps.compareDocumentPosition(price) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(price).getByText('Gratis medan vi testar.')).toBeDefined();
+    expect(within(price).getByText('0 kr')).toBeDefined();
   });
 });
 
@@ -282,13 +224,21 @@ describe('PrivacyPage', () => {
     expect(body).toContain('hej@talarum.se');
   });
 
-  it('the mast back link returns without reloading', () => {
+  it('going back is one button at the end, not a link at the top', () => {
     const onBack = vi.fn();
     render(<PrivacyPage onBack={onBack} />);
-    const back = screen.getByRole('link', { name: /Tillbaka/ });
-    expect(back.getAttribute('href')).toBe('/');
-    fireEvent.click(back);
+    expect(screen.queryByRole('link', { name: /Tillbaka/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Tillbaka till start' }));
     expect(onBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('the mast marks Integritet as current beside the band nav', () => {
+    render(<PrivacyPage onBack={() => {}} />);
+    const nav = screen.getByRole('navigation', { name: 'Skolnivå' });
+    expect(within(nav).getByRole('link', { name: 'Åk 1–6' }).getAttribute('href')).toBe('/');
+    expect(within(nav).getByRole('link', { name: 'Högstadiet' }).getAttribute('href')).toBe('/hogstadiet');
+    const mast = document.querySelector('.tp-mast') as HTMLElement;
+    expect(within(mast).getByRole('link', { name: 'Integritet' }).getAttribute('aria-current')).toBe('page');
   });
 });
 
@@ -341,19 +291,6 @@ describe('EndCard share', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Tipsa' }));
     await waitFor(() => expect(writeText2).toHaveBeenCalledWith('https://talarum.se/'));
     delete (navigator as unknown as Record<string, unknown>).share;
-  });
-});
-
-describe('HomeChooser unmount', () => {
-  it('stops the hello clip when the front door leaves (quiet link to another page)', async () => {
-    MockAudio.instances = [];
-    vi.stubGlobal('Audio', MockAudio as unknown as typeof Audio);
-    const { unmount } = render(<HomeChooser onBegin={vi.fn()} starting={false} />);
-    fireEvent.click(screen.getByRole('button', { name: /Lyssna på Räven$/ }));
-    await waitFor(() => expect(MockAudio.instances.length).toBeGreaterThan(0));
-    expect(MockAudio.instances[0].paused).toBe(false);
-    unmount();
-    expect(MockAudio.instances[0].paused).toBe(true);
   });
 });
 

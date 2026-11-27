@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { layoutMode, mapAvatarState } from './avatarState';
-import { BAND_PATHS, bandConfig, bandFromPath, bandFromSearch, explicitHostBand, normalizeAliasUrl, resolveBand, type BandId } from './bands';
+import { BANDS, BAND_PATHS, bandConfig, bandFromPath, bandFromSearch, explicitHostBand, normalizeAliasUrl, resolveBand, type BandId } from './bands';
 import { bandUrl } from './bandLinks';
 import { BandProvider } from './BandContext';
 import { getLastProfileId, getLastProfileIdForBand, listProfiles, newProfileId, rememberLastProfileId } from './db';
@@ -15,6 +15,7 @@ import { PaperMast, PaperPage } from './components/Paper';
 import { focusStartControl } from './focus';
 import { stopGreeting } from './components/greetingAudio';
 import PrivacyPage from './components/PrivacyPage';
+import StartMenu from './components/StartMenu';
 import CallStage from './components/CallStage';
 import BottomBar from './components/BottomBar';
 import PhoneStage from './components/PhoneStage';
@@ -87,8 +88,10 @@ export default function App() {
   const choseBandRef = useRef(false);
   const phaseRef = useRef(session.phase);
   phaseRef.current = session.phase;
+  // Band nav click: refocus the new page's current band link (see below).
+  const focusNavAfterRef = useRef(false);
 
-  const navigate = useCallback((path: string, opts?: { keepPrefill?: boolean }) => {
+  const navigate = useCallback((path: string, opts?: { keepPrefill?: boolean; chooser?: boolean }) => {
     // The href owns the query: a cross-band link drops ?band=, so in-app
     // navigation lands on exactly the href's path+query, never with a
     // stale testing override attached.
@@ -96,11 +99,21 @@ export default function App() {
     const lower = (qIndex >= 0 ? path.slice(0, qIndex) : path).toLowerCase();
     const search = qIndex >= 0 ? path.slice(qIndex) : '';
     try {
-      window.history.pushState(null, '', lower + search);
+      // The entry remembers an explicit Åk 1–6 choice, so Back/Forward
+      // restores the nameless Räven page instead of a remembered learner.
+      window.history.pushState(opts?.chooser ? { chooser: true } : null, '', lower + search);
     } catch {
       /* ignore */
     }
     choseBandRef.current = true;
+    // The paper pages scroll on the document: a new page starts at the top
+    // (the privacy page's back button sits at the bottom).
+    try {
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+    } catch {
+      /* ignore */
+    }
     // An explicit user navigation wins over a pending in-call-switch
     // prefill and clears it; the prefill effect's own redirect keeps it.
     if (!opts?.keepPrefill) session.clearPrefill();
@@ -152,7 +165,13 @@ export default function App() {
       // switch lands on the prefilled learner when the room closes.
       if (phaseRef.current === 'profiles' || phaseRef.current === 'ended') session.clearPrefill();
       setPickerOpen(false);
-      setForceChooser(false);
+      let chooser = false;
+      try {
+        chooser = Boolean((window.history.state as { chooser?: boolean } | null)?.chooser);
+      } catch {
+        chooser = false;
+      }
+      setForceChooser(chooser);
     };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
@@ -261,6 +280,13 @@ export default function App() {
     } catch {
       /* ignore */
     }
+    // Paper pages scroll on the document (iOS URL-bar collapse, status-bar
+    // tap to top); the call view keeps its fixed viewport (paper.css).
+    try {
+      document.documentElement.classList.toggle('ot-doc-scroll', paperView);
+    } catch {
+      /* ignore */
+    }
   }, [paperView]);
 
   const inSession = phase === 'live' || phase === 'ending' || phase === 'connecting';
@@ -279,14 +305,28 @@ export default function App() {
     document.querySelector<HTMLInputElement>('.ot-chat-input')?.focus();
   }
 
-  /** Quiet cross-links: a band page, or the family front door (/). Same
-   *  target as the rendered href, so other query parameters stay. */
+  /** Band nav: a band page, or the front door (/) for Åk 1–6. Same target
+   *  as the rendered href, so other query parameters stay. On / a
+   *  remembered Åk 1–6 learner is greeted by name; anyone else gets the
+   *  nameless front door (never another band's companion under "Åk 1–6"). */
   function navigateTo(target: BandId | '/') {
-    if (target === '/') {
-      setForceChooser(true);
-      navigate('/');
+    if (target === '/' || target === 'primary') {
+      const lastId = getLastProfileIdSafe();
+      const learner = lastId ? profiles.find((p) => p.id === lastId && p.name.trim() !== '') : undefined;
+      const chooser = !learner || (learner.band ?? 'primary') !== 'primary';
+      setForceChooser(chooser);
+      focusNavAfterRef.current = true;
+      try {
+        const url = new URL(window.location.href);
+        url.pathname = '/';
+        url.searchParams.delete('band');
+        navigate(url.pathname + url.search, { chooser });
+      } catch {
+        navigate('/', { chooser });
+      }
       return;
     }
+    focusNavAfterRef.current = true;
     try {
       const url = new URL(bandUrl(target, window.location.href));
       navigate(url.pathname + url.search);
@@ -294,6 +334,17 @@ export default function App() {
       navigate(BAND_PATHS[target]);
     }
   }
+
+  // A band nav click that swaps the page component (front door ↔ band page
+  // ↔ /integritet) unmounts the focused link: keep keyboard focus on the
+  // new page's current band link instead of dropping it to <body>.
+  useEffect(() => {
+    if (!focusNavAfterRef.current) return;
+    focusNavAfterRef.current = false;
+    const active = document.activeElement;
+    if (active && active !== document.body && active.isConnected) return;
+    document.querySelector<HTMLElement>('.tp-nav a[aria-current="page"]')?.focus();
+  }, [route, forceChooser]);
 
   /** Start a call, stamping the band on a stored profile and remembering it
    *  overall and per band. A nameless start is remembered once the tutor
@@ -468,12 +519,12 @@ export default function App() {
       )}
 
       {phase === 'profiles' && isPrivacy && (
-        <PrivacyPage onBack={() => navigate('/')} />
+        <PrivacyPage onBack={() => navigate('/')} onNavigate={navigateTo} />
       )}
 
       {phase === 'profiles' && !isPrivacy && pickerOpen && (
         <PaperPage>
-          <PaperMast />
+          <PaperMast onNavigate={navigateTo} />
           <main className="tp-wrap">
             <HouseholdPicker
               profiles={profiles}
@@ -494,7 +545,16 @@ export default function App() {
       )}
 
       {phase === 'profiles' && !isPrivacy && !pickerOpen && showChooser && (
-        <ChooserPage onBegin={beginInBand} starting={false} onNavigate={navigateTo} />
+        <ChooserPage
+          onBegin={beginInBand}
+          starting={false}
+          onNavigate={navigateTo}
+          menu={
+            profiles.some((p) => p.name.trim() !== '') ? (
+              <StartMenu switchLabel={BANDS.primary.copy.switchStudent} onSwitch={openPicker} />
+            ) : undefined
+          }
+        />
       )}
 
       {phase === 'profiles' && !isPrivacy && !pickerOpen && !showChooser && (

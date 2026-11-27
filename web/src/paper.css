@@ -1,36 +1,38 @@
-/* Warm paper editorial (2026-11-27): the start pages (/, /ak1-6,
+/* Warm paper editorial, v4 (2026-11-27): the start pages (/, /ak1-6,
    /hogstadiet, /gymnasiet), the household picker and /integritet.
    Light paper canvas, espresso ink, warm hairline rules and a terracotta
    accent from the light-background Talarum logo. Fraunces display serif,
-   Plus Jakarta Sans body, Caveat on the squared exercise book; all three are
-   self-hosted (fontsource). The call view, end card and Smart Screen keep
-   their dark themes: everything here is scoped under .tp. */
+   Plus Jakarta Sans body, Caveat for handwriting; all three are self-hosted
+   (fontsource). The page scrolls on the document, not in a fixed-height
+   box. The call view, end card and Smart Screen keep their dark themes and
+   fixed viewport: everything here is scoped under .tp or .ot-doc-scroll. */
 
 .tp {
   --tp-paper: #f6f1e7;
   --tp-paper2: #fbf8f2;
+  --tp-sand: #efe9dd;
   --tp-ink: #1a1613;
   --tp-ink2: #3f362e;
-  --tp-mute: #61584f;
-  --tp-rule: #ddd5c8;
+  --tp-mute: #5e554c;
+  --tp-rule: #e2dacd;
   --tp-rule2: #cfc3b0;
   --tp-terra: #c85634;
   /* Small text in the accent: darker for contrast on paper (5:1). */
   --tp-terra-ink: #a4442a;
+  /* Large accent text (headline accent, open maths line): 4.5:1 on paper. */
+  --tp-terra-text: #b84d2e;
   --tp-coral: #d45c38;
   --tp-amber: #e0a13e;
   --tp-pen: #22314a;
+  --tp-green: #3d7a4c;
   --tp-grid: #5d7fa521;
   --tp-serif: "Fraunces Variable", Georgia, "Times New Roman", serif;
   --tp-sans: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --tp-hand: "Caveat", "Segoe Print", "Comic Sans MS", cursive;
   --tp-gutter: 40px;
 
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
   color-scheme: light;
+  min-height: 100dvh;
   background: var(--tp-paper);
   color: var(--tp-ink);
   font-family: var(--tp-sans);
@@ -38,6 +40,34 @@
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Document scroll on the paper pages: the root grows with the page instead
+   of a 100dvh box with its own scroller. App.tsx sets the class while the
+   start pages show; the call view never gets it. */
+html.ot-doc-scroll,
+html.ot-doc-scroll body,
+html.ot-doc-scroll #root {
+  height: auto;
+  min-height: 100%;
+  background: #f6f1e7;
+}
+
+html.ot-doc-scroll .ot-root {
+  height: auto;
+  min-height: 100dvh;
+  overflow: visible;
+  background: #f6f1e7;
+}
+
+/* Phones: the call layout pins .ot-phone to the visual viewport; the paper
+   pages flow instead. */
+html.ot-doc-scroll .ot-root.ot-phone {
+  position: relative;
+  top: auto;
+  left: auto;
+  right: auto;
+  height: auto;
 }
 
 /* Overscroll and the area behind the canvas stay paper too. */
@@ -61,6 +91,18 @@ html:has(.tp) body {
   border-radius: 6px;
 }
 
+.tp-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .tp-wrap {
   width: 100%;
   max-width: 1200px;
@@ -71,11 +113,14 @@ html:has(.tp) body {
 
 /* ---------- Masthead ---------- */
 
+/* Logo | band nav (centred, never moves between pages) | Integritet. */
 .tp-mast-in {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  grid-template-areas: "logo nav right";
   align-items: center;
   gap: 24px;
-  min-height: 80px;
+  min-height: 76px;
   position: relative;
 }
 
@@ -89,25 +134,73 @@ html:has(.tp) body {
 }
 
 .tp-logo {
+  grid-area: logo;
+  justify-self: start;
   display: inline-flex;
   align-items: center;
   min-height: 44px;
-  flex: 0 0 auto;
 }
 
 .tp-logo img {
-  height: 28px;
+  height: 27px;
   width: auto;
 }
 
 .tp-nav {
+  grid-area: nav;
   display: flex;
   align-items: center;
-  gap: 32px;
-  margin-left: auto;
+  gap: 6px;
 }
 
-.tp-nav a,
+.tp-nav a {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 14px;
+  color: var(--tp-mute);
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.tp-nav a::after {
+  content: "";
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 6px;
+  height: 2px;
+  border-radius: 2px;
+  background: transparent;
+}
+
+.tp-nav a:hover {
+  color: var(--tp-ink);
+}
+
+.tp-nav a:hover::after {
+  background: var(--tp-rule2);
+}
+
+.tp-nav a[aria-current="page"] {
+  color: var(--tp-ink);
+}
+
+.tp-nav a[aria-current="page"]::after {
+  background: var(--tp-terra);
+}
+
+.tp-mast-right {
+  grid-area: right;
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
 .tp-mast-link {
   color: var(--tp-ink2);
   font-size: 15px;
@@ -118,24 +211,13 @@ html:has(.tp) body {
   align-items: center;
 }
 
-.tp-nav a:hover,
-.tp-mast-link:hover {
+.tp-mast-link:hover,
+.tp-mast-link[aria-current="page"] {
   color: var(--tp-ink);
   text-decoration: underline;
   text-decoration-color: var(--tp-coral);
   text-decoration-thickness: 2px;
   text-underline-offset: 6px;
-}
-
-.tp-mast-right {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.tp-nav + .tp-mast-right {
-  margin-left: 8px;
 }
 
 /* The pre-call menu (StartMenu) on paper. */
@@ -184,8 +266,8 @@ html:has(.tp) body {
 .tp-h1 {
   font-family: var(--tp-serif);
   font-weight: 500;
-  font-size: clamp(40px, 4.7vw, 68px);
-  line-height: 1.03;
+  font-size: clamp(40px, 4.4vw, 64px);
+  line-height: 1.04;
   letter-spacing: -0.025em;
   font-optical-sizing: auto;
   text-wrap: balance;
@@ -193,17 +275,16 @@ html:has(.tp) body {
 
 .tp-h1 i {
   font-style: italic;
-  color: var(--tp-terra);
+  color: var(--tp-terra-text);
 }
 
 .tp-h2 {
   font-family: var(--tp-serif);
   font-weight: 500;
-  font-size: clamp(32px, 3.4vw, 46px);
-  line-height: 1.08;
+  font-size: clamp(30px, 3vw, 42px);
+  line-height: 1.1;
   letter-spacing: -0.02em;
-  margin-top: 12px;
-  max-width: 17em;
+  margin-top: 10px;
   text-wrap: balance;
 }
 
@@ -216,81 +297,30 @@ html:has(.tp) body {
 }
 
 .tp-lede {
-  margin-top: 24px;
-  font-size: 19.5px;
+  margin-top: 22px;
+  font-size: 19px;
   line-height: 1.55;
   color: var(--tp-ink2);
   max-width: 29em;
-}
-
-.tp-sub {
-  margin-top: 14px;
-  font-size: 18px;
-  color: var(--tp-ink2);
-  max-width: 34em;
 }
 
 /* ---------- Hero ---------- */
 
 .tp-hero {
   display: grid;
-  grid-template-columns: 1.05fr 0.95fr;
-  gap: 64px;
+  grid-template-columns: minmax(0, 0.84fr) minmax(0, 1.16fr);
+  gap: 52px;
   align-items: center;
-  padding-top: 64px;
-  padding-bottom: 88px;
+  padding-top: 60px;
+  padding-bottom: 80px;
 }
 
 .tp-hero-copy {
   min-width: 0;
 }
 
-/* Two-way switch on the front door: a calm segmented control under the
-   lede, never a pill row above the headline. */
-.tp-switch {
-  margin-top: 30px;
-  display: inline-flex;
-  padding: 4px;
-  gap: 4px;
-  border-radius: 14px;
-  background: #ece4d6;
-  border: 1px solid var(--tp-rule);
-  max-width: 100%;
-}
-
-.tp-switch-opt {
-  border: 0;
-  background: transparent;
-  color: var(--tp-mute);
-  font: inherit;
-  font-size: 15.5px;
-  font-weight: 600;
-  padding: 9px 16px;
-  border-radius: 10px;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.tp-switch-opt:hover {
-  color: var(--tp-ink);
-}
-
-.tp-switch-opt[aria-pressed="true"] {
-  background: var(--tp-paper2);
-  color: var(--tp-ink);
-  box-shadow: 0 1px 0 var(--tp-rule2), 0 4px 12px -6px #5a432b40;
-}
-
-.tp-switch-who {
-  font-weight: 500;
-}
-
-.tp-switch-opt[aria-pressed="true"] .tp-switch-who {
-  color: var(--tp-terra-ink);
-}
-
 .tp-hello {
-  margin-top: 28px;
+  margin-top: 26px;
   display: flex;
   align-items: baseline;
   flex-wrap: wrap;
@@ -325,36 +355,30 @@ html:has(.tp) body {
   text-decoration-color: var(--tp-coral);
 }
 
-.tp-cta-area {
+.tp-cta-row {
   margin-top: 30px;
   display: flex;
   align-items: center;
-  gap: 20px 28px;
   flex-wrap: wrap;
-}
-
-.tp-hello + .tp-cta-area {
-  margin-top: 14px;
-}
-
-.tp-cta-row {
-  display: flex;
-  align-items: center;
   gap: 12px;
+}
+
+.tp-hello + .tp-cta-row {
+  margin-top: 12px;
 }
 
 .tp-cta {
   display: inline-flex;
   align-items: center;
   gap: 12px;
-  min-height: 64px;
-  padding: 12px 22px 12px 12px;
+  min-height: 58px;
+  padding: 8px 22px 8px 9px;
   border: 0;
-  border-radius: 14px;
+  border-radius: 999px;
   background: var(--tp-ink);
   color: var(--tp-paper2);
   font: inherit;
-  font-size: 17px;
+  font-size: 16.5px;
   font-weight: 700;
   white-space: nowrap;
   cursor: pointer;
@@ -390,159 +414,144 @@ html:has(.tp) body {
   transform: translateX(3px);
 }
 
+/* "Hör rösten": an outline pill with a visible label. The width holds
+   both labels, so "Spelar…" never makes the row jump. */
 .tp-listen {
-  width: 56px;
-  height: 56px;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  border: 1px solid var(--tp-rule2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 58px;
+  min-width: 158px;
+  padding: 8px 22px 8px 18px;
+  border-radius: 999px;
+  border: 1.5px solid var(--tp-rule2);
   background: var(--tp-paper2);
-  color: var(--tp-ink2);
-  display: inline-grid;
-  place-items: center;
-  padding: 0;
+  color: var(--tp-ink);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  white-space: nowrap;
   cursor: pointer;
 }
 
 .tp-listen svg {
-  width: 24px;
-  height: 22px;
+  width: 21px;
+  height: 20px;
+  flex: 0 0 auto;
+  color: var(--tp-ink2);
 }
 
 .tp-listen:hover {
-  color: var(--tp-ink);
   border-color: var(--tp-mute);
 }
 
 .tp-listen.is-playing {
-  color: var(--tp-terra);
   border-color: var(--tp-terra);
+  color: var(--tp-terra-ink);
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .tp-listen.is-playing svg path:not(:first-child) {
-    animation: tp-wave 1.2s ease-in-out infinite;
-  }
-  .tp-listen.is-playing svg path:nth-child(3) {
-    animation-delay: 0.15s;
-  }
-  .tp-listen.is-playing svg path:nth-child(4) {
-    animation-delay: 0.3s;
-  }
+.tp-listen.is-playing svg {
+  color: var(--tp-terra);
 }
 
-@keyframes tp-wave {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
-}
-
-.tp-anchor {
-  font-size: 15.5px;
-  line-height: 1.45;
+.tp-quietline {
+  margin-top: 16px;
+  font-size: 15px;
   color: var(--tp-ink2);
-  max-width: 19em;
 }
 
-.tp-anchor b {
-  display: block;
+.tp-quietline b {
   color: var(--tp-ink);
   font-weight: 700;
 }
 
-.tp-anchor span {
-  display: block;
-}
+/* ---------- Showcase: exercise book + call window ---------- */
 
-/* ---------- Squared exercise book ---------- */
-
-.tp-book {
+.tp-show {
   position: relative;
   min-width: 0;
-  background-color: var(--tp-paper2);
-  background-image:
-    linear-gradient(var(--tp-grid) 1px, transparent 1px),
-    linear-gradient(90deg, var(--tp-grid) 1px, transparent 1px);
-  background-size: 26px 26px;
-  border: 1px solid var(--tp-rule2);
-  border-radius: 6px 22px 22px 6px;
-  padding: 32px 36px 36px 58px;
-  box-shadow: 0 1px 0 var(--tp-rule), 0 30px 60px -36px #5a432b66;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.54fr);
+  align-items: stretch;
+  padding: 18px 0;
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .tp-book {
-    animation: tp-book-in 260ms ease-out;
+  .tp-show {
+    animation: tp-show-in 260ms ease-out;
   }
 }
 
-@keyframes tp-book-in {
+@keyframes tp-show-in {
   from { opacity: 0.4; transform: translateY(4px); }
   to { opacity: 1; transform: none; }
 }
 
-/* The red margin line of a Swedish exercise book. */
+.tp-book {
+  position: relative;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--tp-paper2);
+  background-image:
+    linear-gradient(var(--tp-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--tp-grid) 1px, transparent 1px);
+  background-size: 24px 24px;
+  border: 1px solid var(--tp-rule2);
+  border-radius: 8px;
+  padding: 24px 50px 22px 48px;
+  box-shadow: 0 1px 0 var(--tp-rule), 0 30px 60px -36px #5a432b66;
+}
+
+/* The faint margin line of a Swedish exercise book. */
 .tp-book::before {
   content: "";
   position: absolute;
-  left: 34px;
+  left: 30px;
   top: 0;
   bottom: 0;
-  width: 2px;
-  background: #d45c3866;
+  width: 1.5px;
+  background: #d45c3840;
 }
 
 .tp-book-head {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  font-size: 13px;
+  font-size: 12.5px;
+  letter-spacing: 0.02em;
   color: var(--tp-mute);
   font-weight: 600;
 }
 
-.tp-book-live {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  white-space: nowrap;
-}
-
-.tp-book-live::before {
-  content: "";
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--tp-coral);
-}
-
 .tp-book-q {
-  margin-top: 18px;
+  margin-top: 14px;
   font-family: var(--tp-serif);
-  font-size: 22px;
+  font-size: 20px;
   line-height: 1.3;
+  text-wrap: balance;
 }
 
 .tp-book-q small {
+  display: block;
+  margin-bottom: 2px;
   font-family: var(--tp-sans);
   font-size: 13px;
   color: var(--tp-mute);
-  margin-right: 10px;
   font-weight: 600;
   white-space: nowrap;
 }
 
 .tp-hand {
-  margin-top: 12px;
+  margin-top: 10px;
   font-family: var(--tp-hand);
   font-weight: 700;
-  font-size: clamp(32px, 3vw, 42px);
-  line-height: 1.25;
+  font-size: clamp(32px, 2.9vw, 42px);
+  line-height: 1.3;
   color: var(--tp-pen);
 }
 
-.tp-hand div {
+.tp-hand p {
   display: flex;
-  gap: 18px;
+  gap: 4px 16px;
   align-items: baseline;
   flex-wrap: wrap;
 }
@@ -550,136 +559,365 @@ html:has(.tp) body {
 .tp-hand em {
   font-style: normal;
   font-weight: 600;
-  font-size: 0.62em;
+  font-size: 0.6em;
   color: var(--tp-terra-ink);
 }
 
-.tp-hand-res {
-  color: var(--tp-terra);
-}
-
-.tp-hand-res span {
-  border: 2.5px solid var(--tp-terra);
-  border-radius: 40% 50% 45% 50%;
-  padding: 0 12px;
-  margin-left: -10px;
+.tp-hand-next {
+  color: var(--tp-terra-text);
 }
 
 .tp-said {
-  margin: 20px 128px 0 0;
-  font-size: 15.5px;
-  line-height: 1.5;
+  margin-top: auto;
+  padding: 14px 0 0;
+}
+
+.tp-said p {
+  font-size: 14.5px;
+  line-height: 1.45;
   color: var(--tp-ink2);
   border-left: 3px solid var(--tp-amber);
-  padding: 2px 0 2px 14px;
+  padding: 2px 0 2px 12px;
+}
+
+.tp-said p + p {
+  border-left-color: var(--tp-terra);
 }
 
 .tp-said b {
   color: var(--tp-ink);
 }
 
-.tp-book-fig {
+/* The companion's call window: dark slate with a warm rim, overlapping the
+   book's right edge, the companion pointing at the book. */
+.tp-call {
+  position: relative;
+  z-index: 1;
+  margin: -18px 0 -18px -34px;
+  min-height: 360px;
+  border-radius: 24px;
+  overflow: hidden;
+  isolation: isolate;
+  background:
+    radial-gradient(90% 60% at 62% 92%, #c856347a 0%, #c8563400 70%),
+    radial-gradient(70% 50% at 30% 8%, #6b78a833 0%, #6b78a800 70%),
+    linear-gradient(168deg, #323c5a 0%, #232b42 52%, #181d2d 100%);
+  border: 1.5px solid #e7a88a;
+  box-shadow:
+    0 0 0 5px #c8563418,
+    0 32px 60px -28px #1a1613b3,
+    inset 0 1px 0 #ffffff1a;
+}
+
+.tp-call img {
   position: absolute;
-  right: -30px;
-  bottom: -34px;
-  width: 188px;
+  bottom: 0;
+  max-width: none;
+  height: auto;
   pointer-events: none;
 }
 
-/* Waist-up lynx and bear: a little wider and lower so the head sits where
-   the fox's head does. */
-.tp-book[data-companion="middle"] .tp-book-fig {
-  width: 176px;
-  right: -26px;
-  bottom: -30px;
+/* Each pose is waist-up, pointing left at the book. Sizes put the face in
+   the upper half and the pointing hand inside the left edge. */
+.tp-show[data-companion="primary"] .tp-call img {
+  width: 120%;
+  right: -22%;
 }
 
-.tp-book[data-companion="upper"] .tp-book-fig {
-  width: 196px;
-  right: -34px;
-  bottom: -30px;
+.tp-show[data-companion="middle"] .tp-call img {
+  width: 134%;
+  right: -32%;
+}
+
+.tp-show[data-companion="upper"] .tp-call img {
+  width: 128%;
+  right: -28%;
+}
+
+/* A dark floor under the waveform hides the poses' waist fade. */
+.tp-call::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 30%;
+  background: linear-gradient(180deg, #181d2d00 0%, #181d2dd9 62%, #161a28 100%);
+  pointer-events: none;
+}
+
+.tp-wave {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  height: 26px;
+}
+
+.tp-wave i {
+  display: block;
+  width: 3px;
+  border-radius: 2px;
+  height: 30%;
+  background: currentColor;
+  transform-origin: center;
+}
+
+.tp-wave i:nth-child(4n + 1) { height: 34%; }
+.tp-wave i:nth-child(4n + 2) { height: 72%; }
+.tp-wave i:nth-child(4n + 3) { height: 48%; }
+.tp-wave i:nth-child(5n) { height: 92%; }
+.tp-wave i:nth-child(7n) { height: 22%; }
+.tp-wave i:first-child,
+.tp-wave i:last-child { height: 16%; }
+
+.tp-call .tp-wave {
+  position: absolute;
+  z-index: 1;
+  left: 0;
+  right: 0;
+  bottom: 16px;
+  color: #f4dccd;
+  opacity: 0.85;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .tp-wave.is-live i {
+    animation: tp-bar 900ms ease-in-out infinite alternate;
+  }
+  .tp-wave.is-live i:nth-child(3n) { animation-delay: -300ms; }
+  .tp-wave.is-live i:nth-child(3n + 1) { animation-delay: -600ms; }
+}
+
+@keyframes tp-bar {
+  from { transform: scaleY(0.45); }
+  to { transform: scaleY(1.15); }
 }
 
 /* ---------- Sections ---------- */
 
 .tp-sec {
-  border-top: 1px solid var(--tp-rule);
-  padding: 92px 0;
+  padding: 84px 0;
   scroll-margin-top: 8px;
 }
 
-/* Price list */
+.tp-how {
+  border-top: 1px solid var(--tp-rule);
+}
+
+/* Steps: illustration cards with handwritten maths placed over them. */
+.tp-steps {
+  list-style: none;
+  padding: 0;
+  margin-top: 40px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 28px;
+}
+
+.tp-steps li {
+  min-width: 0;
+}
+
+.tp-steps h3 {
+  margin-top: 18px;
+  font-family: var(--tp-serif);
+  font-weight: 500;
+  font-size: 23px;
+  line-height: 1.25;
+}
+
+.tp-step-n {
+  color: var(--tp-terra-ink);
+}
+
+.tp-steps p {
+  margin-top: 6px;
+  font-size: 15.5px;
+  color: var(--tp-ink2);
+  max-width: 26em;
+}
+
+/* The illustrations are 960×536; the container keeps that ratio so every
+   overlay coordinate below is a percentage of the artwork itself. Font
+   sizes use container units for the same reason. */
+.tp-art {
+  position: relative;
+  aspect-ratio: 960 / 536;
+  container-type: inline-size;
+  border-radius: 18px;
+  overflow: hidden;
+  background: #faf6ee;
+  border: 1px solid var(--tp-rule);
+  box-shadow: 0 18px 36px -30px #5a432b80;
+}
+
+.tp-art img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.tp-ink {
+  position: absolute;
+  font-family: var(--tp-hand);
+  font-weight: 700;
+  line-height: 1;
+  color: var(--tp-pen);
+  white-space: nowrap;
+  transform: translate(-50%, -50%);
+}
+
+/* Step 1: the problem on the notebook page above the phone, and again
+   inside the camera viewfinder (brackets at x 355–605, y 210–335). */
+.tp-ink-page {
+  left: 34.4%;
+  top: 21.5%;
+  font-size: 5cqw;
+  transform: translate(-50%, -50%) rotate(-1.5deg);
+  opacity: 0.92;
+}
+
+.tp-ink-screen {
+  left: 50%;
+  top: 51%;
+  font-size: 5.6cqw;
+}
+
+.tp-steps[data-companion="middle"] .tp-ink-screen {
+  font-size: 4.8cqw;
+}
+
+.tp-steps[data-companion="upper"] :is(.tp-ink-screen) {
+  font-size: 4.1cqw;
+}
+
+.tp-steps[data-companion="upper"] .tp-ink-page {
+  font-size: 4.4cqw;
+}
+
+/* Step 2: the intermediate step on the blank board, left of the
+   companion's hand, with a quiet voice line under it. */
+.tp-ink-board {
+  left: 31%;
+  top: 37%;
+  font-size: 6.4cqw;
+}
+
+.tp-steps[data-companion="middle"] .tp-ink-board {
+  left: 31%;
+  top: 38%;
+  font-size: 7cqw;
+}
+
+.tp-steps[data-companion="upper"] .tp-ink-board {
+  left: 31.5%;
+  top: 35%;
+  font-size: 5.8cqw;
+}
+
+.tp-wave-board {
+  position: absolute;
+  left: 31%;
+  top: 62%;
+  height: 7cqw;
+  gap: 0.6cqw;
+  transform: translate(-50%, -50%);
+  color: var(--tp-terra);
+  opacity: 0.6;
+}
+
+.tp-wave-board i {
+  width: 0.7cqw;
+}
+
+/* Step 3: the finished line on the right-hand page, ending by the pencil
+   tip (tip at x 578, y 300; the page leans about -8°). */
+.tp-ink-done {
+  left: 48.4%;
+  top: 34%;
+  font-size: 6.2cqw;
+  line-height: 1.12;
+  white-space: pre-line;
+  transform: rotate(-7deg);
+  transform-origin: left top;
+}
+
+.tp-ink-done b {
+  color: var(--tp-green);
+  font-weight: 700;
+}
+
+.tp-steps[data-companion="middle"] .tp-ink-done {
+  left: 49%;
+  top: 43%;
+  font-size: 7cqw;
+}
+
+.tp-steps[data-companion="upper"] .tp-ink-done {
+  left: 48.2%;
+  top: 41%;
+  font-size: 5.4cqw;
+}
+
+/* Planned price: a calm warm sand band after the steps. */
+.tp-price {
+  background: var(--tp-sand);
+  padding: 64px 0 68px;
+}
+
 .tp-pricing {
   display: grid;
-  grid-template-columns: 1.15fr 1fr;
-  gap: 64px;
-  margin-top: 44px;
-  align-items: start;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 56px;
+  margin-top: 30px;
+  align-items: center;
 }
 
 .tp-list {
+  margin: 0;
   background: var(--tp-paper2);
   border: 1px solid var(--tp-rule);
-  border-radius: 20px;
-  padding: 8px 30px 22px;
+  border-radius: 18px;
+  padding: 4px 24px;
+  box-shadow: 0 1px 0 #d9cfbf;
 }
 
 .tp-li {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  gap: 20px;
-  padding: 20px 0;
-  border-bottom: 1px dotted var(--tp-rule2);
+  gap: 8px 20px;
+  padding: 15px 0;
+  border-bottom: 1px solid var(--tp-rule);
+}
+
+.tp-li:last-child {
+  border-bottom: 0;
 }
 
 .tp-li dt {
-  font-size: 17px;
-}
-
-.tp-li dt small {
-  display: block;
-  color: var(--tp-mute);
-  font-size: 14.5px;
+  font-size: 15.5px;
+  color: var(--tp-ink2);
 }
 
 .tp-li dd {
-  font-family: var(--tp-serif);
+  font-size: 15.5px;
   font-weight: 600;
-  font-size: 30px;
-  line-height: 1.1;
-  white-space: nowrap;
-  font-variant-numeric: lining-nums;
+  text-align: right;
 }
 
 .tp-li dd.tp-free {
-  color: var(--tp-terra);
-}
-
-.tp-li dd.tp-word {
-  font-family: var(--tp-sans);
-  font-size: 18px;
-  font-weight: 700;
-}
-
-.tp-now {
-  margin-top: 18px;
-  font-size: 15.5px;
-  line-height: 1.5;
-  color: var(--tp-ink);
-  padding-left: 14px;
-  border-left: 3px solid var(--tp-coral);
-}
-
-.tp-versus h3 {
   font-family: var(--tp-serif);
-  font-weight: 500;
   font-size: 24px;
-  line-height: 1.25;
+  line-height: 1.1;
+  color: var(--tp-terra-ink);
+  font-variant-numeric: lining-nums;
 }
 
-.tp-bars {
-  margin-top: 20px;
+.tp-versus {
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -689,7 +927,7 @@ html:has(.tp) body {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  font-size: 15px;
+  font-size: 14.5px;
   color: var(--tp-ink2);
 }
 
@@ -699,9 +937,9 @@ html:has(.tp) body {
 
 .tp-track {
   margin-top: 6px;
-  height: 12px;
-  border-radius: 6px;
-  background: var(--tp-rule);
+  height: 10px;
+  border-radius: 5px;
+  background: #ddd3c3;
   display: flex;
   overflow: hidden;
 }
@@ -714,137 +952,42 @@ html:has(.tp) body {
 /* The 300–500 kr range: solid up to 300, hatched to 500. */
 .tp-fill-range {
   background: repeating-linear-gradient(135deg, var(--tp-ink2) 0 4px, #8c7f72 4px 8px);
-  opacity: 0.55;
+  opacity: 0.5;
 }
 
 .tp-bar.is-us .tp-fill {
   background: var(--tp-coral);
-  min-width: 12px;
-  border-radius: 6px;
+  min-width: 14px;
+  border-radius: 5px;
 }
 
 .tp-versus p {
-  margin-top: 22px;
-  font-size: 15.5px;
+  font-size: 15px;
   color: var(--tp-ink2);
   max-width: 32em;
 }
 
-/* Steps */
-.tp-steps {
-  list-style: none;
-  padding: 0;
-  margin-top: 44px;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  border-top: 2px solid var(--tp-ink);
+/* Closing call to action. */
+.tp-close {
+  padding: 72px 0 76px;
+  text-align: center;
 }
 
-.tp-steps li {
-  padding: 22px 28px 0 0;
-  display: flex;
-  flex-direction: column;
+.tp-close .tp-h2 {
+  margin: 0 auto;
 }
 
-.tp-step-n {
-  font-size: 13px;
-  color: var(--tp-terra-ink);
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+.tp-close .tp-cta-row {
+  justify-content: center;
+  margin-top: 26px;
 }
 
-.tp-steps h3 {
-  font-family: var(--tp-serif);
-  font-weight: 500;
-  font-size: 23px;
-  line-height: 1.25;
-  margin-top: 6px;
-}
-
-.tp-steps p:not(.tp-step-n) {
-  font-size: 15.5px;
-  color: var(--tp-ink2);
-  margin-top: 6px;
-}
-
-.tp-mini {
-  margin-top: auto;
-  padding: 12px 16px;
-  min-height: 104px;
-  background-color: var(--tp-paper2);
-  background-image:
-    linear-gradient(var(--tp-grid) 1px, transparent 1px),
-    linear-gradient(90deg, var(--tp-grid) 1px, transparent 1px);
-  background-size: 20px 20px;
-  border: 1px solid var(--tp-rule);
-  border-radius: 14px;
-  font-family: var(--tp-hand);
-  font-size: 28px;
-  font-weight: 700;
-  line-height: 1.25;
-  color: var(--tp-pen);
-}
-
-.tp-steps p + .tp-mini {
-  margin-top: 16px;
-}
-
-.tp-mini em {
-  font-style: normal;
-  color: var(--tp-terra);
-}
-
-/* Quiet cross-links */
-.tp-quiet {
-  border-top: 1px solid var(--tp-rule);
-  padding: 36px 0 44px;
-}
-
-.tp-quiet .tp-wrap {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.tp-quiet-row {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 10px 0;
-  color: var(--tp-ink2);
-  text-decoration: none;
-  font-size: 17px;
-  width: fit-content;
-  max-width: 100%;
-}
-
-.tp-quiet-row img {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  background: #ece4d6;
-  flex: 0 0 auto;
-}
-
-.tp-quiet-label {
-  font-weight: 700;
-  color: var(--tp-ink);
-  white-space: nowrap;
-  border-bottom: 2px solid var(--tp-coral);
-  padding-bottom: 1px;
-}
-
-.tp-quiet-row:hover .tp-quiet-label {
-  color: var(--tp-terra-ink);
-}
-
-/* Footer */
+/* Footer: readable, not faint (contrast ≥ 4.5:1 on paper). */
 .tp-foot {
   border-top: 1px solid var(--tp-rule);
-  padding: 28px 0 44px;
+  padding: 26px 0 40px;
   font-size: 14px;
-  color: var(--tp-mute);
+  color: var(--tp-ink2);
 }
 
 .tp-foot-in {
@@ -1024,25 +1167,13 @@ html:has(.tp) body {
     --tp-gutter: 32px;
   }
   .tp-hero {
-    gap: 44px;
+    gap: 40px;
   }
-  .tp-said {
-    margin-right: 110px;
-  }
-  .tp-book-fig {
-    width: 160px;
-    right: -18px;
-  }
-  .tp-book[data-companion="middle"] .tp-book-fig {
-    width: 150px;
-    right: -16px;
-  }
-  .tp-book[data-companion="upper"] .tp-book-fig {
-    width: 166px;
-    right: -20px;
+  .tp-steps {
+    gap: 20px;
   }
   .tp-pricing {
-    gap: 44px;
+    gap: 40px;
   }
 }
 
@@ -1050,25 +1181,30 @@ html:has(.tp) body {
 @media (max-width: 900px) {
   .tp-hero {
     grid-template-columns: 1fr;
-    gap: 48px;
+    gap: 44px;
     padding-top: 40px;
-    padding-bottom: 72px;
+    padding-bottom: 64px;
   }
   .tp-h1 {
-    font-size: clamp(38px, 7vw, 60px);
+    font-size: clamp(36px, 7vw, 58px);
   }
   .tp-lede {
     max-width: 34em;
   }
-  .tp-book {
-    margin-right: 18px;
+  .tp-show {
     max-width: 680px;
+  }
+  .tp-steps {
+    grid-template-columns: 1fr;
+    gap: 36px;
+    max-width: 560px;
   }
   .tp-pricing {
     grid-template-columns: 1fr;
+    gap: 32px;
   }
   .tp-sec {
-    padding: 72px 0;
+    padding: 64px 0;
   }
 }
 
@@ -1079,183 +1215,129 @@ html:has(.tp) body {
     --tp-gutter: 20px;
     font-size: 16px;
   }
+  /* Top bar: logo and Integritet; the band nav is a slim strip under it. */
   .tp-mast-in {
-    min-height: 62px;
-    gap: 12px;
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "logo right"
+      "nav nav";
+    gap: 0 12px;
+    min-height: 0;
+    padding-top: 6px;
   }
   .tp-logo img {
     height: 23px;
   }
   .tp-nav {
-    display: none;
+    justify-content: center;
+    gap: 2px;
+    border-top: 1px solid var(--tp-rule);
+    margin: 4px 0 0;
+    min-height: 38px;
   }
-  .tp-nav + .tp-mast-right {
-    margin-left: auto;
+  .tp-nav a {
+    min-height: 38px;
+    padding: 0 12px;
+    font-size: 14.5px;
+  }
+  .tp-nav a::after {
+    left: 12px;
+    right: 12px;
+    bottom: 3px;
   }
   .tp-hero {
-    gap: 40px;
-    padding-top: 26px;
-    padding-bottom: 60px;
+    gap: 36px;
+    padding-top: 22px;
+    padding-bottom: 52px;
   }
   .tp-h1 {
-    font-size: clamp(34px, 10.6vw, 44px);
-    line-height: 1.05;
+    font-size: clamp(32px, 9.6vw, 42px);
+    line-height: 1.06;
   }
   .tp-lede {
     font-size: 16.5px;
-    margin-top: 14px;
-  }
-  .tp-switch {
-    display: flex;
-    width: 100%;
-    margin-top: 22px;
-  }
-  .tp-switch-opt {
-    flex: 1 1 0;
-    padding: 10px 8px;
-    font-size: 15px;
-    white-space: normal;
-    line-height: 1.25;
-  }
-  .tp-switch-who {
-    display: block;
-    font-size: 13.5px;
-  }
-  .tp-switch-sep {
-    display: none;
+    margin-top: 12px;
   }
   .tp-hello {
-    margin-top: 20px;
+    margin-top: 18px;
   }
   .tp-hello-name {
     font-size: 26px;
   }
-  /* The price anchor sits above the full-width button, never as fine print
-     cramped under it. */
-  .tp-cta-area {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 16px;
-    margin-top: 22px;
-  }
-  .tp-anchor {
-    order: -1;
-    font-size: 16px;
-    max-width: none;
-    padding-left: 14px;
-    border-left: 3px solid var(--tp-coral);
+  .tp-cta-row {
+    margin-top: 20px;
+    gap: 10px;
   }
   .tp-cta {
-    flex: 1 1 auto;
-    min-width: 0;
-    font-size: 17px;
+    flex: 1 0 auto;
+    min-height: 54px;
+    font-size: 15.5px;
+    padding: 7px 16px 7px 8px;
+    gap: 10px;
   }
-  .tp-cta span:not(.tp-cta-arrow) {
-    overflow: hidden;
-    text-overflow: ellipsis;
+  .tp-cta img {
+    width: 36px;
+    height: 36px;
   }
   .tp-cta-arrow {
     margin-left: auto;
   }
-  .tp-book {
-    margin-right: 0;
-    padding: 20px 18px 22px 36px;
-    background-size: 22px 22px;
-  }
-  .tp-book::before {
-    left: 20px;
-  }
-  .tp-book-head {
-    font-size: 12.5px;
-  }
-  .tp-book-q {
-    font-size: 18px;
-  }
-  .tp-hand {
-    font-size: 31px;
-  }
-  .tp-hand div {
-    gap: 12px;
-  }
-  .tp-said {
-    margin-right: 96px;
+  .tp-listen {
+    flex: 0 0 auto;
+    min-height: 54px;
+    min-width: 0;
+    padding: 8px 14px 8px 12px;
+    gap: 7px;
     font-size: 14.5px;
   }
-  .tp-book-fig,
-  .tp-book[data-companion] .tp-book-fig {
-    width: 112px;
-    right: -6px;
-    bottom: -22px;
+  .tp-listen svg {
+    width: 18px;
+    height: 17px;
   }
-  .tp-book[data-companion="upper"] .tp-book-fig {
-    width: 120px;
+  .tp-quietline {
+    margin-top: 12px;
+    font-size: 14.5px;
   }
   .tp-sec {
-    padding: 60px 0;
+    padding: 56px 0;
   }
   .tp-h2 {
-    font-size: clamp(28px, 8.4vw, 34px);
-  }
-  .tp-sub {
-    font-size: 16px;
-  }
-  .tp-pricing {
-    gap: 40px;
-    margin-top: 30px;
-  }
-  .tp-list {
-    padding: 4px 18px 18px;
-  }
-  .tp-li {
-    padding: 16px 0;
-  }
-  .tp-li dt {
-    font-size: 15.5px;
-  }
-  .tp-li dt small {
-    font-size: 13.5px;
-  }
-  .tp-li dd {
-    font-size: 24px;
-  }
-  .tp-li dd.tp-word {
-    font-size: 16px;
+    font-size: clamp(27px, 7.6vw, 34px);
   }
   .tp-steps {
-    grid-template-columns: 1fr;
-    margin-top: 30px;
+    margin-top: 28px;
   }
-  .tp-steps li {
-    padding: 20px 0 22px;
-    border-bottom: 1px solid var(--tp-rule);
+  .tp-steps h3 {
+    margin-top: 14px;
+    font-size: 21px;
   }
-  .tp-steps li:last-child {
-    border-bottom: 0;
+  .tp-price {
+    padding: 52px 0 56px;
   }
-  .tp-quiet-row {
+  .tp-list {
+    padding: 2px 18px;
+  }
+  .tp-li {
     flex-wrap: wrap;
-    column-gap: 14px;
-    row-gap: 2px;
-    display: grid;
-    grid-template-columns: 44px 1fr;
   }
-  .tp-quiet-row img {
-    grid-row: span 2;
+  .tp-li dt,
+  .tp-li dd {
+    font-size: 15px;
   }
-  .tp-quiet-label {
-    white-space: normal;
-    width: fit-content;
+  .tp-close {
+    padding: 56px 0 60px;
   }
   .tp-foot-in {
     flex-direction: column;
     align-items: flex-start;
+    gap: 10px;
   }
   .tp-foot-in a {
     margin-left: 0;
   }
   .tp-privacy {
-    padding-top: 36px;
-    padding-bottom: 60px;
+    padding-top: 32px;
+    padding-bottom: 56px;
   }
   .tp-privacy-list {
     margin-top: 36px;
@@ -1278,31 +1360,141 @@ html:has(.tp) body {
   }
 }
 
-/* Small phones (≤ 380 px): tighter book and smaller handwriting. */
+/* Narrow phones: the book takes the full width and the call window sits
+   over its lower right corner like a picture-in-picture, the companion
+   pointing back at the rows and the dialogue. */
+@media (max-width: 640px) {
+  .tp-show {
+    display: block;
+    padding: 0 0 14px;
+  }
+  .tp-book {
+    padding: 16px 18px 18px 34px;
+    background-size: 20px 20px;
+  }
+  .tp-book::before {
+    left: 20px;
+  }
+  .tp-book-head {
+    font-size: 12px;
+  }
+  .tp-book-q {
+    margin-top: 6px;
+    font-size: 17px;
+  }
+  .tp-book-q small {
+    font-size: 12px;
+  }
+  .tp-hand {
+    font-size: 31px;
+    margin-top: 4px;
+  }
+  .tp-hand p {
+    gap: 0 12px;
+  }
+  .tp-said {
+    padding-top: 10px;
+    margin-right: 112px;
+  }
+  .tp-said p {
+    font-size: 13.5px;
+    padding-left: 10px;
+  }
+  .tp-said p + p {
+    margin-top: 6px;
+  }
+  .tp-call {
+    position: absolute;
+    right: -6px;
+    bottom: 0;
+    width: 116px;
+    height: 156px;
+    min-height: 0;
+    margin: 0;
+    border-radius: 18px;
+    box-shadow:
+      0 0 0 4px #c8563418,
+      0 18px 36px -18px #1a1613b3,
+      inset 0 1px 0 #ffffff1a;
+  }
+  /* Sized so the eyes and the pointing hand both fit the small frame. */
+  .tp-show[data-companion="primary"] .tp-call img {
+    width: 140%;
+    right: -38%;
+  }
+  .tp-show[data-companion="middle"] .tp-call img {
+    width: 140%;
+    right: -36%;
+  }
+  .tp-show[data-companion="upper"] .tp-call img {
+    width: 140%;
+    right: -40%;
+  }
+  .tp-call .tp-wave {
+    bottom: 9px;
+    height: 16px;
+    gap: 2px;
+  }
+  .tp-call .tp-wave i {
+    width: 2.5px;
+  }
+  .tp-call .tp-wave i:nth-child(n + 16) {
+    display: none;
+  }
+}
+
+/* Phones up to 480 px: the start row stays one line (start + Hör rösten);
+   the arrow gives way first. */
+@media (max-width: 480px) {
+  .tp-cta-arrow {
+    display: none;
+  }
+  .tp-cta {
+    padding-right: 18px;
+    gap: 9px;
+    font-size: 15px;
+  }
+  .tp-listen {
+    font-size: 14px;
+    padding: 8px 12px 8px 11px;
+  }
+}
+
+/* Small phones (≤ 380 px). */
 @media (max-width: 380px) {
   .tp {
     --tp-gutter: 16px;
   }
+  .tp-nav a {
+    padding: 0 9px;
+    font-size: 14px;
+  }
+  .tp-nav a::after {
+    left: 9px;
+    right: 9px;
+  }
+  .tp-cta-row {
+    gap: 8px;
+  }
   .tp-cta {
-    padding-right: 16px;
-    gap: 10px;
+    padding: 7px 13px 7px 7px;
+    gap: 8px;
+    font-size: 14.5px;
   }
   .tp-cta img {
     width: 34px;
     height: 34px;
   }
   .tp-listen {
-    width: 52px;
-    height: 52px;
+    padding: 8px 10px 8px 9px;
+    gap: 6px;
+    font-size: 13.5px;
+  }
+  .tp-listen svg {
+    width: 16px;
+    height: 15px;
   }
   .tp-hand {
-    font-size: 27px;
-  }
-  .tp-said {
-    margin-right: 84px;
-  }
-  .tp-book-fig,
-  .tp-book[data-companion] .tp-book-fig {
-    width: 98px;
+    font-size: 28px;
   }
 }

@@ -1,48 +1,42 @@
-import { useState } from 'react';
-import { BANDS, BAND_PATHS, type BandId } from '../bands';
+import { useEffect, type ReactNode } from 'react';
+import { BANDS, type BandId } from '../bands';
 import { t } from '../locales/sv';
-import HomeChooser from './HomeChooser';
-import { PaperFooter, PaperMast, PaperPage, PriceSection, QuietLinks, SectionLink, StepsSection } from './Paper';
+import { BandSections, Hero, PaperFooter, PaperMast, PaperPage, type StartProps } from './Paper';
+import { stopGreeting } from './greetingAudio';
 
 type Props = {
   /** Begin a call in this band (switches band in place, then starts). */
   onBegin: (band: BandId) => void;
   starting: boolean;
-  /** In-app navigation for the quiet /gymnasiet link. */
-  onNavigate?: (target: BandId | '/') => void;
+  /** In-app navigation for the band nav. */
+  onNavigate?: (target: BandId) => void;
+  /** The household menu, when the device remembers someone (App decides). */
+  menu?: ReactNode;
 };
 
-/** The front door (/) speaks to grundskola families only: the hero with the
- *  two-way switch, the planned price list, the three steps, and one quiet
- *  link for upper-secondary students and adults. The header's Integritet
- *  link is a plain text link, never a pill row above the headline. */
-export default function ChooserPage({ onBegin, starting, onNavigate }: Props) {
-  const [band, setBand] = useState<BandId>('primary');
+/** The front door (/) for a first visit: the Åk 1–6 page in the parent
+ *  voice (Räven). The other audiences are one tap away in the masthead's
+ *  band nav; there is no switch inside the hero. */
+export default function ChooserPage({ onBegin, starting, onNavigate, menu }: Props) {
+  const band = BANDS.primary;
+  // Leaving the front door stops the hello, so it never keeps playing under
+  // a different companion.
+  useEffect(() => () => stopGreeting(), []);
+  const start: StartProps = {
+    label: starting ? t('welcome.starting') : band.copy.startButton,
+    disabled: starting,
+    onStart: () => {
+      // Starting the call stops the greeting clip first.
+      stopGreeting();
+      onBegin('primary');
+    },
+  };
   return (
     <PaperPage>
-      <PaperMast
-        nav={
-          <>
-            <SectionLink to="sa-gar-det-till">{t('landing.howTitle')}</SectionLink>
-            <SectionLink to="pris">{t('landing.navPrice')}</SectionLink>
-          </>
-        }
-        right={
-          <a className="tp-mast-link" href="/integritet">
-            {t('landing.headerPrivacy')}
-          </a>
-        }
-      />
+      <PaperMast active="primary" onNavigate={onNavigate} right={menu} />
       <main>
-        <HomeChooser onBegin={onBegin} starting={starting} band={band} onBandChange={setBand} />
-        <PriceSection audience="family" />
-        <StepsSection band={BANDS[band]} />
-        <QuietLinks
-          onNavigate={onNavigate}
-          links={[
-            { lead: 'landing.crossUpperLead', label: 'landing.crossUpperLink', href: BAND_PATHS.upper, face: 'upper', target: 'upper' },
-          ]}
-        />
+        <Hero band={band} start={start} />
+        <BandSections band={band} start={start} />
       </main>
       <PaperFooter />
     </PaperPage>
