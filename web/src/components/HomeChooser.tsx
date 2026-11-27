@@ -1,104 +1,86 @@
-import { BANDS, BAND_IDS } from '../bands';
+import { useEffect, useState } from 'react';
+import { BANDS } from '../bands';
 import type { BandId } from '../bands';
 import { t } from '../locales/sv';
-import { stopGreeting, toggleGreeting, usePlayingGreetingBand } from './greetingAudio';
+import { ListenButton, Notebook, PaperTitle, PriceAnchor, StartButton } from './Paper';
+import { stopGreeting } from './greetingAudio';
+
+/** The two grundskola companions on the front door. Gymnasiet and adults
+ *  have their own page (/gymnasiet), linked quietly further down. */
+export const FAMILY_BANDS: BandId[] = ['primary', 'middle'];
+
+const AUDIENCE = { primary: 'landing.audiencePrimary', middle: 'landing.audienceMiddle', upper: 'landing.crossUpperLink' } as const;
 
 type Props = {
   /** Begin a call in this band (switches band in place, then starts). */
   onBegin: (band: BandId) => void;
   starting: boolean;
+  /** Controlled selection (ChooserPage lets the steps follow it). */
+  band?: BandId;
+  onBandChange?: (band: BandId) => void;
 };
 
-const AUDIENCE: Record<BandId, 'landing.audiencePrimary' | 'landing.audienceMiddle' | 'landing.audienceUpper'> = {
-  primary: 'landing.audiencePrimary',
-  middle: 'landing.audienceMiddle',
-  upper: 'landing.audienceUpper',
-};
+/** Front door hero for grundskola families: the headline, a discreet
+ *  two-way switch (Åk 1–6 · Räven | Högstadiet · Lodjuret), one dark start
+ *  button that begins the call in one tap, a quiet listen control, the
+ *  honest price anchor, and the squared exercise book that follows the
+ *  switch. */
+export default function HomeChooser({ onBegin, starting, band: bandProp, onBandChange }: Props) {
+  const [inner, setInner] = useState<BandId>('primary');
+  const selected = bandProp ?? inner;
+  const band = BANDS[selected];
+  // Leaving the front door (a quiet link to another companion's page) stops
+  // the hello, so it never keeps playing under a different companion.
+  useEffect(() => () => stopGreeting(), []);
 
-const CTA: Record<BandId, 'band.primary.startButton' | 'band.middle.startButton' | 'band.upper.startButton'> = {
-  primary: 'band.primary.startButton',
-  middle: 'band.middle.startButton',
-  upper: 'band.upper.startButton',
-};
+  function choose(next: BandId) {
+    if (next === selected) return;
+    // A different companion: its predecessor's hello must not keep playing.
+    stopGreeting();
+    if (bandProp === undefined) setInner(next);
+    onBandChange?.(next);
+  }
 
-/** A calm round listen control on each portrait: dark frosted disc, cream
- *  speaker, apricot while that companion's clip plays. The comic "Hej!"
- *  bubble stays on the single-band pages, where there is one companion;
- *  three of them in a row competed with the three start buttons. */
-function ListenIcon() {
   return (
-    <span className="ot-choose-listen" aria-hidden="true">
-      <svg className="ot-land-spk" viewBox="0 0 52 48">
-        <path d="M6 18 H14 L25 9 V39 L14 30 H6 Z" fill="currentColor" stroke="currentColor" strokeWidth="3" strokeLinejoin="round" />
-        <path d="M31 17 a10 10 0 0 1 0 14" fill="none" stroke="currentColor" strokeWidth="4.5" strokeLinecap="round" />
-        <path d="M36 11 a18 18 0 0 1 0 26" fill="none" stroke="currentColor" strokeWidth="4.5" strokeLinecap="round" />
-        <path d="M41 6 a26 26 0 0 1 0 36" fill="none" stroke="currentColor" strokeWidth="4.5" strokeLinecap="round" opacity=".55" />
-      </svg>
-    </span>
-  );
-}
-
-/** The single-domain front door: one landing page with three equal-weight
- *  companion cards. Each card starts the call in one tap (the band switches
- *  in place first). The portrait is one big button that plays that
- *  companion's hello clip; the round speaker on it says so. */
-export default function HomeChooser({ onBegin, starting }: Props) {
-  const playingBand = usePlayingGreetingBand();
-  return (
-    <div className="ot-choose">
-      <div className="ot-choose-head">
-        {/* "prata med." never splits: a break lands before the accent word
-            or earlier, never leaving "med." alone on a line. */}
-        <h1 className="ot-land-title">
-          {t('landing.titlePrefix')}
-          <span className="ot-nowrap">
-            <span className="ot-land-accent">{t('landing.titleAccent')}</span>
-            {t('landing.titleSuffix')}
-            <span className="ot-land-dot">{t('landing.titlePeriod')}</span>
-          </span>
-        </h1>
-        <p className="ot-land-sub">{t('landing.unifiedIntro')}</p>
+    <header className="tp-hero tp-wrap">
+      <div className="tp-hero-copy">
+        <PaperTitle prefix="landing.familyTitlePrefix" accent="landing.familyTitleAccent" suffix="landing.familyTitleSuffix" />
+        <p className="tp-lede">{t('landing.familyIntro')}</p>
+        <div className="tp-switch" role="group" aria-label={t('landing.switchLabel')}>
+          {FAMILY_BANDS.map((id) => (
+            <button
+              key={id}
+              type="button"
+              className="tp-switch-opt"
+              aria-pressed={id === selected}
+              aria-label={`${t(AUDIENCE[id])} · ${BANDS[id].companion.name}`}
+              onClick={() => choose(id)}
+            >
+              <span>{t(AUDIENCE[id])}</span>
+              <span className="tp-switch-sep" aria-hidden="true"> · </span>
+              <span className="tp-switch-who">{BANDS[id].companion.name}</span>
+            </button>
+          ))}
+        </div>
+        <div className="tp-cta-area">
+          <div className="tp-cta-row">
+            <StartButton
+              band={band}
+              label={starting ? t('welcome.starting') : band.copy.startButton}
+              disabled={starting}
+              onClick={() => {
+                // Starting the call stops the greeting clip first, so no
+                // stale hello keeps playing under the new session.
+                stopGreeting();
+                onBegin(selected);
+              }}
+            />
+            <ListenButton band={band} greeting={band.copy.welcomeBubble} />
+          </div>
+          <PriceAnchor />
+        </div>
       </div>
-      <h2 className="ot-sr-only">{t('landing.chooserTitle')}</h2>
-      <ul className="ot-choose-cards">
-        {BAND_IDS.map((id) => {
-          const band = BANDS[id];
-          const playing = playingBand === id;
-          return (
-            <li key={id} className="ot-choose-card" data-companion={id}>
-              <button
-                type="button"
-                className={`ot-choose-portrait${playing ? ' is-playing' : ''}`}
-                onClick={() => toggleGreeting(id)}
-                aria-pressed={playing}
-                aria-label={t('landing.listenAria', { greeting: band.copy.welcomeBubble, companion: band.companion.name })}
-                title={t('landing.listenTitle', { companion: band.companion.name })}
-              >
-                <img className="ot-choose-fig" src={band.companion.hero} alt="" aria-hidden="true" />
-                <ListenIcon />
-              </button>
-              <div className="ot-choose-body">
-                <h3 className="ot-choose-aud">{t(AUDIENCE[id])}</h3>
-                <p className="ot-choose-with">{t('landing.withCompanion', { companion: band.companion.name })}</p>
-                <button
-                  type="button"
-                  className="ot-choose-cta"
-                  disabled={starting}
-                  onClick={() => {
-                    // A card starts the call: stop the greeting clip first so
-                    // no stale greeting keeps playing under the new session.
-                    stopGreeting();
-                    onBegin(id);
-                  }}
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>
-                  {t(CTA[id])}
-                </button>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
+      <Notebook band={band} />
+    </header>
   );
 }

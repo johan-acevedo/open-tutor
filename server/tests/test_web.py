@@ -99,7 +99,7 @@ def test_spa_routes_serve_index_for_direct_load_and_refresh(tmp_path, monkeypatc
     monkeypatch.setattr(web, "WEB_DIST", dist)
 
     client = TestClient(create_app(ENV))
-    for path in ("/", "/integritet", "/ak1-6", "/hogstadiet", "/gymnasiet", "/raven"):
+    for path in ("/", "/integritet", "/ak1-6", "/hogstadiet", "/gymnasiet", "/raven", "/studier"):
         response = client.get(path)
         assert response.status_code == 200, path
         assert "Talarum" in response.text, path

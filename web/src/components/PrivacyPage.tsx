@@ -1,55 +1,60 @@
-import { t } from '../locales/sv';
-import Brand from './Brand';
+import { t, type SvKey } from '../locales/sv';
+import { PaperFooter, PaperMast, PaperPage } from './Paper';
 
-/** Public privacy page at /integritet: what the browser remembers, what is
- *  sent during a call, and how to begin together. Calm landing-style type,
- *  no warning styling. Copy lives in web/src/locales/sv.ts. */
+const SECTIONS: Array<[SvKey, SvKey]> = [
+  ['privacy.browserTitle', 'privacy.browserBody'],
+  ['privacy.sendTitle', 'privacy.sendBody'],
+  ['privacy.statsTitle', 'privacy.statsBody'],
+];
+
+/** Public privacy page at /integritet: a short, calm statement of how
+ *  Talarum treats what is said, on the same warm paper as the start pages.
+ *  Principles, not a vendor list, so it stays true as providers change.
+ *  Copy lives in web/src/locales/sv.ts. */
 export default function PrivacyPage({ onBack }: { onBack: () => void }) {
   const email = t('privacy.contactEmail');
   return (
-    <div className="ot-land">
-      <header className="ot-land-top">
-        <div className="ot-land-topinner">
-          <Brand />
-          {/* Right-aligned like the chooser's Integritet link, and visible on
-              phones too (the centred nav collapses there). */}
-          <nav className="ot-land-topright" aria-label={t('landing.navLabel')}>
-            <a className="ot-choose-privacy" href="/">
-              <span aria-hidden="true">← </span>
-              {t('privacy.back')}
-            </a>
-          </nav>
+    <PaperPage>
+      <PaperMast
+        right={
+          <a
+            className="tp-mast-link"
+            href="/"
+            onClick={(event) => {
+              if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+              event.preventDefault();
+              onBack();
+            }}
+          >
+            <span aria-hidden="true">← </span>
+            {t('privacy.back')}
+          </a>
+        }
+      />
+      <main className="tp-privacy tp-wrap">
+        <p className="tp-kicker">{t('privacy.kicker')}</p>
+        <h1 className="tp-h1 tp-privacy-title">{t('privacy.title')}</h1>
+        <p className="tp-lede">{t('privacy.intro')}</p>
+        <div className="tp-privacy-list">
+          {SECTIONS.map(([title, body]) => (
+            <section key={title}>
+              <h2>{t(title)}</h2>
+              <p>{t(body)}</p>
+            </section>
+          ))}
+          <section>
+            <h2>{t('privacy.contactTitle')}</h2>
+            <p>
+              {t('privacy.contactPrefix')} <a href={`mailto:${email}`}>{email}</a>.
+            </p>
+          </section>
         </div>
-      </header>
-      <div className="ot-land-scroll">
-        <main className="ot-privacy">
-          <h1>{t('privacy.title')}</h1>
-          <p className="ot-privacy-lead">{t('privacy.intro')}</p>
-          <section>
-            <h2>{t('privacy.browserTitle')}</h2>
-            <p>{t('privacy.browserBody')}</p>
-          </section>
-          <section>
-            <h2>{t('privacy.sendTitle')}</h2>
-            <p>{t('privacy.sendBody')}</p>
-            <p>{t('privacy.training')}</p>
-            <p>{t('privacy.stats')}</p>
-          </section>
-          <section>
-            <h2>{t('privacy.togetherTitle')}</h2>
-            <p>{t('privacy.togetherBody')}</p>
-          </section>
-          <p className="ot-privacy-contact">
-            {t('privacy.contactPrefix')}{' '}
-            <a href={`mailto:${email}`}>{email}</a>
-          </p>
-          <p>
-            <button type="button" className="ot-land-ghost" onClick={onBack}>
-              ← {t('privacy.back')}
-            </button>
-          </p>
-        </main>
-      </div>
-    </div>
+        <button type="button" className="tp-back" onClick={onBack}>
+          <span aria-hidden="true">← </span>
+          {t('privacy.backHome')}
+        </button>
+      </main>
+      <PaperFooter privacyLink={false} />
+    </PaperPage>
   );
 }

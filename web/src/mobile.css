@@ -172,12 +172,6 @@
   height: 44px;
   flex-basis: 44px;
 }
-.ot-phone .ot-land-topinner {
-  padding: 6px 24px;
-}
-.ot-phone .ot-land-scroll {
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-}
 .ot-phone .ot-main {
   --companion-w: min(50vw, 215px);
   --companion-h: min(64.6vw, 277px);

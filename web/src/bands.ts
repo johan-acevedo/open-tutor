@@ -180,6 +180,7 @@ const PATH_ALIASES: Record<string, BandId> = {
   '/bjornen': 'upper',
   '/bj\u00f6rnen': 'upper',
   '/vuxen': 'upper',
+  '/studier': 'upper',
 };
 
 /** Band from the request path alone. Unknown paths (/, /integritet, …)

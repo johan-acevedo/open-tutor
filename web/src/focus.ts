@@ -7,12 +7,12 @@
 
 /** Focus the current start view's primary start control. True when found. */
 export function focusStartControl(root: ParentNode = document): boolean {
-  const hero = root.querySelector<HTMLElement>('.ot-land-hero .ot-land-cta');
+  const hero = root.querySelector<HTMLElement>('.tp-hero .tp-cta');
   if (hero) {
     hero.focus();
     return true;
   }
-  const card = root.querySelector<HTMLElement>('.ot-choose-card .ot-choose-cta');
+  const card = root.querySelector<HTMLElement>('.tp-cta');
   if (card) {
     card.focus();
     return true;

@@ -66,3 +66,20 @@ portraits (transparent heroes on band-coloured backdrops, a round speaker disc a
 affordance, cream buttons on one baseline). The comic "Hej!" bubble stays on the single-band
 pages; three of them on `/` competed with the start buttons. The steps on `/` name no companion. Decisions above still hold: no pills above the
 headline, no gradient text, no fine print under buttons, one tap from card to call.
+
+## v3: warm paper editorial (2026-11-27)
+
+Johan chose concept B of three commercial explorations: warm light paper, Fraunces display
+serif, a squared Swedish exercise book as the board with Caveat handwriting, and a ruled price
+list beside a bar comparison. Implemented in `web/src/components/Paper.tsx` and
+`web/src/paper.css`; the dark call view is unchanged.
+
+- Each page speaks to one audience. `/` is for grundskola families (Räven and Lodjuret behind a
+  discreet two-way switch under the lede, not a pill row above the headline); `/gymnasiet`
+  (also `/studier`) is adult studiestöd with Björnen. They link to each other only quietly,
+  above the footer.
+- One dark start button per page, one tap to the call, plus a round listen button for the
+  hello clip. The comic bubble and the three-card chooser are gone.
+- Price: free while we test; the planned price (2 h/week free, then 25 kr/h, no subscription)
+  sits beside the button on desktop and above it on phones, never as fine print under it.
+- Fonts are self-hosted (no Google Fonts or other font CDN on these pages).

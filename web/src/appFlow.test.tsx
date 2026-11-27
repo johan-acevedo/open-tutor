@@ -172,9 +172,9 @@ describe('pending in-call-switch prefill on /', () => {
     expect(clearPrefill).not.toHaveBeenCalled();
     await waitFor(() => expect(screen.getByText('Hej Bea!')).toBeDefined());
 
-    // …but the user tapping another band's card wins: the prefill is
+    // …but the user tapping another band's quiet link wins: the prefill is
     // cleared, so the page is not yanked back.
-    fireEvent.click(screen.getByRole('link', { name: 'Åk 1–6 med Räven' }));
+    fireEvent.click(screen.getByRole('link', { name: /Läxhjälp med Räven/ }));
     await waitFor(() => expect(clearPrefill).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(window.location.pathname).toBe('/ak1-6'));
     expect(window.location.pathname).toBe('/ak1-6');
@@ -214,7 +214,7 @@ describe('cross-band links', () => {
     await waitFor(() =>
       expect(document.querySelector('.ot-root')?.getAttribute('data-band')).toBe('middle'),
     );
-    fireEvent.click(screen.getByRole('link', { name: 'Åk 1–6 med Räven' }));
+    fireEvent.click(screen.getByRole('link', { name: /Läxhjälp med Räven/ }));
     await waitFor(() => expect(window.location.pathname).toBe('/ak1-6'));
     expect(window.location.search).toBe('');
     expect(document.querySelector('.ot-root')?.getAttribute('data-band')).toBe('primary');
@@ -241,8 +241,8 @@ describe('household picker Back', () => {
     await waitFor(() => expect(screen.getByText('Hej Alva!')).toBeDefined());
     // The opener is gone with the old view: the new start view's start
     // control takes focus, never <body>.
-    expect(document.activeElement?.textContent).toBe('Prata med Räven');
-    expect(document.activeElement?.className).toContain('ot-land-cta');
+    expect(document.activeElement?.textContent).toContain('Prata med Räven');
+    expect(document.activeElement?.className).toContain('tp-cta');
   });
 });
 
@@ -294,7 +294,7 @@ describe('final review edges', () => {
     window.history.replaceState(null, '', '/hogstadiet?kampanj=x&band=middle');
     sessionMock.useSession.mockReturnValue(baseSession({}));
     render(<App />);
-    fireEvent.click(await screen.findByRole('link', { name: 'Åk 1–6 med Räven' }));
+    fireEvent.click(await screen.findByRole('link', { name: /Läxhjälp med Räven/ }));
     await waitFor(() => expect(window.location.pathname).toBe('/ak1-6'));
     expect(window.location.search).toBe('?kampanj=x');
   });
