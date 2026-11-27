@@ -79,9 +79,42 @@ MAX_HOMEWORK_IMAGES = 4
 FINAL_RENDER_RESERVE_S = 3.0
 DELIVERY_RESERVE_S = 0.2
 MIN_OPTIONAL_STEP_S = 2.0
+
 # The shell's `dense` minimum is 16 px below 600 px wide (screen/shell/shell.js).
 NARROW_PANE_WIDTH = 600
 NARROW_PANE_HEIGHT = 640
+
+
+# What the optional repair work did on one page, in one word each. These are
+# counted per session for PostHog (``screen_stats_summary``), so months of real
+# use can answer whether the vision ``look`` pass earns its keep: how often it
+# actually changes a page, how often it only says OK, and how often it never
+# runs at all. Plain strings: they go into meta.json and the debug log as they
+# are. Both optional steps can end the same two ways:
+STEP_TIMED_OUT = "timed_out"
+STEP_FAILED = "failed"
+# The look pass:
+LOOK_OFF = "off"                        # SCREEN_LOOK=0
+LOOK_SKIPPED_BUDGET = "skipped_budget"  # no room inside the page target
+LOOK_SKIPPED_LINT = "skipped_lint"      # actionable lint: correct it directly
+LOOK_OK = "ok"                          # looked, nothing to change
+LOOK_FIXED = "fixed"                    # looked, fixed, and the fix shipped
+LOOK_FIX_DROPPED = "fix_dropped"        # wrote a fix, no time to render it
+# The one lint retry:
+RETRY_NOT_NEEDED = "not_needed"         # no actionable lint left
+RETRY_AFTER_LOOK = "after_look"         # one correction per page; the look had it
+RETRY_OFF = "off"                       # SCREEN_LINT_RETRY=0
+RETRY_SKIPPED_BUDGET = "skipped_budget"
+RETRY_NO_CHANGE = "no_change"           # ran, returned the same page
+RETRY_APPLIED = "applied"
+RETRY_WORSE = "worse"                   # the correction linted worse; first kept
+RETRY_DROPPED = "dropped"               # could not be re-rendered in time
+
+
+def _step_outcome(why: str) -> str:
+    """Turn ``_bounded``'s why-not into one outcome word."""
+    return STEP_TIMED_OUT if why.startswith("timed out") else STEP_FAILED
+
 
 
 def session_pages_dir(room: str, debug_dir: Path | str | None = None) -> Path:
@@ -526,6 +559,10 @@ class Screen:
         # Per-call stats for analytics (kind, serving provider, hedge use and
         # first-text times; never prompts or answers).
         self._call_stats: list[dict[str, Any]] = []
+        # One record per finished page: what the look pass and the lint retry
+        # actually did (screen_stats_summary aggregates them for PostHog, so
+        # we can see over months whether the look pass earns its keep).
+        self._repair_stats: list[dict[str, Any]] = []
         self.turns: list[tuple[str, str]] = []  # ("child"|"tutor", text)
         self.homework: list[tuple[str, list[str]]] = []  # (description, image data URLs)
         self.answers: list[dict[str, str]] = []
@@ -534,6 +571,9 @@ class Screen:
         # Applied patches, keyed by page id: a preview for one page must never
         # read or corrupt another's history.
         self.visible_patches: dict[str, list[str]] = {}
+        # Pages the child has already seen, so a page still held back can be
+        # told apart from one that has been superseded (``unshown_pages``).
+        self._shown: set[str] = set()
         self.on_page: Callable[[PageResult], Any] | None = None
         self.on_patch: Callable[[PatchResult], Any] | None = None
         self.on_failure: Callable[[str], Any] | None = None
@@ -579,9 +619,21 @@ class Screen:
         self._get_pane_size = get_pane_size
 
     def mark_visible(self, page_id: str) -> None:
-        if page_id in self.pages and page_id != self.visible_id:
+        if page_id not in self.pages:
+            return
+        self._shown.add(page_id)
+        if page_id != self.visible_id:
             self.visible_id = page_id
             self.visible_patches[page_id] = []
+
+    def unshown_pages(self) -> set[str]:
+        """Finished pages the child has not seen yet.
+
+        A page asked for with ``show="hold"`` waits here until the tutor calls
+        ``show_page``; the tutor is expected to teach from it then, so its
+        screenshot is still worth keeping in the tutor's context (see
+        ``screen_context.prune_screen_shots``)."""
+        return {page_id for page_id in self.pages if page_id not in self._shown}
 
     # ---- progress --------------------------------------------------------
 
@@ -1589,17 +1641,27 @@ class Screen:
     def screen_stats_summary(self) -> dict[str, Any]:
         """Per-session screen call stats for ``tutor_session_ended``.
 
-        Counts, hedges and first-text timings per call kind, plus which provider
-        served each call. Never prompts or answers."""
-        from .analytics import summarize_screen_calls
+        Counts, hedges and first-text timings per call kind, which provider
+        served each call, and what the look pass and the lint retry did on each
+        page (``screen_look`` / ``screen_retry``: how often the model fixed its
+        own page, only said OK, or never looked at all). Never prompts, answers
+        or page content."""
+        from .analytics import summarize_screen_calls, summarize_screen_repairs
 
         summary = summarize_screen_calls(self._call_stats)
+        repairs = summarize_screen_repairs(self._repair_stats)
         return {
             "screen_calls_total": summary["calls_total"],
             "screen_hedged_calls": summary["hedged_calls"],
             "screen_race_calls": sum(1 for call in self._call_stats if call.get("race")),
             "screen_provider_wins": summary["provider_wins"],
             "screen_calls": summary["calls"],
+            "screen_pages_total": repairs["pages"],
+            "screen_look": repairs["look"],
+            "screen_retry": repairs["retry"],
+            "screen_look_s": repairs["look_s"],
+            "screen_retry_s": repairs["retry_s"],
+            "screen_pages_with_residual_lint": repairs["pages_with_residual_lint"],
         }
 
     def _note_provider(self, kind: str, provider: str, *, failed: bool,
@@ -1781,8 +1843,12 @@ class Screen:
         reserve_s = max(render_s, FINAL_RENDER_RESERVE_S)
         step_s = MIN_OPTIONAL_STEP_S
         look_s = retry_s = 0.0
+        # ``look_outcome`` and ``retry_outcome`` say in one word what the
+        # optional work did, so a session summary can count outcomes without
+        # parsing ``notes`` (which stays the human-readable trail).
         repair: dict[str, Any] = {"look": False, "look_fix": False, "retry": False,
-                                  "retry_applied": False, "notes": []}
+                                  "retry_applied": False, "notes": [],
+                                  "look_outcome": LOOK_OFF, "retry_outcome": RETRY_NOT_NEEDED}
 
         # Spend the soft target only on optional inspection. Known lint goes
         # straight to one correction instead of paying for a look first.
@@ -1797,50 +1863,73 @@ class Screen:
                     target_s=look_target)
                 if why:
                     repair["notes"].append(f"look pass {why}")
+                    repair["look_outcome"] = _step_outcome(why)
                 elif fixed and fixed != body:
                     if self._time_left(t0) < reserve_s:
                         repair["notes"].append("look fix not rendered: no time left")
+                        repair["look_outcome"] = LOOK_FIX_DROPPED
                     else:
                         fixed = await images.prepare(fixed)
                         rendered, why = await self._render_optional(fixed, t0)
                         if rendered is None:
                             repair["notes"].append(f"look fix dropped: {why}")
+                            repair["look_outcome"] = LOOK_FIX_DROPPED
                         else:
                             body, png, issues = fixed, rendered[0], rendered[1]
                             render_s += rendered[2]
                             reserve_s = max(reserve_s, rendered[2])
                             repair["look_fix"] = True
+                            repair["look_outcome"] = LOOK_FIXED
+                else:
+                    # The model looked and had nothing to change: the page it
+                    # wrote survived its own inspection.
+                    repair["look_outcome"] = LOOK_OK
             else:
                 repair["notes"].append("look pass skipped: page target budget")
+                repair["look_outcome"] = LOOK_SKIPPED_BUDGET
         elif look_mode != "0" and actionable_issues(issues):
             repair["notes"].append("look pass skipped: correct lint directly")
+            repair["look_outcome"] = LOOK_SKIPPED_LINT
 
         # One corrective retry when actionable lint is still there: the page
         # source, the ask, the pane and the exact lint text. Advisory issues
         # (slow loading, image credits) never buy a retry.
         leftover = actionable_issues(issues)
-        if leftover and not repair["look"] and _screen_env("SCREEN_LINT_RETRY", "1") != "0":
-            if self._time_left(t0) >= step_s + reserve_s:
-                repair["retry"] = True
-                corrected, retry_s, why = await self._bounded(
-                    t0, reserve_s,
-                    lambda budget: self._retry_with_lint(ask, body, leftover, width, height, budget))
-                if why:
-                    repair["notes"].append(f"lint retry {why}")
-                elif corrected and corrected != body:
-                    corrected = await images.prepare(corrected)
-                    rendered, why = await self._render_optional(corrected, t0)
-                    if rendered is None:
-                        repair["notes"].append(f"lint retry dropped: {why}")
-                    elif len(actionable_issues(rendered[1])) > len(leftover):
-                        repair["notes"].append("lint retry made lint worse; kept the first page")
-                    else:
-                        body, png, issues = corrected, rendered[0], rendered[1]
-                        render_s += rendered[2]
-                        reserve_s = max(reserve_s, rendered[2])
-                        repair["retry_applied"] = True
+        if not leftover:
+            repair["retry_outcome"] = RETRY_NOT_NEEDED
+        elif repair["look"]:
+            # One correction per page: the look pass already had its turn.
+            repair["retry_outcome"] = RETRY_AFTER_LOOK
+        elif _screen_env("SCREEN_LINT_RETRY", "1") == "0":
+            repair["retry_outcome"] = RETRY_OFF
+        elif self._time_left(t0) >= step_s + reserve_s:
+            repair["retry"] = True
+            corrected, retry_s, why = await self._bounded(
+                t0, reserve_s,
+                lambda budget: self._retry_with_lint(ask, body, leftover, width, height, budget))
+            if why:
+                repair["notes"].append(f"lint retry {why}")
+                repair["retry_outcome"] = _step_outcome(why)
+            elif corrected and corrected != body:
+                corrected = await images.prepare(corrected)
+                rendered, why = await self._render_optional(corrected, t0)
+                if rendered is None:
+                    repair["notes"].append(f"lint retry dropped: {why}")
+                    repair["retry_outcome"] = RETRY_DROPPED
+                elif len(actionable_issues(rendered[1])) > len(leftover):
+                    repair["notes"].append("lint retry made lint worse; kept the first page")
+                    repair["retry_outcome"] = RETRY_WORSE
+                else:
+                    body, png, issues = corrected, rendered[0], rendered[1]
+                    render_s += rendered[2]
+                    reserve_s = max(reserve_s, rendered[2])
+                    repair["retry_applied"] = True
+                    repair["retry_outcome"] = RETRY_APPLIED
             else:
-                repair["notes"].append("lint retry skipped: no time left")
+                repair["retry_outcome"] = RETRY_NO_CHANGE
+        else:
+            repair["notes"].append("lint retry skipped: no time left")
+            repair["retry_outcome"] = RETRY_SKIPPED_BUDGET
 
         # Whatever is still reported ships with the page, in the log and in
         # meta.json: a usable page is never dropped for optional repair work.
@@ -1852,6 +1941,16 @@ class Screen:
             log.info("screen page %s delivered without look: %s", page_id,
                      "; ".join(repair["notes"]) or "disabled")
         total_s = time.monotonic() - t0
+        # One line per page for the session summary: outcomes and the seconds
+        # the optional work cost. Counts and timings only, never page content.
+        self._repair_stats.append({
+            "look": repair["look_outcome"], "retry": repair["retry_outcome"],
+            # Seconds only for a step that actually ran: a page the look never
+            # judged must not pull the median towards zero.
+            "look_s": round(look_s, 2) if repair["look"] else None,
+            "retry_s": round(retry_s, 2) if repair["retry"] else None,
+            "residual_lint": len(residual),
+        })
         spec = self.model_spec()
         job_dir = self._save(job_id, ask,
                              {"page.html": body, "shot.png": png, "images.json": json.dumps(images.events, ensure_ascii=False)},
@@ -1875,8 +1974,10 @@ class Screen:
                                       "residual_lint": residual,
                                       "reveal": reveal,
                                       "look": repair["look"], "repair_notes": repair["notes"],
+                                      "look_outcome": repair["look_outcome"],
                                       "retry": repair["retry"],
                                       "retry_applied": repair["retry_applied"],
+                                      "retry_outcome": repair["retry_outcome"],
                                       **self._provider_meta()})
         result = PageResult(job_id=job_id, page_id=page_id,
                             title=page_title(body, page_id), body=body, png=png,

@@ -97,6 +97,7 @@ The worker logs the route at the start of each session (`tutor TTS route elevenl
 | `TUTOR_CLOUD_RECORDING` | `1` uploads session audio and transcripts to LiveKit Cloud observability. Off by default |
 | `TUTOR_DEBUG_LOG` | `1` writes a per-session debug trail to a private local directory (see below). Off by default |
 | `TUTOR_DEBUG_LOG_DIR` | Override the debug trail directory (default `~/.local/state/open-tutor/sessions`) |
+| `TUTOR_SCREEN_SHOTS` | Default `1`. How many of the newest Smart Screen screenshots stay in the live tutor's chat context. Each screen page and each applied change adds a high-detail PNG; without a limit every earlier one was re-sent with every voice turn (~1 100 tokens and 50-200 kB each). The newest shot of the page on screen and of any page still held back (`show="hold"`) is always kept, and only screenshots are dropped: the page source stays. `99` keeps every screenshot (the behaviour before 2026-11-27), `0` keeps none. See [the tutor's context](../docs/smart-screen.md#2026-11-27-one-screenshot-in-the-tutors-context-and-look-pass-evidence) |
 | `TUTOR_POSTHOG_KEY` | PostHog project token (`phc_…`, EU cloud). Unset (default): analytics fully off, no SDK load, no network calls |
 | `TUTOR_POSTHOG_HOST` | PostHog host, default `https://eu.i.posthog.com` |
 | `TUTOR_STT_MAX_ENDPOINT_MS`, `TUTOR_MIN_ENDPOINT` | Turn-taking tuning for pauses while a child thinks |
