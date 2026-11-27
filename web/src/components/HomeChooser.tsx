@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { BANDS } from '../bands';
 import type { BandId } from '../bands';
 import { t } from '../locales/sv';
@@ -29,6 +29,9 @@ export default function HomeChooser({ onBegin, starting, band: bandProp, onBandC
   const [inner, setInner] = useState<BandId>('primary');
   const selected = bandProp ?? inner;
   const band = BANDS[selected];
+  // Leaving the front door (a quiet link to another companion's page) stops
+  // the hello, so it never keeps playing under a different companion.
+  useEffect(() => () => stopGreeting(), []);
 
   function choose(next: BandId) {
     if (next === selected) return;

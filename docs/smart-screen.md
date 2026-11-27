@@ -37,6 +37,12 @@ type, a squared exercise book as the board, a ruled price list). Branch `feat/ta
 - **Removed:** the dark landing and chooser CSS (`.ot-land-*`, `.ot-choose-*`, `.ot-privacy*`,
   about 1,370 lines), the header ghost CTA and the "Om Talarum" nav button on band pages (the
   hamburger keeps switch, about and privacy). `og.png` is now on paper with a faint grid.
+- **Review (Codex gpt-6.1-sol, cross-family):** three findings, all fixed. (1) `/integritet` said
+  the profile stays "bara lokalt" but every call sends name, grade and notes to `/api/session`:
+  one sentence added ("När ett samtal börjar skickas uppgifterna med …"), the rest of Johan's
+  copy unchanged. (2) A hello clip started on `/` kept playing after a quiet link to another
+  companion's page: `HomeChooser` now stops it on unmount (regression test fails without the
+  fix). (3) Small notebook annotations were 4.1:1 on paper: now the darker accent ink.
 - **Verified:** Playwright on the built app via `vite preview` (1440×900, 820×1180, 390×844,
   360×640; `/`, switcher on Lodjuret, `/ak1-6`, `/hogstadiet`, `/gymnasiet`, `/studier`,
   `/integritet`, returning learner and picker with fictional profiles): no horizontal overflow,

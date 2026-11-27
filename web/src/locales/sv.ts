@@ -301,7 +301,7 @@ export const sv = {
   'privacy.title': 'Om Talarum och din integritet',
   'privacy.intro': 'Talarum är läxhjälp och studiestöd du pratar med på svenska – skapat av Johan Acevedo som ett experiment. Inget konto behövs för att börja.',
   'privacy.browserTitle': 'Det som stannar i webbläsaren',
-  'privacy.browserBody': 'Förnamn, årskurs och korta anteckningar från tidigare samtal sparas bara lokalt i webbläsaren (tillsammans med ett slumpmässigt webbläsarnummer). Rensar du webbplatsdata försvinner allt lokalt.',
+  'privacy.browserBody': 'Förnamn, årskurs och korta anteckningar från tidigare samtal sparas bara lokalt i webbläsaren (tillsammans med ett slumpmässigt webbläsarnummer). Rensar du webbplatsdata försvinner allt lokalt. När ett samtal börjar skickas uppgifterna med, så att samtalet kan fortsätta där ni slutade.',
   'privacy.sendTitle': 'Det som skickas under samtalet',
   'privacy.sendBody': 'För att kunna lyssna, svara och rita förklaringar använder Talarum externa röst- och AI-tjänster. För att kunna hålla tjänsten billig kan vissa av de AI-tjänster vi använder idag använda samtalstext för att förbättra sina modeller.',
   'privacy.statsTitle': 'Statistik och reklam',

@@ -343,3 +343,23 @@ describe('EndCard share', () => {
     delete (navigator as unknown as Record<string, unknown>).share;
   });
 });
+
+describe('HomeChooser unmount', () => {
+  it('stops the hello clip when the front door leaves (quiet link to another page)', async () => {
+    MockAudio.instances = [];
+    vi.stubGlobal('Audio', MockAudio as unknown as typeof Audio);
+    const { unmount } = render(<HomeChooser onBegin={vi.fn()} starting={false} />);
+    fireEvent.click(screen.getByRole('button', { name: /Lyssna på Räven$/ }));
+    await waitFor(() => expect(MockAudio.instances.length).toBeGreaterThan(0));
+    expect(MockAudio.instances[0].paused).toBe(false);
+    unmount();
+    expect(MockAudio.instances[0].paused).toBe(true);
+  });
+});
+
+describe('PrivacyPage honesty', () => {
+  it('says the stored details travel with the call', () => {
+    render(<PrivacyPage onBack={() => {}} />);
+    expect(document.body.textContent).toContain('När ett samtal börjar skickas uppgifterna med');
+  });
+});

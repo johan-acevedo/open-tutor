@@ -551,7 +551,7 @@ html:has(.tp) body {
   font-style: normal;
   font-weight: 600;
   font-size: 0.62em;
-  color: var(--tp-terra);
+  color: var(--tp-terra-ink);
 }
 
 .tp-hand-res {
