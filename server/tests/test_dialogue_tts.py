@@ -240,3 +240,53 @@ def test_default_voice_is_v4_turbo_bella_and_flash_stays_on_the_plugin(monkeypat
 
     monkeypatch.setenv("TUTOR_TTS_MODEL", "eleven_flash_v2_5")
     assert isinstance(build_tts(), elevenlabs.TTS)
+
+
+async def test_pronunciation_dictionaries_ride_on_the_first_message_only(fake):
+    server, plain = await fake(recorded_dialogue)
+    locators = (elevenlabs.PronunciationDictionaryLocator("dictA1", "verA1"),
+                elevenlabs.PronunciationDictionaryLocator("dictB2", "verB2"))
+    voice = DialogueTTS(api_key="test-key", voice_id=BELLA, base_url=plain._opts.base_url,
+                        http_session=plain._session, pronunciation_dictionaries=locators)
+    _, words = await speak(voice, "Hej, jag heter Lodjuret.")
+
+    assert server.sent[0] == {
+        "voices": [BELLA],
+        "pronunciation_dictionary_locators": [
+            {"pronunciation_dictionary_id": "dictA1", "version_id": "verA1"},
+            {"pronunciation_dictionary_id": "dictB2", "version_id": "verB2"},
+        ],
+    }
+    assert not any("pronunciation_dictionary_locators" in m for m in server.sent[1:])
+    assert "dictA1:verA1,dictB2:verB2" in voice.route()
+    assert "dictionaries" not in plain.route()
+    assert words  # captions still follow the audio
+
+
+def test_more_than_three_dictionaries_are_refused():
+    many = tuple(elevenlabs.PronunciationDictionaryLocator(f"d{i}", f"v{i}") for i in range(4))
+    with pytest.raises(ValueError, match="at most 3"):
+        DialogueTTS(api_key="k", voice_id=BELLA, pronunciation_dictionaries=many)
+
+
+def test_build_tts_passes_dictionaries_to_both_elevenlabs_routes(monkeypatch):
+    for name in ("TUTOR_TTS", "TUTOR_TTS_MODEL", "TUTOR_TTS_VOICE", "TUTOR_TTS_FALLBACK"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("ELEVENLABS_API_KEY", "test-key")
+    monkeypatch.delenv("TUTOR_TTS_PRONUNCIATION_DICTIONARIES", raising=False)
+    assert build_tts()._opts.first_message() == {"voices": [BELLA]}  # unset: exactly as before
+
+    monkeypatch.setenv("TUTOR_TTS_PRONUNCIATION_DICTIONARIES", "dictA1:verA1")
+    voice = build_tts()
+    assert voice._opts.first_message()["pronunciation_dictionary_locators"] == [
+        {"pronunciation_dictionary_id": "dictA1", "version_id": "verA1"}]
+
+    monkeypatch.setenv("TUTOR_TTS_MODEL", "eleven_flash_v2_5")
+    flash = build_tts()
+    assert isinstance(flash, elevenlabs.TTS)
+    assert [(l.pronunciation_dictionary_id, l.version_id) for l in flash._opts.pronunciation_dictionary_locators] == [
+        ("dictA1", "verA1")]
+
+    monkeypatch.setenv("TUTOR_TTS_PRONUNCIATION_DICTIONARIES", "not-a-locator")
+    with pytest.raises(ValueError, match="dictionary_id"):
+        build_tts()

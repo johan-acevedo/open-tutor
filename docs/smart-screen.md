@@ -4,6 +4,63 @@ Lead: the thread "state of the project" (Claude, 2026-11-12). The lead keeps thi
 Workers read it before starting and report against it. Decisions here were agreed with Johan
 on 2026-11-12 unless marked open.
 
+## 2026-11-28: Swedish pronunciation on both voices
+
+Real family calls on production (Bella `eleven_v4_turbo`, Google Chirp 3: HD Aoede
+fallback) had Swedish words said wrongly. Counts and kinds only: the middle band's
+companion name `Lodjuret` with an audible d (the d of `dj` is silent in Swedish), and
+chemical formulas (`CH2OH`, `OH`, `OH-grejerna`) read as English letters or as an
+interjection ("oh"). Swedish school abbreviations and units (`t.ex.`, `s. 34`, `åk 7`,
+`°C`, `km/h`) had no rule at all.
+
+- **Fixed in the text the voice gets, for both voices:** `speech.swedish_speech` runs
+  inside `speakable` (so in `tts_node` for replies, the fixed greeting, the apology and
+  the idle goodbye). Formulas are read with Swedish letter names the way a teacher says
+  them (`H2O` → "hå två o", `CO2` → "se o två", `C6H12O6` → "se sex hå tolv o sex",
+  `Na⁺` → "en a plus", `pH` → "pe hå"). Abbreviations and units are said in full.
+  `Lodjur…` is respelled `Lojur…`. The tables are in `locales/sv.py`
+  (`LETTER_NAMES`, `SPOKEN_ABBREVIATIONS`, `SPOKEN_RESPELLINGS`).
+- **False positives are the bigger risk, so the rules are narrow.** A formula must be
+  all element symbols *and* have a digit or a charge, except a short list (`OH`, `NaCl`,
+  `NaOH`, `HCl`, `KOH`, `COOH`). `NO`/`SO` (school subjects), `OK`, `Ni`, `Se`, `E4`,
+  `MP3`, `7B`, grades and `C-vitamin` stay as written (tests list them). `åk`, `s.`,
+  `kl`, `nr` and `ca` change only before a number; the stream holds such a word until
+  the next one arrives (`speech._cut`), so a chunk boundary cannot split "åk | 7".
+  Mid-sentence abbreviations lose their full stop, so the TTS sentence splitter no longer
+  breaks a sentence after `t.ex.`.
+- **Captions and chat history keep what the model wrote** (`unspoken`). Checked in
+  LiveKit 1.8.10: the caption comes from `transcription_node` over the model text, because
+  `use_tts_aligned_transcript` is not set, so Bella's word timings from `DialogueTTS` are
+  produced but not shown. If someone turns aligned transcripts on, captions would show
+  the spoken forms ("hå två o", "Lojuret"); keep that in mind before switching.
+- **Not inline IPA:** writing `/ˈluːjʉːrɛt/` into the text would be read aloud by the
+  Google fallback and would end up in any aligned transcript.
+- **The prompt** now asks the tutor to name substances the way a Swedish teacher does
+  ("vatten", "koldioxid") and otherwise write the formula in standard form so the voice
+  can read it, never a phonetic spelling or nickname.
+- **ElevenLabs pronunciation dictionaries, optional:** `TUTOR_TTS_PRONUNCIATION_DICTIONARIES`
+  (up to three `id:version_id`, validated at worker boot) adds
+  `pronunciation_dictionary_locators` to `DialogueTTS`'s first socket message and to the
+  plugin for older models. Unset, every request is byte-for-byte as before. The lexicon
+  is `server/open_tutor/locales/sv_pronunciation.pls` (IPA rules for the lodjur family,
+  both cases); `server/scripts/pronunciation_dictionary.py` checks it, uploads it and writes
+  probe WAVs. Only Bella reads a dictionary, so a fix both voices need stays a respelling.
+  The lexicon's lodjur rules do not fire in production while the respelling is on; they
+  exist to compare IPA against the respelling by ear.
+- **Verified locally:** 971 server tests pass (normalisation cases, false-positive
+  guards, stream boundaries character by character, the handshake with and without
+  locators, env and lexicon validation). **Verified live on 2026-11-28** against
+  `text-to-dialogue/stream-input` with `eleven_v4_turbo` Bella and fictional text: the
+  lexicon uploaded through `add-from-file` (a probe dictionary on the owner's account), the socket accepted the locator with no
+  error, and the alignment came back spelled exactly as the text sent, with and without
+  the dictionary. About 300 characters were spent.
+- **Not verified:** how any of it *sounds*. Needs a listening check on Bella and on Aoede
+  (`pronunciation_dictionary.py listen --google`): `Lojuret` versus `Lodjuret` with the IPA
+  dictionary, the formula letter names (does a lone "o" sound like the letter O, /uː/?),
+  and the candidate words with no rule yet (`Sjuan`, `kemi`/`kemisida`, `sackaros`,
+  `glukos`, `fruktos`, `kolhydrat`, `Talarum`, `Räven`, `Björnen`, `däggdjur`, `rovdjur`).
+  Not tried in a real call yet. The dictionary is not set on any instance.
+
 ## 2026-11-27: four fixes from a family test call
 
 One real family call on `main` at `07ac5a6` (middle band, homework in science)

@@ -56,7 +56,7 @@ Production uses Deepgram Swedish speech with `TUTOR_TTS=deepgram`, `TUTOR_TTS_MO
 
 ElevenLabs **Eleven v4 Turbo** (`eleven_v4_turbo`, released September 2026), voice **Bella - Professional, Bright, Warm** (`hpp4J3VqNfWAUOO0d1Us`, an ElevenLabs premade voice), Swedish (`language_code=sv`). ElevenLabs recommends v4 Turbo for real-time conversation and `eleven_v4` for produced narration.
 
-v4 is served only through text-to-dialogue. `open_tutor/dialogue_tts.py` speaks the documented single-context socket `wss://api.elevenlabs.io/v1/text-to-dialogue/stream-input`: one registered voice, one socket per reply, each sentence sent and flushed, `keep_alive` while the reply waits for text, `close_socket` at the end. Output is `pcm_24000` with `sync_alignment=true`, so captions follow the audio word by word. An interruption cancels the stream and closes its socket, so an interrupted reply stops at once.
+v4 is served only through text-to-dialogue. `open_tutor/dialogue_tts.py` speaks the documented single-context socket `wss://api.elevenlabs.io/v1/text-to-dialogue/stream-input`: one registered voice, one socket per reply, each sentence sent and flushed, `keep_alive` while the reply waits for text, `close_socket` at the end. Output is `pcm_24000` with `sync_alignment=true`, and the adapter turns the alignment into word timings. The worker does not set `use_tts_aligned_transcript` (checked 2026-11-28), so the caption is the model's text from `transcription_node`, paced by LiveKit's synchronizer, not these timings. That is also why the spoken forms below (`speech.speakable`) never show in the caption. An interruption cancels the stream and closes its socket, so an interrupted reply stops at once.
 
 LiveKit's ElevenLabs plugin (1.8.10, the newest release on 2026-11-04) sends v4 to `text-to-dialogue/multi-stream-input` instead. ElevenLabs documents that endpoint as v3-only. It still answered for v4 Turbo in a probe, but the worker does not depend on undocumented behaviour. The plugin is still used for earlier models (`TUTOR_TTS_MODEL=eleven_flash_v2_5` is the rollback).
 
@@ -70,6 +70,24 @@ Checked against the real API on 2026-11-04 with fictional Swedish text:
 
 The worker logs the route at the start of each session (`tutor TTS route elevenlabs /text-to-dialogue/stream-input model eleven_v4_turbo voice … lang sv`). It also logs the time to first audio of each reply, never the text.
 
+## Swedish pronunciation
+
+The voice receives the reply after `speech.speakable`, which keeps captions and the chat history untouched and changes only what is said. Besides maths symbols, it reads chemical formulas with Swedish letter names (`H2O` → "hå två o", `CH2OH` → "se hå två o hå", `Na⁺` → "en a plus"), says school abbreviations and units in full (`t.ex.`, `dvs.`, `bl.a.`, `s. 34`, `åk 7`, `kl. 8`, `°C`, `km/h`, `m/s²`), and respells words the voices get wrong (`Lodjuret` → `Lojuret`, silent d). The tables live in `open_tutor/locales/sv.py`; the rules are deliberately narrow (`NO`, `SO`, `OK`, `Ni`, `E4`, grades and `C-vitamin` stay as written). Both voices, Bella and the Google fallback, get the same text.
+
+For what a respelling cannot fix, ElevenLabs can apply a pronunciation dictionary (IPA `<phoneme>` or `<alias>` rules, case-sensitive). The lexicon is `open_tutor/locales/sv_pronunciation.pls`:
+
+```bash
+uv run python scripts/pronunciation_dictionary.py check                       # validate, no network
+bin/with-env uv run python scripts/pronunciation_dictionary.py upload --name open-tutor-sv-YYYY-MM-DD
+# prints TUTOR_TTS_PRONUNCIATION_DICTIONARIES=<id>:<version_id>; set it on a development instance first
+bin/with-env uv run python scripts/pronunciation_dictionary.py listen --out /tmp/pron \
+    --dictionary <id>:<version_id> [--google] [--only lodjuret,glukos]
+```
+
+`listen` writes each fictional probe line as WAV files: raw text, the worker's spoken text, and raw text with the dictionary (plus Aoede with `--google`). It reports whether the alignment matches what was sent. It costs a few hundred ElevenLabs characters. Each upload creates a new dictionary. The key is read from `ELEVENLABS_API_KEY` and never printed.
+
+Verified on 2026-11-28 against the real socket: `text-to-dialogue/stream-input` with `eleven_v4_turbo` accepts `pronunciation_dictionary_locators` on the first message, and the alignment stays spelled as sent. Still to do: a listening check of `Lojuret` against the IPA rule, the formula letter names on both voices, and the words listed in [the state file](../docs/smart-screen.md#2026-11-28-swedish-pronunciation-on-both-voices).
+
 ## Configuration
 
 | Variable | Purpose |
@@ -80,6 +98,7 @@ The worker logs the route at the start of each session (`tutor TTS route elevenl
 | `TUTOR_TTS_VOICE`, `TUTOR_TTS_MODEL` | Voice id and model for that provider. ElevenLabs default: `eleven_v4_turbo` with Bella (`hpp4J3VqNfWAUOO0d1Us`), see [the voice route](#the-voice-route). Google default: `sv-SE-Chirp3-HD-Aoede` (`language="sv-SE"`, gRPC streaming via `livekit-plugins-google`). `eleven_v3*`/`eleven_v4*` models use the text-to-dialogue adapter; earlier models such as `eleven_flash_v2_5` use LiveKit's plugin |
 | `TUTOR_TTS_FALLBACK` | Optional automatic fallback TTS provider (`google`, `deepgram`, `elevenlabs`, or `cartesia`; empty = none). Session-sticky on failure, with a shared file-backed cooldown across LiveKit job processes on quota/auth errors (`401`/`402`/`429`/`quota_exceeded`) so later calls start directly on the fallback without paying a failed handshake. Preserves Bella's word-synced captions while primary is healthy. Missing or invalid fallback credentials log a fixed warning and serve primary alone |
 | `TUTOR_TTS_FALLBACK_VOICE`, `TUTOR_TTS_FALLBACK_MODEL`, `TUTOR_TTS_FALLBACK_COOLDOWN_S`, `TUTOR_TTS_COOLDOWN_FILE` | Optional fallback voice/model override (Google default: `sv-SE-Chirp3-HD-Aoede`; required when `TUTOR_TTS_FALLBACK=cartesia` because Cartesia has no Swedish default), quota cooldown in seconds (default `600`), and cooldown state file path (default `~/.cache/open-tutor/tts-cooldowns.json`, mode `0600`) |
+| `TUTOR_TTS_PRONUNCIATION_DICTIONARIES` | Optional ElevenLabs pronunciation dictionaries: up to three `<dictionary_id>:<version_id>` separated by commas, sent with the first message of every ElevenLabs request (both the v4 dialogue socket and the plugin for older models). Empty (default): requests are unchanged. A malformed value stops the worker at boot. Recorded in the debug trail and the TTS route log. See [Swedish pronunciation](#swedish-pronunciation) |
 | `ELEVENLABS_API_KEY` / `GOOGLE_TTS_CREDENTIALS_JSON` / `DEEPGRAM_API_KEY` / `CARTESIA_API_KEY` | Voice provider credentials. Google Cloud TTS reads `GOOGLE_TTS_CREDENTIALS_JSON` (compact service-account JSON string, e.g. from Infisical), `GOOGLE_APPLICATION_CREDENTIALS` (file path), or `gcloud` ADC |
 | `TUTOR_LLM` | `go` (default): Muse Spark 1.3 Contributor (`muse-spark-1.3-contributor`) on OpenCode Go, Responses API over HTTP streaming, `OPENCODE_GO_API_KEY`. `cc`: the same model (`meta/muse-spark-1.3-contributor`) on Command Code, `COMMAND_CODE_API_KEY` -- the stability backup, usable as the preferred or the fallback route. `go-deepseek`: DeepSeek V4.1 Flash on the same subscription. `gemini`: Gemini 4 Hydrogen (`gemini-4-hydrogen`) on Google's OpenAI-compatible Chat Completions, thinking level `low`, `GEMINI_API_KEY`. `gemini-dev` only reproduces the board/voice bug of the earlier development route; do not deploy it. This is the preferred route; there is no silent fallback to a route the operator did not name. |
 | `TUTOR_LLM_FALLBACK` | Optional second candidate route (`go`, `go-deepseek`, `gemini`, `cc`). Empty (default): one route for the whole session, no warm-up race. Set: both routes answer a warm-up request while the greeting plays and the winner serves the session; see [the greeting and the session's voice](#the-greeting-and-the-sessions-voice) |

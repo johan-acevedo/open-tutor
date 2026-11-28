@@ -69,6 +69,7 @@ from .page_answers import PageAnswers
 from .text_input import TOPIC_CHAT, TypedChat
 from .fillers import DEFAULT_DELAY_S as DEFAULT_FILLER_DELAY, build_fillers
 from .tutor_llm import build_session_llm, warm_up
+from .pronunciation import pronunciation_dictionaries
 from .speech import speakable_stream, unspoken_stream
 
 log = logging.getLogger("open-tutor")
@@ -211,11 +212,15 @@ def _build_tts_provider(
     eff_model = model or DEFAULT_TTS_MODEL
     eff_voice = voice or DEFAULT_TTS_VOICE
     api_key = env.get("ELEVENLABS_API_KEY") or env.get("ELEVEN_API_KEY") or ""
+    # TUTOR_TTS_PRONUNCIATION_DICTIONARIES (pronunciation.py): empty sends nothing extra.
+    dictionaries = pronunciation_dictionaries(env)
     if is_dialogue_model(eff_model):
         # Eleven v4: the documented single-context text-to-dialogue socket (dialogue_tts.py).
-        return DialogueTTS(api_key=api_key, voice_id=eff_voice, model=eff_model, language="sv")
+        return DialogueTTS(api_key=api_key, voice_id=eff_voice, model=eff_model, language="sv",
+                           pronunciation_dictionaries=dictionaries)
     # Earlier models (e.g. eleven_flash_v2_5) through LiveKit's plugin, kept for rollback.
-    return elevenlabs.TTS(model=eff_model, voice_id=eff_voice, language="sv", api_key=api_key)
+    extra = {"pronunciation_dictionary_locators": list(dictionaries)} if dictionaries else {}
+    return elevenlabs.TTS(model=eff_model, voice_id=eff_voice, language="sv", api_key=api_key, **extra)
 
 
 def build_tts(environ: dict[str, str] | Any | None = None):
@@ -1304,6 +1309,8 @@ def prewarm(proc: JobProcess) -> None:
     noise.warm_up(noise.noise_cancellation_mode())
     # Same for a misspelt TUTOR_TURN_DETECTION: fail at boot, not at a child's greeting.
     turn_detection_options()
+    # And for a malformed TUTOR_TTS_PRONUNCIATION_DICTIONARIES (pronunciation.py).
+    pronunciation_dictionaries()
     proc.userdata["vad"] = silero.VAD.load(min_silence_duration=0.5)
     warm_up()
     # The first analytics capture inside a session blocked the loop importing the

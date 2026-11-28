@@ -8,6 +8,8 @@ answered for v4 Turbo in a probe on 2026-11-04, but an undocumented route is not
 build a family service on, so this adapter speaks the documented protocol:
 
     -> {"voices": [voice_id]}                         first message, exactly one voice
+                                                      (+ "pronunciation_dictionary_locators"
+                                                      when configured, pronunciation.py)
     -> {"inputs": [{"text": ..., "voice_id": ...}]}   one per sentence, then {"flush": true}
     -> {"keep_alive": true}                           while the reply waits for text (20 s idle limit)
     -> {"close_socket": true}                         after the last sentence
@@ -46,6 +48,9 @@ from livekit.agents import (
 )
 from livekit.agents.types import DEFAULT_API_CONNECT_OPTIONS
 from livekit.agents.voice.io import TimedString
+from livekit.plugins.elevenlabs import PronunciationDictionaryLocator
+
+from .pronunciation import MAX_DICTIONARIES, describe_locators, locators_payload
 
 log = logging.getLogger("open-tutor")
 
@@ -68,6 +73,14 @@ class DialogueOptions:
     language: str
     base_url: str = API_BASE_URL
     enable_logging: bool = True
+    pronunciation_dictionaries: tuple[PronunciationDictionaryLocator, ...] = ()
+
+    def first_message(self) -> dict:
+        """Registers the one voice; dictionaries are only valid on this message."""
+        message: dict = {"voices": [self.voice_id]}
+        if self.pronunciation_dictionaries:
+            message["pronunciation_dictionary_locators"] = locators_payload(self.pronunciation_dictionaries)
+        return message
 
     def url(self) -> str:
         query = {
@@ -152,17 +165,23 @@ class DialogueTTS(tts.TTS):
         base_url: str = API_BASE_URL,
         http_session: aiohttp.ClientSession | None = None,
         tokenizer: tokenize.SentenceTokenizer | None = None,
+        pronunciation_dictionaries: tuple[PronunciationDictionaryLocator, ...] = (),
     ) -> None:
         if not api_key:
             raise ValueError("ElevenLabs needs ELEVENLABS_API_KEY in the backend environment")
         if not is_dialogue_model(model):
             raise ValueError(f"{model} is not a text-to-dialogue model")
+        if len(pronunciation_dictionaries) > MAX_DICTIONARIES:
+            raise ValueError(f"ElevenLabs takes at most {MAX_DICTIONARIES} pronunciation dictionaries")
         super().__init__(
             capabilities=tts.TTSCapabilities(streaming=True, aligned_transcript=True),
             sample_rate=SAMPLE_RATE,
             num_channels=1,
         )
-        self._opts = DialogueOptions(api_key=api_key, voice_id=voice_id, model=model, language=language, base_url=base_url)
+        self._opts = DialogueOptions(
+            api_key=api_key, voice_id=voice_id, model=model, language=language, base_url=base_url,
+            pronunciation_dictionaries=tuple(pronunciation_dictionaries),
+        )
         self._session = http_session
         self._tokenizer = tokenizer or tokenize.blingfire.SentenceTokenizer()
         self._streams = weakref.WeakSet[DialogueStream]()
@@ -178,7 +197,10 @@ class DialogueTTS(tts.TTS):
 
     def route(self) -> str:
         """The actual synthesis route, for logs. No key."""
-        return f"elevenlabs {PATH} model {self._opts.model} voice {self._opts.voice_id} lang {self._opts.language}"
+        route = f"elevenlabs {PATH} model {self._opts.model} voice {self._opts.voice_id} lang {self._opts.language}"
+        if self._opts.pronunciation_dictionaries:
+            route += f" dictionaries {describe_locators(self._opts.pronunciation_dictionaries)}"
+        return route
 
     def _ensure_session(self) -> aiohttp.ClientSession:
         if not self._session:
@@ -257,7 +279,7 @@ class DialogueStream(tts.SynthesizeStream):
 
         async def send_text() -> None:
             nonlocal first_text, pending_flushes, close_sent
-            await send({"voices": [self._opts.voice_id]})
+            await send(self._opts.first_message())
             async for sentence in sentences:
                 text = sentence.token.strip()
                 if not text:

@@ -2,7 +2,7 @@ import asyncio
 
 import pytest
 
-from open_tutor.speech import speakable, speakable_stream, unspoken_stream
+from open_tutor.speech import speakable, speakable_stream, swedish_speech, unspoken_stream
 
 
 def test_maths_is_spoken_in_swedish():
@@ -80,7 +80,8 @@ def test_board_content_in_the_reply_is_said_as_maths_not_markup():
 
 
 @pytest.mark.parametrize("reply", ["Ja.", "Sju!", "Nej, inte riktigt.", "Bra (alltså fem) – snyggt!", "Vad tror du?",
-                                   "Om f(x) är 3x, vad är f(2)?", "Det står t.ex. i boken."])
+                                   "Om f(x) är 3x, vad är f(2)?", "Det står i boken.", "NO och SO är ämnen.",
+                                   "OK, Ni kan ta E4.", "Svaret är C.", "Åk hem nu!", "Klass 7B läser."])
 def test_short_answers_and_ordinary_words_are_untouched(reply):
     assert " ".join(say([reply]).split()) == reply
     assert " ".join(caption(list(reply)).split()) == reply
@@ -100,3 +101,111 @@ def test_an_unclosed_block_does_not_hold_speech_forever():
 
     asyncio.run(collect())
     assert len(pieces) > 1  # speech resumed before the end of the reply
+
+
+def spoken(text):
+    return " ".join(speakable(text).split())
+
+
+@pytest.mark.parametrize("written, said", [
+    ("H2O", "hå två o"),
+    ("H₂O", "hå två o"),
+    ("CO2-utsläppen", "se o två-utsläppen"),
+    ("O2", "o två"),
+    ("CH2OH-gruppen", "se hå två o hå-gruppen"),
+    ("OH-grejerna", "o hå-grejerna"),
+    ("C6H12O6", "se sex hå tolv o sex"),
+    ("H2SO4", "hå två ess o fyra"),
+    ("Ca(OH)2", "se a o hå två"),
+    ("2H2O", "två hå två o"),
+    ("NaCl", "en a se ell"),
+    ("Na⁺ och Cl⁻", "en a plus och se ell minus"),
+    ("SO₄²⁻", "ess o fyra två minus"),
+    ("H+", "hå plus"),
+    ("H3O^+", "hå tre o plus"),
+    ("pH-värdet", "pe hå-värdet"),
+    (r"$\mathrm{H_{2}O}$", "hå två o"),
+])
+def test_chemical_formulas_are_read_the_swedish_way(written, said):
+    assert spoken(written) == said
+
+
+@pytest.mark.parametrize("text", [
+    "NO", "SO-läxan", "OK", "Ni", "Se här", "Ge mig", "In", "I åk", "Be", "Är",
+    "E4", "MP3", "A4", "3D", "7B", "4K", "SVT", "USA", "IKEA", "COVID-19", "CO2e",
+    "betyget C", "C-vitamin", "B- och C-uppgifter", "x2", "Karl XII", "CO",
+])
+def test_capital_letters_that_are_not_formulas_stay(text):
+    assert swedish_speech(text) == text
+
+
+@pytest.mark.parametrize("written, said", [
+    ("Det står t.ex. i boken.", "Det står till exempel i boken."),
+    ("T.ex. en katt.", "Till exempel en katt."),
+    ("Det är dvs. fel", "Det är det vill säga fel"),
+    ("alltså d.v.s. rätt", "alltså det vill säga rätt"),
+    ("bl.a. glukos", "bland annat glukos"),
+    ("pga. regnet", "på grund av regnet"),
+    ("äpplen, päron osv.", "äpplen, päron och så vidare."),
+    ("äpplen, päron o.s.v. Sedan", "äpplen, päron och så vidare. Sedan"),
+    ("pennor m.m.", "pennor med mera."),
+    ("Läs s. 34", "Läs sidan 34"),
+    ("Jag går i åk 7", "Jag går i årskurs 7"),
+    ("Åk 9 har prov", "Årskurs 9 har prov"),
+    ("kl. 8", "klockan 8"),
+    ("nr 3", "nummer 3"),
+    ("ca 20", "cirka 20"),
+    ("5 st äpplen", "5 stycken äpplen"),
+    ("3 ggr", "3 gånger"),
+    ("Det är 20 °C ute", "Det är 20 grader Celsius ute"),
+    ("Det är 20°C ute", "Det är 20 grader Celsius ute"),
+    ("en vinkel på 90°", "en vinkel på 90 grader"),
+    ("50 km/h", "50 kilometer i timmen"),
+    ("3 m/s", "3 meter per sekund"),
+    ("9,8 m/s²", "9,8 meter per sekundkvadrat"),
+    ("1 g/cm³", "1 gram per kubikcentimeter"),
+])
+def test_abbreviations_and_units_are_said_in_full(written, said):
+    assert spoken(written) == said
+
+
+@pytest.mark.parametrize("text", [
+    "Åk hem nu", "s", "kl", "nr", "Lisa ca", "st", "mm", "Kalla det m", "Ett ess", "sid", "Carl",
+    "ggr", "etcetera", "Sankt", "katt.ex", "mest", "dvsx",
+])
+def test_abbreviation_lookalikes_stay(text):
+    assert swedish_speech(text) == text
+
+
+def test_lodjuret_is_said_with_a_silent_d_but_written_as_is():
+    assert spoken("Hej, jag heter Lodjuret!") == "Hej, jag heter Lojuret!"
+    assert spoken("lodjuren och lodjurets") == "lojuren och lojurets"
+    assert " ".join(caption(["Hej, jag heter ", "Lodjuret!"]).split()) == "Hej, jag heter Lodjuret!"
+    assert spoken("Slodjur") == "Slodjur"  # only at the start of a word
+
+
+def test_the_caption_keeps_what_the_model_wrote():
+    reply = "Glukos är C6H12O6, t.ex. i frukt, och det är 20 °C i åk 7."
+    assert " ".join(caption(list(reply)).split()) == reply
+
+
+@pytest.mark.parametrize("parts, said", [
+    (["Läs s. ", "34 nu."], "Läs sidan 34 nu."),
+    (["Jag går i åk ", "7 nu."], "Jag går i årskurs 7 nu."),
+    (["Jag går i åk", " 7 nu."], "Jag går i årskurs 7 nu."),
+    (["Kom kl. ", "8 i morgon."], "Kom klockan 8 i morgon."),
+    (["Det står t. ", "ex. här."], "Det står till exempel här."),
+    (["Glukos är C6H", "12O6 och ", "CO2 är gas."], "Glukos är se sex hå tolv o sex och se o två är gas."),
+    (["Det är 20 ", "°C."], "Det är 20 grader Celsius."),
+    (["Åk ", "hem nu."], "Åk hem nu."),
+    (["Lod", "juret ", "är här."], "Lojuret är här."),
+])
+def test_stream_chunk_boundaries_do_not_split_a_reading(parts, said):
+    assert " ".join(say(parts).split()) == said
+    # Character by character, as some providers stream.
+    assert " ".join(say(list("".join(parts))).split()) == said
+
+
+def test_a_held_word_is_said_when_the_reply_ends_there():
+    assert " ".join(say(["Vi ses kl."]).split()) == "Vi ses kl."
+    assert " ".join(say(["Jag går i åk ", "7"]).split()) == "Jag går i årskurs 7"
