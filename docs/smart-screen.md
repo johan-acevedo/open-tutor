@@ -9,23 +9,27 @@ on 2026-11-12 unless marked open.
 Real family calls on production (Bella `eleven_v4_turbo`, Google Chirp 3: HD Aoede
 fallback) had Swedish words said wrongly. Counts and kinds only: the middle band's
 companion name `Lodjuret` with an audible d (the d of `dj` is silent in Swedish), and
-chemical formulas (`CH2OH`, `OH`, `OH-grejerna`) read as English letters or as an
-interjection ("oh"). Swedish school abbreviations and units (`t.ex.`, `s. 34`, `åk 7`,
+chemical formulas and hydroxyl groups read as English letters or as an interjection
+("oh"). Swedish school abbreviations and units (`t.ex.`, `s. 34`, `åk 7`,
 `°C`, `km/h`) had no rule at all.
 
 - **Fixed in the text the voice gets, for both voices:** `speech.swedish_speech` runs
   inside `speakable` (so in `tts_node` for replies, the fixed greeting, the apology and
   the idle goodbye). Formulas are read with Swedish letter names the way a teacher says
   them (`H2O` → "hå två o", `CO2` → "se o två", `C6H12O6` → "se sex hå tolv o sex",
-  `Na⁺` → "en a plus", `pH` → "pe hå"). Abbreviations and units are said in full.
+  `Ca(OH)2` → "se a, parentes o hå slut parentes, två", `Fe³⁺` → "eff e tre plus",
+  `pH` → "pe hå"). Abbreviations and units are said in full.
   `Lodjur…` is respelled `Lojur…`. The tables are in `locales/sv.py`
   (`LETTER_NAMES`, `SPOKEN_ABBREVIATIONS`, `SPOKEN_RESPELLINGS`).
 - **False positives are the bigger risk, so the rules are narrow.** A formula must be
   all element symbols *and* have a digit or a charge, except a short list (`OH`, `NaCl`,
   `NaOH`, `HCl`, `KOH`, `COOH`). `NO`/`SO` (school subjects), `OK`, `Ni`, `Se`, `E4`,
-  `MP3`, `7B`, grades and `C-vitamin` stay as written (tests list them). `åk`, `s.`,
-  `kl`, `nr` and `ca` change only before a number; the stream holds such a word until
-  the next one arrives (`speech._cut`), so a chunk boundary cannot split "åk | 7".
+  `MP3`, `7B`, grades and `C-vitamin` stay as written (tests list them), and a
+  spreadsheet cell in arithmetic (`=B2/3`, `B2-1`, `B2:B5`) keeps its operator. `s.`,
+  `kl`, `nr` and `ca` change only before a number, `åk` only before a school year 1-9
+  with no unit after it (`Åk 5 km söderut` is the verb). The stream holds such a word,
+  and any number, until the next word arrives (`speech._cut`, at most three words), so a
+  chunk boundary cannot split "åk | 7" or "5 | st".
   Mid-sentence abbreviations lose their full stop, so the TTS sentence splitter no longer
   breaks a sentence after `t.ex.`.
 - **Captions and chat history keep what the model wrote** (`unspoken`). Checked in
@@ -47,7 +51,11 @@ interjection ("oh"). Swedish school abbreviations and units (`t.ex.`, `s. 34`, `
   probe WAVs. Only Bella reads a dictionary, so a fix both voices need stays a respelling.
   The lexicon's lodjur rules do not fire in production while the respelling is on; they
   exist to compare IPA against the respelling by ear.
-- **Verified locally:** 971 server tests pass (normalisation cases, false-positive
+- **Review:** Codex `gpt-6.2-astra` (cross-family) found nine problems, all fixed with
+  tests. They were a wrong ion sign, lost brackets, spreadsheet operators eaten, `Åk 5 km`,
+  `5 | st` across chunks, a call-attributed example in this file, a locator error that
+  echoed its value, compact `s.34`, and singular `1 grad`.
+- **Verified locally:** the server tests pass (normalisation cases, false-positive
   guards, stream boundaries character by character, the handshake with and without
   locators, env and lexicon validation). **Verified live on 2026-11-28** against
   `text-to-dialogue/stream-input` with `eleven_v4_turbo` Bella and fictional text: the

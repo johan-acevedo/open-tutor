@@ -79,6 +79,9 @@ TENS_WORDS = {2: "tjugo", 3: "trettio", 4: "fyrtio", 5: "femtio", 6: "sextio",
               7: "sjuttio", 8: "åttio", 9: "nittio"}
 
 CHARGE_WORDS = {"+": "plus", "-": "minus"}
+# Ca(OH)2: the two belongs to the whole group, so the brackets are said.
+FORMULA_GROUP_OPEN = ", parentes"
+FORMULA_GROUP_CLOSE = "slut parentes,"
 
 # Abbreviations and units as (regular expression, spoken words). Matched case-
 # sensitively between word boundaries. Mid-sentence abbreviations drop their full
@@ -100,16 +103,17 @@ SPOKEN_ABBREVIATIONS = (
     (r"(?:o\.s\.v|osv)(\.?)", "och så vidare\\1"),
     (r"m\.m(\.?)", "med mera\\1"),
     (r"etc(\.?)", "etcetera\\1"),
-    # Only before a number: "åk" is also the verb ("åk hem"), "s" and "nr" plain letters.
-    (r"åk\.?(?= ?\d)", "årskurs"),
-    (r"Åk\.?(?= ?\d)", "Årskurs"),
-    (r"(?:s|sid)\.(?= ?\d)", "sidan"),
-    (r"(?:S|Sid)\.(?= ?\d)", "Sidan"),
-    (r"kl\.?(?= ?\d)", "klockan"),
-    (r"Kl\.?(?= ?\d)", "Klockan"),
-    (r"nr\.?(?= ?\d)", "nummer"),
-    (r"Nr\.?(?= ?\d)", "Nummer"),
-    (r"ca\.?(?= ?\d)", "cirka"),
+    # Only before a number: "åk" is also the verb ("åk hem", "åk 5 km"), so only before
+    # a school year 1-9 that no unit follows; "s" and "nr" are plain letters otherwise.
+    (r"åk\.? ?(?=[1-9](?![\d,.]?\d)(?! ?(?:km|m|mil|meter|kilometer|min|minuter|timmar|timme|h|st|kr|kg|g|varv|steg|gånger)(?![^\W\d])))", "årskurs "),
+    (r"Åk\.? ?(?=[1-9](?![\d,.]?\d)(?! ?(?:km|m|mil|meter|kilometer|min|minuter|timmar|timme|h|st|kr|kg|g|varv|steg|gånger)(?![^\W\d])))", "Årskurs "),
+    (r"(?:s|sid)\. ?(?=\d)", "sidan "),
+    (r"(?:S|Sid)\. ?(?=\d)", "Sidan "),
+    (r"kl\.? ?(?=\d)", "klockan "),
+    (r"Kl\.? ?(?=\d)", "Klockan "),
+    (r"nr\.? ?(?=\d)", "nummer "),
+    (r"Nr\.? ?(?=\d)", "Nummer "),
+    (r"ca\.? ?(?=\d)", "cirka "),
     (r"(?<=\d )ggr\.?", "gånger"),
     (r"(?<=\d )st\.?", "stycken"),
     # Units. Longest first, so m/s² is not read as m/s.

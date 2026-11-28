@@ -113,10 +113,12 @@ def spoken(text):
     ("CO2-utsläppen", "se o två-utsläppen"),
     ("O2", "o två"),
     ("CH2OH-gruppen", "se hå två o hå-gruppen"),
-    ("OH-grejerna", "o hå-grejerna"),
+    ("OH-grupperna", "o hå-grupperna"),
     ("C6H12O6", "se sex hå tolv o sex"),
     ("H2SO4", "hå två ess o fyra"),
-    ("Ca(OH)2", "se a o hå två"),
+    ("Ca(OH)2", "se a, parentes o hå slut parentes, två"),
+    ("Fe^{3+}", "eff e tre plus"),
+    ("Fe³⁺ och O²⁻", "eff e tre plus och o två minus"),
     ("2H2O", "två hå två o"),
     ("NaCl", "en a se ell"),
     ("Na⁺ och Cl⁻", "en a plus och se ell minus"),
@@ -133,7 +135,7 @@ def test_chemical_formulas_are_read_the_swedish_way(written, said):
 @pytest.mark.parametrize("text", [
     "NO", "SO-läxan", "OK", "Ni", "Se här", "Ge mig", "In", "I åk", "Be", "Är",
     "E4", "MP3", "A4", "3D", "7B", "4K", "SVT", "USA", "IKEA", "COVID-19", "CO2e",
-    "betyget C", "C-vitamin", "B- och C-uppgifter", "x2", "Karl XII", "CO",
+    "betyget C", "C-vitamin", "B2:B5", "B- och C-uppgifter", "x2", "Karl XII", "CO",
 ])
 def test_capital_letters_that_are_not_formulas_stay(text):
     assert swedish_speech(text) == text
@@ -152,6 +154,11 @@ def test_capital_letters_that_are_not_formulas_stay(text):
     ("Läs s. 34", "Läs sidan 34"),
     ("Jag går i åk 7", "Jag går i årskurs 7"),
     ("Åk 9 har prov", "Årskurs 9 har prov"),
+    ("Läs s.34 kl.8.", "Läs sidan 34 klockan 8."),
+    ("Det är 1°C ute", "Det är 1 grad Celsius ute"),
+    ("Det är −1 °C ute", "Det är minus 1 grad Celsius ute"),
+    ("21 °C och 0,1 °C", "21 grader Celsius och 0,1 grader Celsius"),
+    ("en vinkel på 1°", "en vinkel på 1 grad"),
     ("kl. 8", "klockan 8"),
     ("nr 3", "nummer 3"),
     ("ca 20", "cirka 20"),
@@ -170,11 +177,23 @@ def test_abbreviations_and_units_are_said_in_full(written, said):
 
 
 @pytest.mark.parametrize("text", [
-    "Åk hem nu", "s", "kl", "nr", "Lisa ca", "st", "mm", "Kalla det m", "Ett ess", "sid", "Carl",
+    "Åk hem nu", "Åk 5 km söderut.", "åk 2 varv till", "åk 10", "s", "kl", "nr", "Lisa ca", "st", "mm", "Kalla det m", "Ett ess", "sid", "Carl",
     "ggr", "etcetera", "Sankt", "katt.ex", "mest", "dvsx",
 ])
 def test_abbreviation_lookalikes_stay(text):
     assert swedish_speech(text) == text
+
+
+def test_spreadsheet_cells_keep_their_arithmetic():
+    assert spoken("=B2/3") == "är lika med B2 delat med 3"
+    assert spoken("=B2-1") == "är lika med B2 minus 1"
+
+
+def test_locator_errors_never_echo_the_value():
+    from open_tutor.pronunciation import parse_locators
+    with pytest.raises(ValueError) as error:
+        parse_locators("fictional-misplaced-token")
+    assert "fictional-misplaced-token" not in str(error.value)
 
 
 def test_lodjuret_is_said_with_a_silent_d_but_written_as_is():
@@ -199,6 +218,10 @@ def test_the_caption_keeps_what_the_model_wrote():
     (["Det är 20 ", "°C."], "Det är 20 grader Celsius."),
     (["Åk ", "hem nu."], "Åk hem nu."),
     (["Lod", "juret ", "är här."], "Lojuret är här."),
+    (["Ta 5 ", "st äpplen och 3 ", "ggr till."], "Ta 5 stycken äpplen och 3 gånger till."),
+    (["Åk 5 ", "km söderut."], "Åk 5 km söderut."),
+    (["Åk ", "5 ", "km söderut."], "Åk 5 km söderut."),
+    (["Det är 1 ", "°C."], "Det är 1 grad Celsius."),
 ])
 def test_stream_chunk_boundaries_do_not_split_a_reading(parts, said):
     assert " ".join(say(parts).split()) == said

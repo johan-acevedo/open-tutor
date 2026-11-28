@@ -43,12 +43,13 @@ def parse_locators(raw: str | None) -> tuple[PronunciationDictionaryLocator, ...
     if len(entries) > MAX_DICTIONARIES:
         raise ValueError(f"{ENV} takes at most {MAX_DICTIONARIES} dictionaries, got {len(entries)}")
     locators: list[PronunciationDictionaryLocator] = []
-    for entry in entries:
+    for number, entry in enumerate(entries, start=1):
         dictionary_id, sep, version_id = entry.partition(":")
         if not sep or not _ID.fullmatch(dictionary_id) or not _ID.fullmatch(version_id):
-            raise ValueError(f"{ENV} entries must look like <dictionary_id>:<version_id>, not {entry!r}")
+            # Never echo the value: a key pasted into the wrong setting would land in the log.
+            raise ValueError(f"{ENV} entry {number} must look like <dictionary_id>:<version_id>")
         if any(loc.pronunciation_dictionary_id == dictionary_id for loc in locators):
-            raise ValueError(f"{ENV} names dictionary {dictionary_id} twice")
+            raise ValueError(f"{ENV} entry {number} repeats a dictionary listed twice")
         locators.append(PronunciationDictionaryLocator(dictionary_id, version_id))
     return tuple(locators)
 

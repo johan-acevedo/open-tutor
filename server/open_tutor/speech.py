@@ -78,22 +78,29 @@ _SUPERSCRIPT_DIGITS = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹", "0123456789")
 _LATEX_SUBSCRIPT = re.compile(r"(?<=[A-Za-z)])_\{(\d+)\}")
 _LATEX_TEXT = re.compile(r"\\(?:text|mathrm|ce)\s*\{([A-Za-z0-9()]+)\}")
 _FORMULA = re.compile(
-    r"(?<![\w.,/])(?P<coef>\d+)?"
+    r"(?<![\w.,/=:$])(?P<coef>\d+)?"
     r"(?P<body>(?:[A-Z][a-z]?\d*|\((?:[A-Z][a-z]?\d*)+\)\d*)+)"
     r"(?P<charge>[⁰¹²³⁴⁵⁶⁷⁸⁹]*[⁺⁻]|\^\{?\d*[+-]\}?|\+(?![\w+]))?"
-    r"(?!\w)"
+    # Not a spreadsheet cell in arithmetic or a range (=B2/3, B2-1, B2:B5): the maths
+    # rules below must still see the operator.
+    r"(?![\w/:*^]|[-−]\d)"
 )
-_FORMULA_PART = re.compile(r"[A-Z][a-z]?|\d+")
+_FORMULA_PART = re.compile(r"[A-Z][a-z]?|\d+|[()]")
 _ABBREVIATIONS = tuple(
-    (re.compile(r"(?<![\w.])" + pattern + r"(?![\w/])"), words) for pattern, words in _SV.SPOKEN_ABBREVIATIONS
+    # A digit may follow ("s.34"); a letter or a slash may not.
+    (re.compile(r"(?<![\w.])" + pattern + r"(?![^\W\d]|/)"), words) for pattern, words in _SV.SPOKEN_ABBREVIATIONS
 )
+_ONE_DEGREE_C = re.compile(r"(?<![\d,.])([-−]?1) ?°C(?!\w)")
+_ONE_DEGREE = re.compile(r"(?<![\d,.])([-−]?1) ?°(?![CF\w])")
 _DEGREES_C = re.compile(r"(?:(?<=\d) ?)?°C(?!\w)")
 _DEGREES = re.compile(r"(?<=\d) ?°(?![CF\w])")
 _RESPELLINGS = tuple((re.compile(r"(?<!\w)" + re.escape(written)), spoken)
                      for written, spoken in _SV.SPOKEN_RESPELLINGS)
-# A word that is read differently depending on the next one ("åk 7", "s. 34"):
-# the stream waits for that next word before speaking it.
-_AWAITS_NEXT_WORD = re.compile(r"(?<![\w.])(?:(?:s|S|sid|Sid|t|T)\.|(?:åk|Åk|kl|Kl|nr|Nr|ca)\.?)$")
+# A word that is read differently depending on the next one ("åk 7", "s. 34",
+# "5 st", "åk 5 km"): the stream waits for that next word before speaking it. A
+# number waits too, for a unit or abbreviation after it.
+_AWAITS_NEXT_WORD = re.compile(r"(?:(?<![\w.])(?:(?:s|S|sid|Sid|t|T)\.|(?:åk|Åk|kl|Kl|nr|Nr|ca)\.?)|\d)$")
+_HOLD_WORDS = 3  # at most this many words wait for the next one
 
 
 def number_words(value: str) -> str:
@@ -120,14 +127,19 @@ def _say_formula(match: re.Match) -> str:
         return match.group(0)
     words = [number_words(match.group("coef"))] if match.group("coef") else []
     for part in _FORMULA_PART.findall(body):
-        words.append(number_words(part) if part.isdigit() else _letters(part))
+        if part == "(":
+            words.append(_SV.FORMULA_GROUP_OPEN)
+        elif part == ")":
+            words.append(_SV.FORMULA_GROUP_CLOSE)
+        else:
+            words.append(number_words(part) if part.isdigit() else _letters(part))
     if charge:
-        sign = "+" if charge[-1] in "+⁺" else "-"
+        sign = "+" if re.search(r"[+⁺]", charge) else "-"
         size = re.sub(r"\D", "", charge.translate(_SUPERSCRIPT_DIGITS))
         if size:
             words.append(number_words(size))
         words.append(_SV.CHARGE_WORDS[sign])
-    return " ".join(words)
+    return " ".join(words).replace(" ,", ",")
 
 
 def swedish_speech(text: str) -> str:
@@ -142,6 +154,8 @@ def swedish_speech(text: str) -> str:
     text = _FORMULA.sub(_say_formula, text)
     for pattern, words in _ABBREVIATIONS:
         text = pattern.sub(words, text)
+    text = _ONE_DEGREE_C.sub(r"\1 grad Celsius", text)
+    text = _ONE_DEGREE.sub(r"\1 grad", text)
     text = _DEGREES_C.sub(" grader Celsius", text)
     text = _DEGREES.sub(" grader", text)
     for pattern, spoken in _RESPELLINGS:
@@ -219,7 +233,9 @@ def _cut(buffer: str) -> int:
     A word such as "åk" or "s." is read differently before a number, so the cut
     stays in front of it until the next word has arrived."""
     cut = max(buffer.rfind(" "), buffer.rfind("\n"))
-    if cut > 0 and _AWAITS_NEXT_WORD.search(buffer[:cut]):
+    for _ in range(_HOLD_WORDS):
+        if cut <= 0 or not _AWAITS_NEXT_WORD.search(buffer[:cut]):
+            break
         cut = max(buffer.rfind(" ", 0, cut), buffer.rfind("\n", 0, cut))
     return cut
 
