@@ -218,7 +218,7 @@ def test_band_3_gets_greeting_without_school_framing():
 
 
 def test_nameless_greeting_names_the_band_companion():
-    assert "Lodjuret" in prompt.greeting_line({"name": "", "band": "middle"}, index=0)[0]
+    assert "Linnea" in prompt.greeting_line({"name": "", "band": "middle"}, index=0)[0]
     assert "Björnen" in prompt.greeting_line({"name": "", "band": "upper"}, index=1)[0]
 
 

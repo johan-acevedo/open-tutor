@@ -4,6 +4,13 @@ Lead: the thread "state of the project" (Claude, 2026-11-12). The lead keeps thi
 Workers read it before starting and report against it. Decisions here were agreed with Johan
 on 2026-11-12 unless marked open.
 
+## 2026-11-28: middle-band companion named Linnea
+
+Bella (`eleven_v4_turbo`) occasionally pronounced the silent `d` in *Lodjuret*; the pronunciation
+workarounds in PR #103 sounded unnatural. Listening probes found *Linnea* cleanly pronounced by
+both Bella and Google Chirp 3: HD without a dictionary, and a natural fit for högstadiet. The
+companion's lynx artwork is unchanged.
+
 ## 2026-11-27: four fixes from a family test call
 
 One real family call on `main` at `07ac5a6` (middle band, homework in science)

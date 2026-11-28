@@ -152,7 +152,7 @@ describe('pending in-call-switch prefill on /', () => {
     render(<App />);
     await waitFor(() => expect(screen.getByText('Hej Bo!')).toBeDefined());
     // The generic three-card chooser would drop the prefill.
-    expect(screen.queryByRole('button', { name: 'Prata med Lodjuret' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Prata med Linnea' })).toBeNull();
     expect(screen.getAllByRole('button', { name: 'Prata med Räven' }).length).toBeGreaterThan(0);
   });
 

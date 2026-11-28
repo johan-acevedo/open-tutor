@@ -138,7 +138,7 @@ describe('start flow', () => {
   it('has TWO start buttons per page, and both start the call the same way', () => {
     for (const [band, cta] of [
       ['primary', 'Prata med Räven'],
-      ['middle', 'Prata med Lodjuret'],
+      ['middle', 'Prata med Linnea'],
       ['upper', 'Prata med Björnen'],
     ] as Array<[BandId, string]>) {
       cleanup();
@@ -215,9 +215,9 @@ describe('hero', () => {
 
   it('the listen control names the greeting and the companion', () => {
     firstVisit('middle');
-    const b = screen.getAllByRole('button', { name: /Hör rösten\s*– Lodjuret/ })[0];
+    const b = screen.getAllByRole('button', { name: /Hör rösten\s*– Linnea/ })[0];
     expect(b.getAttribute('aria-pressed')).toBe('false');
-    expect(b.getAttribute('title')).toBe('Lyssna på Lodjuret');
+    expect(b.getAttribute('title')).toBe('Lyssna på Linnea');
     expect(b.textContent).toContain('Hör rösten');
   });
 
@@ -237,7 +237,7 @@ describe('hero', () => {
   it('the middle hero speaks to the learner directly', () => {
     firstVisit('middle');
     const figure = document.querySelector('figure.tp-show') as HTMLElement;
-    expect(figure?.getAttribute('aria-label')).toBe('Exempel: Lodjuret går igenom en uppgift');
+    expect(figure?.getAttribute('aria-label')).toBe('Exempel: Linnea går igenom en uppgift');
     expect(norm(figure.textContent)).toContain('3x = 15');
     expect(norm(figure.textContent)).toContain('x = ?');
     expect(within(figure).getByText('Du:')).toBeDefined();
@@ -436,7 +436,7 @@ describe('household picker entry', () => {
         ignoreLastId
       />,
     );
-    expect(screen.getAllByRole('button', { name: /Hör rösten\s*– Lodjuret/ })[0]).toBeDefined();
+    expect(screen.getAllByRole('button', { name: /Hör rösten\s*– Linnea/ })[0]).toBeDefined();
     expect(screen.queryByText('Hej Elsa!')).toBeNull();
   });
 });

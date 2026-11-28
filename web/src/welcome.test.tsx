@@ -98,7 +98,7 @@ it('names the band companion on the start button', () => {
   render(
     <Welcome profiles={[]} band={bandConfig('middle')} onPick={() => {}} starting={false} />,
   );
-  expect(screen.getByRole('button', { name: 'Prata med Lodjuret' })).toBeDefined();
+  expect(screen.getByRole('button', { name: 'Prata med Linnea' })).toBeDefined();
   cleanup();
   render(
     <Welcome profiles={[]} band={bandConfig('upper')} onPick={() => {}} starting={false} />,
@@ -140,7 +140,7 @@ describe('listen control', () => {
 
   it('names the other companions on their bands', () => {
     render(<Welcome profiles={[]} band={bandConfig('middle')} onPick={() => {}} starting={false} />);
-    expect(listen(/Hör rösten\s*– Lodjuret/)).toBeDefined();
+    expect(listen(/Hör rösten\s*– Linnea/)).toBeDefined();
     cleanup();
     render(<Welcome profiles={[]} band={bandConfig('upper')} onPick={() => {}} starting={false} />);
     expect(listen(/Hör rösten\s*– Björnen/)).toBeDefined();
@@ -220,8 +220,8 @@ describe('listen control', () => {
     await waitFor(() => expect(MockAudio.instances[0].paused).toBe(false));
     rerender(<Welcome profiles={[]} band={bandConfig('middle')} onPick={() => {}} starting={false} />);
     expect(MockAudio.instances[0].paused).toBe(true);
-    expect(listen(/Hör rösten\s*– Lodjuret/).getAttribute('aria-pressed')).toBe('false');
-    fireEvent.click(listen(/Hör rösten\s*– Lodjuret/));
+    expect(listen(/Hör rösten\s*– Linnea/).getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(listen(/Hör rösten\s*– Linnea/));
     await waitFor(() => expect(MockAudio.instances.at(-1)!.paused).toBe(false));
     unmount();
     expect(MockAudio.instances.at(-1)!.paused).toBe(true);
@@ -234,7 +234,7 @@ describe('listen control', () => {
     fireEvent.click(listen(/Hör rösten\s*– Räven/));
     await waitFor(() => expect(MockAudio.instances.length).toBe(1));
     rerender(<Welcome profiles={[]} band={bandConfig('middle')} onPick={() => {}} starting={false} />);
-    const lynxListen = listen(/Hör rösten\s*– Lodjuret/);
+    const lynxListen = listen(/Hör rösten\s*– Linnea/);
     fireEvent.click(lynxListen);
     await waitFor(() => expect(lynxListen.getAttribute('aria-pressed')).toBe('true'));
     // The Räven clip fails late (a 404 arriving after the switch).

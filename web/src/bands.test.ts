@@ -71,6 +71,7 @@ describe('resolveBand', () => {
 describe('normalizeAliasUrl', () => {
   it('keeps the query string and fragment on alias normalization', () => {
     expect(normalizeAliasUrl('/lodjuret', '?band=upper', '#x')).toBe('/hogstadiet?band=upper#x');
+    expect(normalizeAliasUrl('/linnea', '?band=upper', '#x')).toBe('/hogstadiet?band=upper#x');
     expect(normalizeAliasUrl('/raven', '', '')).toBe('/ak1-6');
     expect(normalizeAliasUrl('/vuxen', '?a=b', '')).toBe('/gymnasiet?a=b');
     expect(normalizeAliasUrl('/studier', '?a=b', '#x')).toBe('/gymnasiet?a=b#x');
@@ -125,6 +126,7 @@ describe('bandFromPath', () => {
     const { bandFromPath } = await import('./bands');
     expect(bandFromPath('/raven')).toBe('primary');
     expect(bandFromPath('/lodjuret')).toBe('middle');
+    expect(bandFromPath('/linnea')).toBe('middle');
     expect(bandFromPath('/bjornen')).toBe('upper');
     expect(bandFromPath('/vuxen')).toBe('upper');
     expect(bandFromPath('/studier')).toBe('upper');

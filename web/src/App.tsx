@@ -122,7 +122,7 @@ export default function App() {
     setPickerOpen(false);
   }, [session.clearPrefill]);
 
-  // Alias paths (/raven, /lodjuret, /bjornen, /vuxen, /studier) normalize to the
+  // Alias paths (/raven, /lodjuret, /linnea, /bjornen, /vuxen, /studier) normalize to the
   // canonical band path without a reload or a history entry. The query
   // string and fragment survive: ?band= and #anchors are not dropped.
   useEffect(() => {
