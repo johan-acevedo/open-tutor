@@ -32,7 +32,7 @@ describe('ChooserPage', () => {
       'En lugn läxhjälp som pratar – och visar.',
     );
     expect(screen.queryByRole('group', { name: 'Välj årskurs' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Prata med Lodjuret' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Prata med Linnea' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Prata med Björnen' })).toBeNull();
     expect(screen.getAllByRole('button', { name: 'Prata med Räven' })).toHaveLength(2);
     // The hero is honest about the price from the start.
@@ -95,7 +95,7 @@ describe('HouseholdPicker', () => {
     expect(screen.getByRole('heading', { name: 'Vem ska prata?' })).toBeDefined();
     // Nameless profiles are not listed; named ones carry their companion.
     expect(screen.queryByText(/ · Björnen/)).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Max · Lodjuret' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Max · Linnea' }));
     expect(onPick).toHaveBeenCalledTimes(1);
     expect(screen.getByRole('button', { name: '+ Någon ny' })).toBeDefined();
   });
@@ -184,16 +184,16 @@ describe('focusStartControl', () => {
   it('prefers the landing hero CTA over other start buttons', () => {
     document.body.innerHTML =
       '<div class="tp-hero"><button class="tp-cta">Prata med Räven</button></div>' +
-      '<div class="tp-sec"><button class="tp-cta">Prata med Lodjuret</button></div>';
+      '<div class="tp-sec"><button class="tp-cta">Prata med Linnea</button></div>';
     expect(focusStartControl()).toBe(true);
     expect(document.activeElement?.textContent).toBe('Prata med Räven');
     document.body.innerHTML = '';
   });
   it('falls back to any start button and reports when missing', () => {
     document.body.innerHTML =
-      '<div class="tp-sec"><button class="tp-cta">Prata med Lodjuret</button></div>';
+      '<div class="tp-sec"><button class="tp-cta">Prata med Linnea</button></div>';
     expect(focusStartControl()).toBe(true);
-    expect(document.activeElement?.textContent).toBe('Prata med Lodjuret');
+    expect(document.activeElement?.textContent).toBe('Prata med Linnea');
     document.body.innerHTML = '<div class="tp"></div>';
     expect(focusStartControl()).toBe(false);
     document.body.innerHTML = '';

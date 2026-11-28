@@ -177,6 +177,7 @@ const PATH_ALIASES: Record<string, BandId> = {
   '/gymnasiet/': 'upper',
   '/raven': 'primary',
   '/lodjuret': 'middle',
+  '/linnea': 'middle',
   '/bjornen': 'upper',
   '/bj\u00f6rnen': 'upper',
   '/vuxen': 'upper',
@@ -231,7 +232,7 @@ export function resolveBand(opts: {
   return 'primary';
 }
 
-/** Alias paths (/raven, /lodjuret, …) normalize to the canonical band path
+/** Alias paths (/raven, /lodjuret, /linnea, …) normalize to the canonical band path
  *  while keeping the query string and fragment: a ?band= testing override
  *  or #anchor survives the normalization. Returns the full normalized URL
  *  (path + search + hash), or null when the path is already canonical or

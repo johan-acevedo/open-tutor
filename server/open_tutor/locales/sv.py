@@ -11,7 +11,7 @@ LOCALE = "sv"
 
 COMPANIONS = {
     "primary": "Räven",
-    "middle": "Lodjuret",
+    "middle": "Linnea",
     "upper": "Björnen",
 }
 

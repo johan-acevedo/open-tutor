@@ -3,7 +3,7 @@ import pytest
 from open_tutor import prompt
 
 
-@pytest.mark.parametrize("band,name", [("primary", "Räven"), ("middle", "Lodjuret"), ("upper", "Björnen")])
+@pytest.mark.parametrize("band,name", [("primary", "Räven"), ("middle", "Linnea"), ("upper", "Björnen")])
 def test_tutor_and_fixed_greeting_use_the_displayed_companion(band, name):
     learner = {"name": "Testelev", "band": band}
     assert prompt.instructions(learner).startswith(f"Your name is {name}.\n")
